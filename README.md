@@ -1,81 +1,86 @@
 # My Last Feedback
 
-A [Model Context Protocol (MCP)](https://modelcontextprotocol.io/) server that provides a **human-in-the-loop feedback GUI** for AI-assisted development tools such as [Cursor](https://www.cursor.com), [Cline](https://cline.bot), [Windsurf](https://windsurf.com), and VS Code Copilot.
+A lightweight MCP feedback GUI that lets AI agents request confirmation and feedback from you before completing tasks.
 
-Built with **Tauri 2.0 + React 19**, replacing the original PySide6 implementation with a lightweight (~9 MB) native binary.
+Works with [Cursor](https://www.cursor.com), [VS Code Copilot](https://code.visualstudio.com/), [Cline](https://cline.bot), [Windsurf](https://windsurf.com), and any AI tool supporting the [Model Context Protocol](https://modelcontextprotocol.io/).
+
+Built with **Tauri 2.0 + React 19** — binary is only ~11 MB.
+
+[中文文档](README_zh.md)
 
 ---
 
-## ✨ Features
+## Features
 
 | Feature | Description |
-|---|---|
-| **Interactive feedback window** | A native desktop GUI pops up whenever the AI agent requests feedback |
-| **Markdown summary** | Agent summaries are rendered as rich Markdown |
-| **Task title in title bar** | The `request_name` is displayed in the custom title bar |
-| **Image attachments** | Attach via file picker, Ctrl+V clipboard paste, or drag-and-drop |
-| **Quick action buttons** | One-click preset responses (Start, Continue, Analyze, Fix, Explain) |
-| **Custom prompt buttons** | Load `.prompt.md` files from `mcp_prompts/` as clickable buttons |
-| **Test log section** | Dedicated area for pasting test output |
-| **Enhancement reminder** | Optional checkbox that reminds the agent to call feedback again |
-| **Always-on-top** | Pin button keeps the window above other windows |
-| **Dark theme** | Modern dark UI with custom title bar |
-| **i18n** | English and Chinese interface |
-| **Tiny binary** | ~9 MB vs ~150 MB+ for PySide6 |
+|---------|-------------|
+| **Feedback Window** | Native desktop popup when the agent requests feedback |
+| **Markdown Rendering** | Agent work summaries displayed as rich Markdown |
+| **Multi-Caller Support** | Multiple AI clients can connect simultaneously with tab switching and multi-column layout |
+| **Image Attachments** | File picker, Ctrl+V clipboard paste, or drag-and-drop (up to 5 images) |
+| **Quick Actions** | One-click preset responses (Start, Continue, Analyze, Fix, etc.) |
+| **Custom Prompts** | Drop `.prompt.md` files into `mcp_prompts/` to create clickable buttons |
+| **MCP Config Helper** | Built-in config generator with auto-detected installation path and one-click copy |
+| **Settings Panel** | General settings, display (theme/language), prompt management, about |
+| **Dual Theme** | Dark and light theme support |
+| **Bilingual** | Full English and Chinese interface |
+| **Always-on-Top** | Pin the window above other windows |
+| **Auto-Start** | Optional launch at system startup |
+| **Single Instance** | Automatically reuses the running instance |
 
 ---
 
-## 🛠️ Prerequisites
+## How It Works
 
-- [Node.js](https://nodejs.org/) **18+** and npm
-- [Rust](https://rustup.rs/) **1.70+** (for building the GUI app)
-
----
-
-## 📦 Build
-
-```bash
-# 1. Install MCP server dependencies (project root)
-npm install
-
-# 2. Install frontend dependencies
-cd app
-npm install
-
-# 3. Build the Tauri app (produces app/src-tauri/target/release/app.exe)
-npx tauri build --no-bundle
+```
+AI Agent ──stdio──▶ server.mjs (MCP Server) ──TCP IPC──▶ Tauri App (GUI)
+                                                              ↓
+                                                         User Feedback
+                                                              ↓
+AI Agent ◀──────── Text + Images returned ◀────────────── Submit
 ```
 
-The built binary is at:
-- **Windows**: `app/src-tauri/target/release/app.exe`
-- **macOS/Linux**: `app/src-tauri/target/release/app`
+1. The AI client calls the `interactive_feedback` tool via MCP protocol
+2. `server.mjs` connects to the Tauri desktop app over TCP IPC
+3. The user views the agent's work summary and enters feedback in the GUI
+4. Feedback (text + images) is returned to the agent via MCP
+
+The desktop app launches automatically on first call and is reused for subsequent requests.
 
 ---
 
-## ⚙️ MCP Configuration
+## Quick Start
 
-### Cursor
+### Prerequisites
 
-Add to your Cursor MCP configuration (`~/.cursor/mcp.json` or project-level):
+- [Node.js](https://nodejs.org/) **18+**
+
+### 1. Install Dependencies
+
+```bash
+npm install
+```
+
+### 2. Configure Your AI Tool
+
+#### Cursor
+
+Add to `~/.cursor/mcp.json` (global) or `<project>/.cursor/mcp.json` (per-project):
 
 ```json
 {
   "mcpServers": {
     "my-last-feedback": {
       "command": "node",
-      "args": [
-        "/path/to/my-last-feedback/server.mjs"
-      ],
+      "args": ["/path/to/my-last-feedback/server.mjs"],
       "timeout": 600,
-      "autoApprove": [
-        "interactive_feedback"
-      ]
+      "autoApprove": ["interactive_feedback"]
     }
   }
 }
 ```
 
-### VS Code (Copilot)
+#### VS Code (Copilot)
 
 Add to `.vscode/mcp.json` in your project:
 
@@ -84,65 +89,54 @@ Add to `.vscode/mcp.json` in your project:
   "servers": {
     "my-last-feedback": {
       "command": "node",
-      "args": [
-        "/path/to/my-last-feedback/server.mjs"
-      ],
+      "args": ["/path/to/my-last-feedback/server.mjs"],
       "timeout": 600
     }
   }
 }
 ```
 
-### Cline / Windsurf
+#### Cline / Windsurf
 
-Use the same `command` / `args` pattern in the respective tool's MCP settings.
+Use the same `command` / `args` pattern in the tool's MCP settings.
 
-> Replace `/path/to/my-last-feedback` with the actual path to this project directory.
+> Replace `/path/to/my-last-feedback` with the actual installation path. After launching the app, the built-in **MCP Config Helper** can auto-generate the correct configuration.
 
-See [`mcp.json.template`](mcp.json.template) for a ready-to-use template.
+### 3. Add Agent Instructions
 
----
+Add these rules to your AI tool's custom instructions:
 
-## 📝 Prompt Setup
-
-Add the following to your AI assistant's custom rules (e.g. `.cursor/rules/`, VS Code `.instructions.md`):
+| Tool | Location |
+|------|----------|
+| Cursor | `<project>/.cursor/rules/interactive_feedback.instructions.md` |
+| VS Code | `.github/copilot-instructions.md` or `.vscode/*.instructions.md` |
+| Cline | Custom instructions in settings |
 
 ```markdown
----
-name: interactive-feedback
-description: For ALL Requests, use the interactive-feedback tool to get user confirmation.
-applyTo: '**'
----
 ## MUST FOLLOW:
-Whenever you're about to complete a user request, call the interactive_feedback tool instead of simply ending the process.
+Whenever you're about to complete a user request, call the interactive_feedback tool.
 
-## Usage Rules:
+## Rules:
 - Call interactive_feedback when user confirmation is needed (testing, terminal commands, reports, questions)
 - Call interactive_feedback before completing any user request
 - Keep calling interactive_feedback until the user's feedback is empty, then end the request
 ```
 
+### 4. Done
+
+The agent will now pop up a feedback window whenever it needs your confirmation.
+
 ---
 
-## 🔧 Tool Reference
+## Tool Reference
 
 ### `interactive_feedback`
 
 | Parameter | Type | Required | Description |
-|---|---|---|---|
-| `project_directory` | `string` | ✅ | Full path to the project directory |
-| `summary` | `string` | ✅ | Summary in **Markdown format** — use headings (`##`), lists (`-`), bold (`**text**`), code blocks |
-| `request_name` | `string` | ✅ | Concise task title (5–10 words) shown in the title bar |
-
-#### Example
-
-```json
-{
-  "project_directory": "/path/to/your/project",
-  "request_name": "Refactor authentication module",
-  "summary": "## Changes Made\n\n- Extracted token logic into `auth/token.py`\n- Added unit tests\n\n## Next Steps\n\n- Review updated tests"
-}
-```
+|-----------|------|----------|-------------|
+| `project_directory` | `string` | Yes | Full path to the project directory |
+| `summary` | `string` | Yes | Work summary in Markdown format |
+| `request_name` | `string` | Yes | Concise task title (5–10 words), shown in the title bar |
 
 #### Return Value
 
@@ -150,79 +144,67 @@ Returns a list of MCP content blocks (`TextContent` and/or `ImageContent`):
 
 ```json
 [
-  {
-    "type": "text",
-    "text": "## User Feedback\n[feedback text]\n\n## Reminder\nPlease use interactive_feedback again."
-  },
-  {
-    "type": "image",
-    "data": "<base64>",
-    "mimeType": "image/png"
-  }
+  { "type": "text", "text": "User feedback text" },
+  { "type": "image", "data": "<base64>", "mimeType": "image/png" }
 ]
 ```
 
 ---
 
-## 🖼️ Image Attachments
+## Image Attachments
 
 | Method | How |
 |--------|-----|
-| **File picker** | Click the **📎 Attach** button |
-| **Clipboard** | Press **Ctrl+V** in the feedback text area |
-| **Drag & drop** | Drag files onto the window |
-
-### Limits
+| File picker | Click the attach button |
+| Clipboard | Press Ctrl+V in the feedback area |
+| Drag & drop | Drag files onto the window |
 
 | Limit | Value |
 |-------|-------|
 | Max images | 5 |
 | Max per image | 5 MB |
 | Max total | 20 MB |
-| Formats | PNG, JPG, JPEG, GIF, WEBP, BMP |
+| Formats | PNG, JPG, GIF, WEBP, BMP |
 
 ---
 
-## 📁 Custom Prompt Buttons
+## Custom Prompt Buttons
 
-Place `.prompt.md` files in `mcp_prompts/`. Each file needs YAML front matter:
+Place `.prompt.md` files in the `mcp_prompts/` directory:
 
 ```markdown
 ---
 name: "Run Tests"
 description: "Ask the agent to run the test suite"
+icon: "play"
 ---
 Please run the full test suite and report any failures.
 ```
 
-Clicking the button appends the prompt body to feedback and submits immediately.
+Clicking the button appends the prompt content to feedback and submits immediately.
+
+### Available Icons
+
+The `icon` field supports 45 preset icons:
+
+`book` `file` `file-text` `edit` `code` `terminal` `search` `message` `chat` `brain` `lightbulb` `star` `folder` `settings` `database` `link` `list` `check` `play` `zap` `compass` `layers` `globe` `target` `shield` `clock` `tag` `tool` `box` `hash` `wand` `sparkles` `clipboard` `rocket` `bug` `summary` `knowledge` `magic` `refresh` `send` `download` `upload` `alert` `info`
 
 ---
 
-## 🏗️ Project Structure
+## Settings
 
-```
-my-last-feedback/
-├── server.mjs              # MCP Server (Node.js, stdio transport)
-├── package.json            # Node.js project config
-├── mcp.json.template       # MCP config template
-├── mcp_prompts/            # Custom prompt button templates
-│   ├── compact.prompt.md
-│   └── knowledge_maker.prompt.md
-├── app/                    # Tauri 2.0 desktop app
-│   ├── src/                # React 19 frontend
-│   │   ├── components/     # UI components
-│   │   ├── store/          # Zustand state management
-│   │   └── i18n/           # Internationalization (en/zh)
-│   └── src-tauri/          # Rust backend
-│       ├── src/lib.rs      # Tauri commands
-│       └── tauri.conf.json # Window config
-└── ref-repos/              # Reference implementation (PySide6)
-```
+Open via the gear icon in the title bar:
+
+| Tab | Contents |
+|-----|----------|
+| **General** | Auto-start, MCP config helper |
+| **Display** | Theme (dark/light), language (中文/EN) |
+| **Prompts** | Enable/disable custom prompt buttons |
+| **About** | Version info |
 
 ---
 
-## 🔄 Environment Variables
+## Environment Variables
 
 | Variable | Description | Default |
 |----------|-------------|---------|
@@ -230,6 +212,68 @@ my-last-feedback/
 
 ---
 
-## 📄 License
+## Building from Source
 
-See [LICENSE](LICENSE) for details.
+### Requirements
+
+- Node.js 18+
+- Rust 1.70+ (with cargo)
+- Visual Studio Build Tools (Windows)
+
+### Build
+
+```bash
+# Install dependencies
+npm install
+cd app && npm install
+
+# Development mode
+npx tauri dev
+
+# Production build
+npx tauri build --no-bundle
+```
+
+Output: `app/src-tauri/target/release/app.exe` (Windows) or `app/src-tauri/target/release/app` (macOS/Linux)
+
+See [BUILD.md](BUILD.md) for the full build guide and [CONTRIBUTING.md](CONTRIBUTING.md) for the repository maintenance guide.
+
+---
+
+## Project Structure
+
+```
+my-last-feedback/
+├── server.mjs              # MCP Server (Node.js, stdio + TCP IPC)
+├── package.json            # MCP Server dependencies
+├── mcp_prompts/            # Custom prompt button templates
+├── app/                    # Tauri 2.0 desktop application
+│   ├── src/                # React 19 frontend
+│   │   ├── components/     # UI components
+│   │   ├── store/          # Zustand state management
+│   │   └── i18n/           # Internationalization (en/zh)
+│   └── src-tauri/          # Rust backend
+│       └── src/            # Tauri commands + IPC communication
+├── scripts/                # Build & packaging scripts (Win/Mac)
+├── BUILD.md                # Build guide
+└── CONTRIBUTING.md         # Repository maintenance guide
+```
+
+---
+
+## Tech Stack
+
+| Layer | Technology |
+|-------|-----------|
+| Desktop framework | Tauri 2.0 |
+| Frontend | React 19 + TypeScript + Vite 7 |
+| State management | Zustand 5 |
+| Internationalization | i18next |
+| MCP protocol | @modelcontextprotocol/sdk 1.12 |
+| Backend | Rust 2021 |
+
+---
+
+## License
+
+See [LICENSE](LICENSE).
