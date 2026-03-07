@@ -1,0 +1,13 @@
+{
+  "name": "my-last-feedback-mcp",
+  "version": "1.0.0",
+  "description": "MCP Server for My Last Feedback - bridges AI Agent and Tauri GUI",
+  "type": "module",
+  "main": "server.mjs",
+  "scripts": {
+    "start": "node server.mjs"
+  },
+  "dependencies": {
+    "@modelcontextprotocol/sdk": "^1.12.1"
+  }
+}

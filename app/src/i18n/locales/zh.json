@@ -1,0 +1,88 @@
+{
+  "app": {
+    "title": "My Last Feedback"
+  },
+  "summary": {
+    "title": "AI 摘要",
+    "empty": "等待 AI 任务摘要..."
+  },
+  "feedback": {
+    "placeholder": "在此输入您的反馈...\nCtrl+Enter 提交，Ctrl+V 粘贴图片",
+    "submit": "发送反馈 (Ctrl+Enter)",
+    "submitting": "提交中...",
+    "hint": "Ctrl+Enter 提交"
+  },
+  "testLog": {
+    "placeholder": "在此输入测试日志，将附加到反馈中",
+    "attach": "附加日志"
+  },
+  "quickActions": {
+    "start": "开始",
+    "continue": "继续",
+    "analyze": "分析",
+    "fix": "修复",
+    "explain": "解释"
+  },
+  "enhancement": {
+    "label": "启用 interactive_feedback 增强提醒"
+  },
+  "images": {
+    "attach": "附加图片",
+    "attachments": "附件",
+    "clearAll": "清除全部",
+    "limitCount": "最多只能附加 {{max}} 张图片。",
+    "limitSize": "每张图片不能超过 {{max}}MB。当前: {{size}}MB",
+    "limitTotal": "图片总大小不能超过 {{max}}MB。",
+    "dropHint": "拖拽或粘贴图片到此处（最多 {{max}} 张）",
+    "remove": "删除",
+    "errorMaxCount": "最多只能附加 {{max}} 张图片",
+    "errorFileSize": "\"{{name}}\" 超过 {{max}} MB 大小限制",
+    "errorTotalSize": "图片总大小超过 {{max}} MB 限制",
+    "errorInvalidType": "\"{{name}}\" 不是支持的图片格式"
+  },
+  "sidebar": {
+    "history": "历史记录",
+    "empty": "暂无会话",
+    "delete": "删除",
+    "confirmDelete": "该会话仍在等待处理。确定删除并发送空反馈？",
+    "deleteAttempt": "你正在尝试移除 {{caller}} 的 \"{{request}}\"",
+    "cancel": "取消",
+    "confirmBtn": "删除"
+  },
+  "session": {
+    "waitingForRequest": "等待反馈请求...",
+    "responded": "反馈已提交（只读）"
+  },
+  "settings": {
+    "title": "设置",
+    "general": "通用",
+    "display": "显示",
+    "about": "关于",
+    "theme": "主题",
+    "themeDark": "深色",
+    "themeLight": "浅色",
+    "language": "语言",
+    "zh": "中文",
+    "en": "English",
+    "autostart": "开机自启动",
+    "autostartDesc": "系统启动时自动运行 My Last Feedback",
+    "aboutDesc": "一个用于 MCP 交互式反馈的桌面应用",
+    "prompts": "提示词",
+    "promptsEmpty": "未找到 prompt 文件\n将 .prompt.md 文件放入 exe 同级的 mcp_prompts/ 目录",
+    "promptEnable": "启用",
+    "promptDisable": "禁用"
+  },
+  "tooltip": {
+    "client": "客户端",
+    "workspace": "工作区",
+    "version": "版本"
+  },
+  "mcpConfig": {
+    "title": "MCP 配置",
+    "client": "客户端",
+    "format": "格式",
+    "cmdArgs": "命令+参数",
+    "addTo": "添加到",
+    "copy": "复制"
+  }
+}

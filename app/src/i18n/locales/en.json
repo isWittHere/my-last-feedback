@@ -1,0 +1,88 @@
+{
+  "app": {
+    "title": "My Last Feedback"
+  },
+  "summary": {
+    "title": "AI Summary",
+    "empty": "Waiting for AI task summary..."
+  },
+  "feedback": {
+    "placeholder": "Enter your feedback here...\nCtrl+Enter to submit, Ctrl+V to paste images",
+    "submit": "Send Feedback (Ctrl+Enter)",
+    "submitting": "Submitting...",
+    "hint": "Ctrl+Enter to submit"
+  },
+  "testLog": {
+    "placeholder": "Enter test logs here, will be appended to feedback",
+    "attach": "Attach Log"
+  },
+  "quickActions": {
+    "start": "Start Task",
+    "continue": "Continue",
+    "analyze": "Analyze",
+    "fix": "Fix",
+    "explain": "Explain"
+  },
+  "enhancement": {
+    "label": "Enable interactive_feedback enhanced reminder"
+  },
+  "images": {
+    "attach": "Attach Images",
+    "attachments": "Attachments",
+    "clearAll": "Clear All",
+    "limitCount": "You can attach up to {{max}} images.",
+    "limitSize": "Each image must be under {{max}}MB. Current: {{size}}MB",
+    "limitTotal": "Total size must be under {{max}}MB.",
+    "dropHint": "Drag & drop or paste images here (max {{max}})",
+    "remove": "Remove",
+    "errorMaxCount": "Maximum {{max}} images allowed",
+    "errorFileSize": "\"{{name}}\" exceeds {{max}} MB limit",
+    "errorTotalSize": "Total size exceeds {{max}} MB limit",
+    "errorInvalidType": "\"{{name}}\" is not a supported image format"
+  },
+  "sidebar": {
+    "history": "History",
+    "empty": "No sessions yet",
+    "delete": "Delete",
+    "confirmDelete": "This session is still pending. Delete and send empty feedback?",
+    "deleteAttempt": "Removing {{caller}}'s \"{{request}}\"",
+    "cancel": "Cancel",
+    "confirmBtn": "Delete"
+  },
+  "session": {
+    "waitingForRequest": "Waiting for feedback request...",
+    "responded": "Feedback already submitted (read-only)"
+  },
+  "settings": {
+    "title": "Settings",
+    "general": "General",
+    "display": "Display",
+    "about": "About",
+    "theme": "Theme",
+    "themeDark": "Dark",
+    "themeLight": "Light",
+    "language": "Language",
+    "zh": "中文",
+    "en": "English",
+    "autostart": "Launch at startup",
+    "autostartDesc": "Automatically start My Last Feedback when the system boots",
+    "aboutDesc": "A desktop app for MCP interactive feedback",
+    "prompts": "Prompts",
+    "promptsEmpty": "No prompt files found\nPlace .prompt.md files in mcp_prompts/ next to the exe",
+    "promptEnable": "Enable",
+    "promptDisable": "Disable"
+  },
+  "tooltip": {
+    "client": "Client",
+    "workspace": "Workspace",
+    "version": "Version"
+  },
+  "mcpConfig": {
+    "title": "MCP Configuration",
+    "client": "Client",
+    "format": "Format",
+    "cmdArgs": "Cmd+Args",
+    "addTo": "Add to",
+    "copy": "Copy"
+  }
+}

@@ -1,0 +1,11 @@
+{
+  "mcpServers": {
+    "my-last-feedback": {
+      "command": "node",
+      "args": [
+        "/path/to/my-last-feedback/server.mjs"
+      ],
+      "timeout": 600
+    }
+  }
+}
