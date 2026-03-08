@@ -120,6 +120,16 @@ Whenever you're about to complete a user request, call the interactive_feedback 
 - Call interactive_feedback when user confirmation is needed (testing, terminal commands, reports, questions)
 - Call interactive_feedback before completing any user request
 - Keep calling interactive_feedback until the user's feedback is empty, then end the request
+
+## Agent Identity (agent_name)
+- On your first call, leave agent_name empty or omit it.
+- The response will assign you an agent identifier (e.g. "B780").
+- On ALL subsequent calls, you MUST pass that identifier back as agent_name.
+
+## Questions Feature
+- When you need the user to supplement information or choose from options, use the questions parameter.
+- questions is an array of { label, options? }. With options → radio buttons; without → free-text input.
+- Questions are short labels only. Describe full context in summary, use questions for concise choices.
 ```
 
 ### 4. Done
@@ -137,6 +147,8 @@ The agent will now pop up a feedback window whenever it needs your confirmation.
 | `project_directory` | `string` | Yes | Full path to the project directory |
 | `summary` | `string` | Yes | Work summary in Markdown format |
 | `request_name` | `string` | Yes | Concise task title (5–10 words), shown in the title bar |
+| `agent_name` | `string` | No | Agent identifier. Leave empty on first call; pass assigned ID on subsequent calls |
+| `questions` | `array` | No | Structured questions: `[{ label: string, options?: string[] }]` |
 
 #### Return Value
 
