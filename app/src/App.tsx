@@ -11,9 +11,11 @@ interface NewSessionEvent {
   caller_name: string;
   caller_color: string;
   caller_client_name: string;
+  caller_alias: string;
   request_name: string;
   summary: string;
   project_directory: string;
+  questions: Array<{ label: string; options?: string[] }>;
 }
 
 function App() {
@@ -45,7 +47,7 @@ function App() {
         } else {
           // Persistent mode: load persisted history (callers + sessions)
           invoke<{
-            callers: Array<{ id: string; name: string; version: string; color: string; client_name?: string }>;
+            callers: Array<{ id: string; name: string; version: string; color: string; client_name?: string; alias?: string }>;
             sessions: Array<{
               id: string;
               caller_id: string;
@@ -57,12 +59,13 @@ function App() {
               feedback_text: string | null;
               command_logs: string | null;
               images: unknown[];
+              questions?: Array<{ label: string; options?: string[] }>;
             }>;
           }>("load_history")
             .then((history) => {
               const s = useFeedbackStore.getState();
               for (const c of history.callers) {
-                s.addCaller({ ...c, pendingCount: 0, clientName: c.client_name || "" });
+                s.addCaller({ ...c, pendingCount: 0, clientName: c.client_name || "", alias: c.alias || "" });
               }
               for (const sess of history.sessions) {
                 s.addSession({
@@ -71,12 +74,18 @@ function App() {
                   requestName: sess.request_name,
                   summary: sess.summary,
                   projectDirectory: sess.project_directory,
-                  status: (sess.status === "pending" ? "pending" : "responded") as Session["status"],
+                  status: (sess.status === "pending" ? "pending" : sess.status === "cancelled" ? "cancelled" : "responded") as Session["status"],
                   createdAt: sess.created_at,
                   feedbackText: sess.feedback_text || "",
                   testLogText: "",
                   images: [],
                   commandLogs: sess.command_logs || "",
+                  questions: (sess.questions || []).map((q: any) => ({
+                    label: q.label,
+                    options: q.options,
+                    selectedOptions: q.selectedOptions || [],
+                    answer: q.answer || "",
+                  })),
                 });
               }
               // Update pending counts for each caller
@@ -120,6 +129,7 @@ function App() {
         color: data.caller_color,
         pendingCount: 0,
         clientName: data.caller_client_name || "",
+        alias: data.caller_alias || "",
       });
 
       const session: Session = {
@@ -134,14 +144,27 @@ function App() {
         testLogText: "",
         images: [],
         commandLogs: "",
+        questions: (data.questions || []).map((q) => ({
+          label: q.label,
+          options: q.options,
+          selectedOptions: [],
+          answer: "",
+        })),
       };
       s.addSession(session);
       s.setActiveCaller(data.caller_id);
       s.setActiveSession(data.session_id);
     });
 
+    // Listen for session cancellations (client disconnected)
+    const unlistenCancel = listen<{ session_id: string }>("session-cancelled", (event) => {
+      const s = useFeedbackStore.getState();
+      s.markSessionCancelled(event.payload.session_id);
+    });
+
     return () => {
       unlisten.then((fn) => fn());
+      unlistenCancel.then((fn) => fn());
       window.removeEventListener("focus", reloadPrompts);
     };
   }, []);

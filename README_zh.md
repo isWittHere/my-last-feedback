@@ -118,6 +118,16 @@ Whenever you're about to complete a user request, call the interactive_feedback 
 - 需要用户确认时（测试、终端命令、报告、提问），调用 interactive_feedback
 - 完成任何用户请求之前，调用 interactive_feedback
 - 持续调用 interactive_feedback 直到用户反馈为空
+
+## Agent 身份 (agent_name)
+- 首次调用时，留空 agent_name 或省略该参数。
+- 响应中会分配一个 agent 标识符（如 "B780"）。
+- 之后所有调用中必须传回该标识符。
+
+## 结构化问题 (questions)
+- 需要用户补充信息或选择方案时，使用 questions 参数。
+- questions 是 { label, options? } 数组。有 options 渲染为单选按钮，无则渲染为文本输入。
+- questions 仅放简短标签，完整内容写在 summary 中。
 ```
 
 ### 4. 完成
@@ -135,6 +145,8 @@ Agent 现在会在需要确认时弹出反馈窗口。
 | `project_directory` | `string` | ✅ | 项目目录完整路径 |
 | `summary` | `string` | ✅ | Markdown 格式的工作摘要 |
 | `request_name` | `string` | ✅ | 任务标题（5-10 个词），显示在标题栏 |
+| `agent_name` | `string` | ❌ | Agent 标识符。首次调用留空，之后传回分配的 ID |
+| `questions` | `array` | ❌ | 结构化问题：`[{ label: string, options?: string[] }]` |
 
 #### 返回值
 

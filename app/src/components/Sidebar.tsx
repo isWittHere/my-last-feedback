@@ -5,6 +5,7 @@ import { useFeedbackStore } from "../store/feedbackStore";
 import { useTranslation } from "react-i18next";
 import { useActiveCallerSession } from "./useActiveCallerSession";
 import { useCallerOverride } from "./CallerContext";
+import { IdenticonAvatar } from "./IdenticonAvatar";
 
 function timeAgo(dateStr: string): string {
   const now = Date.now();
@@ -46,6 +47,7 @@ export function Sidebar() {
     if (session.status === "pending") {
       setPendingDeleteId(session.id);
     } else {
+      // For responded and cancelled sessions, just remove directly
       removeSession(session.id);
     }
   }, [removeSession]);
@@ -76,58 +78,57 @@ export function Sidebar() {
     <div className="session-sidebar">
       <div className="session-sidebar-header">
         {caller ? (
-          <>
-            <span
-              style={{
-                width: 8,
-                height: 8,
-                borderRadius: "50%",
-                background: caller.color,
-                flexShrink: 0,
-              }}
-            />
-            <span style={{ overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>
-              {caller.name}
-            </span>
-            {caller.pendingCount > 0 && (
-              caller.pendingCount > 4 ? (
-                <span
-                  style={{
-                    background: "#f59e0b",
-                    color: "#1a1a1a",
-                    fontSize: 9,
-                    fontWeight: 700,
-                    minWidth: 14,
-                    height: 14,
-                    borderRadius: 7,
-                    display: "inline-flex",
-                    alignItems: "center",
-                    justifyContent: "center",
-                    padding: "0 4px",
-                    lineHeight: 1,
-                    flexShrink: 0,
-                  }}
-                >
-                  {caller.pendingCount}
+          <div style={{ display: "flex", alignItems: "center", gap: 8, minWidth: 0, width: "100%" }}>
+            <IdenticonAvatar alias={caller.alias || caller.name} color={caller.color} size={28} />
+            <div style={{ display: "flex", flexDirection: "column", minWidth: 0, flex: 1 }}>
+              <div style={{ display: "flex", alignItems: "center", gap: 4 }}>
+                <span style={{ fontFamily: "'Cascadia Code', 'Consolas', 'SF Mono', 'Monaco', monospace", fontSize: 13, fontWeight: 600, color: caller.color, whiteSpace: "nowrap" }}>
+                  {caller.alias || caller.name.charAt(0).toUpperCase()}
                 </span>
-              ) : (
-                <span style={{ display: "inline-flex", gap: 2, flexShrink: 0 }}>
-                  {Array.from({ length: caller.pendingCount }, (_, i) => (
+                {caller.pendingCount > 0 && (
+                  caller.pendingCount > 4 ? (
                     <span
-                      key={i}
-                      className={isBlinking ? "caller-tab-badge-new" : undefined}
                       style={{
-                          width: 5,
-                          height: 5,
-                          borderRadius: "50%",
-                          background: "#f59e0b",
-                        }}
-                    />
-                  ))}
-                </span>
-              )
-            )}
-          </>
+                        background: "#f59e0b",
+                        color: "#1a1a1a",
+                        fontSize: 9,
+                        fontWeight: 700,
+                        minWidth: 14,
+                        height: 14,
+                        borderRadius: 7,
+                        display: "inline-flex",
+                        alignItems: "center",
+                        justifyContent: "center",
+                        padding: "0 4px",
+                        lineHeight: 1,
+                        flexShrink: 0,
+                      }}
+                    >
+                      {caller.pendingCount}
+                    </span>
+                  ) : (
+                    <span style={{ display: "inline-flex", gap: 2, flexShrink: 0 }}>
+                      {Array.from({ length: caller.pendingCount }, (_, i) => (
+                        <span
+                          key={i}
+                          className={isBlinking ? "caller-tab-badge-new" : undefined}
+                          style={{
+                            width: 5,
+                            height: 5,
+                            borderRadius: "50%",
+                            background: "#f59e0b",
+                          }}
+                        />
+                      ))}
+                    </span>
+                  )
+                )}
+              </div>
+              <span style={{ fontSize: 10, color: "var(--color-text-muted)", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>
+                {caller.name}
+              </span>
+            </div>
+          </div>
         ) : (
           t("sidebar.history", "History")
         )}
@@ -140,23 +141,30 @@ export function Sidebar() {
         )}
         {[...sessions]
           .sort((a, b) => {
-            if (a.status !== b.status) return a.status === "pending" ? -1 : 1;
+            // pending first, then cancelled, then responded
+            const statusOrder = { pending: 0, cancelled: 1, responded: 2 };
+            const aOrder = statusOrder[a.status] ?? 2;
+            const bOrder = statusOrder[b.status] ?? 2;
+            if (aOrder !== bOrder) return aOrder - bOrder;
             return new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime();
           })
           .map((session) => {
           const isActive = session.id === activeSessionId;
           const isPending = session.status === "pending";
+          const isCancelled = session.status === "cancelled";
           return (
             <button
               key={session.id}
               className={`session-item${isActive ? " session-item-active" : ""}`}
               onClick={() => handleSelectSession(session.id)}
               title={session.requestName}
-              style={isActive && activeCallerColor ? { background: `${activeCallerColor}1a` } : undefined}
+              style={isActive && activeCallerColor ? { background: `${activeCallerColor}${document.documentElement.getAttribute("data-theme") === "light" ? "0d" : "1a"}` } : undefined}
             >
               <span className="session-item-icon">
                 {isPending ? (
                   <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="#f59e0b" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z" /><circle cx="12" cy="10" r="1" fill="#f59e0b" /></svg>
+                ) : isCancelled ? (
+                  <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="#ef4444" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round"><line x1="18" y1="6" x2="6" y2="18" /><line x1="6" y1="6" x2="18" y2="18" /></svg>
                 ) : (
                   <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="var(--color-success)" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round"><polyline points="20 6 9 17 4 12" /></svg>
                 )}

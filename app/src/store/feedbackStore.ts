@@ -17,7 +17,14 @@ export interface PromptItem {
 
 // ── Multi-session types ──
 
-export type SessionStatus = "pending" | "responded";
+export type SessionStatus = "pending" | "responded" | "cancelled";
+
+export interface QuestionItem {
+  label: string;
+  options?: string[];
+  selectedOptions: string[];
+  answer: string;
+}
 
 export interface Caller {
   id: string;
@@ -26,6 +33,7 @@ export interface Caller {
   color: string;
   pendingCount: number;
   clientName?: string;
+  alias?: string;
 }
 
 export interface Session {
@@ -41,6 +49,8 @@ export interface Session {
   testLogText: string;
   images: ImageAttachment[];
   commandLogs: string;
+  // Agent questions
+  questions: QuestionItem[];
 }
 
 export type AppMode = "legacy" | "persistent";
@@ -98,6 +108,8 @@ export interface FeedbackState {
   updateCallerColor: (id: string, color: string) => void;
   setActiveCaller: (id: string) => void;
   setCallerOrder: (order: string[]) => void;
+  sortCallersByName: () => void;
+  clearAllHistory: () => Promise<void>;
   addSession: (session: Session) => void;
   setActiveSession: (id: string) => void;
   updateSessionField: (sessionId: string, field: keyof Pick<Session, "feedbackText" | "testLogText" | "commandLogs">, value: string) => void;
@@ -105,7 +117,10 @@ export interface FeedbackState {
   removeSessionImage: (sessionId: string, path: string) => void;
   clearSessionImages: (sessionId: string) => void;
   markSessionResponded: (sessionId: string) => void;
+  markSessionCancelled: (sessionId: string) => void;
   removeSession: (sessionId: string) => void;
+  updateSessionAnswer: (sessionId: string, questionIndex: number, answer: string) => void;
+  toggleSessionOption: (sessionId: string, questionIndex: number, option: string) => void;
   updateCallerPendingCount: (callerId: string) => void;
   clearBlinking: (callerId: string) => void;
 
@@ -202,9 +217,14 @@ export const useFeedbackStore = create<FeedbackState>((set, get) => ({
     const { callers, callerOrder } = get();
     const existing = callers.find((c) => c.id === caller.id);
     if (existing) {
-      // Update clientName if previously missing
-      if (!existing.clientName && caller.clientName) {
-        set({ callers: callers.map((c) => c.id === caller.id ? { ...c, clientName: caller.clientName } : c) });
+      // Update clientName or alias if previously missing
+      const needsUpdate = (!existing.clientName && caller.clientName) || (!existing.alias && caller.alias);
+      if (needsUpdate) {
+        set({ callers: callers.map((c) => c.id === caller.id ? {
+          ...c,
+          clientName: c.clientName || caller.clientName,
+          alias: c.alias || caller.alias,
+        } : c) });
       }
       return;
     }
@@ -235,6 +255,36 @@ export const useFeedbackStore = create<FeedbackState>((set, get) => ({
   },
 
   setCallerOrder: (order) => set({ callerOrder: order }),
+
+  sortCallersByName: () => {
+    const { callers, callerOrder } = get();
+    const order = callerOrder.length > 0
+      ? [...callerOrder]
+      : callers.map((c) => c.id);
+    const callerMap = new Map(callers.map((c) => [c.id, c]));
+    // Group by workspace name, preserving original relative order within each group
+    // Map insertion order = first-appearance order of each workspace
+    const groups = new Map<string, string[]>();
+    for (const id of order) {
+      const name = callerMap.get(id)?.name ?? "";
+      if (!groups.has(name)) groups.set(name, []);
+      groups.get(name)!.push(id);
+    }
+    set({ callerOrder: [...groups.values()].flat() });
+  },
+
+  clearAllHistory: async () => {
+    const { invoke } = await import("@tauri-apps/api/core");
+    await invoke("clear_all_history");
+    set({
+      callers: [],
+      callerOrder: [],
+      sessions: [],
+      activeCallerId: null,
+      activeSessionId: null,
+      blinkingCallerIds: [],
+    });
+  },
 
   addSession: (session) => {
     set((state) => ({
@@ -303,6 +353,51 @@ export const useFeedbackStore = create<FeedbackState>((set, get) => ({
     if (session) {
       get().updateCallerPendingCount(session.callerId);
     }
+  },
+
+  markSessionCancelled: (sessionId) => {
+    set((state) => ({
+      sessions: state.sessions.map((s) =>
+        s.id === sessionId ? { ...s, status: "cancelled" as const } : s
+      ),
+    }));
+    const session = get().sessions.find((s) => s.id === sessionId);
+    if (session) {
+      get().updateCallerPendingCount(session.callerId);
+    }
+  },
+
+  updateSessionAnswer: (sessionId, questionIndex, answer) => {
+    set((state) => ({
+      sessions: state.sessions.map((s) =>
+        s.id === sessionId
+          ? {
+              ...s,
+              questions: s.questions.map((q, i) =>
+                i === questionIndex ? { ...q, answer } : q
+              ),
+            }
+          : s
+      ),
+    }));
+  },
+
+  toggleSessionOption: (sessionId, questionIndex, option) => {
+    set((state) => ({
+      sessions: state.sessions.map((s) =>
+        s.id === sessionId
+          ? {
+              ...s,
+              questions: s.questions.map((q, i) => {
+                if (i !== questionIndex) return q;
+                const sel = q.selectedOptions || [];
+                const has = sel.includes(option);
+                return { ...q, selectedOptions: has ? sel.filter((o) => o !== option) : [...sel, option] };
+              }),
+            }
+          : s
+      ),
+    }));
   },
 
   removeSession: (sessionId) => {

@@ -4,10 +4,12 @@
   },
   "summary": {
     "title": "AI 摘要",
-    "empty": "等待 AI 任务摘要..."
+    "empty": "等待 AI 任务摘要...",
+    "says": "说："
   },
   "feedback": {
     "placeholder": "在此输入您的反馈...\nCtrl+Enter 提交，Ctrl+V 粘贴图片",
+    "placeholderWithAlias": "向 {{alias}} 发送反馈...\nCtrl+Enter 提交，Ctrl+V 粘贴图片",
     "submit": "发送反馈 (Ctrl+Enter)",
     "submitting": "提交中...",
     "hint": "Ctrl+Enter 提交"
@@ -51,7 +53,8 @@
   },
   "session": {
     "waitingForRequest": "等待反馈请求...",
-    "responded": "反馈已提交（只读）"
+    "responded": "反馈已提交（只读）",
+    "cancelled": "客户端已断开连接 — 会话已取消"
   },
   "settings": {
     "title": "设置",
@@ -66,13 +69,22 @@
     "en": "English",
     "autostart": "开机自启动",
     "autostartDesc": "系统启动时自动运行 My Last Feedback",
+    "clearHistory": "清除所有历史记录",
+    "clearHistoryDesc": "删除所有调用者、会话和附件图片",
+    "clearHistoryBtn": "清除",
+    "clearHistoryConfirm": "确认清除",
+    "clearHistoryCancel": "取消",
     "aboutDesc": "一个用于 MCP 交互式反馈的桌面应用",
     "prompts": "提示词",
     "promptsEmpty": "未找到 prompt 文件\n将 .prompt.md 文件放入 exe 同级的 mcp_prompts/ 目录",
     "promptEnable": "启用",
     "promptDisable": "禁用"
   },
+  "titlebar": {
+    "sortByWorkspace": "按工作区整理排序"
+  },
   "tooltip": {
+    "alias": "Agent 假名",
     "client": "客户端",
     "workspace": "工作区",
     "version": "版本"
@@ -84,5 +96,15 @@
     "cmdArgs": "命令+参数",
     "addTo": "添加到",
     "copy": "复制"
+  },
+  "questions": {
+    "title": "Agent 质询",
+    "titleWithAlias_suffix": "向您询问：",
+    "hint": "请在下方回答",
+    "colQuestion": "问题",
+    "colOptions": "选项",
+    "colAnswer": "回答",
+    "inputPlaceholder": "请输入您对「{{label}}」的决定",
+    "fillTemplate": "填充模板到反馈框"
   }
 }

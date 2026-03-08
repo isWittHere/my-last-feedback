@@ -2,6 +2,7 @@ import { useRef, useState, useCallback } from "react";
 import { useFeedbackStore } from "../store/feedbackStore";
 import { useShallow } from "zustand/react/shallow";
 import { useTranslation } from "react-i18next";
+import { IdenticonAvatar } from "./IdenticonAvatar";
 
 interface CallerTabsProps {
   columnCount?: number;
@@ -142,7 +143,7 @@ export function CallerTabs({ columnCount }: CallerTabsProps = {}) {
     }
 
         const isColumn = columnCount ? index < columnCount : caller.id === activeCallerId;
-    const initial = caller.name.charAt(0).toUpperCase();
+    const aliasKey = caller.alias || caller.name;
     const isDragging = draggingId === caller.id;
     const tx = getTranslateX(index);
     const isHovered = hoveredCallerId === caller.id;
@@ -170,8 +171,8 @@ export function CallerTabs({ columnCount }: CallerTabsProps = {}) {
         }}
         className="caller-tab"
         style={{
-          background: isDragging ? `${caller.color}cc` : isColumn ? `${caller.color}66` : `${caller.color}22`,
-          borderColor: isDragging ? caller.color : isColumn ? `${caller.color}88` : "transparent",
+          background: isDragging ? `${caller.color}cc` : `${caller.color}22`,
+          borderColor: isDragging ? caller.color : isColumn ? caller.color : "transparent",
           cursor: isDragging ? "grabbing" : "grab",
           opacity: 1,
           boxShadow: isDragging ? `0 0 8px ${caller.color}88` : "none",
@@ -181,7 +182,7 @@ export function CallerTabs({ columnCount }: CallerTabsProps = {}) {
           zIndex: isDragging ? 10 : isHovered ? 20 : 1,
         }}
       >
-        <span className="caller-tab-initial">{initial}</span>
+        <IdenticonAvatar alias={aliasKey} color={caller.color} size={16} />
         {caller.pendingCount > 0 && (
           caller.pendingCount > 4 ? (
             <span className={`caller-tab-badge-num${blinkingCallerIds.includes(caller.id) ? " caller-tab-badge-new" : ""}`}>{caller.pendingCount}</span>
@@ -196,6 +197,12 @@ export function CallerTabs({ columnCount }: CallerTabsProps = {}) {
         {isHovered && (
           <div className="caller-tab-tooltip">
             <div className="caller-tab-tooltip-name" style={{ color: caller.color }}>{caller.name}</div>
+            {caller.alias && (
+              <div className="caller-tab-tooltip-row">
+                <span className="caller-tab-tooltip-label">{t("tooltip.alias")}</span>
+                <span style={{ fontFamily: "'Cascadia Code', 'Consolas', 'SF Mono', 'Monaco', monospace" }}>{caller.alias}</span>
+              </div>
+            )}
             {caller.clientName && (
               <div className="caller-tab-tooltip-row">
                 <span className="caller-tab-tooltip-label">{t("tooltip.client")}</span>

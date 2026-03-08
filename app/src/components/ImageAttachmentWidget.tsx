@@ -158,8 +158,6 @@ export function ImageAttachmentWidget({ children, renderLayout }: {
         style={{
           fontSize: 11,
           padding: "3px 10px",
-          background: "#2a2d42",
-          borderColor: "#3a3f5c",
           opacity: canAdd ? 1 : 0.4,
           cursor: canAdd ? "pointer" : "not-allowed",
         }}
@@ -181,7 +179,7 @@ export function ImageAttachmentWidget({ children, renderLayout }: {
     <div
       className="flex gap-2 overflow-x-auto py-1 px-1 rounded-lg shrink-0"
       style={{
-        background: dragOver ? "var(--color-primary-subtle, #2a2d42)" : "var(--color-bg-input)",
+        background: dragOver ? "var(--color-accent-green)" : "var(--color-bg-elevated)",
         minHeight: THUMBNAIL_SIZE + 28,
       }}
       onDragOver={(e) => { if (e.dataTransfer.types.includes("Files")) { e.preventDefault(); setDragOver(true); } }}
@@ -212,11 +210,11 @@ export function ImageAttachmentWidget({ children, renderLayout }: {
         bottom: 16,
         left: "50%",
         transform: "translateX(-50%)",
-        background: "#1e1e2e",
-        border: "1px solid #ef4444",
+        background: "var(--color-bg-surface)",
+        border: "1px solid var(--color-danger)",
         borderRadius: 6,
         padding: "8px 16px",
-        color: "#fca5a5",
+        color: "var(--color-danger)",
         fontSize: 12,
         whiteSpace: "pre-line",
         zIndex: 99999,
@@ -275,7 +273,7 @@ function ImageThumb({ img, onRemove }: { img: ImageAttachment; onRemove: (path: 
         style={{
           width: THUMBNAIL_SIZE,
           height: THUMBNAIL_SIZE,
-          background: "#12121a",
+          background: "var(--color-bg-elevated)",
           border: "1px solid var(--color-border)",
           position: "relative",
         }}

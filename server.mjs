@@ -8,7 +8,7 @@ import { readFileSync, unlinkSync, existsSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join, dirname } from "node:path";
 import { fileURLToPath } from "node:url";
-import { randomBytes, randomUUID } from "node:crypto";
+import { randomBytes, randomUUID, createHash } from "node:crypto";
 import { createConnection } from "node:net";
 import { createInterface } from "node:readline";
 
@@ -179,7 +179,42 @@ async function getCallerInfo(server, projectDir) {
   return { name: baseName, version: version || "0.0.0", clientName: clientName };
 }
 
-async function requestFeedbackViaIpc(socket, projectDirectory, summary, requestName, callerInfo) {
+// ── Alias generation ──
+// Generate a deterministic 4-char uppercase hex alias from caller identity components.
+// The alias is meaningless by design — it serves as a neutral agent identifier that
+// won't influence the agent's self-perception of its role.
+function generateAlias(baseName, agentName, clientName) {
+  const key = `${baseName}:${agentName || ""}:${clientName || ""}`;
+  const hash = createHash("md5").update(key).digest("hex");
+  return hash.slice(0, 4).toUpperCase();
+}
+
+// ── Active session tracking (for cancel-on-disconnect) ──
+
+const activeSessions = new Map(); // sessionId → { socket }
+
+async function sendCancelForSession(sessionId) {
+  try {
+    const socket = await connectToApp();
+    if (!socket) return;
+    const msg = JSON.stringify({ type: "session_cancel", session_id: sessionId });
+    socket.write(msg + "\n");
+    socket.end();
+    console.error("[MCP] Sent cancel for session:", sessionId);
+  } catch (e) {
+    console.error("[MCP] Failed to send cancel:", e.message);
+  }
+}
+
+async function cancelAllActiveSessions() {
+  const ids = [...activeSessions.keys()];
+  activeSessions.clear();
+  for (const id of ids) {
+    await sendCancelForSession(id);
+  }
+}
+
+async function requestFeedbackViaIpc(socket, projectDirectory, summary, requestName, callerInfo, questions) {
   const sessionId = randomUUID();
 
   const request = JSON.stringify({
@@ -189,11 +224,13 @@ async function requestFeedbackViaIpc(socket, projectDirectory, summary, requestN
       name: callerInfo.name,
       version: callerInfo.version,
       client_name: callerInfo.clientName,
+      alias: callerInfo.alias,
     },
     payload: {
       summary,
       request_name: requestName,
       project_directory: projectDirectory,
+      questions: questions || [],
     },
   });
 
@@ -201,13 +238,10 @@ async function requestFeedbackViaIpc(socket, projectDirectory, summary, requestN
     const rl = createInterface({ input: socket });
     let settled = false;
 
-    const timeout = setTimeout(() => {
-      if (!settled) {
-        settled = true;
-        socket.destroy();
-        reject(new Error("IPC response timeout (10 minutes)"));
-      }
-    }, 10 * 60 * 1000);
+    // Track this session so we can cancel it if stdin closes
+    activeSessions.set(sessionId, { socket });
+
+    // No timeout — the app stays alive permanently until the user responds or the session is cancelled
 
     rl.on("line", (line) => {
       if (settled) return;
@@ -216,7 +250,7 @@ async function requestFeedbackViaIpc(socket, projectDirectory, summary, requestN
         console.error("[MCP] Received IPC message:", msg.type, msg.session_id);
         if (msg.type === "feedback_response" && msg.session_id === sessionId) {
           settled = true;
-          clearTimeout(timeout);
+          activeSessions.delete(sessionId);
           rl.close();
           socket.destroy();
           console.error("[MCP] Feedback received, resolving...");
@@ -228,7 +262,7 @@ async function requestFeedbackViaIpc(socket, projectDirectory, summary, requestN
     rl.on("close", () => {
       if (!settled) {
         settled = true;
-        clearTimeout(timeout);
+        activeSessions.delete(sessionId);
         console.error("[MCP] IPC connection closed before response");
         reject(new Error("IPC connection closed before response"));
       }
@@ -237,7 +271,7 @@ async function requestFeedbackViaIpc(socket, projectDirectory, summary, requestN
     socket.on("error", (err) => {
       if (!settled) {
         settled = true;
-        clearTimeout(timeout);
+        activeSessions.delete(sessionId);
         console.error("[MCP] IPC socket error:", err.message);
         reject(new Error(`IPC socket error: ${err.message}`));
       }
@@ -293,7 +327,9 @@ Images will be returned as ImageContent alongside the text feedback.
 
 IMPORTANT - rules for AI agents calling this tool:
 1. request_name MUST always be provided with a meaningful task title. Never omit it or leave it blank.
-2. summary MUST be written in standard Markdown format using headings, lists, bold, or code blocks.`,
+2. summary MUST be written in standard Markdown format using headings, lists, bold, or code blocks.
+3. Use questions to ask the user structured questions. Describe full proposals in summary, then use questions for concise choices.
+4. agent_name: On your FIRST call, leave empty or omit. The response will assign you an agent identifier. On ALL subsequent calls, you MUST pass that identifier back as agent_name.`,
   {
     project_directory: z.string().describe("Full path to the project directory"),
     summary: z.string().describe(
@@ -305,10 +341,24 @@ IMPORTANT - rules for AI agents calling this tool:
       "A concise title (5-10 words) for the current task, displayed in the window title bar. " +
       "This parameter is REQUIRED and MUST NOT be left empty."
     ),
+    agent_name: z.string().optional().describe(
+      "Your assigned agent identifier. Leave empty on first call; the response will assign one. " +
+      "On all subsequent calls, you MUST pass your assigned identifier here."
+    ),
+    questions: z.array(z.object({
+      label: z.string().describe("Short question label, e.g. 'Database choice', 'Need caching?'"),
+      options: z.array(z.string()).optional().describe("Option labels, e.g. ['Plan A', 'Plan B']. Omit for open-ended input."),
+    })).optional().describe(
+      "Structured questions for the user. Describe full proposals in summary, " +
+      "then list concise question labels and option choices here."
+    ),
   },
-  async ({ project_directory, summary, request_name }) => {
+  async ({ project_directory, summary, request_name, agent_name, questions }) => {
     const projectDir = project_directory.split("\n")[0].trim();
     const callerInfo = await getCallerInfo(server, projectDir);
+    // Use agent_name if provided; otherwise generate alias from base identity
+    const alias = agent_name || generateAlias(callerInfo.name, "", callerInfo.clientName);
+    callerInfo.alias = alias;
     console.error("[MCP] callerInfo:", JSON.stringify(callerInfo));
 
     let result;
@@ -316,7 +366,7 @@ IMPORTANT - rules for AI agents calling this tool:
       // Try IPC mode first (persistent app)
       const socket = await ensureAppRunning();
       console.error("[MCP] IPC socket connected, sending request...");
-      result = await requestFeedbackViaIpc(socket, projectDir, summary, request_name, callerInfo);
+      result = await requestFeedbackViaIpc(socket, projectDir, summary, request_name, callerInfo, questions);
     } catch (ipcErr) {
       // Fallback to legacy mode
       console.error("[MCP] IPC failed, falling back to legacy mode:", ipcErr.message);
@@ -361,9 +411,48 @@ IMPORTANT - rules for AI agents calling this tool:
       content.push({ type: "text", text: "(No feedback provided)" });
     }
 
+    // Append agent alias reminder to reinforce identity across calls
+    content.push({
+      type: "text",
+      text: `[System] Your agent identifier for this MCP server is "${alias}". You MUST include agent_name="${alias}" in ALL subsequent interactive_feedback calls.`,
+    });
+
     return { content };
   }
 );
 
 const transport = new StdioServerTransport();
 await server.connect(transport);
+
+// ── Detect client disconnect ──
+// When the MCP client (e.g. VS Code) closes, the stdin pipe breaks.
+// We use multiple detection strategies since behavior differs across platforms:
+// 1. stdin 'end' / 'close' events (may not fire reliably on Windows)
+// 2. Process signal handlers (SIGTERM, SIGINT, SIGHUP)
+// 3. Periodic stdin readability check (most reliable cross-platform fallback)
+
+let disconnectHandled = false;
+async function handleClientDisconnect(reason) {
+  if (disconnectHandled) return;
+  disconnectHandled = true;
+  console.error(`[MCP] Client disconnected (${reason}), cancelling active sessions...`);
+  await cancelAllActiveSessions();
+  process.exit(0);
+}
+
+process.stdin.on("end", () => handleClientDisconnect("stdin end"));
+process.stdin.on("close", () => handleClientDisconnect("stdin close"));
+process.stdin.on("error", () => handleClientDisconnect("stdin error"));
+
+for (const sig of ["SIGTERM", "SIGINT", "SIGHUP"]) {
+  process.on(sig, () => handleClientDisconnect(`signal ${sig}`));
+}
+
+// Periodic check: if stdin is no longer readable (pipe broken), client is gone.
+// This is the most reliable method on Windows where pipe closure events may not fire.
+const stdinCheckInterval = setInterval(() => {
+  if (activeSessions.size > 0 && process.stdin.destroyed) {
+    clearInterval(stdinCheckInterval);
+    handleClientDisconnect("stdin destroyed (periodic check)");
+  }
+}, 2000);

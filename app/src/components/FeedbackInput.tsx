@@ -7,7 +7,7 @@ import { useActiveCallerSession } from "./useActiveCallerSession";
 export function FeedbackInput({ minHeight }: { minHeight?: number } = {}) {
   const { t } = useTranslation();
   const appMode = useFeedbackStore((s) => s.appMode);
-  const { session: activeSession } = useActiveCallerSession();
+  const { session: activeSession, caller } = useActiveCallerSession();
   const { feedbackText, setFeedbackText, updateSessionField, addSessionImage } = useFeedbackStore(useShallow((s) => ({
     feedbackText: s.feedbackText,
     setFeedbackText: s.setFeedbackText,
@@ -18,7 +18,7 @@ export function FeedbackInput({ minHeight }: { minHeight?: number } = {}) {
 
   const isPersistent = appMode === "persistent";
   const value = isPersistent ? (activeSession?.feedbackText || "") : feedbackText;
-  const isReadonly = isPersistent && activeSession?.status === "responded";
+  const isReadonly = isPersistent && (activeSession?.status === "responded" || activeSession?.status === "cancelled");
 
   useEffect(() => {
     textareaRef.current?.focus();
@@ -73,6 +73,10 @@ export function FeedbackInput({ minHeight }: { minHeight?: number } = {}) {
     [isPersistent, activeSession, addSessionImage]
   );
 
+  const placeholderText = isPersistent && caller?.alias
+    ? t("feedback.placeholderWithAlias", { alias: caller.alias, defaultValue: "Send feedback to {{alias}}...\nCtrl+Enter to submit, Ctrl+V to paste images" })
+    : t("feedback.placeholder");
+
   return (
     <textarea
       ref={textareaRef}
@@ -80,7 +84,7 @@ export function FeedbackInput({ minHeight }: { minHeight?: number } = {}) {
       onChange={handleChange}
       onPaste={handlePaste}
       readOnly={isReadonly}
-      placeholder={t("feedback.placeholder")}
+      placeholder={placeholderText}
       className={`input-area${minHeight === undefined ? " flex-1" : ""}`}
       style={{
         minHeight: minHeight ?? 0,

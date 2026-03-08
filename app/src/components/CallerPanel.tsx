@@ -140,8 +140,8 @@ function AttachmentTagBar({
           style={{
             fontSize: 11,
             padding: "3px 10px",
-            background: showTestLog ? callerColor : "#2a2d42",
-            borderColor: showTestLog ? callerColor : "#3a3f5c",
+            background: showTestLog ? callerColor : undefined,
+            borderColor: showTestLog ? callerColor : undefined,
             color: showTestLog ? "#fff" : undefined,
           }}
           onClick={handleAttachLogClick}
@@ -342,7 +342,7 @@ function TestLogTag({
       ref={tagRef}
       className="attachment-tag"
       style={{
-        background: showTestLog ? callerColor : "rgba(255,255,255,0.06)",
+        background: showTestLog ? callerColor : undefined,
         borderColor: showTestLog ? callerColor : "var(--color-border)",
         color: showTestLog ? "#fff" : "var(--color-text-secondary)",
       }}
@@ -463,7 +463,7 @@ function ReadonlyLogTag({ testLogText, expanded, onToggle }: { testLogText: stri
       ref={tagRef}
       className="attachment-tag"
       style={{
-        background: expanded ? "rgba(255,255,255,0.1)" : "rgba(255,255,255,0.06)",
+        background: expanded ? "var(--color-bg-elevated)" : undefined,
         borderColor: expanded ? "var(--color-border-strong)" : "var(--color-border)",
         cursor: "pointer",
       }}
@@ -598,7 +598,7 @@ function RichText({ text, style, className }: { text: string; style?: React.CSSP
                   height: 10,
                   borderRadius: 2,
                   backgroundColor: part.value,
-                  border: "1px solid rgba(255,255,255,0.2)",
+                  border: "1px solid var(--color-border)",
                   verticalAlign: "middle",
                   marginRight: 2,
                 }}
@@ -670,7 +670,7 @@ function CallerContent() {
   );
 
   // Auto-expand feedback panel based on textarea content
-  const isReadonly = activeSession?.status === "responded";
+  const isReadonly = activeSession?.status === "responded" || activeSession?.status === "cancelled";
   const sessionFeedback = activeSession?.feedbackText || "";
   const sessionTestLog = activeSession?.testLogText || "";
   const sessionImageCount = activeSession?.images?.length ?? 0;
@@ -718,6 +718,22 @@ function CallerContent() {
       if (quickAction) {
         sections.push(`## User Requirement\n${quickAction}`);
       }
+
+      // Agent questions response as Markdown table
+      const answeredQuestions = activeSession.questions?.filter(
+        (q) => q.answer.trim() || (q.selectedOptions && q.selectedOptions.length > 0)
+      );
+      if (answeredQuestions && answeredQuestions.length > 0) {
+        const tableRows = activeSession.questions.map((q, i) => {
+          const selected = q.selectedOptions && q.selectedOptions.length > 0 ? q.selectedOptions.join(", ") : "\u2014";
+          const answer = q.answer.trim() || "\u2014";
+          return `| ${i + 1} | ${q.label} | ${selected} | ${answer} |`;
+        });
+        sections.push(
+          `## Agent Questions Response\n\n| # | Question | Selected | Answer |\n|---|----------|----------|--------|\n${tableRows.join("\n")}`
+        );
+      }
+
       sections.push(
         "## Reminder\nPlease use the interactive_feedback tool again after completing this operation."
       );
@@ -869,9 +885,15 @@ function CallerContent() {
       )}
 
       {isReadonly && (
-        <div className="flex items-center justify-center py-3 shrink-0" style={{ color: "var(--color-text-muted)", fontSize: 12 }}>
-          <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="var(--color-success)" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round" style={{ display: "inline", verticalAlign: "middle", marginRight: 4 }}><polyline points="20 6 9 17 4 12" /></svg>
-          Feedback already submitted (read-only)
+        <div className="flex items-center justify-center py-3 shrink-0" style={{ color: activeSession?.status === "cancelled" ? "#ef4444" : "var(--color-text-muted)", fontSize: 12 }}>
+          {activeSession?.status === "cancelled" ? (
+            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="#ef4444" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round" style={{ display: "inline", verticalAlign: "middle", marginRight: 4 }}><line x1="18" y1="6" x2="6" y2="18" /><line x1="6" y1="6" x2="18" y2="18" /></svg>
+          ) : (
+            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="var(--color-success)" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round" style={{ display: "inline", verticalAlign: "middle", marginRight: 4 }}><polyline points="20 6 9 17 4 12" /></svg>
+          )}
+          {activeSession?.status === "cancelled"
+            ? t("session.cancelled", "Client disconnected — session cancelled")
+            : "Feedback already submitted (read-only)"}
         </div>
       )}
     </div>
@@ -888,7 +910,7 @@ const TestLogInput = forwardRef<HTMLTextAreaElement>(function TestLogInput(_prop
   })));
 
   const value = activeSession?.testLogText || "";
-  const isReadonly = activeSession?.status === "responded";
+  const isReadonly = activeSession?.status === "responded" || activeSession?.status === "cancelled";
   const internalRef = useRef<HTMLTextAreaElement>(null);
 
   const combinedRef = useCallback((el: HTMLTextAreaElement | null) => {
