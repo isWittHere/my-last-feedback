@@ -4,10 +4,12 @@
   },
   "summary": {
     "title": "AI Summary",
-    "empty": "Waiting for AI task summary..."
+    "empty": "Waiting for AI task summary...",
+    "says": "says:"
   },
   "feedback": {
     "placeholder": "Enter your feedback here...\nCtrl+Enter to submit, Ctrl+V to paste images",
+    "placeholderWithAlias": "Send feedback to {{alias}}...\nCtrl+Enter to submit, Ctrl+V to paste images",
     "submit": "Send Feedback (Ctrl+Enter)",
     "submitting": "Submitting...",
     "hint": "Ctrl+Enter to submit"
@@ -51,7 +53,8 @@
   },
   "session": {
     "waitingForRequest": "Waiting for feedback request...",
-    "responded": "Feedback already submitted (read-only)"
+    "responded": "Feedback already submitted (read-only)",
+    "cancelled": "Client disconnected — session cancelled"
   },
   "settings": {
     "title": "Settings",
@@ -66,13 +69,22 @@
     "en": "English",
     "autostart": "Launch at startup",
     "autostartDesc": "Automatically start My Last Feedback when the system boots",
+    "clearHistory": "Clear All History",
+    "clearHistoryDesc": "Remove all callers, sessions, and attached images",
+    "clearHistoryBtn": "Clear",
+    "clearHistoryConfirm": "Confirm",
+    "clearHistoryCancel": "Cancel",
     "aboutDesc": "A desktop app for MCP interactive feedback",
     "prompts": "Prompts",
     "promptsEmpty": "No prompt files found\nPlace .prompt.md files in mcp_prompts/ next to the exe",
     "promptEnable": "Enable",
     "promptDisable": "Disable"
   },
+  "titlebar": {
+    "sortByWorkspace": "Sort tabs by workspace"
+  },
   "tooltip": {
+    "alias": "Agent ID",
     "client": "Client",
     "workspace": "Workspace",
     "version": "Version"
@@ -84,5 +96,15 @@
     "cmdArgs": "Cmd+Args",
     "addTo": "Add to",
     "copy": "Copy"
+  },
+  "questions": {
+    "title": "Agent Questions",
+    "titleWithAlias_suffix": "asks you:",
+    "hint": "Please answer below",
+    "colQuestion": "Question",
+    "colOptions": "Options",
+    "colAnswer": "Answer",
+    "inputPlaceholder": "Your decision on \"{{label}}\"",
+    "fillTemplate": "Fill template to feedback"
   }
 }

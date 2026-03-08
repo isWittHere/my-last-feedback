@@ -5,17 +5,40 @@ use std::path::{Path, PathBuf};
 use std::sync::Arc;
 use tokio::sync::{oneshot, Mutex as TokioMutex};
 
-/// Predefined color pool for caller tabs (muted tones)
-const COLOR_POOL: &[&str] = &[
-    "#6b9fc8", // soft blue
-    "#6aad8e", // sage green
-    "#9a85b8", // muted purple
-    "#c4a05a", // warm gold
-    "#c07070", // dusty rose
-    "#5fa8b5", // soft teal
-    "#c08a5a", // muted orange
-    "#b07a9a", // dusty pink
-];
+/// Golden angle ≈ 137.508° — maximally separates sequential hues
+const GOLDEN_ANGLE: f64 = 137.508;
+
+/// Generate a muted color from a sequential index using HSL golden-angle spacing
+fn generate_color(index: usize) -> String {
+    let hue = (index as f64 * GOLDEN_ANGLE) % 360.0;
+    hsl_to_hex(hue, 0.42, 0.58)
+}
+
+/// Convert HSL (h in 0..360, s/l in 0..1) to a #rrggbb hex string
+fn hsl_to_hex(h: f64, s: f64, l: f64) -> String {
+    let c = (1.0 - (2.0 * l - 1.0).abs()) * s;
+    let x = c * (1.0 - ((h / 60.0) % 2.0 - 1.0).abs());
+    let m = l - c / 2.0;
+    let (r, g, b) = if h < 60.0 {
+        (c, x, 0.0)
+    } else if h < 120.0 {
+        (x, c, 0.0)
+    } else if h < 180.0 {
+        (0.0, c, x)
+    } else if h < 240.0 {
+        (0.0, x, c)
+    } else if h < 300.0 {
+        (x, 0.0, c)
+    } else {
+        (c, 0.0, x)
+    };
+    format!(
+        "#{:02x}{:02x}{:02x}",
+        ((r + m) * 255.0).round() as u8,
+        ((g + m) * 255.0).round() as u8,
+        ((b + m) * 255.0).round() as u8,
+    )
+}
 
 const MAX_HISTORY_SESSIONS: usize = 200;
 
@@ -24,6 +47,7 @@ const MAX_HISTORY_SESSIONS: usize = 200;
 pub enum SessionStatus {
     Pending,
     Responded,
+    Cancelled,
 }
 
 /// AI caller information (one per MCP client)
@@ -35,6 +59,8 @@ pub struct CallerInfo {
     pub color: String,
     #[serde(default)]
     pub client_name: String,
+    #[serde(default)]
+    pub alias: String,
 }
 
 /// Serializable session summary for frontend
@@ -60,6 +86,8 @@ pub struct SessionDetail {
     pub feedback_text: Option<String>,
     pub command_logs: Option<String>,
     pub images: Vec<serde_json::Value>,
+    #[serde(default)]
+    pub questions: Vec<serde_json::Value>,
 }
 
 /// Feedback payload submitted by user
@@ -91,6 +119,8 @@ struct PersistedSession {
     feedback_text: Option<String>,
     command_logs: Option<String>,
     image_refs: Vec<ImageRef>,
+    #[serde(default)]
+    questions: Vec<serde_json::Value>,
 }
 
 #[derive(Serialize, Deserialize)]
@@ -115,13 +145,33 @@ pub struct SessionManager {
 
 impl SessionManager {
     pub fn new(data_dir: PathBuf) -> Self {
-        let (callers, sessions, color_index) = Self::load_from_disk(&data_dir);
-        Self {
+        let (mut callers, sessions, _old_color_index) = Self::load_from_disk(&data_dir);
+        // Reassign colors using golden-angle HSL for better separation
+        let mut ws_index: HashMap<String, usize> = HashMap::new();
+        let mut idx: usize = 0;
+        let mut sorted_ids: Vec<_> = callers.keys().cloned().collect();
+        sorted_ids.sort();
+        for id in &sorted_ids {
+            if let Some(c) = callers.get(id) {
+                if !ws_index.contains_key(&c.name) {
+                    ws_index.insert(c.name.clone(), idx);
+                    idx += 1;
+                }
+            }
+        }
+        for caller in callers.values_mut() {
+            if let Some(&i) = ws_index.get(&caller.name) {
+                caller.color = generate_color(i);
+            }
+        }
+        let mut mgr = Self {
             callers,
             sessions,
-            color_index,
+            color_index: idx,
             data_dir,
-        }
+        };
+        mgr.persist();
+        mgr
     }
 
     fn history_path(&self) -> PathBuf {
@@ -133,26 +183,43 @@ impl SessionManager {
     }
 
     /// Register or get a caller. Assigns a color from the pool on first sight.
-    pub fn ensure_caller(&mut self, name: &str, version: &str, client_name: &str) -> CallerInfo {
-        // Use a simple hash of the name as the caller id
-        let id = format!("caller_{:x}", md5_simple(name));
+    /// The `alias` parameter is used to distinguish different agents within the same workspace.
+    /// Color is assigned per workspace name, so agents in the same workspace share color.
+    pub fn ensure_caller(&mut self, name: &str, version: &str, client_name: &str, alias: &str) -> CallerInfo {
+        // Caller ID includes alias so different agents are separate callers
+        let id_input = if alias.is_empty() { name.to_string() } else { format!("{}:{}", name, alias) };
+        let id = format!("caller_{:x}", md5_simple(&id_input));
         if let Some(existing) = self.callers.get(&id) {
-            let result = existing.clone();
+            let mut result = existing.clone();
             // Update client_name if it was previously empty
             if result.client_name.is_empty() && !client_name.is_empty() {
                 self.callers.get_mut(&id).unwrap().client_name = client_name.to_string();
+                result.client_name = client_name.to_string();
+                self.persist();
+            }
+            // Update alias if it was previously empty
+            if result.alias.is_empty() && !alias.is_empty() {
+                self.callers.get_mut(&id).unwrap().alias = alias.to_string();
+                result.alias = alias.to_string();
                 self.persist();
             }
             return result;
         }
-        let color = COLOR_POOL[self.color_index % COLOR_POOL.len()].to_string();
-        self.color_index += 1;
+        // Assign color: reuse existing workspace color, or generate new via golden-angle
+        let color = if let Some(existing_ws) = self.callers.values().find(|c| c.name == name) {
+            existing_ws.color.clone()
+        } else {
+            let c = generate_color(self.color_index);
+            self.color_index += 1;
+            c
+        };
         let caller = CallerInfo {
             id: id.clone(),
             name: name.to_string(),
             version: version.to_string(),
             color,
             client_name: client_name.to_string(),
+            alias: alias.to_string(),
         };
         self.callers.insert(id, caller.clone());
         self.persist();
@@ -167,6 +234,7 @@ impl SessionManager {
         request_name: String,
         summary: String,
         project_directory: String,
+        questions: Vec<serde_json::Value>,
         response_tx: oneshot::Sender<FeedbackPayload>,
     ) -> String {
         let detail = SessionDetail {
@@ -180,6 +248,7 @@ impl SessionManager {
             feedback_text: None,
             command_logs: None,
             images: Vec::new(),
+            questions,
         };
         self.sessions.push(SessionEntry {
             detail,
@@ -331,6 +400,27 @@ impl SessionManager {
             .count()
     }
 
+    /// Cancel a pending session (client disconnected). Drops the oneshot sender so the IPC handler unblocks.
+    pub fn cancel_session(&mut self, session_id: &str) -> Result<(), String> {
+        let entry = self
+            .sessions
+            .iter_mut()
+            .find(|s| s.detail.id == session_id)
+            .ok_or_else(|| format!("Session not found: {}", session_id))?;
+
+        if entry.detail.status != SessionStatus::Pending {
+            return Err("Session is not pending".to_string());
+        }
+
+        entry.detail.status = SessionStatus::Cancelled;
+        // Drop the oneshot sender — this will cause the IPC handler's rx.await to return Err,
+        // unblocking the connection task.
+        let _ = entry.response_tx.take();
+
+        self.persist();
+        Ok(())
+    }
+
     /// Remove a session and its image files. Returns true if caller has no remaining sessions.
     pub fn remove_session(&mut self, session_id: &str) -> bool {
         let images_dir = self.images_dir();
@@ -363,6 +453,19 @@ impl SessionManager {
         caller.color = color;
         self.persist();
         Ok(())
+    }
+
+    /// Clear all history: remove all callers, sessions, and image files
+    pub fn clear_all_history(&mut self) {
+        // Delete all image files
+        let images_dir = self.images_dir();
+        if images_dir.exists() {
+            let _ = std::fs::remove_dir_all(&images_dir);
+            let _ = std::fs::create_dir_all(&images_dir);
+        }
+        self.callers.clear();
+        self.sessions.clear();
+        self.persist();
     }
 
     // ── Persistence methods ──
@@ -425,6 +528,7 @@ impl SessionManager {
                     feedback_text: entry.detail.feedback_text.clone(),
                     command_logs: entry.detail.command_logs.clone(),
                     image_refs,
+                    questions: entry.detail.questions.clone(),
                 }
             })
             .collect();
@@ -494,6 +598,7 @@ impl SessionManager {
                         feedback_text: ps.feedback_text,
                         command_logs: ps.command_logs,
                         images,
+                        questions: ps.questions,
                     },
                     response_tx: None,
                 }

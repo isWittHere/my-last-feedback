@@ -26,6 +26,7 @@ export function SettingsDialog({ open, onClose }: { open: boolean; onClose: () =
   const [tab, setTab] = useState<Tab>("general");
   const [theme, setTheme] = useState<Theme>(getStoredTheme);
   const [autostart, setAutostart] = useState(false);
+  const [confirmClear, setConfirmClear] = useState(false);
   const prompts = useFeedbackStore((s) => s.prompts);
   const disabledPrompts = useFeedbackStore((s) => s.disabledPrompts);
   const togglePromptDisabled = useFeedbackStore((s) => s.togglePromptDisabled);
@@ -145,6 +146,42 @@ export function SettingsDialog({ open, onClose }: { open: boolean; onClose: () =
                   </button>
                 </div>
                 <McpConfigHelper />
+
+                {/* Clear all history */}
+                <div className="settings-row" style={{ borderTop: "1px solid var(--color-border)", paddingTop: 12, marginTop: 8 }}>
+                  <div className="settings-row-info">
+                    <span className="settings-label">{t("settings.clearHistory")}</span>
+                    <span className="settings-sublabel">{t("settings.clearHistoryDesc")}</span>
+                  </div>
+                  {!confirmClear ? (
+                    <div className="settings-btn-group">
+                      <button
+                        className="settings-btn-option danger"
+                        onClick={() => setConfirmClear(true)}
+                      >
+                        {t("settings.clearHistoryBtn")}
+                      </button>
+                    </div>
+                  ) : (
+                    <div className="settings-btn-group">
+                      <button
+                        className="settings-btn-option danger active"
+                        onClick={async () => {
+                          await useFeedbackStore.getState().clearAllHistory();
+                          setConfirmClear(false);
+                        }}
+                      >
+                        {t("settings.clearHistoryConfirm")}
+                      </button>
+                      <button
+                        className="settings-btn-option"
+                        onClick={() => setConfirmClear(false)}
+                      >
+                        {t("settings.clearHistoryCancel")}
+                      </button>
+                    </div>
+                  )}
+                </div>
               </div>
             )}
 

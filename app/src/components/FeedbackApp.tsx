@@ -219,6 +219,14 @@ export function FeedbackApp() {
 
         {/* Right: controls */}
         <div className="flex items-center gap-1 shrink-0 z-10 ml-auto">
+          {isPersistent && callers.length > 1 && (
+            <button onClick={() => useFeedbackStore.getState().sortCallersByName()} className="titlebar-btn" title={t("titlebar.sortByWorkspace")}>
+              <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" style={{ transform: "rotate(-90deg)" }}>
+                <line x1="4" y1="6" x2="14" y2="6" /><line x1="4" y1="12" x2="18" y2="12" /><line x1="4" y1="18" x2="11" y2="18" />
+                <polyline points="16 16 19 19 22 16" />
+              </svg>
+            </button>
+          )}
           <button onClick={() => setSettingsOpen(true)} className="titlebar-btn" title={t("settings.title")}>
             <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
               <circle cx="12" cy="12" r="3" />

@@ -34,8 +34,8 @@ ref-repos/
 .myLastChat/
 
 # Test artifacts
-test-ipc-result.txt
-test-ipc.cjs
+# test-ipc-result.txt
+# test-ipc.cjs
 
 # Misc generated files
 app/npx

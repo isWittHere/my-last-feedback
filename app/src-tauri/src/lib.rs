@@ -193,6 +193,15 @@ async fn remove_session(
     Ok(mgr.remove_session(&session_id))
 }
 
+#[tauri::command]
+async fn clear_all_history(
+    session_mgr: State<'_, SharedSessionManager>,
+) -> Result<(), String> {
+    let mut mgr = session_mgr.lock().await;
+    mgr.clear_all_history();
+    Ok(())
+}
+
 /// Get autostart enabled state
 #[tauri::command]
 fn get_autostart(app: tauri::AppHandle) -> bool {
@@ -471,6 +480,7 @@ pub fn run() {
             get_pending_count,
             load_history,
             remove_session,
+            clear_all_history,
         ])
         .setup(move |app| {
             let app_handle = app.handle().clone();
