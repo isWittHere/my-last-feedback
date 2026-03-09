@@ -59,6 +59,7 @@
   "settings": {
     "title": "设置",
     "general": "通用",
+    "callers": "Caller 管理",
     "display": "显示",
     "about": "关于",
     "theme": "主题",
@@ -106,5 +107,14 @@
     "colAnswer": "回答",
     "inputPlaceholder": "请输入您对「{{label}}」的决定",
     "fillTemplate": "填充模板到反馈框"
+  },
+  "callerManager": {
+    "empty": "还没有 caller。当 AI agent 连接时会自动出现。",
+    "rename": "重命名工作区",
+    "merge": "合并到另一个 caller",
+    "mergeSelectTarget": "点击目标 caller 进行合并",
+    "mergeConfirmText": "将 \"{{source}}\" 合并到 \"{{target}}\"？所有会话将被迁移。此操作不可撤销。",
+    "mergeConfirm": "确认合并",
+    "cancel": "取消"
   }
 }

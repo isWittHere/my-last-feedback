@@ -327,30 +327,29 @@ Images will be returned as ImageContent alongside the text feedback.
 
 IMPORTANT - rules for AI agents calling this tool:
 1. request_name MUST always be provided with a meaningful task title. Never omit it or leave it blank.
-2. summary MUST be written in standard Markdown format using headings, lists, bold, or code blocks.
-3. Use questions to ask the user structured questions. Describe full proposals in summary, then use questions for concise choices.
-4. agent_name: On your FIRST call, leave empty or omit. The response will assign you an agent identifier. On ALL subsequent calls, you MUST pass that identifier back as agent_name.`,
+2. summary MUST be written in standard Markdown format (headings, lists, bold, code blocks). Do NOT use escape characters.
+3. Describe full context, suggestions, and detailed information in summary. Use questions only for concise, actionable choices or brief input fields.
+4. agent_name is a 4-character random combination of uppercase letters and numbers (e.g. "A1B2", "X9Y8"). You MUST generate one on your first call and reuse the same identifier on ALL subsequent calls.`,
   {
     project_directory: z.string().describe("Full path to the project directory"),
     summary: z.string().describe(
-      "Summary of the changes in standard Markdown format. " +
-      "MUST use proper Markdown syntax: headings (## Heading), " +
-      "bullet lists (- item), bold (**text**), and/or code blocks."
+      "Summary of changes and feedback in standard Markdown format. " +
+      "MUST use proper Markdown syntax: headings (## Heading), bullet lists (- item), bold (**text**), code blocks. " +
+      "Do NOT use escape characters. Provide complete context, suggestions, and detailed information here."
     ),
     request_name: z.string().describe(
       "A concise title (5-10 words) for the current task, displayed in the window title bar. " +
       "This parameter is REQUIRED and MUST NOT be left empty."
     ),
     agent_name: z.string().optional().describe(
-      "Your assigned agent identifier. Leave empty on first call; the response will assign one. " +
-      "On all subsequent calls, you MUST pass your assigned identifier here."
+      "A 4-character random combination of uppercase letters and numbers (e.g. 'A1B2', 'X9Y8'). " +
+      "You MUST generate one on your first call and reuse the same identifier on ALL subsequent calls."
     ),
     questions: z.array(z.object({
       label: z.string().describe("Short question label, e.g. 'Database choice', 'Need caching?'"),
-      options: z.array(z.string()).optional().describe("Option labels, e.g. ['Plan A', 'Plan B']. Omit for open-ended input."),
+      options: z.array(z.string()).optional().describe("Option identifiers for quick selection, e.g. ['A', 'B', 'C']. Omit for free-text input."),
     })).optional().describe(
-      "Structured questions for the user. Describe full proposals in summary, " +
-      "then list concise question labels and option choices here."
+      "Structured questions for the user. Options are short identifiers only — describe full proposals and details in summary."
     ),
   },
   async ({ project_directory, summary, request_name, agent_name, questions }) => {
@@ -411,10 +410,10 @@ IMPORTANT - rules for AI agents calling this tool:
       content.push({ type: "text", text: "(No feedback provided)" });
     }
 
-    // Append agent alias reminder to reinforce identity across calls
+    // Append agent alias confirmation to reinforce identity across calls
     content.push({
       type: "text",
-      text: `[System] Your agent identifier for this MCP server is "${alias}". You MUST include agent_name="${alias}" in ALL subsequent interactive_feedback calls.`,
+      text: `[System] Agent identifier "${alias}" confirmed. You MUST include agent_name="${alias}" in ALL subsequent interactive_feedback calls.`,
     });
 
     return { content };

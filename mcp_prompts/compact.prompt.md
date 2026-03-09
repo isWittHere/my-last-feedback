@@ -1,7 +1,7 @@
 ---
 name: "compact"
 description: "Create a detailed summary of the conversation so far."
-icon: "clipboard"
+icon: "zap"
 ---
 Your task is to create a detailed summary of the conversation so far, paying close attention to the user's explicit requests and your previous actions.
 This summary should be thorough in capturing technical details, code patterns, and architectural decisions that would be essential for continuing with the conversation and supporting any continuing tasks.

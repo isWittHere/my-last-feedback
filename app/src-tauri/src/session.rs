@@ -455,6 +455,43 @@ impl SessionManager {
         Ok(())
     }
 
+    /// Rename a caller (change its workspace name)
+    pub fn rename_caller(&mut self, caller_id: &str, new_name: String) -> Result<(), String> {
+        let caller = self
+            .callers
+            .get_mut(caller_id)
+            .ok_or_else(|| format!("Caller not found: {}", caller_id))?;
+        caller.name = new_name;
+        self.persist();
+        Ok(())
+    }
+
+    /// Merge source caller into target caller: move all sessions from source to target, then remove source.
+    /// Returns the number of sessions moved.
+    pub fn merge_callers(&mut self, source_id: &str, target_id: &str) -> Result<usize, String> {
+        if source_id == target_id {
+            return Err("Cannot merge a caller into itself".to_string());
+        }
+        if !self.callers.contains_key(source_id) {
+            return Err(format!("Source caller not found: {}", source_id));
+        }
+        if !self.callers.contains_key(target_id) {
+            return Err(format!("Target caller not found: {}", target_id));
+        }
+
+        let mut moved = 0usize;
+        for entry in &mut self.sessions {
+            if entry.detail.caller_id == source_id {
+                entry.detail.caller_id = target_id.to_string();
+                moved += 1;
+            }
+        }
+
+        self.callers.remove(source_id);
+        self.persist();
+        Ok(moved)
+    }
+
     /// Clear all history: remove all callers, sessions, and image files
     pub fn clear_all_history(&mut self) {
         // Delete all image files

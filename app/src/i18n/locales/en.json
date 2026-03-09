@@ -59,6 +59,7 @@
   "settings": {
     "title": "Settings",
     "general": "General",
+    "callers": "Callers",
     "display": "Display",
     "about": "About",
     "theme": "Theme",
@@ -106,5 +107,14 @@
     "colAnswer": "Answer",
     "inputPlaceholder": "Your decision on \"{{label}}\"",
     "fillTemplate": "Fill template to feedback"
+  },
+  "callerManager": {
+    "empty": "No callers yet. Callers appear when AI agents connect.",
+    "rename": "Rename workspace",
+    "merge": "Merge into another caller",
+    "mergeSelectTarget": "Click a target caller to merge into",
+    "mergeConfirmText": "Merge \"{{source}}\" into \"{{target}}\"? All sessions will be moved. This cannot be undone.",
+    "mergeConfirm": "Confirm Merge",
+    "cancel": "Cancel"
   }
 }

@@ -155,6 +155,28 @@ async fn update_caller_color(
     mgr.update_caller_color(&caller_id, color)
 }
 
+/// Rename a caller (change workspace name)
+#[tauri::command]
+async fn rename_caller(
+    session_mgr: State<'_, SharedSessionManager>,
+    caller_id: String,
+    new_name: String,
+) -> Result<(), String> {
+    let mut mgr = session_mgr.lock().await;
+    mgr.rename_caller(&caller_id, new_name)
+}
+
+/// Merge source caller into target caller
+#[tauri::command]
+async fn merge_callers(
+    session_mgr: State<'_, SharedSessionManager>,
+    source_id: String,
+    target_id: String,
+) -> Result<usize, String> {
+    let mut mgr = session_mgr.lock().await;
+    mgr.merge_callers(&source_id, &target_id)
+}
+
 /// Get pending count for a caller
 #[tauri::command]
 async fn get_pending_count(
@@ -477,6 +499,8 @@ pub fn run() {
             get_session_detail,
             submit_session_feedback,
             update_caller_color,
+            rename_caller,
+            merge_callers,
             get_pending_count,
             load_history,
             remove_session,

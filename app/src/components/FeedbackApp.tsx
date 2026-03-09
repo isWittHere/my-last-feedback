@@ -178,6 +178,8 @@ export function FeedbackApp() {
 
   return (
     <div className="flex flex-col h-screen select-none" style={{ background: "var(--color-bg-base)" }}>
+      {/* Content wrapper – blurred when settings overlay is open */}
+      <div className={`flex flex-col flex-1 min-h-0${settingsOpen ? " content-blurred" : ""}`}>
       {/* Custom title bar */}
       <div
         data-tauri-drag-region
@@ -320,6 +322,7 @@ export function FeedbackApp() {
           </>
         )}
       </div>
+      </div>{/* end content-blurred wrapper */}
 
       <SettingsDialog open={settingsOpen} onClose={() => setSettingsOpen(false)} />
     </div>

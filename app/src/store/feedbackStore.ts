@@ -109,6 +109,8 @@ export interface FeedbackState {
   setActiveCaller: (id: string) => void;
   setCallerOrder: (order: string[]) => void;
   sortCallersByName: () => void;
+  renameCaller: (callerId: string, newName: string) => Promise<void>;
+  mergeCallers: (sourceId: string, targetId: string) => Promise<void>;
   clearAllHistory: () => Promise<void>;
   addSession: (session: Session) => void;
   setActiveSession: (id: string) => void;
@@ -271,6 +273,37 @@ export const useFeedbackStore = create<FeedbackState>((set, get) => ({
       groups.get(name)!.push(id);
     }
     set({ callerOrder: [...groups.values()].flat() });
+  },
+
+  renameCaller: async (callerId, newName) => {
+    await invoke("rename_caller", { callerId, newName });
+    set((state) => ({
+      callers: state.callers.map((c) =>
+        c.id === callerId ? { ...c, name: newName } : c
+      ),
+    }));
+  },
+
+  mergeCallers: async (sourceId, targetId) => {
+    await invoke("merge_callers", { sourceId, targetId });
+    const { callers, callerOrder, sessions, activeCallerId, activeSessionId } = get();
+    // Move all sessions from source to target
+    const updatedSessions = sessions.map((s) =>
+      s.callerId === sourceId ? { ...s, callerId: targetId } : s
+    );
+    // Remove source caller
+    const newCallers = callers.filter((c) => c.id !== sourceId);
+    const newCallerOrder = callerOrder.filter((id) => id !== sourceId);
+    const newActiveCallerId = activeCallerId === sourceId ? targetId : activeCallerId;
+    let newActiveSessionId = activeSessionId;
+    // If active session belonged to source, keep it (it's now under target)
+    set({
+      callers: newCallers,
+      callerOrder: newCallerOrder,
+      sessions: updatedSessions,
+      activeCallerId: newActiveCallerId,
+      activeSessionId: newActiveSessionId,
+    });
   },
 
   clearAllHistory: async () => {

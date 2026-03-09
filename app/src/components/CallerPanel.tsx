@@ -674,7 +674,10 @@ function CallerContent() {
   const sessionFeedback = activeSession?.feedbackText || "";
   const sessionTestLog = activeSession?.testLogText || "";
   const sessionImageCount = activeSession?.images?.length ?? 0;
-  const hasContent = !!(sessionFeedback.trim() || sessionTestLog.trim() || sessionImageCount > 0);
+  const hasQuestionAnswers = !!(activeSession?.questions?.some(
+    (q) => q.answer.trim() || (q.selectedOptions && q.selectedOptions.length > 0)
+  ));
+  const hasContent = !!(sessionFeedback.trim() || sessionTestLog.trim() || sessionImageCount > 0 || hasQuestionAnswers);
   const feedbackText = sessionFeedback;
   useEffect(() => {
     if (userResizedRef.current || isReadonly) return;
