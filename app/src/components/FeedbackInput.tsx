@@ -93,6 +93,8 @@ export function FeedbackInput({ minHeight }: { minHeight?: number } = {}) {
         resize: minHeight !== undefined ? "none" as const : undefined,
         flexShrink: minHeight !== undefined ? 0 : undefined,
         opacity: isReadonly ? 0.6 : 1,
+        userSelect: isReadonly ? "text" : undefined,
+        cursor: isReadonly ? "text" : undefined,
       }}
     />
   );

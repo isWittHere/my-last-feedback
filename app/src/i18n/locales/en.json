@@ -49,7 +49,17 @@
     "confirmDelete": "This session is still pending. Delete and send empty feedback?",
     "deleteAttempt": "Removing {{caller}}'s \"{{request}}\"",
     "cancel": "Cancel",
-    "confirmBtn": "Delete"
+    "confirmBtn": "Delete",
+    "markCancelled": "Mark as cancelled",
+    "timeJustNow": "just now",
+    "timeMinutes": "{{count}}m ago",
+    "timeHours": "{{count}}h ago",
+    "timeDays": "{{count}}d ago",
+    "timeDate": "{{month}}/{{day}}",
+    "groupToday": "Today",
+    "groupYesterday": "Yesterday",
+    "groupLastWeek": "Last week",
+    "groupEarlier": "Earlier"
   },
   "session": {
     "waitingForRequest": "Waiting for feedback request...",
@@ -66,6 +76,9 @@
     "themeDark": "Dark",
     "themeLight": "Light",
     "language": "Language",
+    "zoomGlobal": "UI scale",
+    "zoomSummary": "Summary scale",
+    "zoomInput": "Input scale",
     "zh": "中文",
     "en": "English",
     "autostart": "Launch at startup",
@@ -79,10 +92,19 @@
     "prompts": "Prompts",
     "promptsEmpty": "No prompt files found\nPlace .prompt.md files in mcp_prompts/ next to the exe",
     "promptEnable": "Enable",
-    "promptDisable": "Disable"
+    "promptDisable": "Disable",
+    "notification": "Notification",
+    "taskbarFlash": "Taskbar flash",
+    "taskbarFlashDesc": "Flash the taskbar icon when a new request arrives while the window is not focused",
+    "systemNotification": "System notification",
+    "systemNotificationDesc": "Show a system notification when a new request arrives while the window is not focused",
+    "persistentUnread": "Persistent unread indicator",
+    "persistentUnreadDesc": "Keep the unread badge blinking until you view the caller"
   },
   "titlebar": {
-    "sortByWorkspace": "Sort tabs by workspace"
+    "sortByWorkspace": "Sort tabs by workspace",
+    "layoutMode": "Layout: {{mode}}",
+    "layoutAuto": "Auto"
   },
   "tooltip": {
     "alias": "Agent ID",
@@ -112,6 +134,8 @@
     "empty": "No callers yet. Callers appear when AI agents connect.",
     "rename": "Rename workspace",
     "merge": "Merge into another caller",
+    "hide": "Hide from top bar",
+    "show": "Show in top bar",
     "mergeSelectTarget": "Click a target caller to merge into",
     "mergeConfirmText": "Merge \"{{source}}\" into \"{{target}}\"? All sessions will be moved. This cannot be undone.",
     "mergeConfirm": "Confirm Merge",

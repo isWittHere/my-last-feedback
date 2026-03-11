@@ -1,9 +1,46 @@
 import { useEffect } from "react";
 import { invoke } from "@tauri-apps/api/core";
 import { listen } from "@tauri-apps/api/event";
+import { getCurrentWindow } from "@tauri-apps/api/window";
 import { useFeedbackStore } from "./store/feedbackStore";
 import { FeedbackApp } from "./components/FeedbackApp";
 import type { Session } from "./store/feedbackStore";
+
+/** Read notification settings from localStorage */
+function getNotificationSettings() {
+  try {
+    const raw = localStorage.getItem("mlf-notification-settings");
+    if (raw) return JSON.parse(raw) as { taskbarFlash?: boolean; systemNotification?: boolean; persistentUnread?: boolean };
+  } catch {}
+  return { taskbarFlash: true, systemNotification: true, persistentUnread: true };
+}
+
+/** Fire taskbar flash + system notification for a new session */
+function notifyNewSession(requestName: string, callerName: string) {
+  const settings = getNotificationSettings();
+  // Taskbar flash (only when window not focused)
+  if (settings.taskbarFlash !== false && !document.hasFocus()) {
+    getCurrentWindow().requestUserAttention(2).catch(() => {});
+  }
+  // System notification
+  if (settings.systemNotification !== false && !document.hasFocus()) {
+    if (Notification.permission === "granted") {
+      new Notification(requestName || "New feedback request", {
+        body: callerName,
+        icon: "/icon.png",
+      });
+    } else if (Notification.permission !== "denied") {
+      Notification.requestPermission().then((perm) => {
+        if (perm === "granted") {
+          new Notification(requestName || "New feedback request", {
+            body: callerName,
+            icon: "/icon.png",
+          });
+        }
+      });
+    }
+  }
+}
 
 interface NewSessionEvent {
   session_id: string;
@@ -154,6 +191,9 @@ function App() {
       s.addSession(session);
       s.setActiveCaller(data.caller_id);
       s.setActiveSession(data.session_id);
+
+      // Notify user of new session
+      notifyNewSession(data.request_name, data.caller_name);
     });
 
     // Listen for session cancellations (client disconnected)

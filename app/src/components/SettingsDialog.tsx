@@ -7,8 +7,64 @@ import { McpConfigHelper } from "./McpConfigHelper";
 import { CallerManager } from "./CallerManager";
 import { invoke } from "@tauri-apps/api/core";
 
-type Tab = "general" | "callers" | "display" | "prompts" | "about";
+type Tab = "general" | "callers" | "display" | "notification" | "prompts" | "about";
 type Theme = "dark" | "light";
+
+interface NotificationSettings {
+  taskbarFlash: boolean;
+  systemNotification: boolean;
+  persistentUnread: boolean;
+}
+
+function getNotificationSettings(): NotificationSettings {
+  try {
+    const raw = localStorage.getItem("mlf-notification-settings");
+    if (raw) {
+      const parsed = JSON.parse(raw);
+      return { taskbarFlash: parsed.taskbarFlash !== false, systemNotification: parsed.systemNotification !== false, persistentUnread: parsed.persistentUnread !== false };
+    }
+  } catch {}
+  return { taskbarFlash: true, systemNotification: true, persistentUnread: true };
+}
+
+function saveNotificationSettings(settings: NotificationSettings) {
+  try { localStorage.setItem("mlf-notification-settings", JSON.stringify(settings)); } catch {}
+}
+
+export interface ZoomSettings {
+  global: number;
+  summary: number;
+  input: number;
+}
+
+export function getZoomSettings(): ZoomSettings {
+  try {
+    const raw = localStorage.getItem("mlf-zoom-settings");
+    if (raw) {
+      const parsed = JSON.parse(raw);
+      return {
+        global: parsed.global ?? 100,
+        summary: parsed.summary ?? 100,
+        input: parsed.input ?? 100,
+      };
+    }
+  } catch {}
+  return { global: 100, summary: 100, input: 100 };
+}
+
+function saveZoomSettings(settings: ZoomSettings) {
+  try { localStorage.setItem("mlf-zoom-settings", JSON.stringify(settings)); } catch {}
+}
+
+export function applyZoomSettings(settings?: ZoomSettings) {
+  const s = settings || getZoomSettings();
+  document.documentElement.style.setProperty("--zoom-global", String(s.global / 100));
+  document.documentElement.style.setProperty("--zoom-summary", String(s.summary / 100));
+  document.documentElement.style.setProperty("--zoom-input", String(s.input / 100));
+}
+
+// Initialize zoom on module load
+applyZoomSettings();
 
 function getStoredTheme(): Theme {
   return (localStorage.getItem("mlf-theme") as Theme) || "dark";
@@ -28,6 +84,8 @@ export function SettingsDialog({ open, onClose }: { open: boolean; onClose: () =
   const [theme, setTheme] = useState<Theme>(getStoredTheme);
   const [autostart, setAutostart] = useState(false);
   const [confirmClear, setConfirmClear] = useState(false);
+  const [notifSettings, setNotifSettings] = useState<NotificationSettings>(getNotificationSettings);
+  const [zoomSettings, setZoomSettings] = useState<ZoomSettings>(getZoomSettings);
   const prompts = useFeedbackStore((s) => s.prompts);
   const disabledPrompts = useFeedbackStore((s) => s.disabledPrompts);
   const togglePromptDisabled = useFeedbackStore((s) => s.togglePromptDisabled);
@@ -64,6 +122,23 @@ export function SettingsDialog({ open, onClose }: { open: boolean; onClose: () =
       .then(() => setAutostart(newVal))
       .catch(() => {});
   }, [autostart]);
+
+  const handleNotifToggle = useCallback((key: keyof NotificationSettings) => {
+    setNotifSettings((prev) => {
+      const next = { ...prev, [key]: !prev[key] };
+      saveNotificationSettings(next);
+      return next;
+    });
+  }, []);
+
+  const handleZoomChange = useCallback((key: keyof ZoomSettings, value: number) => {
+    setZoomSettings((prev) => {
+      const next = { ...prev, [key]: value };
+      saveZoomSettings(next);
+      applyZoomSettings(next);
+      return next;
+    });
+  }, []);
 
   if (!open) return null;
 
@@ -115,6 +190,16 @@ export function SettingsDialog({ open, onClose }: { open: boolean; onClose: () =
                 <path d="M12 1v2M12 21v2M4.22 4.22l1.42 1.42M18.36 18.36l1.42 1.42M1 12h2M21 12h2M4.22 19.78l1.42-1.42M18.36 5.64l1.42-1.42" />
               </svg>
               {t("settings.display")}
+            </button>
+            <button
+              className={`settings-nav-item${tab === "notification" ? " settings-nav-active" : ""}`}
+              onClick={() => setTab("notification")}
+            >
+              <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                <path d="M18 8A6 6 0 0 0 6 8c0 7-3 9-3 9h18s-3-2-3-9" />
+                <path d="M13.73 21a2 2 0 0 1-3.46 0" />
+              </svg>
+              {t("settings.notification")}
             </button>
             <button
               className={`settings-nav-item${tab === "prompts" ? " settings-nav-active" : ""}`}
@@ -254,6 +339,80 @@ export function SettingsDialog({ open, onClose }: { open: boolean; onClose: () =
                       English
                     </button>
                   </div>
+                </div>
+
+                {/* Zoom: Global */}
+                <div className="settings-row" style={{ borderTop: "1px solid var(--color-border)", paddingTop: 12, marginTop: 4 }}>
+                  <div className="settings-row-info" style={{ flex: 1 }}>
+                    <span className="settings-label">{t("settings.zoomGlobal")}</span>
+                  </div>
+                  <div className="settings-zoom-control">
+                    <input type="range" min={70} max={140} step={5} value={zoomSettings.global} onChange={(e) => handleZoomChange("global", Number(e.target.value))} className="settings-range" />
+                    <span className="settings-zoom-value">{zoomSettings.global}%</span>
+                  </div>
+                </div>
+
+                {/* Zoom: Summary */}
+                <div className="settings-row">
+                  <div className="settings-row-info" style={{ flex: 1 }}>
+                    <span className="settings-label">{t("settings.zoomSummary")}</span>
+                  </div>
+                  <div className="settings-zoom-control">
+                    <input type="range" min={70} max={160} step={5} value={zoomSettings.summary} onChange={(e) => handleZoomChange("summary", Number(e.target.value))} className="settings-range" />
+                    <span className="settings-zoom-value">{zoomSettings.summary}%</span>
+                  </div>
+                </div>
+
+                {/* Zoom: Input */}
+                <div className="settings-row">
+                  <div className="settings-row-info" style={{ flex: 1 }}>
+                    <span className="settings-label">{t("settings.zoomInput")}</span>
+                  </div>
+                  <div className="settings-zoom-control">
+                    <input type="range" min={70} max={140} step={5} value={zoomSettings.input} onChange={(e) => handleZoomChange("input", Number(e.target.value))} className="settings-range" />
+                    <span className="settings-zoom-value">{zoomSettings.input}%</span>
+                  </div>
+                </div>
+              </div>
+            )}
+
+            {tab === "notification" && (
+              <div className="settings-section">
+                <div className="settings-row">
+                  <div className="settings-row-info">
+                    <span className="settings-label">{t("settings.taskbarFlash")}</span>
+                    <span className="settings-sublabel">{t("settings.taskbarFlashDesc")}</span>
+                  </div>
+                  <button
+                    className={`settings-toggle${notifSettings.taskbarFlash ? " settings-toggle-on" : ""}`}
+                    onClick={() => handleNotifToggle("taskbarFlash")}
+                  >
+                    <span className="settings-toggle-knob" />
+                  </button>
+                </div>
+                <div className="settings-row">
+                  <div className="settings-row-info">
+                    <span className="settings-label">{t("settings.systemNotification")}</span>
+                    <span className="settings-sublabel">{t("settings.systemNotificationDesc")}</span>
+                  </div>
+                  <button
+                    className={`settings-toggle${notifSettings.systemNotification ? " settings-toggle-on" : ""}`}
+                    onClick={() => handleNotifToggle("systemNotification")}
+                  >
+                    <span className="settings-toggle-knob" />
+                  </button>
+                </div>
+                <div className="settings-row">
+                  <div className="settings-row-info">
+                    <span className="settings-label">{t("settings.persistentUnread")}</span>
+                    <span className="settings-sublabel">{t("settings.persistentUnreadDesc")}</span>
+                  </div>
+                  <button
+                    className={`settings-toggle${notifSettings.persistentUnread ? " settings-toggle-on" : ""}`}
+                    onClick={() => handleNotifToggle("persistentUnread")}
+                  >
+                    <span className="settings-toggle-knob" />
+                  </button>
                 </div>
               </div>
             )}

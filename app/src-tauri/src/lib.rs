@@ -138,6 +138,7 @@ async fn submit_session_feedback(
         interactive_feedback: feedback_text,
         command_logs,
         images: image_values,
+        caller_alias: None,
     };
 
     let mut mgr = session_mgr.lock().await;
@@ -575,6 +576,12 @@ pub fn run() {
 
             // Show window
             if let Some(window) = app.get_webview_window("main") {
+                // On non-macOS, remove native decorations for custom titlebar
+                #[cfg(not(target_os = "macos"))]
+                {
+                    let _ = window.set_decorations(false);
+                }
+
                 // Set high-res window icon for crisp taskbar display
                 let window_icon_bytes = include_bytes!("../icons/128x128@2x.png");
                 if let Ok(icon) = tauri::image::Image::from_bytes(window_icon_bytes) {

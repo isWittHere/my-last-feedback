@@ -98,7 +98,8 @@ export interface FeedbackState {
   // ── Persistent mode fields ──
   callers: Caller[];
   callerOrder: string[]; // user-controlled display order of caller IDs
-  blinkingCallerIds: string[]; // callers with recently increased pending count
+  unreadCallerIds: string[]; // callers with unread new sessions
+  hiddenCallerIds: string[]; // callers hidden from top bar tabs
   sessions: Session[];
   activeCallerId: string | null;
   activeSessionId: string | null;
@@ -124,7 +125,9 @@ export interface FeedbackState {
   updateSessionAnswer: (sessionId: string, questionIndex: number, answer: string) => void;
   toggleSessionOption: (sessionId: string, questionIndex: number, option: string) => void;
   updateCallerPendingCount: (callerId: string) => void;
-  clearBlinking: (callerId: string) => void;
+  markCallerRead: (callerId: string) => void;
+  toggleCallerHidden: (callerId: string) => void;
+  unhideCaller: (callerId: string) => void;
 
   // Derived getters
   getActiveCaller: () => Caller | null;
@@ -210,7 +213,13 @@ export const useFeedbackStore = create<FeedbackState>((set, get) => ({
   // ── Persistent mode defaults ──
   callers: [],
   callerOrder: [],
-  blinkingCallerIds: [],
+  unreadCallerIds: [],
+  hiddenCallerIds: (() => {
+    try {
+      const stored = localStorage.getItem("mlf-hidden-callers");
+      return stored ? JSON.parse(stored) : [];
+    } catch { return []; }
+  })(),
   sessions: [],
   activeCallerId: null,
   activeSessionId: null,
@@ -243,6 +252,8 @@ export const useFeedbackStore = create<FeedbackState>((set, get) => ({
 
   setActiveCaller: (id) => {
     set({ activeCallerId: id });
+    // Mark caller as read when user navigates to it
+    get().markCallerRead(id);
     // Auto-select the latest pending session for this caller
     const { sessions } = get();
     const callerSessions = sessions.filter((s) => s.callerId === id);
@@ -286,20 +297,30 @@ export const useFeedbackStore = create<FeedbackState>((set, get) => ({
 
   mergeCallers: async (sourceId, targetId) => {
     await invoke("merge_callers", { sourceId, targetId });
-    const { callers, callerOrder, sessions, activeCallerId, activeSessionId } = get();
-    // Move all sessions from source to target
-    const updatedSessions = sessions.map((s) =>
-      s.callerId === sourceId ? { ...s, callerId: targetId } : s
-    );
+    const { callers, callerOrder, hiddenCallerIds, sessions, activeCallerId, activeSessionId } = get();
+    const targetCaller = callers.find((c) => c.id === targetId);
+    const targetAlias = targetCaller?.alias || "";
+    // Move all sessions from source to target; inject [System] notice into pending sessions
+    const updatedSessions = sessions.map((s) => {
+      if (s.callerId !== sourceId) return s;
+      const moved = { ...s, callerId: targetId };
+      if (moved.status === "pending" && targetAlias) {
+        moved.summary = `[System] Agent merged: your identifier has been updated to agent_name="${targetAlias}". Use this in ALL subsequent interactive_feedback calls.\n\n${moved.summary}`;
+      }
+      return moved;
+    });
     // Remove source caller
     const newCallers = callers.filter((c) => c.id !== sourceId);
     const newCallerOrder = callerOrder.filter((id) => id !== sourceId);
+    const newHiddenCallerIds = hiddenCallerIds.filter((id) => id !== sourceId);
+    try { localStorage.setItem("mlf-hidden-callers", JSON.stringify(newHiddenCallerIds)); } catch {}
     const newActiveCallerId = activeCallerId === sourceId ? targetId : activeCallerId;
     let newActiveSessionId = activeSessionId;
     // If active session belonged to source, keep it (it's now under target)
     set({
       callers: newCallers,
       callerOrder: newCallerOrder,
+      hiddenCallerIds: newHiddenCallerIds,
       sessions: updatedSessions,
       activeCallerId: newActiveCallerId,
       activeSessionId: newActiveSessionId,
@@ -309,13 +330,15 @@ export const useFeedbackStore = create<FeedbackState>((set, get) => ({
   clearAllHistory: async () => {
     const { invoke } = await import("@tauri-apps/api/core");
     await invoke("clear_all_history");
+    try { localStorage.removeItem("mlf-hidden-callers"); } catch {}
     set({
       callers: [],
       callerOrder: [],
+      hiddenCallerIds: [],
       sessions: [],
       activeCallerId: null,
       activeSessionId: null,
-      blinkingCallerIds: [],
+      unreadCallerIds: [],
     });
   },
 
@@ -323,6 +346,10 @@ export const useFeedbackStore = create<FeedbackState>((set, get) => ({
     set((state) => ({
       sessions: [...state.sessions, session],
     }));
+    // Auto-unhide caller when a new pending session arrives
+    if (session.status === "pending") {
+      get().unhideCaller(session.callerId);
+    }
     // Update pending count for the caller
     get().updateCallerPendingCount(session.callerId);
   },
@@ -492,20 +519,41 @@ export const useFeedbackStore = create<FeedbackState>((set, get) => ({
       callers: state.callers.map((c) =>
         c.id === callerId ? { ...c, pendingCount: count } : c
       ),
-      // Only add to blinking if count actually increased
-      blinkingCallerIds: count > oldCount
-        ? [...new Set([...state.blinkingCallerIds, callerId])]
-        : state.blinkingCallerIds,
+      // Only add to unread if count actually increased
+      unreadCallerIds: count > oldCount
+        ? [...new Set([...state.unreadCallerIds, callerId])]
+        : state.unreadCallerIds,
     }));
-    // Auto-clear blink after 2 seconds
+    // Auto-clear when persistent unread is disabled
     if (count > oldCount) {
-      setTimeout(() => get().clearBlinking(callerId), 2000);
+      try {
+        const raw = localStorage.getItem("mlf-notification-settings");
+        const settings = raw ? JSON.parse(raw) : {};
+        if (settings.persistentUnread === false) {
+          setTimeout(() => get().markCallerRead(callerId), 3000);
+        }
+      } catch {}
     }
   },
-  clearBlinking: (callerId) => {
+  markCallerRead: (callerId) => {
     set((state) => ({
-      blinkingCallerIds: state.blinkingCallerIds.filter((id) => id !== callerId),
+      unreadCallerIds: state.unreadCallerIds.filter((id) => id !== callerId),
     }));
+  },
+  toggleCallerHidden: (callerId) => {
+    const { hiddenCallerIds } = get();
+    const next = hiddenCallerIds.includes(callerId)
+      ? hiddenCallerIds.filter((id) => id !== callerId)
+      : [...hiddenCallerIds, callerId];
+    set({ hiddenCallerIds: next });
+    try { localStorage.setItem("mlf-hidden-callers", JSON.stringify(next)); } catch {}
+  },
+  unhideCaller: (callerId) => {
+    const { hiddenCallerIds } = get();
+    if (!hiddenCallerIds.includes(callerId)) return;
+    const next = hiddenCallerIds.filter((id) => id !== callerId);
+    set({ hiddenCallerIds: next });
+    try { localStorage.setItem("mlf-hidden-callers", JSON.stringify(next)); } catch {}
   },
 
   // Derived getters

@@ -410,13 +410,46 @@ IMPORTANT - rules for AI agents calling this tool:
       content.push({ type: "text", text: "(No feedback provided)" });
     }
 
+    // Use caller_alias from response if available (may differ after merge), otherwise use original alias
+    const effectiveAlias = result.caller_alias || alias;
+
     // Append agent alias confirmation to reinforce identity across calls
     content.push({
       type: "text",
-      text: `[System] Agent identifier "${alias}" confirmed. You MUST include agent_name="${alias}" in ALL subsequent interactive_feedback calls.`,
+      text: `[System] Agent identifier "${effectiveAlias}" confirmed. You MUST include agent_name="${effectiveAlias}" in ALL subsequent interactive_feedback calls.\n[System] IMPORTANT: In your summary parameter, use standard Markdown only. Do NOT use escape characters such as \\n, \\t, \\\\n, or any other backslash-escaped sequences. Write actual line breaks and formatting directly in Markdown.`,
     });
 
     return { content };
+  }
+);
+
+// ── register_agent tool ──
+
+server.tool(
+  "register_agent",
+  `Register as an agent and obtain a unique agent identifier (alias) from the MCP server.
+Call this tool ONCE at the start of your session BEFORE calling interactive_feedback.
+The returned agent_name MUST be reused in ALL subsequent interactive_feedback calls.
+
+IMPORTANT: Do NOT use escape characters (\\n, \\t, etc.) in any string parameters when calling interactive_feedback. Use standard Markdown formatting only.`,
+  {
+    project_directory: z.string().describe("Full path to the project directory"),
+  },
+  async ({ project_directory }) => {
+    const projectDir = project_directory.split("\n")[0].trim();
+    const callerInfo = await getCallerInfo(server, projectDir);
+    const alias = generateAlias(callerInfo.name, randomBytes(2).toString("hex"), callerInfo.clientName);
+    callerInfo.alias = alias;
+    console.error("[MCP] register_agent:", JSON.stringify(callerInfo));
+
+    return {
+      content: [
+        {
+          type: "text",
+          text: `Agent registered successfully.\n\nYour agent identifier: **${alias}**\n\nYou MUST include \`agent_name="${alias}"\` in ALL subsequent \`interactive_feedback\` calls.\n\n**IMPORTANT RULES for interactive_feedback:**\n- summary MUST use standard Markdown format (headings, lists, bold, code blocks)\n- Do NOT use escape characters such as \\n, \\t, or \\\\n in the summary parameter\n- Write actual line breaks and formatting directly`,
+        },
+      ],
+    };
   }
 );
 

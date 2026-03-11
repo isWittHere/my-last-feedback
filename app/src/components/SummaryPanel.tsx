@@ -229,11 +229,20 @@ interface HeadingEntry { level: number; text: string; index: number; }
 
 function parseHeadings(md: string): HeadingEntry[] {
   const result: HeadingEntry[] = [];
-  const re = /^(#{1,4})\s+(.+)$/gm;
-  let m: RegExpExecArray | null;
+  const lines = md.split("\n");
+  let inCodeBlock = false;
   let idx = 0;
-  while ((m = re.exec(md)) !== null) {
-    result.push({ level: m[1].length, text: m[2].trim(), index: idx++ });
+  for (const line of lines) {
+    // Toggle code block state on fenced code markers
+    if (/^\s*(`{3,}|~{3,})/.test(line)) {
+      inCodeBlock = !inCodeBlock;
+      continue;
+    }
+    if (inCodeBlock) continue;
+    const m = /^(#{1,4})\s+(.+)$/.exec(line);
+    if (m) {
+      result.push({ level: m[1].length, text: m[2].trim(), index: idx++ });
+    }
   }
   return result;
 }

@@ -13,11 +13,13 @@
     "core:window:allow-set-always-on-top",
     "core:window:allow-show",
     "core:window:allow-hide",
+    "core:window:allow-request-user-attention",
     "core:tray:default",
     "core:menu:default",
     "core:event:default",
     "opener:default",
     "clipboard-manager:allow-read-text",
+    "clipboard-manager:allow-write-text",
     "autostart:allow-enable",
     "autostart:allow-disable",
     "autostart:allow-is-enabled"

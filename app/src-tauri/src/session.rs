@@ -96,6 +96,9 @@ pub struct FeedbackPayload {
     pub interactive_feedback: String,
     pub command_logs: String,
     pub images: Vec<serde_json::Value>,
+    /// Set by backend when responding — the current caller alias (may differ from original after merge)
+    #[serde(default, skip_deserializing)]
+    pub caller_alias: Option<String>,
 }
 
 // ── Persistence types ──
@@ -360,6 +363,11 @@ impl SessionManager {
             return Err("Session already responded".to_string());
         }
 
+        // Look up the current caller alias (may have changed due to merge)
+        let caller_alias = self.callers.get(&entry.detail.caller_id)
+            .map(|c| c.alias.clone())
+            .unwrap_or_default();
+
         entry.detail.status = SessionStatus::Responded;
         entry.detail.feedback_text = Some(payload.interactive_feedback.clone());
         entry.detail.command_logs = Some(payload.command_logs.clone());
@@ -383,9 +391,13 @@ impl SessionManager {
         }
         entry.detail.images = image_refs;
 
-        // Send response back to waiting MCP Server via oneshot channel
+        // Send response back to waiting MCP Server via oneshot channel (with caller alias)
         if let Some(tx) = entry.response_tx.take() {
-            let _ = tx.send(payload);
+            let mut response_payload = payload;
+            if !caller_alias.is_empty() {
+                response_payload.caller_alias = Some(caller_alias);
+            }
+            let _ = tx.send(response_payload);
         }
 
         self.persist();
@@ -479,10 +491,22 @@ impl SessionManager {
             return Err(format!("Target caller not found: {}", target_id));
         }
 
+        let target_alias = self.callers.get(target_id)
+            .map(|c| c.alias.clone())
+            .unwrap_or_default();
+
         let mut moved = 0usize;
         for entry in &mut self.sessions {
             if entry.detail.caller_id == source_id {
                 entry.detail.caller_id = target_id.to_string();
+                // Inject [System] notice into pending sessions so the agent learns its new alias
+                if entry.detail.status == SessionStatus::Pending && !target_alias.is_empty() {
+                    let notice = format!(
+                        "[System] Agent merged: your identifier has been updated to agent_name=\"{}\". Use this in ALL subsequent interactive_feedback calls.\n\n",
+                        target_alias
+                    );
+                    entry.detail.summary = format!("{}{}", notice, entry.detail.summary);
+                }
                 moved += 1;
             }
         }

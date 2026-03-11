@@ -11,12 +11,14 @@ interface WorkspaceGroup {
 
 export function CallerManager() {
   const { t } = useTranslation();
-  const { callers, sessions, renameCaller, mergeCallers } = useFeedbackStore(
+  const { callers, sessions, renameCaller, mergeCallers, hiddenCallerIds, toggleCallerHidden } = useFeedbackStore(
     useShallow((s) => ({
       callers: s.callers,
       sessions: s.sessions,
       renameCaller: s.renameCaller,
       mergeCallers: s.mergeCallers,
+      hiddenCallerIds: s.hiddenCallerIds,
+      toggleCallerHidden: s.toggleCallerHidden,
     }))
   );
 
@@ -209,6 +211,7 @@ export function CallerManager() {
                   const caller = callers.find((c) => c.id === cid);
                   if (!caller) return null;
                   const counts = sessionCounts[cid] || { total: 0, pending: 0 };
+                  const isHidden = hiddenCallerIds.includes(cid);
                   const isMergeSource = mergeSource === cid;
                   const isMergeSelectable = mergeSource && mergeSource !== cid && !mergeConfirm;
                   const isDragging = dragCallerId === cid;
@@ -216,7 +219,7 @@ export function CallerManager() {
                   return (
                     <div
                       key={cid}
-                      className={`cm-caller-card${isMergeSource ? " cm-caller-merge-source" : ""}${isDragging ? " cm-caller-dragging" : ""}`}
+                      className={`cm-caller-card${isMergeSource ? " cm-caller-merge-source" : ""}${isDragging ? " cm-caller-dragging" : ""}${isHidden ? " cm-caller-hidden" : ""}`}
                       draggable
                       onDragStart={() => handleDragStart(cid)}
                       onDragEnd={handleDragEnd}
@@ -264,6 +267,18 @@ export function CallerManager() {
                               <path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7" />
                               <path d="M18.5 2.5a2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z" />
                             </svg>
+                          </button>
+                          {/* Hide/Show button */}
+                          <button className="cm-action-btn" title={t(isHidden ? "callerManager.show" : "callerManager.hide")} onClick={(e) => { e.stopPropagation(); toggleCallerHidden(cid); }}>
+                            {isHidden ? (
+                              <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                                <path d="M17.94 17.94A10.07 10.07 0 0 1 12 20c-7 0-11-8-11-8a18.45 18.45 0 0 1 5.06-5.94" /><path d="M9.9 4.24A9.12 9.12 0 0 1 12 4c7 0 11 8 11 8a18.5 18.5 0 0 1-2.16 3.19" /><line x1="1" y1="1" x2="23" y2="23" />
+                              </svg>
+                            ) : (
+                              <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                                <path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z" /><circle cx="12" cy="12" r="3" />
+                              </svg>
+                            )}
                           </button>
                           {/* Merge button */}
                           <button className="cm-action-btn" title={t("callerManager.merge")} onClick={(e) => { e.stopPropagation(); setMergeSource(cid); setMergeTarget(null); setMergeConfirm(false); }}>

@@ -10,14 +10,15 @@ interface CallerTabsProps {
 
 export function CallerTabs({ columnCount }: CallerTabsProps = {}) {
   const { t } = useTranslation();
-  const { callers, callerOrder, activeCallerId, setActiveCaller, setCallerOrder, blinkingCallerIds, sessions } = useFeedbackStore(useShallow((s) => ({
+  const { callers, callerOrder, activeCallerId, setActiveCaller, setCallerOrder, blinkingCallerIds, sessions, hiddenCallerIds } = useFeedbackStore(useShallow((s) => ({
     callers: s.callers,
     callerOrder: s.callerOrder,
     activeCallerId: s.activeCallerId,
     setActiveCaller: s.setActiveCaller,
     setCallerOrder: s.setCallerOrder,
-    blinkingCallerIds: s.blinkingCallerIds,
+    blinkingCallerIds: s.unreadCallerIds,
     sessions: s.sessions,
+    hiddenCallerIds: s.hiddenCallerIds,
   })));
 
   const [dropIndex, _setDropIndex] = useState<number | null>(null);
@@ -33,9 +34,14 @@ export function CallerTabs({ columnCount }: CallerTabsProps = {}) {
 
   if (callers.length === 0) return null;
 
-  const orderedCallers = callerOrder.length > 0
+  const allOrderedCallers = callerOrder.length > 0
     ? callerOrder.map(id => callers.find(c => c.id === id)).filter(Boolean) as typeof callers
     : callers;
+
+  // Filter out hidden callers from tab display
+  const orderedCallers = allOrderedCallers.filter(c => !hiddenCallerIds.includes(c.id));
+
+  if (orderedCallers.length === 0) return null;
 
   const showDivider = columnCount != null && columnCount > 0 && columnCount < orderedCallers.length;
   const srcIndex = draggingId ? orderedCallers.findIndex(c => c.id === draggingId) : -1;
@@ -43,7 +49,10 @@ export function CallerTabs({ columnCount }: CallerTabsProps = {}) {
   const handleDragStart = (e: React.DragEvent, callerId: string) => {
     dragSrcId.current = callerId;
     setDraggingId(callerId);
+    setHoveredCallerId(null);
+    if (hoverTimerRef.current) { clearTimeout(hoverTimerRef.current); hoverTimerRef.current = null; }
     e.dataTransfer.effectAllowed = "move";
+    e.dataTransfer.setData("text/plain", callerId);
     // Snapshot tab positions before any transforms
     if (containerRef.current) {
       const buttons = containerRef.current.querySelectorAll<HTMLElement>(".caller-tab");

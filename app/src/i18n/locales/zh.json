@@ -49,7 +49,17 @@
     "confirmDelete": "该会话仍在等待处理。确定删除并发送空反馈？",
     "deleteAttempt": "你正在尝试移除 {{caller}} 的 \"{{request}}\"",
     "cancel": "取消",
-    "confirmBtn": "删除"
+    "confirmBtn": "删除",
+    "markCancelled": "标记为已取消",
+    "timeJustNow": "刚刚",
+    "timeMinutes": "{{count}}分钟前",
+    "timeHours": "{{count}}小时前",
+    "timeDays": "{{count}}天前",
+    "timeDate": "{{month}}月{{day}}日",
+    "groupToday": "今天",
+    "groupYesterday": "昨天",
+    "groupLastWeek": "上周",
+    "groupEarlier": "更早"
   },
   "session": {
     "waitingForRequest": "等待反馈请求...",
@@ -66,6 +76,9 @@
     "themeDark": "深色",
     "themeLight": "浅色",
     "language": "语言",
+    "zoomGlobal": "界面缩放",
+    "zoomSummary": "摘要缩放",
+    "zoomInput": "输入缩放",
     "zh": "中文",
     "en": "English",
     "autostart": "开机自启动",
@@ -79,10 +92,19 @@
     "prompts": "提示词",
     "promptsEmpty": "未找到 prompt 文件\n将 .prompt.md 文件放入 exe 同级的 mcp_prompts/ 目录",
     "promptEnable": "启用",
-    "promptDisable": "禁用"
+    "promptDisable": "禁用",
+    "notification": "通知",
+    "taskbarFlash": "任务栏闪烁",
+    "taskbarFlashDesc": "当窗口未聚焦时，新请求到达会闪烁任务栏图标",
+    "systemNotification": "系统通知",
+    "systemNotificationDesc": "当窗口未聚焦时，新请求到达会显示系统通知",
+    "persistentUnread": "持久未读标记",
+    "persistentUnreadDesc": "未读徽标持续闪烁，直到你查看该 Caller"
   },
   "titlebar": {
-    "sortByWorkspace": "按工作区整理排序"
+    "sortByWorkspace": "按工作区整理排序",
+    "layoutMode": "布局：{{mode}}",
+    "layoutAuto": "自动"
   },
   "tooltip": {
     "alias": "Agent 假名",
@@ -112,6 +134,8 @@
     "empty": "还没有 caller。当 AI agent 连接时会自动出现。",
     "rename": "重命名工作区",
     "merge": "合并到另一个 caller",
+    "hide": "从顶栏隐藏",
+    "show": "在顶栏显示",
     "mergeSelectTarget": "点击目标 caller 进行合并",
     "mergeConfirmText": "将 \"{{source}}\" 合并到 \"{{target}}\"？所有会话将被迁移。此操作不可撤销。",
     "mergeConfirm": "确认合并",

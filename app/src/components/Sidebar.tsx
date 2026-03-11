@@ -1,4 +1,4 @@
-import { useCallback, useMemo, useState } from "react";
+import { useCallback, useMemo, useRef, useState } from "react";
 import { createPortal } from "react-dom";
 import { invoke } from "@tauri-apps/api/core";
 import { useFeedbackStore } from "../store/feedbackStore";
@@ -7,17 +7,136 @@ import { useActiveCallerSession } from "./useActiveCallerSession";
 import { useCallerOverride } from "./CallerContext";
 import { IdenticonAvatar } from "./IdenticonAvatar";
 
-function timeAgo(dateStr: string): string {
+function timeAgo(dateStr: string, t: (key: string, opts?: Record<string, unknown>) => string): string {
   const now = Date.now();
   const then = new Date(dateStr).getTime();
   const diffSec = Math.floor((now - then) / 1000);
-  if (diffSec < 60) return `${diffSec}s`;
+  if (diffSec < 60) return t("sidebar.timeJustNow", { defaultValue: "just now" });
   const diffMin = Math.floor(diffSec / 60);
-  if (diffMin < 60) return `${diffMin}m`;
+  if (diffMin < 60) return t("sidebar.timeMinutes", { count: diffMin, defaultValue: "{{count}}m ago" });
   const diffHr = Math.floor(diffMin / 60);
-  if (diffHr < 24) return `${diffHr}h`;
+  if (diffHr < 24) return t("sidebar.timeHours", { count: diffHr, defaultValue: "{{count}}h ago" });
   const diffDay = Math.floor(diffHr / 24);
-  return `${diffDay}d`;
+  if (diffDay < 7) return t("sidebar.timeDays", { count: diffDay, defaultValue: "{{count}}d ago" });
+  // Show date: M/D
+  const d = new Date(dateStr);
+  return t("sidebar.timeDate", { month: d.getMonth() + 1, day: d.getDate(), defaultValue: "{{month}}/{{day}}" });
+}
+
+type TimeGroup = "today" | "yesterday" | "lastWeek" | "earlier";
+
+function getTimeGroup(dateStr: string): TimeGroup {
+  const now = new Date();
+  const then = new Date(dateStr);
+  const todayStart = new Date(now.getFullYear(), now.getMonth(), now.getDate()).getTime();
+  const yesterdayStart = todayStart - 86400000;
+  const weekAgoStart = todayStart - 7 * 86400000;
+  const t = then.getTime();
+  if (t >= todayStart) return "today";
+  if (t >= yesterdayStart) return "yesterday";
+  if (t >= weekAgoStart) return "lastWeek";
+  return "earlier";
+}
+
+/** Collapsible session group with sticky header */
+function SessionGroup({
+  label,
+  sessions,
+  activeSessionId,
+  activeCallerColor,
+  onSelect,
+  onDelete,
+  onCancel,
+  t,
+}: {
+  label: string;
+  sessions: Array<{ id: string; status: string; requestName: string; createdAt: string }>;
+  activeSessionId: string | undefined;
+  activeCallerColor: string | null;
+  onSelect: (id: string) => void;
+  onDelete: (session: { id: string; status: string }) => void;
+  onCancel: (sessionId: string) => void;
+  t: (key: string, opts?: Record<string, unknown>) => string;
+}) {
+  const [collapsed, setCollapsed] = useState(false);
+
+  return (
+    <div className="session-group">
+      <button
+        className="session-group-header"
+        onClick={() => setCollapsed(prev => !prev)}
+      >
+        <svg
+          width="8" height="8" viewBox="0 0 8 8" fill="currentColor"
+          style={{ transition: "transform 0.15s", transform: collapsed ? "rotate(-90deg)" : "rotate(0deg)", flexShrink: 0 }}
+        >
+          <path d="M1 2 L4 5.5 L7 2" />
+        </svg>
+        <span>{label}</span>
+        <span className="session-group-count">{sessions.length}</span>
+      </button>
+      {!collapsed && sessions.map((session) => {
+        const isActive = session.id === activeSessionId;
+        const isPending = session.status === "pending";
+        const isCancelled = session.status === "cancelled";
+        return (
+          <button
+            key={session.id}
+            className={`session-item${isActive ? " session-item-active" : ""}`}
+            onClick={() => onSelect(session.id)}
+            title={session.requestName}
+            style={isActive && activeCallerColor ? { background: `${activeCallerColor}${document.documentElement.getAttribute("data-theme") === "light" ? "0d" : "1a"}` } : undefined}
+          >
+            {/* Row 1: icon + title */}
+            <div className="session-item-row1">
+              <span className="session-item-icon">
+                {isPending ? (
+                  <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="#f59e0b" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z" /><circle cx="12" cy="10" r="1" fill="#f59e0b" /></svg>
+                ) : isCancelled ? (
+                  <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="#ef4444" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round"><line x1="18" y1="6" x2="6" y2="18" /><line x1="6" y1="6" x2="18" y2="18" /></svg>
+                ) : (
+                  <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="var(--color-success)" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round"><polyline points="20 6 9 17 4 12" /></svg>
+                )}
+              </span>
+              <span className={`session-item-name${isPending ? "" : " session-item-name-responded"}`}>
+                {session.requestName || "Untitled"}
+              </span>
+            </div>
+            {/* Row 2: time + action buttons */}
+            <div className="session-item-row2">
+              <span className="session-item-time">
+                {timeAgo(session.createdAt, t)}
+              </span>
+              <span className="session-item-actions">
+                {isPending && (
+                  <span
+                    className="session-item-cancel"
+                    onClick={(e) => {
+                      e.stopPropagation();
+                      onCancel(session.id);
+                    }}
+                    title={t("sidebar.markCancelled", { defaultValue: "Mark as cancelled" })}
+                  >
+                    <svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><circle cx="12" cy="12" r="10" /><line x1="15" y1="9" x2="9" y2="15" /><line x1="9" y1="9" x2="15" y2="15" /></svg>
+                  </span>
+                )}
+                <span
+                  className="session-item-delete"
+                  onClick={(e) => {
+                    e.stopPropagation();
+                    onDelete(session);
+                  }}
+                  title={t("sidebar.delete", { defaultValue: "Delete" })}
+                >
+                  <svg width="10" height="10" viewBox="0 0 10 10"><line x1="2" y1="2" x2="8" y2="8" stroke="currentColor" strokeWidth="1.2"/><line x1="8" y1="2" x2="2" y2="8" stroke="currentColor" strokeWidth="1.2"/></svg>
+                </span>
+              </span>
+            </div>
+          </button>
+        );
+      })}
+    </div>
+  );
 }
 
 export function Sidebar() {
@@ -28,9 +147,23 @@ export function Sidebar() {
   const setActiveSession = useFeedbackStore((s) => s.setActiveSession);
   const removeSession = useFeedbackStore((s) => s.removeSession);
   const markSessionResponded = useFeedbackStore((s) => s.markSessionResponded);
+  const markSessionCancelled = useFeedbackStore((s) => s.markSessionCancelled);
   const activeCallerColor = caller?.color || null;
-  const blinkingCallerIds = useFeedbackStore((s) => s.blinkingCallerIds);
+  const blinkingCallerIds = useFeedbackStore((s) => s.unreadCallerIds);
   const isBlinking = caller ? blinkingCallerIds.includes(caller.id) : false;
+
+  // Copy agent_name on avatar click
+  const [avatarCopied, setAvatarCopied] = useState(false);
+  const avatarCopyTimer = useRef<ReturnType<typeof setTimeout>>(undefined);
+  const handleAvatarClick = useCallback(() => {
+    if (!caller) return;
+    const text = `agent_name="${caller.alias || caller.name}"`;
+    navigator.clipboard.writeText(text).then(() => {
+      setAvatarCopied(true);
+      clearTimeout(avatarCopyTimer.current);
+      avatarCopyTimer.current = setTimeout(() => setAvatarCopied(false), 1500);
+    });
+  }, [caller]);
 
   const handleSelectSession = (id: string) => {
     if (override) {
@@ -79,7 +212,18 @@ export function Sidebar() {
       <div className="session-sidebar-header">
         {caller ? (
           <div style={{ display: "flex", alignItems: "center", gap: 8, minWidth: 0, width: "100%" }}>
-            <IdenticonAvatar alias={caller.alias || caller.name} color={caller.color} size={28} />
+            <div
+              onClick={handleAvatarClick}
+              title={avatarCopied ? "Copied!" : `Click to copy: agent_name="${caller.alias || caller.name}"`}
+              style={{ cursor: "pointer", position: "relative", flexShrink: 0 }}
+            >
+              <IdenticonAvatar alias={caller.alias || caller.name} color={caller.color} size={28} style={{ opacity: avatarCopied ? 0.5 : 1, transition: "opacity 0.15s" }} />
+              {avatarCopied && (
+                <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke={caller.color} strokeWidth="3" strokeLinecap="round" strokeLinejoin="round" style={{ position: "absolute", top: "50%", left: "50%", transform: "translate(-50%, -50%)" }}>
+                  <polyline points="20 6 9 17 4 12" />
+                </svg>
+              )}
+            </div>
             <div style={{ display: "flex", flexDirection: "column", minWidth: 0, flex: 1 }}>
               <div style={{ display: "flex", alignItems: "center", gap: 4 }}>
                 <span style={{ fontFamily: "'Cascadia Code', 'Consolas', 'SF Mono', 'Monaco', monospace", fontSize: 13, fontWeight: 600, color: caller.color, whiteSpace: "nowrap" }}>
@@ -139,57 +283,47 @@ export function Sidebar() {
             {t("sidebar.empty", "No sessions yet")}
           </div>
         )}
-        {[...sessions]
-          .sort((a, b) => {
-            // pending first, then cancelled, then responded
-            const statusOrder = { pending: 0, cancelled: 1, responded: 2 };
+        {(() => {
+          const sorted = [...sessions].sort((a, b) => {
+            const statusOrder: Record<string, number> = { pending: 0, cancelled: 2, responded: 2 };
             const aOrder = statusOrder[a.status] ?? 2;
             const bOrder = statusOrder[b.status] ?? 2;
             if (aOrder !== bOrder) return aOrder - bOrder;
             return new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime();
-          })
-          .map((session) => {
-          const isActive = session.id === activeSessionId;
-          const isPending = session.status === "pending";
-          const isCancelled = session.status === "cancelled";
-          return (
-            <button
-              key={session.id}
-              className={`session-item${isActive ? " session-item-active" : ""}`}
-              onClick={() => handleSelectSession(session.id)}
-              title={session.requestName}
-              style={isActive && activeCallerColor ? { background: `${activeCallerColor}${document.documentElement.getAttribute("data-theme") === "light" ? "0d" : "1a"}` } : undefined}
-            >
-              <span className="session-item-icon">
-                {isPending ? (
-                  <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="#f59e0b" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z" /><circle cx="12" cy="10" r="1" fill="#f59e0b" /></svg>
-                ) : isCancelled ? (
-                  <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="#ef4444" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round"><line x1="18" y1="6" x2="6" y2="18" /><line x1="6" y1="6" x2="18" y2="18" /></svg>
-                ) : (
-                  <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="var(--color-success)" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round"><polyline points="20 6 9 17 4 12" /></svg>
-                )}
-              </span>
-              <div className="session-item-info">
-                <span className={`session-item-name${isPending ? "" : " session-item-name-responded"}`}>
-                  {session.requestName || "Untitled"}
-                </span>
-                <span className="session-item-time">
-                  {timeAgo(session.createdAt)}
-                </span>
-              </div>
-              <span
-                className="session-item-delete"
-                onClick={(e) => {
-                  e.stopPropagation();
-                  handleDeleteClick(session);
-                }}
-                title={t("sidebar.delete", "Delete")}
-              >
-                <svg width="10" height="10" viewBox="0 0 10 10"><line x1="2" y1="2" x2="8" y2="8" stroke="currentColor" strokeWidth="1.2"/><line x1="8" y1="2" x2="2" y2="8" stroke="currentColor" strokeWidth="1.2"/></svg>
-              </span>
-            </button>
-          );
-        })}
+          });
+
+          // Group sessions by time
+          const groupOrder: TimeGroup[] = ["today", "yesterday", "lastWeek", "earlier"];
+          const groupLabels: Record<TimeGroup, string> = {
+            today: t("sidebar.groupToday", "Today"),
+            yesterday: t("sidebar.groupYesterday", "Yesterday"),
+            lastWeek: t("sidebar.groupLastWeek", "Last week"),
+            earlier: t("sidebar.groupEarlier", "Earlier"),
+          };
+
+          const groups = new Map<TimeGroup, typeof sorted>();
+          for (const s of sorted) {
+            const g = getTimeGroup(s.createdAt);
+            if (!groups.has(g)) groups.set(g, []);
+            groups.get(g)!.push(s);
+          }
+
+          return groupOrder
+            .filter(g => groups.has(g))
+            .map(g => (
+              <SessionGroup
+                key={g}
+                label={groupLabels[g]}
+                sessions={groups.get(g)!}
+                activeSessionId={activeSessionId ?? undefined}
+                activeCallerColor={activeCallerColor}
+                onSelect={handleSelectSession}
+                onDelete={handleDeleteClick}
+                onCancel={markSessionCancelled}
+                t={t}
+              />
+            ));
+        })()}
       </div>
 
       {/* Custom confirm dialog for pending session deletion */}

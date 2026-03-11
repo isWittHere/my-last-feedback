@@ -15,6 +15,7 @@ import { invoke } from "@tauri-apps/api/core";
 import { getCurrentWindow } from "@tauri-apps/api/window";
 
 const PANEL_MIN_WIDTH = 520;
+const IS_MACOS = navigator.userAgent.includes('Macintosh');
 
 export function FeedbackApp() {
   const { t } = useTranslation();
@@ -22,6 +23,7 @@ export function FeedbackApp() {
   const isPersistent = appMode === "persistent";
   const callers = useFeedbackStore((s) => s.callers);
   const callerOrder = useFeedbackStore((s) => s.callerOrder);
+  const hiddenCallerIds = useFeedbackStore((s) => s.hiddenCallerIds);
   const activeCallerId = useFeedbackStore((s) => s.activeCallerId);
 
   // Window width tracking for responsive multi-column layout
@@ -32,18 +34,33 @@ export function FeedbackApp() {
     return () => window.removeEventListener("resize", handler);
   }, []);
 
+  // Visible callers (excluding hidden ones)
+  const visibleCallers = useMemo(() => callers.filter(c => !hiddenCallerIds.includes(c.id)), [callers, hiddenCallerIds]);
+
+  // ── Layout mode: auto / 1 / 2 / 3 ──
+  const [layoutMode, setLayoutMode] = useState<"auto" | 1 | 2 | 3>("auto");
+  const layoutModes: Array<"auto" | 1 | 2 | 3> = ["auto", 1, 2, 3];
+  const cycleLayoutMode = useCallback(() => {
+    setLayoutMode(prev => {
+      const idx = layoutModes.indexOf(prev);
+      return layoutModes[(idx + 1) % layoutModes.length];
+    });
+  }, []);
+
   // Dynamic parallel: how many columns can fit?
-  const maxColumns = Math.max(1, Math.floor(windowWidth / PANEL_MIN_WIDTH));
-  const canMultiColumn = isPersistent && callers.length > 1 && maxColumns >= 2;
+  const autoMaxColumns = Math.max(1, Math.floor(windowWidth / PANEL_MIN_WIDTH));
+  const maxColumns = layoutMode === "auto" ? autoMaxColumns : layoutMode;
+  const canMultiColumn = isPersistent && visibleCallers.length > 1 && maxColumns >= 2;
 
-  // Column callers = first N from user-ordered list (works for both single and multi column)
+  // Column callers = first N from user-ordered list, excluding hidden ones
   const columnCallerIds = useMemo(() => {
-    if (!isPersistent || callers.length <= 1) return [] as string[];
+    if (!isPersistent || visibleCallers.length <= 1) return [] as string[];
     const order = callerOrder.length > 0 ? callerOrder : callers.map(c => c.id);
-    return order.slice(0, Math.min(order.length, maxColumns));
-  }, [callers, callerOrder, isPersistent, maxColumns]);
+    const visibleOrder = order.filter(id => !hiddenCallerIds.includes(id));
+    return visibleOrder.slice(0, Math.min(visibleOrder.length, maxColumns));
+  }, [callers, callerOrder, hiddenCallerIds, isPersistent, maxColumns, visibleCallers.length]);
 
-  const columnCount = isPersistent && callers.length > 1 ? Math.min(callers.length, maxColumns) : 0;
+  const columnCount = isPersistent && visibleCallers.length > 1 ? Math.min(visibleCallers.length, maxColumns) : 0;
   const useMultiColumn = canMultiColumn && columnCallerIds.length >= 2;
 
   // ── Legacy mode fields ──
@@ -190,6 +207,7 @@ export function FeedbackApp() {
           height: 34,
           cursor: "default",
           userSelect: "none",
+          ...(IS_MACOS ? { paddingLeft: 78 } : {}),
         }}
       >
         {/* Left: title or request name */}
@@ -211,8 +229,8 @@ export function FeedbackApp() {
         </div>
 
         {/* Center: Caller tabs - always visible in persistent mode with multiple callers */}
-        {isPersistent && callers.length > 1 && (
-          <div data-tauri-drag-region className="absolute inset-0 flex items-center justify-center pointer-events-none">
+        {isPersistent && visibleCallers.length > 1 && (
+          <div className="absolute inset-0 flex items-center justify-center pointer-events-none" style={IS_MACOS ? { left: 70 } : undefined}>
             <div className="pointer-events-auto">
               <CallerTabs columnCount={columnCount} />
             </div>
@@ -221,13 +239,16 @@ export function FeedbackApp() {
 
         {/* Right: controls */}
         <div className="flex items-center gap-1 shrink-0 z-10 ml-auto">
-          {isPersistent && callers.length > 1 && (
+          {isPersistent && visibleCallers.length > 1 && (
+            <>
             <button onClick={() => useFeedbackStore.getState().sortCallersByName()} className="titlebar-btn" title={t("titlebar.sortByWorkspace")}>
               <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" style={{ transform: "rotate(-90deg)" }}>
                 <line x1="4" y1="6" x2="14" y2="6" /><line x1="4" y1="12" x2="18" y2="12" /><line x1="4" y1="18" x2="11" y2="18" />
                 <polyline points="16 16 19 19 22 16" />
               </svg>
             </button>
+            <LayoutModeButton layoutMode={layoutMode} onCycle={cycleLayoutMode} onSelect={setLayoutMode} />
+            </>
           )}
           <button onClick={() => setSettingsOpen(true)} className="titlebar-btn" title={t("settings.title")}>
             <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
@@ -244,6 +265,8 @@ export function FeedbackApp() {
               <path d="M9 4v6l-2 4v2h10v-2l-2-4V4" /><line x1="12" y1="16" x2="12" y2="22" /><line x1="8" y1="4" x2="16" y2="4" />
             </svg>
           </button>
+          {!IS_MACOS && (
+            <>
           <button onClick={() => getCurrentWindow().minimize()} className="titlebar-btn" title="Minimize">
             <svg width="10" height="1" viewBox="0 0 10 1"><rect width="10" height="1" fill="currentColor"/></svg>
           </button>
@@ -253,6 +276,8 @@ export function FeedbackApp() {
           <button onClick={() => getCurrentWindow().close()} className="titlebar-btn titlebar-close" title="Close">
             <svg width="10" height="10" viewBox="0 0 10 10"><line x1="1" y1="1" x2="9" y2="9" stroke="currentColor" strokeWidth="1.2"/><line x1="9" y1="1" x2="1" y2="9" stroke="currentColor" strokeWidth="1.2"/></svg>
           </button>
+            </>
+          )}
         </div>
       </div>
 
@@ -325,6 +350,94 @@ export function FeedbackApp() {
       </div>{/* end content-blurred wrapper */}
 
       <SettingsDialog open={settingsOpen} onClose={() => setSettingsOpen(false)} />
+    </div>
+  );
+}
+
+/** Layout mode toggle button with click-to-cycle and hover dropdown */
+type LayoutMode = "auto" | 1 | 2 | 3;
+
+function LayoutModeButton({
+  layoutMode,
+  onCycle,
+  onSelect,
+}: {
+  layoutMode: LayoutMode;
+  onCycle: () => void;
+  onSelect: (mode: LayoutMode) => void;
+}) {
+  const { t } = useTranslation();
+  const [showDropdown, setShowDropdown] = useState(false);
+  const hideTimer = useRef<ReturnType<typeof setTimeout>>(undefined);
+
+  const handleMouseEnter = () => {
+    clearTimeout(hideTimer.current);
+    setShowDropdown(true);
+  };
+  const handleMouseLeave = () => {
+    hideTimer.current = setTimeout(() => setShowDropdown(false), 200);
+  };
+
+  const modeLabel = (m: LayoutMode) => {
+    if (m === "auto") return t("titlebar.layoutAuto", "Auto");
+    return `${m}`;
+  };
+
+  const modeIcon = (m: LayoutMode) => {
+    // Simple column icons
+    const cols = m === "auto" ? 0 : m;
+    if (cols === 0) {
+      // Auto: "A" label
+      return (
+        <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+          <rect x="3" y="3" width="18" height="18" rx="2" />
+          <text x="12" y="16" textAnchor="middle" fill="currentColor" stroke="none" fontSize="11" fontWeight="bold" fontFamily="sans-serif">A</text>
+        </svg>
+      );
+    }
+    // Draw column dividers inside a rectangle
+    const dividers: React.ReactNode[] = [];
+    for (let i = 1; i < cols; i++) {
+      const x = 3 + (18 / cols) * i;
+      dividers.push(<line key={i} x1={x} y1="3" x2={x} y2="21" />);
+    }
+    return (
+      <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+        <rect x="3" y="3" width="18" height="18" rx="2" />
+        {dividers}
+      </svg>
+    );
+  };
+
+  const allModes: LayoutMode[] = ["auto", 1, 2, 3];
+
+  return (
+    <div
+      style={{ position: "relative" }}
+      onMouseEnter={handleMouseEnter}
+      onMouseLeave={handleMouseLeave}
+    >
+      <button
+        onClick={onCycle}
+        className={`titlebar-btn${layoutMode !== "auto" ? " titlebar-btn-active" : ""}`}
+        title={t("titlebar.layoutMode", "Layout: {{mode}}", { mode: modeLabel(layoutMode) })}
+      >
+        {modeIcon(layoutMode)}
+      </button>
+      {showDropdown && (
+        <div className="layout-dropdown">
+          {allModes.map((m) => (
+            <button
+              key={String(m)}
+              className={`layout-dropdown-item${m === layoutMode ? " active" : ""}`}
+              onClick={() => { onSelect(m); setShowDropdown(false); }}
+            >
+              {modeIcon(m)}
+              <span>{modeLabel(m)}</span>
+            </button>
+          ))}
+        </div>
+      )}
     </div>
   );
 }

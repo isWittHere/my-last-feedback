@@ -704,6 +704,21 @@ function CallerContent() {
   const [showTestLog, setShowTestLog] = useState(false);
   const testLogRef = useRef<HTMLTextAreaElement>(null);
 
+  // Auto-expand input panel when test log opens
+  useEffect(() => {
+    if (!showTestLog || userResizedRef.current) return;
+    const container = containerRef.current;
+    if (!container) return;
+    const containerH = container.getBoundingClientRect().height;
+    if (containerH <= 0) return;
+    // Add ~140px worth of space for the test log editor
+    const extraRatio = 140 / containerH;
+    const newInput = Math.min(panelSizes[1] + extraRatio, INPUT_AUTO_MAX);
+    if (newInput > panelSizes[1]) {
+      setPanelSizes([1 - newInput, newInput]);
+    }
+  }, [showTestLog]); // only react to showTestLog toggle
+
   // Submit handler
   const [sessionSubmitting, setSessionSubmitting] = useState(false);
   const markSessionResponded = useFeedbackStore((s) => s.markSessionResponded);
