@@ -132,6 +132,9 @@
   },
   "callerManager": {
     "empty": "还没有 caller。当 AI agent 连接时会自动出现。",
+    "colAlias": "别名",
+    "colClient": "客户端",
+    "colSessions": "会话",
     "rename": "重命名工作区",
     "merge": "合并到另一个 caller",
     "hide": "从顶栏隐藏",

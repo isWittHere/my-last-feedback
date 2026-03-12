@@ -790,10 +790,12 @@ function CallerContent() {
     [activeSession, sessionSubmitting, markSessionResponded, updateSessionField]
   );
 
-  // Ctrl+Enter shortcut
+  // Ctrl+Enter shortcut — scoped to this panel
   useEffect(() => {
     const handler = (e: KeyboardEvent) => {
       if (e.ctrlKey && e.key === "Enter") {
+        const container = containerRef.current;
+        if (!container || !container.contains(document.activeElement)) return;
         e.preventDefault();
         handleSubmit();
       }
@@ -831,7 +833,7 @@ function CallerContent() {
               {activeSession.feedbackText && (
                 <div className="flex-1 overflow-y-auto min-h-0 px-3 pb-2">
                   <div
-                    style={{ fontSize: 13, color: "var(--color-text-primary)", whiteSpace: "pre-wrap", wordBreak: "break-all", opacity: 0.7 }}
+                    style={{ fontSize: 13, color: "var(--color-text-primary)", whiteSpace: "pre-wrap", wordBreak: "break-all", opacity: 0.7, userSelect: "text", cursor: "text" }}
                   >
                     <RichText text={activeSession.feedbackText} />
                   </div>

@@ -327,9 +327,9 @@ Images will be returned as ImageContent alongside the text feedback.
 
 IMPORTANT - rules for AI agents calling this tool:
 1. request_name MUST always be provided with a meaningful task title. Never omit it or leave it blank.
-2. summary MUST be written in standard Markdown format (headings, lists, bold, code blocks). Do NOT use escape characters.
+2. summary MUST be written in standard Markdown format (headings, lists, bold, code blocks). Do NOT use escape characters such as \\n or \\t.
 3. Describe full context, suggestions, and detailed information in summary. Use questions only for concise, actionable choices or brief input fields.
-4. agent_name is a 4-character random combination of uppercase letters and numbers (e.g. "A1B2", "X9Y8"). You MUST generate one on your first call and reuse the same identifier on ALL subsequent calls.`,
+4. agent_name: You MUST call register_agent ONCE first to obtain your identifier, then reuse it in ALL subsequent interactive_feedback calls.`,
   {
     project_directory: z.string().describe("Full path to the project directory"),
     summary: z.string().describe(
@@ -342,8 +342,8 @@ IMPORTANT - rules for AI agents calling this tool:
       "This parameter is REQUIRED and MUST NOT be left empty."
     ),
     agent_name: z.string().optional().describe(
-      "A 4-character random combination of uppercase letters and numbers (e.g. 'A1B2', 'X9Y8'). " +
-      "You MUST generate one on your first call and reuse the same identifier on ALL subsequent calls."
+      "Your agent identifier obtained from register_agent. " +
+      "You MUST call register_agent first to get this, then include it in ALL subsequent interactive_feedback calls."
     ),
     questions: z.array(z.object({
       label: z.string().describe("Short question label, e.g. 'Database choice', 'Need caching?'"),

@@ -84,12 +84,14 @@ export function CallerManager() {
     setMergeConfirm(false);
   }, [mergeSource, mergeTarget, mergeCallers]);
 
-  // Drag-and-drop: drag a caller card to another workspace group header
+  // Drag-and-drop: drag a caller to another workspace group
   const [dragCallerId, setDragCallerId] = useState<string | null>(null);
   const [dropTargetGroup, setDropTargetGroup] = useState<string | null>(null);
 
-  const handleDragStart = useCallback((callerId: string) => {
+  const handleDragStart = useCallback((e: React.DragEvent, callerId: string) => {
     setDragCallerId(callerId);
+    e.dataTransfer.effectAllowed = "move";
+    e.dataTransfer.setData("text/plain", callerId);
   }, []);
 
   const handleDragOver = useCallback((e: React.DragEvent, groupName: string) => {
@@ -145,9 +147,9 @@ export function CallerManager() {
   }
 
   return (
-    <div className="settings-section" style={{ gap: 8 }}>
+    <div className="settings-section" style={{ gap: 0 }}>
       {/* Merge bar */}
-      {mergeSource && (
+      {mergeSource && !mergeConfirm && (
         <div className="cm-merge-bar">
           <span style={{ fontSize: 11, color: "var(--color-text-secondary)" }}>
             {t("callerManager.mergeSelectTarget")}
@@ -178,8 +180,10 @@ export function CallerManager() {
         </div>
       )}
 
+      {/* Groups */}
       {groups.map((group) => {
         const isCollapsed = collapsed.has(group.name);
+        const groupCallerCount = group.callerIds.length;
         const groupSessionCount = group.callerIds.reduce((acc, id) => acc + (sessionCounts[id]?.total || 0), 0);
         const isDropTarget = dropTargetGroup === group.name;
 
@@ -191,108 +195,110 @@ export function CallerManager() {
             onDragLeave={handleDragLeave}
             onDrop={(e) => handleDrop(e, group.name)}
           >
-            {/* Group header */}
+            {/* Group header row */}
             <button className="cm-group-header" onClick={() => toggleCollapse(group.name)}>
               <svg
-                width="10" height="10" viewBox="0 0 10 10" fill="currentColor"
-                style={{ transform: isCollapsed ? "rotate(-90deg)" : "rotate(0deg)", transition: "transform 0.15s" }}
+                width="8" height="8" viewBox="0 0 8 8" fill="currentColor"
+                style={{ transform: isCollapsed ? "rotate(-90deg)" : "rotate(0deg)", transition: "transform 0.15s", flexShrink: 0 }}
               >
-                <path d="M2 3l3 4 3-4z" />
+                <path d="M1.5 2l2.5 3.5L6.5 2z" />
               </svg>
               <span className="cm-group-name">{group.name}</span>
-              <span className="cm-group-badge">{group.callerIds.length} caller{group.callerIds.length > 1 ? "s" : ""}</span>
-              <span className="cm-group-badge">{groupSessionCount} session{groupSessionCount !== 1 ? "s" : ""}</span>
+              <span className="cm-group-count">{groupCallerCount}</span>
+              <span className="cm-group-count">{groupSessionCount}</span>
             </button>
 
-            {/* Caller list */}
-            {!isCollapsed && (
-              <div className="cm-caller-list">
-                {group.callerIds.map((cid) => {
-                  const caller = callers.find((c) => c.id === cid);
-                  if (!caller) return null;
-                  const counts = sessionCounts[cid] || { total: 0, pending: 0 };
-                  const isHidden = hiddenCallerIds.includes(cid);
-                  const isMergeSource = mergeSource === cid;
-                  const isMergeSelectable = mergeSource && mergeSource !== cid && !mergeConfirm;
-                  const isDragging = dragCallerId === cid;
+            {/* Caller rows */}
+            {!isCollapsed && group.callerIds.map((cid) => {
+              const caller = callers.find((c) => c.id === cid);
+              if (!caller) return null;
+              const counts = sessionCounts[cid] || { total: 0, pending: 0 };
+              const isHidden = hiddenCallerIds.includes(cid);
+              const isMergeSource = mergeSource === cid;
+              const isMergeSelectable = mergeSource && mergeSource !== cid && !mergeConfirm;
+              const isDragging = dragCallerId === cid;
 
-                  return (
-                    <div
-                      key={cid}
-                      className={`cm-caller-card${isMergeSource ? " cm-caller-merge-source" : ""}${isDragging ? " cm-caller-dragging" : ""}${isHidden ? " cm-caller-hidden" : ""}`}
-                      draggable
-                      onDragStart={() => handleDragStart(cid)}
-                      onDragEnd={handleDragEnd}
-                      onClick={() => {
-                        if (isMergeSelectable) {
-                          setMergeTarget(cid);
-                          setMergeConfirm(true);
-                        }
-                      }}
-                      style={isMergeSelectable ? { cursor: "pointer" } : undefined}
-                    >
-                      <div className="cm-caller-color-bar" style={{ background: caller.color }} />
-                      <IdenticonAvatar alias={caller.alias || caller.id} color={caller.color} size={24} />
-                      <div className="cm-caller-info">
-                        <div className="cm-caller-alias">{caller.alias || "—"}</div>
-                        <div className="cm-caller-client">{caller.clientName || "Unknown"}</div>
-                      </div>
-                      <div className="cm-caller-stats">
-                        {counts.pending > 0 && (
-                          <span className="cm-badge-pending">{counts.pending}</span>
-                        )}
-                        <span className="cm-badge-total">{counts.total}</span>
-                      </div>
-
-                      {/* Rename input */}
-                      {renamingId === cid ? (
-                        <div className="cm-caller-actions" style={{ flex: "0 0 auto" }}>
-                          <input
-                            ref={renameInputRef}
-                            className="cm-rename-input"
-                            value={renameValue}
-                            onChange={(e) => setRenameValue(e.target.value)}
-                            onKeyDown={(e) => {
-                              if (e.key === "Enter") commitRename();
-                              if (e.key === "Escape") setRenamingId(null);
-                            }}
-                            onBlur={commitRename}
-                          />
-                        </div>
+              return (
+                <div
+                  key={cid}
+                  className={`cm-row${isMergeSource ? " cm-row-merge-source" : ""}${isDragging ? " cm-row-dragging" : ""}${isHidden ? " cm-row-hidden" : ""}`}
+                  draggable
+                  onDragStart={(e) => handleDragStart(e, cid)}
+                  onDragEnd={handleDragEnd}
+                  onClick={() => {
+                    if (isMergeSelectable) {
+                      setMergeTarget(cid);
+                      setMergeConfirm(true);
+                    }
+                  }}
+                  style={isMergeSelectable ? { cursor: "pointer", background: "rgba(59, 130, 246, 0.06)" } : undefined}
+                >
+                  {/* Hide/Show toggle — leftmost */}
+                  <div className="cm-col-visibility">
+                    <button className="cm-action-btn" title={t(isHidden ? "callerManager.show" : "callerManager.hide")} onClick={(e) => { e.stopPropagation(); toggleCallerHidden(cid); }}>
+                      {isHidden ? (
+                        <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                          <path d="M17.94 17.94A10.07 10.07 0 0 1 12 20c-7 0-11-8-11-8a18.45 18.45 0 0 1 5.06-5.94" /><path d="M9.9 4.24A9.12 9.12 0 0 1 12 4c7 0 11 8 11 8a18.5 18.5 0 0 1-2.16 3.19" /><line x1="1" y1="1" x2="23" y2="23" />
+                        </svg>
                       ) : (
-                        <div className="cm-caller-actions">
-                          {/* Rename button */}
-                          <button className="cm-action-btn" title={t("callerManager.rename")} onClick={(e) => { e.stopPropagation(); startRename(cid); }}>
-                            <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-                              <path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7" />
-                              <path d="M18.5 2.5a2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z" />
-                            </svg>
-                          </button>
-                          {/* Hide/Show button */}
-                          <button className="cm-action-btn" title={t(isHidden ? "callerManager.show" : "callerManager.hide")} onClick={(e) => { e.stopPropagation(); toggleCallerHidden(cid); }}>
-                            {isHidden ? (
-                              <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-                                <path d="M17.94 17.94A10.07 10.07 0 0 1 12 20c-7 0-11-8-11-8a18.45 18.45 0 0 1 5.06-5.94" /><path d="M9.9 4.24A9.12 9.12 0 0 1 12 4c7 0 11 8 11 8a18.5 18.5 0 0 1-2.16 3.19" /><line x1="1" y1="1" x2="23" y2="23" />
-                              </svg>
-                            ) : (
-                              <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-                                <path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z" /><circle cx="12" cy="12" r="3" />
-                              </svg>
-                            )}
-                          </button>
-                          {/* Merge button */}
-                          <button className="cm-action-btn" title={t("callerManager.merge")} onClick={(e) => { e.stopPropagation(); setMergeSource(cid); setMergeTarget(null); setMergeConfirm(false); }}>
-                            <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-                              <circle cx="18" cy="18" r="3" /><circle cx="6" cy="6" r="3" /><path d="M6 21V9a9 9 0 0 0 9 9" />
-                            </svg>
-                          </button>
-                        </div>
+                        <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                          <path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z" /><circle cx="12" cy="12" r="3" />
+                        </svg>
                       )}
-                    </div>
-                  );
-                })}
-              </div>
-            )}
+                    </button>
+                  </div>
+
+                  {/* Avatar */}
+                  <div className="cm-col-avatar">
+                    <IdenticonAvatar alias={caller.alias || caller.id} color={caller.color} size={20} />
+                  </div>
+
+                  {/* Alias + Client stacked */}
+                  <div className="cm-col-info">
+                    <span className="cm-row-alias" style={{ color: caller.color }}>{caller.alias || "—"}</span>
+                    <span className="cm-row-client">{caller.clientName || "—"}</span>
+                  </div>
+
+                  {/* Sessions */}
+                  <div className="cm-col-sessions">
+                    {counts.pending > 0 && <span className="cm-badge-pending">{counts.pending}</span>}
+                    <span className="cm-badge-total">{counts.total}</span>
+                  </div>
+
+                  {/* Actions (rename, merge) */}
+                  <div className="cm-col-actions">
+                    {renamingId === cid ? (
+                      <input
+                        ref={renameInputRef}
+                        className="cm-rename-input"
+                        value={renameValue}
+                        onChange={(e) => setRenameValue(e.target.value)}
+                        onKeyDown={(e) => {
+                          if (e.key === "Enter") commitRename();
+                          if (e.key === "Escape") setRenamingId(null);
+                        }}
+                        onBlur={commitRename}
+                        onClick={(e) => e.stopPropagation()}
+                      />
+                    ) : (
+                      <div className="cm-row-actions">
+                        <button className="cm-action-btn" title={t("callerManager.rename")} onClick={(e) => { e.stopPropagation(); startRename(cid); }}>
+                          <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                            <path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7" />
+                            <path d="M18.5 2.5a2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z" />
+                          </svg>
+                        </button>
+                        <button className="cm-action-btn" title={t("callerManager.merge")} onClick={(e) => { e.stopPropagation(); setMergeSource(cid); setMergeTarget(null); setMergeConfirm(false); }}>
+                          <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                            <circle cx="18" cy="18" r="3" /><circle cx="6" cy="6" r="3" /><path d="M6 21V9a9 9 0 0 0 9 9" />
+                          </svg>
+                        </button>
+                      </div>
+                    )}
+                  </div>
+                </div>
+              );
+            })}
           </div>
         );
       })}

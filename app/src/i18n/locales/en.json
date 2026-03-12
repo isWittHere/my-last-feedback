@@ -132,6 +132,9 @@
   },
   "callerManager": {
     "empty": "No callers yet. Callers appear when AI agents connect.",
+    "colAlias": "Alias",
+    "colClient": "Client",
+    "colSessions": "Sessions",
     "rename": "Rename workspace",
     "merge": "Merge into another caller",
     "hide": "Hide from top bar",

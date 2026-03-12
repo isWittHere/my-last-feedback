@@ -17,14 +17,14 @@ The #tool:my-last-feedback/interactive_feedback tool must be used in any of the 
 
 ## Agent Identity (`agent_name`)
 - `agent_name` is a 4-character random combination consisting of uppercase letters and numbers, such as "A1B2" or "X9Y8".
-- you **MUST** generate a new identifier back as `agent_name` if you don't have an `agent_name` yet.
+- you **MUST** register a new identifier using #tool:my-last-feedback/register_agent back as `agent_name` if you don't have an `agent_name` yet.
 - you **MUST** pass that identifier back as `agent_name` if you already had a known one.
 - This ensures the desktop app correctly associates all your requests under one persistent caller tab.
 
 ## Summary and Suggestions (`summary`)
 - Send your feedback and notification information to the user in `summary`
 - Always use correct markdown format
-- Do not use escape characters
+- Do not use escape characters such as `\n` or `\n\n`
 - Complete context, suggestions, and detailed option information are always described in `summary` (Markdown).
 
 ## Question Functionality (`questions`)
