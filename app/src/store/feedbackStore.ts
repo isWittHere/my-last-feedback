@@ -239,7 +239,10 @@ export const useFeedbackStore = create<FeedbackState>((set, get) => ({
       }
       return;
     }
-    set({ callers: [...callers, caller], callerOrder: [...callerOrder, caller.id] });
+    const nextOrder = callerOrder.includes(caller.id)
+      ? callerOrder
+      : [...callerOrder, caller.id];
+    set({ callers: [...callers, caller], callerOrder: nextOrder });
   },
 
   updateCallerColor: (id, color) => {
@@ -267,7 +270,12 @@ export const useFeedbackStore = create<FeedbackState>((set, get) => ({
     }
   },
 
-  setCallerOrder: (order) => set({ callerOrder: order }),
+  setCallerOrder: (order) => {
+    set({ callerOrder: order });
+    invoke("update_caller_order", { order }).catch((e: unknown) =>
+      console.error("Failed to persist caller order:", e)
+    );
+  },
 
   sortCallersByName: () => {
     const { callers, callerOrder } = get();
@@ -283,7 +291,8 @@ export const useFeedbackStore = create<FeedbackState>((set, get) => ({
       if (!groups.has(name)) groups.set(name, []);
       groups.get(name)!.push(id);
     }
-    set({ callerOrder: [...groups.values()].flat() });
+    const nextOrder = [...groups.values()].flat();
+    get().setCallerOrder(nextOrder);
   },
 
   renameCaller: async (callerId, newName) => {
@@ -421,6 +430,9 @@ export const useFeedbackStore = create<FeedbackState>((set, get) => ({
         s.id === sessionId ? { ...s, status: "cancelled" as const } : s
       ),
     }));
+    invoke("cancel_session", { sessionId }).catch((e: unknown) =>
+      console.error("Failed to persist cancelled session:", e)
+    );
     const session = get().sessions.find((s) => s.id === sessionId);
     if (session) {
       get().updateCallerPendingCount(session.callerId);

@@ -1,6 +1,6 @@
 use chrono::{DateTime, Utc};
 use serde::{Deserialize, Serialize};
-use std::collections::HashMap;
+use std::collections::{HashMap, HashSet};
 use std::path::{Path, PathBuf};
 use std::sync::Arc;
 use tokio::sync::{oneshot, Mutex as TokioMutex};
@@ -108,6 +108,8 @@ struct PersistedHistory {
     callers: HashMap<String, CallerInfo>,
     sessions: Vec<PersistedSession>,
     color_index: usize,
+    #[serde(default)]
+    caller_order: Vec<String>,
 }
 
 #[derive(Serialize, Deserialize)]
@@ -141,6 +143,7 @@ pub struct SessionEntry {
 /// Central session manager — shared across IPC and Tauri commands
 pub struct SessionManager {
     pub callers: HashMap<String, CallerInfo>,
+    pub caller_order: Vec<String>,
     pub sessions: Vec<SessionEntry>,
     color_index: usize,
     data_dir: PathBuf,
@@ -148,7 +151,7 @@ pub struct SessionManager {
 
 impl SessionManager {
     pub fn new(data_dir: PathBuf) -> Self {
-        let (mut callers, sessions, _old_color_index) = Self::load_from_disk(&data_dir);
+        let (mut callers, sessions, _old_color_index, caller_order) = Self::load_from_disk(&data_dir);
         // Reassign colors using golden-angle HSL for better separation
         let mut ws_index: HashMap<String, usize> = HashMap::new();
         let mut idx: usize = 0;
@@ -169,12 +172,36 @@ impl SessionManager {
         }
         let mut mgr = Self {
             callers,
+            caller_order,
             sessions,
             color_index: idx,
             data_dir,
         };
+        mgr.normalize_caller_order();
         mgr.persist();
         mgr
+    }
+
+    fn normalize_caller_order(&mut self) {
+        let mut seen = HashSet::new();
+        let mut normalized = Vec::new();
+
+        for id in &self.caller_order {
+            if self.callers.contains_key(id) && seen.insert(id.clone()) {
+                normalized.push(id.clone());
+            }
+        }
+
+        let mut missing: Vec<String> = self
+            .callers
+            .keys()
+            .filter(|id| !seen.contains(*id))
+            .cloned()
+            .collect();
+        missing.sort();
+        normalized.extend(missing);
+
+        self.caller_order = normalized;
     }
 
     fn history_path(&self) -> PathBuf {
@@ -206,6 +233,10 @@ impl SessionManager {
                 result.alias = alias.to_string();
                 self.persist();
             }
+            if !self.caller_order.contains(&id) {
+                self.caller_order.push(id.clone());
+                self.persist();
+            }
             return result;
         }
         // Assign color: reuse existing workspace color, or generate new via golden-angle
@@ -225,6 +256,7 @@ impl SessionManager {
             alias: alias.to_string(),
         };
         self.callers.insert(id, caller.clone());
+        self.caller_order.push(caller.id.clone());
         self.persist();
         caller
     }
@@ -263,7 +295,31 @@ impl SessionManager {
 
     /// Get all callers
     pub fn get_callers(&self) -> Vec<CallerInfo> {
-        self.callers.values().cloned().collect()
+        let mut result: Vec<CallerInfo> = self
+            .caller_order
+            .iter()
+            .filter_map(|id| self.callers.get(id).cloned())
+            .collect();
+
+        if result.len() < self.callers.len() {
+            let mut extra_ids: Vec<String> = self
+                .callers
+                .keys()
+                .filter(|id| !self.caller_order.contains(*id))
+                .cloned()
+                .collect();
+            extra_ids.sort();
+            result.extend(extra_ids.into_iter().filter_map(|id| self.callers.get(&id).cloned()));
+        }
+
+        result
+    }
+
+    /// Update caller display order using caller IDs.
+    pub fn update_caller_order(&mut self, order: Vec<String>) {
+        self.caller_order = order;
+        self.normalize_caller_order();
+        self.persist();
     }
 
     /// Get sessions for a specific caller
@@ -449,6 +505,7 @@ impl SessionManager {
             let caller_empty = !self.sessions.iter().any(|s| s.detail.caller_id == caller_id);
             if caller_empty {
                 self.callers.remove(&caller_id);
+                self.caller_order.retain(|id| id != &caller_id);
             }
             self.persist();
             return caller_empty;
@@ -512,6 +569,8 @@ impl SessionManager {
         }
 
         self.callers.remove(source_id);
+        self.caller_order.retain(|id| id != source_id);
+        self.normalize_caller_order();
         self.persist();
         Ok(moved)
     }
@@ -525,6 +584,7 @@ impl SessionManager {
             let _ = std::fs::create_dir_all(&images_dir);
         }
         self.callers.clear();
+        self.caller_order.clear();
         self.sessions.clear();
         self.persist();
     }
@@ -598,6 +658,7 @@ impl SessionManager {
             callers: self.callers.clone(),
             sessions: persisted_sessions,
             color_index: self.color_index,
+            caller_order: self.caller_order.clone(),
         };
 
         if let Ok(json) = serde_json::to_string_pretty(&history) {
@@ -610,17 +671,17 @@ impl SessionManager {
     /// Load callers + sessions from disk
     fn load_from_disk(
         data_dir: &Path,
-    ) -> (HashMap<String, CallerInfo>, Vec<SessionEntry>, usize) {
+    ) -> (HashMap<String, CallerInfo>, Vec<SessionEntry>, usize, Vec<String>) {
         let history_path = data_dir.join("history.json");
         if !history_path.exists() {
-            return (HashMap::new(), Vec::new(), 0);
+            return (HashMap::new(), Vec::new(), 0, Vec::new());
         }
 
         let content = match std::fs::read_to_string(&history_path) {
             Ok(c) => c,
             Err(e) => {
                 eprintln!("[Persist] Failed to read history: {}", e);
-                return (HashMap::new(), Vec::new(), 0);
+                return (HashMap::new(), Vec::new(), 0, Vec::new());
             }
         };
 
@@ -628,7 +689,7 @@ impl SessionManager {
             Ok(h) => h,
             Err(e) => {
                 eprintln!("[Persist] Failed to parse history: {}", e);
-                return (HashMap::new(), Vec::new(), 0);
+                return (HashMap::new(), Vec::new(), 0, Vec::new());
             }
         };
 
@@ -672,7 +733,7 @@ impl SessionManager {
             history.color_index
         );
 
-        (history.callers, sessions, history.color_index)
+        (history.callers, sessions, history.color_index, history.caller_order)
     }
 }
 

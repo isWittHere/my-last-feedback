@@ -188,6 +188,27 @@ async fn get_pending_count(
     Ok(mgr.pending_count(&caller_id))
 }
 
+/// Update caller display order
+#[tauri::command]
+async fn update_caller_order(
+    session_mgr: State<'_, SharedSessionManager>,
+    order: Vec<String>,
+) -> Result<(), String> {
+    let mut mgr = session_mgr.lock().await;
+    mgr.update_caller_order(order);
+    Ok(())
+}
+
+/// Cancel a pending session and persist status
+#[tauri::command]
+async fn cancel_session(
+    session_mgr: State<'_, SharedSessionManager>,
+    session_id: String,
+) -> Result<(), String> {
+    let mut mgr = session_mgr.lock().await;
+    mgr.cancel_session(&session_id)
+}
+
 /// Load persisted history (callers + sessions without image data) for frontend init
 #[derive(Serialize)]
 struct HistoryPayload {
@@ -503,6 +524,8 @@ pub fn run() {
             rename_caller,
             merge_callers,
             get_pending_count,
+            update_caller_order,
+            cancel_session,
             load_history,
             remove_session,
             clear_all_history,
