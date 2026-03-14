@@ -1,77 +1,38 @@
-# My Last Feedback v0.1.2 Release Notes
+# My Last Feedback v0.2.0 Release Notes
 
-## ✨ New Features & Improvements
+## 🎯 Release Summary
 
-### 1. CallerManager Hide/Show Functionality
-- Hide individual callers from the top bar tabs with an eye icon
-- Auto-unhide when new requests arrive
-- Hidden state persisted in localStorage
+本版本完成 `0.2.0` 版本升级与 Windows 发行包构建，统一了 Node、前端与 Tauri 后端版本元数据，并输出可分发压缩包。
 
-### 2. Caller Merge with [System] Injection
-- When merging callers, pending sessions receive a `[System]` notification with the new agent_name
-- Dual-layer implementation:
-  - Summary prefix injection (frontend + backend)
-  - Dynamic alias replacement in responses (MCP server)
+## ✅ Changes
 
-### 3. macOS Drag-and-Drop Fix
-- Fixed CallerTabs drag-reorder on macOS by:
-  - Adding `setData()` call for WebKit compatibility
-  - Ensuring tab button is always the drag event target with `pointer-events`
-  - Removing redundant drag-region attributes
+- 升级根项目版本
+  - `package.json` → `0.2.0`
+- 升级前端应用版本
+  - `app/package.json` → `0.2.0`
+- 升级 Tauri Rust 包版本
+  - `app/src-tauri/Cargo.toml` → `0.2.0`
+- 升级 Tauri 配置版本
+  - `app/src-tauri/tauri.conf.json` → `0.2.0`
+- 构建并打包 Windows 发行目录
+  - `dist/win-x64/my-last-feedback/`
+- 生成压缩包
+  - `dist/win-x64/my-last-feedback-win-x64.zip`
 
-### 4. macOS UI Adaptation (Overlay Title Bar)
-- Native traffic lights on macOS (red/yellow/green)
-- Rounded window corners (automatic via native decorations)
-- Proper spacing for traffic lights in the title bar
-- Platform-specific button visibility (Windows buttons hidden on macOS)
-- Acceptance of first mouse click on inactive windows
+## 📦 Artifacts
 
-### 5. Bug Fixes
-- Fixed clipboard copy buttons (added missing `clipboard-manager:allow-write-text` permission)
+- Windows package directory:
+  - `dist/win-x64/my-last-feedback/`
+- Windows zip archive:
+  - `dist/win-x64/my-last-feedback-win-x64.zip`
 
-## 📦 Package Contents
+## 🧪 Build Verification
 
-- `app.exe` - Main application binary (11 MB)
-- `server.mjs` - MCP server bridge
-- `package.json` + `node_modules/` - Node.js dependencies
-- `mcp.json.template` - MCP configuration template
-- `SETUP.md` - Installation instructions
-- `prompt.instructions.md` - Prompt customization guide
-- `mcp_prompts/` - Example prompt files
+- Tauri release build completed successfully
+- Frontend build (`tsc + vite build`) completed successfully
+- Packaging script completed successfully
 
-**Total Package Size**: 7.65 MB (compressed)
+## ℹ️ Notes
 
-## 🔧 Technical Details
-
-### File Changes
-
-#### Rust Backend
-- **tauri.conf.json**: Added `titleBarStyle: "Overlay"`, `hiddenTitle: true`, `acceptFirstMouse: true`
-- **src/lib.rs**: Added platform-conditional `set_decorations(false)` for Windows
-- **src/session.rs**: Extended FeedbackPayload with `caller_alias` field for dynamic alias injection
-- **capabilities/default.json**: Added `clipboard-manager:allow-write-text` permission
-
-#### React Frontend
-- **components/FeedbackApp.tsx**: Added `IS_MACOS` platform detection, conditional rendering for window controls, title bar padding
-- **components/CallerTabs.tsx**: Added `setData()` for WebKit drag compatibility
-- **components/CallerManager.tsx**: Added hide/show eye icon buttons
-- **index.css**: Added `pointer-events: none` for tab children, `cm-caller-hidden` styling
-- **store/feedbackStore.ts**: Added hidden callers management with localStorage persistence
-
-#### MCP Server
-- **server.mjs**: Dynamic alias selection for [System] messages
-
-## ✅ Verification
-
-- Rust build: Clean (0 errors)
-- TypeScript: Zero errors
-- All locale files updated (Chinese + English)
-
-## 🚀 Installation & Usage
-
-See [SETUP.md](dist/win-x64/my-last-feedback/SETUP.md) for installation steps.
-
-## 📝 Known Limitations
-
-- macOS build has not been tested on actual macOS hardware (changes are code-only)
-- WiX bundler skipped (use included `app.exe` directly or manual MSI creation)
+- 构建期间出现 Vite chunk size 警告，但不影响本次发行产物生成。
+- 本次发布以版本升级与发行打包为主，不包含功能层新增说明。
