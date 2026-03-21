@@ -6,6 +6,7 @@ import { useTranslation } from "react-i18next";
 import { useActiveCallerSession } from "./useActiveCallerSession";
 import { useCallerOverride } from "./CallerContext";
 import { IdenticonAvatar } from "./IdenticonAvatar";
+import { getFriendlyName } from "./friendlyName";
 
 function timeAgo(dateStr: string, t: (key: string, opts?: Record<string, unknown>) => string): string {
   const now = Date.now();
@@ -140,7 +141,7 @@ function SessionGroup({
 }
 
 export function Sidebar() {
-  const { t } = useTranslation();
+  const { t, i18n } = useTranslation();
   const override = useCallerOverride();
   const { callerId: activeCallerId, sessionId: activeSessionId, caller } = useActiveCallerSession();
   const allSessions = useFeedbackStore((s) => s.sessions);
@@ -157,7 +158,7 @@ export function Sidebar() {
   const avatarCopyTimer = useRef<ReturnType<typeof setTimeout>>(undefined);
   const handleAvatarClick = useCallback(() => {
     if (!caller) return;
-    const text = `agent_name="${caller.alias || caller.name}"`;
+    const text = `agent_name="${caller.alias || caller.name}".`;
     navigator.clipboard.writeText(text).then(() => {
       setAvatarCopied(true);
       clearTimeout(avatarCopyTimer.current);
@@ -214,7 +215,7 @@ export function Sidebar() {
           <div style={{ display: "flex", alignItems: "center", gap: 8, minWidth: 0, width: "100%" }}>
             <div
               onClick={handleAvatarClick}
-              title={avatarCopied ? "Copied!" : `Click to copy: agent_name="${caller.alias || caller.name}"`}
+              title={avatarCopied ? t("sidebar.copied", "Copied!") : t("sidebar.clickToCopy", { alias: caller.alias || caller.name, defaultValue: 'Click to copy: agent_name="{{alias}}".' })}
               style={{ cursor: "pointer", position: "relative", flexShrink: 0 }}
             >
               <IdenticonAvatar alias={caller.alias || caller.name} color={caller.color} size={28} style={{ opacity: avatarCopied ? 0.5 : 1, transition: "opacity 0.15s" }} />
@@ -226,9 +227,12 @@ export function Sidebar() {
             </div>
             <div style={{ display: "flex", flexDirection: "column", minWidth: 0, flex: 1 }}>
               <div style={{ display: "flex", alignItems: "center", gap: 4 }}>
-                <span style={{ fontFamily: "'Cascadia Code', 'Consolas', 'SF Mono', 'Monaco', monospace", fontSize: 13, fontWeight: 600, color: caller.color, whiteSpace: "nowrap" }}>
-                  {caller.alias || caller.name.charAt(0).toUpperCase()}
+                <span style={{ fontSize: 13, fontWeight: 600, color: caller.color, whiteSpace: "nowrap" }}>
+                  {caller.alias ? getFriendlyName(caller.alias, i18n.language === "zh" ? "zh" : "en") : caller.name.charAt(0).toUpperCase()}
                 </span>
+                {caller.alias && (
+                  <span style={{ fontSize: 11, color: "var(--color-text-muted)", whiteSpace: "nowrap" }}>({caller.alias})</span>
+                )}
                 {caller.pendingCount > 0 && (
                   caller.pendingCount > 4 ? (
                     <span

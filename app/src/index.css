@@ -1061,9 +1061,9 @@ body,
   background: var(--color-bg-surface);
   border: 1px solid var(--color-border);
   border-radius: 8px;
-  width: 420px;
+  width: 720px;
   max-width: 90vw;
-  height: 420px;
+  height: 480px;
   max-height: 80vh;
   display: flex;
   flex-direction: column;
@@ -1152,6 +1152,9 @@ body,
   flex: 1;
   padding: 14px 18px;
   overflow-y: auto;
+}
+.settings-content:has(.cm-two-col) {
+  overflow: hidden;
 }
 .settings-section {
   display: flex;
@@ -1298,10 +1301,31 @@ body,
 
 /* ── Caller Manager (list layout) ── */
 
+/* Two-column layout */
+.cm-two-col {
+  display: flex;
+  gap: 0;
+  margin: -14px -18px;
+  height: calc(100% + 28px);
+}
+.cm-col-settings {
+  width: 230px;
+  flex-shrink: 0;
+  padding: 14px 16px;
+  border-right: 1px solid var(--color-border-subtle);
+  overflow-y: auto;
+}
+.cm-col-list {
+  flex: 1;
+  min-width: 0;
+  overflow-y: auto;
+  padding: 10px 12px;
+}
+
 /* Column grid for caller rows */
 .cm-row {
   display: grid;
-  grid-template-columns: 20px 28px 1fr 40px 48px;
+  grid-template-columns: 20px 28px 1fr 48px;
   align-items: center;
   gap: 0;
   padding: 0;
@@ -1317,8 +1341,13 @@ body,
   overflow: hidden;
   padding: 0 3px;
 }
-.cm-col-sessions { display: flex; align-items: center; gap: 3px; justify-content: center; }
 .cm-col-actions { display: flex; align-items: center; justify-content: flex-end; gap: 0; min-width: 0; }
+.cm-row-alias-line {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  overflow: hidden;
+}
 
 /* Group container */
 .cm-group {
@@ -1329,6 +1358,23 @@ body,
 .cm-group-drop-target {
   box-shadow: inset 0 0 0 1.5px var(--color-primary);
   border-radius: var(--radius-md);
+}
+
+/* CallerManager number input */
+.cm-number-input {
+  width: 52px;
+  padding: 2px 6px;
+  font-size: 11px;
+  border-radius: 4px;
+  border: 1px solid var(--color-border);
+  background: var(--color-bg);
+  color: var(--color-text);
+  text-align: right;
+  flex-shrink: 0;
+}
+.cm-number-input:focus {
+  outline: none;
+  border-color: var(--color-primary);
 }
 
 /* Group header */
@@ -1356,6 +1402,9 @@ body,
   white-space: nowrap;
 }
 .cm-group-count {
+  display: inline-flex;
+  align-items: center;
+  gap: 2px;
   font-size: 9px;
   font-weight: 500;
   color: var(--color-text-secondary);
@@ -1399,6 +1448,9 @@ body,
 
 /* Session badges */
 .cm-badge-pending {
+  display: inline-flex;
+  align-items: center;
+  gap: 2px;
   font-size: 9px;
   font-weight: 600;
   color: #fff;
@@ -1406,11 +1458,22 @@ body,
   padding: 0 5px;
   border-radius: 8px;
   line-height: 16px;
+  white-space: nowrap;
 }
 .cm-badge-total {
-  font-size: 10px;
+  display: inline-flex;
+  align-items: center;
+  gap: 2px;
+  font-size: 9px;
+  font-weight: 500;
   color: var(--color-text-secondary);
+  background: rgba(255,255,255,0.06);
+  padding: 0 5px;
+  border-radius: 8px;
+  line-height: 16px;
+  white-space: nowrap;
 }
+[data-theme="light"] .cm-badge-total { background: rgba(0,0,0,0.06); }
 
 /* Row action buttons — show on hover */
 .cm-row-actions {

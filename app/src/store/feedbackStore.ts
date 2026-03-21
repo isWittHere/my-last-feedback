@@ -100,6 +100,7 @@ export interface FeedbackState {
   callerOrder: string[]; // user-controlled display order of caller IDs
   unreadCallerIds: string[]; // callers with unread new sessions
   hiddenCallerIds: string[]; // callers hidden from top bar tabs
+  visibleColumnCount: number; // how many callers are visible in the window columns
   sessions: Session[];
   activeCallerId: string | null;
   activeSessionId: string | null;
@@ -122,12 +123,23 @@ export interface FeedbackState {
   markSessionResponded: (sessionId: string) => void;
   markSessionCancelled: (sessionId: string) => void;
   removeSession: (sessionId: string) => void;
+  removeCaller: (callerId: string) => Promise<void>;
+  removeEmptyCallers: () => Promise<string[]>;
+  maxSessionsPerCaller: number;
+  setMaxSessionsPerCaller: (value: number) => void;
+  autoRemoveEmptyCallers: boolean;
+  setAutoRemoveEmptyCallers: (value: boolean) => void;
+  autoHideInactiveHours: number;
+  setAutoHideInactiveHours: (value: number) => void;
+  hideInactiveCallers: () => void;
   updateSessionAnswer: (sessionId: string, questionIndex: number, answer: string) => void;
   toggleSessionOption: (sessionId: string, questionIndex: number, option: string) => void;
   updateCallerPendingCount: (callerId: string) => void;
   markCallerRead: (callerId: string) => void;
   toggleCallerHidden: (callerId: string) => void;
   unhideCaller: (callerId: string) => void;
+  trimCallerSessions: (callerId: string) => Promise<void>;
+  setVisibleColumnCount: (count: number) => void;
 
   // Derived getters
   getActiveCaller: () => Caller | null;
@@ -214,11 +226,30 @@ export const useFeedbackStore = create<FeedbackState>((set, get) => ({
   callers: [],
   callerOrder: [],
   unreadCallerIds: [],
+  visibleColumnCount: 0,
   hiddenCallerIds: (() => {
     try {
       const stored = localStorage.getItem("mlf-hidden-callers");
       return stored ? JSON.parse(stored) : [];
     } catch { return []; }
+  })(),
+  maxSessionsPerCaller: (() => {
+    try {
+      const stored = localStorage.getItem("mlf-max-sessions-per-caller");
+      return stored ? Number(stored) : 200;
+    } catch { return 200; }
+  })(),
+  autoRemoveEmptyCallers: (() => {
+    try {
+      const stored = localStorage.getItem("mlf-auto-remove-empty-callers");
+      return stored === "true";
+    } catch { return false; }
+  })(),
+  autoHideInactiveHours: (() => {
+    try {
+      const stored = localStorage.getItem("mlf-auto-hide-inactive-hours");
+      return stored ? Number(stored) : 18;
+    } catch { return 18; }
   })(),
   sessions: [],
   activeCallerId: null,
@@ -352,6 +383,7 @@ export const useFeedbackStore = create<FeedbackState>((set, get) => ({
   },
 
   addSession: (session) => {
+    const wasHidden = get().hiddenCallerIds.includes(session.callerId);
     set((state) => ({
       sessions: [...state.sessions, session],
     }));
@@ -359,8 +391,49 @@ export const useFeedbackStore = create<FeedbackState>((set, get) => ({
     if (session.status === "pending") {
       get().unhideCaller(session.callerId);
     }
+    // Move caller to visible columns' last position if it was outside the visible window
+    if (session.status === "pending") {
+      const { callerOrder, hiddenCallerIds, visibleColumnCount, callers } = get();
+      if (visibleColumnCount > 0) {
+        const order = callerOrder.length > 0 ? callerOrder : callers.map(c => c.id);
+        const visibleOrder = order.filter(id => !hiddenCallerIds.includes(id));
+        const posInVisible = visibleOrder.indexOf(session.callerId);
+        // Only move if caller exists and is outside the visible columns
+        if (posInVisible >= visibleColumnCount || (wasHidden && posInVisible === -1)) {
+          // Remove from current position and insert at the last visible column position
+          const newOrder = order.filter(id => id !== session.callerId);
+          // Find the index in newOrder where the (visibleColumnCount-1)th visible caller is
+          let visibleSeen = 0;
+          let insertAfterIdx = -1;
+          for (let i = 0; i < newOrder.length; i++) {
+            if (!hiddenCallerIds.includes(newOrder[i])) {
+              visibleSeen++;
+              if (visibleSeen === visibleColumnCount) {
+                insertAfterIdx = i;
+                break;
+              }
+            }
+          }
+          if (insertAfterIdx === -1) {
+            // Less visible callers than columnCount, just append
+            newOrder.push(session.callerId);
+          } else {
+            newOrder.splice(insertAfterIdx, 0, session.callerId);
+          }
+          get().setCallerOrder(newOrder);
+        }
+      }
+    }
     // Update pending count for the caller
     get().updateCallerPendingCount(session.callerId);
+    // Auto-trim sessions per caller if limit is set
+    get().trimCallerSessions(session.callerId);
+    // Auto-remove empty callers if enabled
+    if (get().autoRemoveEmptyCallers) {
+      get().removeEmptyCallers();
+    }
+    // Auto-hide inactive callers
+    get().hideInactiveCallers();
   },
 
   setActiveSession: (id) => set({ activeSessionId: id }),
@@ -567,6 +640,118 @@ export const useFeedbackStore = create<FeedbackState>((set, get) => ({
     set({ hiddenCallerIds: next });
     try { localStorage.setItem("mlf-hidden-callers", JSON.stringify(next)); } catch {}
   },
+
+  removeCaller: async (callerId) => {
+    await invoke("remove_caller", { callerId });
+    const { callers, callerOrder, hiddenCallerIds, sessions, activeCallerId } = get();
+    const remaining = sessions.filter((s) => s.callerId !== callerId);
+    const newCallers = callers.filter((c) => c.id !== callerId);
+    const newCallerOrder = callerOrder.filter((id) => id !== callerId);
+    const newHiddenCallerIds = hiddenCallerIds.filter((id) => id !== callerId);
+    try { localStorage.setItem("mlf-hidden-callers", JSON.stringify(newHiddenCallerIds)); } catch {}
+    const wasActive = activeCallerId === callerId;
+    const newActiveCallerId = wasActive
+      ? (newCallerOrder.length > 0 ? newCallerOrder[0] : null)
+      : activeCallerId;
+    let newActiveSessionId = get().activeSessionId;
+    if (wasActive && newActiveCallerId) {
+      const nextCallerSessions = remaining.filter((s) => s.callerId === newActiveCallerId);
+      newActiveSessionId = nextCallerSessions.length > 0
+        ? nextCallerSessions[nextCallerSessions.length - 1].id
+        : null;
+    } else if (wasActive) {
+      newActiveSessionId = null;
+    }
+    set({
+      callers: newCallers,
+      callerOrder: newCallerOrder,
+      hiddenCallerIds: newHiddenCallerIds,
+      sessions: remaining,
+      activeCallerId: newActiveCallerId,
+      activeSessionId: newActiveSessionId,
+    });
+  },
+
+  removeEmptyCallers: async () => {
+    const removedIds: string[] = await invoke("remove_empty_callers");
+    if (removedIds.length === 0) return removedIds;
+    const { callers, callerOrder, hiddenCallerIds, activeCallerId } = get();
+    const removedSet = new Set(removedIds);
+    const newCallers = callers.filter((c) => !removedSet.has(c.id));
+    const newCallerOrder = callerOrder.filter((id) => !removedSet.has(id));
+    const newHiddenCallerIds = hiddenCallerIds.filter((id) => !removedSet.has(id));
+    try { localStorage.setItem("mlf-hidden-callers", JSON.stringify(newHiddenCallerIds)); } catch {}
+    const newActiveCallerId = activeCallerId && removedSet.has(activeCallerId)
+      ? (newCallerOrder.length > 0 ? newCallerOrder[0] : null)
+      : activeCallerId;
+    set({
+      callers: newCallers,
+      callerOrder: newCallerOrder,
+      hiddenCallerIds: newHiddenCallerIds,
+      activeCallerId: newActiveCallerId,
+    });
+    return removedIds;
+  },
+
+  setMaxSessionsPerCaller: (value) => {
+    set({ maxSessionsPerCaller: value });
+    try { localStorage.setItem("mlf-max-sessions-per-caller", String(value)); } catch {}
+  },
+
+  setAutoRemoveEmptyCallers: (value) => {
+    set({ autoRemoveEmptyCallers: value });
+    try { localStorage.setItem("mlf-auto-remove-empty-callers", String(value)); } catch {}
+  },
+
+  setAutoHideInactiveHours: (value) => {
+    set({ autoHideInactiveHours: value });
+    try { localStorage.setItem("mlf-auto-hide-inactive-hours", String(value)); } catch {}
+  },
+
+  hideInactiveCallers: () => {
+    const { autoHideInactiveHours, callers, sessions, hiddenCallerIds } = get();
+    if (autoHideInactiveHours <= 0) return;
+    const now = Date.now();
+    const thresholdMs = autoHideInactiveHours * 60 * 60 * 1000;
+    for (const caller of callers) {
+      if (hiddenCallerIds.includes(caller.id)) continue;
+      const callerSessions = sessions.filter((s) => s.callerId === caller.id);
+      if (callerSessions.length === 0) continue; // empty callers handled by autoRemoveEmptyCallers
+      const latestTime = Math.max(...callerSessions.map((s) => new Date(s.createdAt).getTime()));
+      if (now - latestTime > thresholdMs) {
+        get().toggleCallerHidden(caller.id);
+      }
+    }
+  },
+
+  trimCallerSessions: async (callerId) => {
+    const { maxSessionsPerCaller, sessions } = get();
+    if (maxSessionsPerCaller <= 0) return;
+    const callerSessionCount = sessions.filter((s) => s.callerId === callerId).length;
+    if (callerSessionCount <= maxSessionsPerCaller) return;
+    const removed: number = await invoke("trim_caller_sessions", { callerId, maxPerCaller: maxSessionsPerCaller });
+    if (removed > 0) {
+      // Reload sessions from backend would be complex; instead trim locally
+      const callerSessions = sessions
+        .filter((s) => s.callerId === callerId)
+        .sort((a, b) => new Date(a.createdAt).getTime() - new Date(b.createdAt).getTime());
+      // Non-pending first, then pending
+      const nonPending = callerSessions.filter((s) => s.status !== "pending");
+      const pending = callerSessions.filter((s) => s.status === "pending");
+      const ordered = [...nonPending, ...pending];
+      const toRemoveIds = new Set(ordered.slice(0, removed).map((s) => s.id));
+      const remaining = sessions.filter((s) => !toRemoveIds.has(s.id));
+      const { activeSessionId } = get();
+      set({
+        sessions: remaining,
+        activeSessionId: activeSessionId && toRemoveIds.has(activeSessionId)
+          ? (remaining.filter((s) => s.callerId === callerId).pop()?.id ?? null)
+          : activeSessionId,
+      });
+    }
+  },
+
+  setVisibleColumnCount: (count) => set({ visibleColumnCount: count }),
 
   // Derived getters
   getActiveCaller: () => {

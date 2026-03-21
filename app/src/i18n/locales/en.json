@@ -59,7 +59,9 @@
     "groupToday": "Today",
     "groupYesterday": "Yesterday",
     "groupLastWeek": "Last week",
-    "groupEarlier": "Earlier"
+    "groupEarlier": "Earlier",
+    "copied": "Copied!",
+    "clickToCopy": "Click to copy: agent_name=\"{{alias}}\"."
   },
   "session": {
     "waitingForRequest": "Waiting for feedback request...",
@@ -137,11 +139,26 @@
     "colSessions": "Sessions",
     "rename": "Rename workspace",
     "merge": "Merge into another caller",
+    "remove": "Remove caller",
+    "removeConfirmText": "Remove \"{{name}}\"? All {{count}} session(s) will be deleted. This cannot be undone.",
+    "removeConfirm": "Confirm Remove",
+    "cleanEmpty": "Clean empty callers",
+    "cleanEmptyBtn": "Clean now",
+    "cleanEmptyDone": "Removed {{count}} empty caller(s)",
+    "cleanEmptyNone": "No empty callers to remove",
     "hide": "Hide from top bar",
     "show": "Show in top bar",
     "mergeSelectTarget": "Click a target caller to merge into",
     "mergeConfirmText": "Merge \"{{source}}\" into \"{{target}}\"? All sessions will be moved. This cannot be undone.",
     "mergeConfirm": "Confirm Merge",
-    "cancel": "Cancel"
+    "cancel": "Cancel",
+    "maxSessionsPerCaller": "Max sessions per caller",
+    "maxSessionsHint": "0 = unlimited. Oldest completed sessions are removed first when exceeded.",
+    "autoRemoveEmpty": "Auto-remove empty callers",
+    "autoRemoveEmptyHint": "Automatically remove callers with zero sessions when a new session arrives",
+    "autoHideInactive": "Auto-hide inactive callers",
+    "autoHideInactiveHint": "Hide callers with no new sessions for the specified hours. 0 = disabled.",
+    "hours": "h",
+    "callerCount": "{{count}} callers"
   }
 }

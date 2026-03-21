@@ -575,6 +575,104 @@ impl SessionManager {
         Ok(moved)
     }
 
+    /// Remove a caller and all its sessions (including image files).
+    /// Returns the number of sessions removed.
+    pub fn remove_caller(&mut self, caller_id: &str) -> Result<usize, String> {
+        if !self.callers.contains_key(caller_id) {
+            return Err(format!("Caller not found: {}", caller_id));
+        }
+        let images_dir = self.images_dir();
+        let mut removed_count = 0usize;
+        // Remove all sessions belonging to this caller
+        self.sessions.retain(|entry| {
+            if entry.detail.caller_id == caller_id {
+                // Clean up image files
+                for img in &entry.detail.images {
+                    if let Some(file_name) = img.get("file").and_then(|v| v.as_str()) {
+                        let _ = std::fs::remove_file(images_dir.join(file_name));
+                    }
+                }
+                removed_count += 1;
+                false
+            } else {
+                true
+            }
+        });
+        self.callers.remove(caller_id);
+        self.caller_order.retain(|id| id != caller_id);
+        self.persist();
+        Ok(removed_count)
+    }
+
+    /// Remove all callers that have zero sessions. Returns the list of removed caller IDs.
+    pub fn remove_empty_callers(&mut self) -> Vec<String> {
+        let caller_ids_with_sessions: HashSet<String> = self
+            .sessions
+            .iter()
+            .map(|s| s.detail.caller_id.clone())
+            .collect();
+        let empty_ids: Vec<String> = self
+            .callers
+            .keys()
+            .filter(|id| !caller_ids_with_sessions.contains(*id))
+            .cloned()
+            .collect();
+        if empty_ids.is_empty() {
+            return Vec::new();
+        }
+        for id in &empty_ids {
+            self.callers.remove(id);
+            self.caller_order.retain(|oid| oid != id);
+        }
+        self.persist();
+        empty_ids
+    }
+
+    /// Trim sessions for a specific caller to at most `max_per_caller` sessions.
+    /// Removes the oldest non-pending sessions first, then oldest pending ones.
+    /// Returns the number of sessions removed.
+    pub fn trim_caller_sessions(&mut self, caller_id: &str, max_per_caller: usize) -> usize {
+        if max_per_caller == 0 {
+            return 0; // 0 means unlimited
+        }
+        let caller_count = self.sessions.iter().filter(|s| s.detail.caller_id == caller_id).count();
+        if caller_count <= max_per_caller {
+            return 0;
+        }
+        let to_remove = caller_count - max_per_caller;
+        let images_dir = self.images_dir();
+        let mut removed = 0usize;
+        // Collect indices of this caller's sessions, oldest first (already in order)
+        // Prefer removing non-pending sessions first
+        let mut candidate_indices: Vec<usize> = self.sessions.iter().enumerate()
+            .filter(|(_, s)| s.detail.caller_id == caller_id && s.detail.status != SessionStatus::Pending)
+            .map(|(i, _)| i)
+            .collect();
+        // Then pending sessions (oldest first)
+        candidate_indices.extend(
+            self.sessions.iter().enumerate()
+                .filter(|(_, s)| s.detail.caller_id == caller_id && s.detail.status == SessionStatus::Pending)
+                .map(|(i, _)| i)
+        );
+        let indices_to_remove: Vec<usize> = candidate_indices.into_iter().take(to_remove).collect();
+        // Remove in reverse order to preserve indices
+        let mut sorted_indices = indices_to_remove;
+        sorted_indices.sort_unstable_by(|a, b| b.cmp(a));
+        for idx in sorted_indices {
+            let entry = self.sessions.remove(idx);
+            for img in &entry.detail.images {
+                if let Some(file_name) = img.get("file").and_then(|v| v.as_str()) {
+                    let _ = std::fs::remove_file(images_dir.join(file_name));
+                }
+            }
+            removed += 1;
+        }
+        if removed > 0 {
+            self.persist();
+        }
+        removed
+    }
+
     /// Clear all history: remove all callers, sessions, and image files
     pub fn clear_all_history(&mut self) {
         // Delete all image files

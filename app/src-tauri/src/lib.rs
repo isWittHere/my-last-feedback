@@ -237,6 +237,36 @@ async fn remove_session(
     Ok(mgr.remove_session(&session_id))
 }
 
+/// Remove a caller and all its sessions
+#[tauri::command]
+async fn remove_caller(
+    session_mgr: State<'_, SharedSessionManager>,
+    caller_id: String,
+) -> Result<usize, String> {
+    let mut mgr = session_mgr.lock().await;
+    mgr.remove_caller(&caller_id)
+}
+
+/// Remove all callers that have zero sessions
+#[tauri::command]
+async fn remove_empty_callers(
+    session_mgr: State<'_, SharedSessionManager>,
+) -> Result<Vec<String>, String> {
+    let mut mgr = session_mgr.lock().await;
+    Ok(mgr.remove_empty_callers())
+}
+
+/// Trim sessions for a caller to a maximum count
+#[tauri::command]
+async fn trim_caller_sessions(
+    session_mgr: State<'_, SharedSessionManager>,
+    caller_id: String,
+    max_per_caller: usize,
+) -> Result<usize, String> {
+    let mut mgr = session_mgr.lock().await;
+    Ok(mgr.trim_caller_sessions(&caller_id, max_per_caller))
+}
+
 #[tauri::command]
 async fn clear_all_history(
     session_mgr: State<'_, SharedSessionManager>,
@@ -528,6 +558,9 @@ pub fn run() {
             cancel_session,
             load_history,
             remove_session,
+            remove_caller,
+            remove_empty_callers,
+            trim_caller_sessions,
             clear_all_history,
         ])
         .setup(move |app| {

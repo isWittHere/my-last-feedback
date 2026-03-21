@@ -13,6 +13,7 @@ import json from "react-syntax-highlighter/dist/esm/languages/prism/json";
 import css from "react-syntax-highlighter/dist/esm/languages/prism/css";
 import markdown from "react-syntax-highlighter/dist/esm/languages/prism/markdown";
 import rust from "react-syntax-highlighter/dist/esm/languages/prism/rust";
+import { getFriendlyName } from "./friendlyName";
 import yaml from "react-syntax-highlighter/dist/esm/languages/prism/yaml";
 import jsx from "react-syntax-highlighter/dist/esm/languages/prism/jsx";
 import tsx from "react-syntax-highlighter/dist/esm/languages/prism/tsx";
@@ -134,7 +135,7 @@ function QuestionsForm({
   onToggleOption: (sessionId: string, index: number, option: string) => void;
   onFillTemplate: () => void;
 }) {
-  const { t } = useTranslation();
+  const { t, i18n } = useTranslation();
   const borderColor = callerColor || "var(--color-border)";
 
   return (
@@ -147,7 +148,7 @@ function QuestionsForm({
           <>
             <IdenticonAvatar alias={callerAlias} color={callerColor || "#888"} size={22} />
             <span style={{ fontSize: 14, lineHeight: "22px", color: "var(--color-text-muted)" }}>
-              <span style={{ fontWeight: 600, color: callerColor || "var(--color-text-primary)", fontFamily: "'Cascadia Code', 'Consolas', 'SF Mono', 'Monaco', monospace" }}>{callerAlias}</span>
+              <span style={{ fontWeight: 600, color: callerColor || "var(--color-text-primary)", fontFamily: "'Cascadia Code', 'Consolas', 'SF Mono', 'Monaco', monospace" }}>{getFriendlyName(callerAlias, i18n.language === "zh" ? "zh" : "en")} ({callerAlias})</span>
               {" "}{t("questions.titleWithAlias_suffix", "asks you:")}
             </span>
           </>
@@ -293,7 +294,7 @@ function HeadingNavBar({
 }
 
 export function SummaryPanel() {
-  const { t } = useTranslation();
+  const { t, i18n } = useTranslation();
   const appMode = useFeedbackStore((s) => s.appMode);
   const legacySummary = useFeedbackStore((s) => s.summary);
   const { session: activeSession, caller } = useActiveCallerSession();
@@ -373,7 +374,7 @@ export function SummaryPanel() {
               <div style={{ display: "flex", alignItems: "center", gap: 6, padding: "6px 0 4px" }}>
                 <IdenticonAvatar alias={caller.alias || caller.name} color={caller.color} size={22} />
                 <span style={{ fontSize: 14, lineHeight: "22px", color: "var(--color-text-muted)" }}>
-                  <span style={{ fontWeight: 600, color: caller.color, fontFamily: "'Cascadia Code', 'Consolas', 'SF Mono', 'Monaco', monospace" }}>{caller.alias || caller.name.charAt(0).toUpperCase()}</span>
+                  <span style={{ fontWeight: 600, color: caller.color }}>{caller.alias ? getFriendlyName(caller.alias, i18n.language === "zh" ? "zh" : "en") : caller.name.charAt(0).toUpperCase()}</span>
                   {" "}{t("summary.says", "says:")}
                 </span>
               </div>

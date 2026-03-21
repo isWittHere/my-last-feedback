@@ -63,6 +63,12 @@ export function FeedbackApp() {
   const columnCount = isPersistent && visibleCallers.length > 1 ? Math.min(visibleCallers.length, maxColumns) : 0;
   const useMultiColumn = canMultiColumn && columnCallerIds.length >= 2;
 
+  // Sync columnCount to store so addSession can use it for auto-positioning
+  const setVisibleColumnCount = useFeedbackStore((s) => s.setVisibleColumnCount);
+  useEffect(() => {
+    setVisibleColumnCount(columnCount);
+  }, [columnCount, setVisibleColumnCount]);
+
   // ── Legacy mode fields ──
   const {
     requestName,

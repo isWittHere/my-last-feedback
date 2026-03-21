@@ -3,6 +3,7 @@ import { useTranslation } from "react-i18next";
 import { useFeedbackStore } from "../store/feedbackStore";
 import { useShallow } from "zustand/react/shallow";
 import { IdenticonAvatar } from "./IdenticonAvatar";
+import { getFriendlyName } from "./friendlyName";
 
 interface WorkspaceGroup {
   name: string;
@@ -10,8 +11,14 @@ interface WorkspaceGroup {
 }
 
 export function CallerManager() {
-  const { t } = useTranslation();
-  const { callers, sessions, renameCaller, mergeCallers, hiddenCallerIds, toggleCallerHidden } = useFeedbackStore(
+  const { t, i18n } = useTranslation();
+  const {
+    callers, sessions, renameCaller, mergeCallers, hiddenCallerIds, toggleCallerHidden,
+    removeCaller, removeEmptyCallers,
+    maxSessionsPerCaller, setMaxSessionsPerCaller,
+    autoRemoveEmptyCallers, setAutoRemoveEmptyCallers,
+    autoHideInactiveHours, setAutoHideInactiveHours,
+  } = useFeedbackStore(
     useShallow((s) => ({
       callers: s.callers,
       sessions: s.sessions,
@@ -19,11 +26,28 @@ export function CallerManager() {
       mergeCallers: s.mergeCallers,
       hiddenCallerIds: s.hiddenCallerIds,
       toggleCallerHidden: s.toggleCallerHidden,
+      removeCaller: s.removeCaller,
+      removeEmptyCallers: s.removeEmptyCallers,
+      maxSessionsPerCaller: s.maxSessionsPerCaller,
+      setMaxSessionsPerCaller: s.setMaxSessionsPerCaller,
+      autoRemoveEmptyCallers: s.autoRemoveEmptyCallers,
+      setAutoRemoveEmptyCallers: s.setAutoRemoveEmptyCallers,
+      autoHideInactiveHours: s.autoHideInactiveHours,
+      setAutoHideInactiveHours: s.setAutoHideInactiveHours,
     }))
   );
 
   // Group callers by workspace name
   const groups: WorkspaceGroup[] = useMemo(() => {
+    // Compute latest session time per caller
+    const latestActivity: Record<string, number> = {};
+    for (const s of sessions) {
+      const t = new Date(s.createdAt).getTime();
+      if (!latestActivity[s.callerId] || t > latestActivity[s.callerId]) {
+        latestActivity[s.callerId] = t;
+      }
+    }
+
     const map = new Map<string, string[]>();
     for (const c of callers) {
       const ids = map.get(c.name) || [];
@@ -31,9 +55,16 @@ export function CallerManager() {
       map.set(c.name, ids);
     }
     return Array.from(map.entries())
-      .sort(([a], [b]) => a.localeCompare(b))
-      .map(([name, callerIds]) => ({ name, callerIds }));
-  }, [callers]);
+      .map(([name, callerIds]) => ({
+        name,
+        callerIds: callerIds.sort((a, b) => (latestActivity[b] || 0) - (latestActivity[a] || 0)),
+      }))
+      .sort((a, b) => {
+        const aMax = Math.max(0, ...a.callerIds.map((id) => latestActivity[id] || 0));
+        const bMax = Math.max(0, ...b.callerIds.map((id) => latestActivity[id] || 0));
+        return bMax - aMax;
+      });
+  }, [callers, sessions]);
 
   // Collapsed state per group
   const [collapsed, setCollapsed] = useState<Set<string>>(new Set());
@@ -87,6 +118,26 @@ export function CallerManager() {
   // Drag-and-drop: drag a caller to another workspace group
   const [dragCallerId, setDragCallerId] = useState<string | null>(null);
   const [dropTargetGroup, setDropTargetGroup] = useState<string | null>(null);
+
+  // Remove caller state
+  const [removeConfirmId, setRemoveConfirmId] = useState<string | null>(null);
+  const [cleanMessage, setCleanMessage] = useState<string | null>(null);
+
+  const handleRemoveCaller = useCallback(async () => {
+    if (!removeConfirmId) return;
+    await removeCaller(removeConfirmId);
+    setRemoveConfirmId(null);
+  }, [removeConfirmId, removeCaller]);
+
+  const handleCleanEmpty = useCallback(async () => {
+    const removed = await removeEmptyCallers();
+    if (removed.length > 0) {
+      setCleanMessage(t("callerManager.cleanEmptyDone", { count: removed.length }));
+    } else {
+      setCleanMessage(t("callerManager.cleanEmptyNone"));
+    }
+    setTimeout(() => setCleanMessage(null), 3000);
+  }, [removeEmptyCallers, t]);
 
   const handleDragStart = useCallback((e: React.DragEvent, callerId: string) => {
     setDragCallerId(callerId);
@@ -147,7 +198,67 @@ export function CallerManager() {
   }
 
   return (
-    <div className="settings-section" style={{ gap: 0 }}>
+    <div className="cm-two-col">
+      {/* Left column: Settings */}
+      <div className="cm-col-settings">
+        <div className="settings-section">
+          <div className="settings-row">
+            <div className="settings-row-info">
+              <span className="settings-label">{t("callerManager.maxSessionsPerCaller")}</span>
+              <span className="settings-sublabel">{t("callerManager.maxSessionsHint")}</span>
+            </div>
+            <input
+              type="number"
+              min={0}
+              max={9999}
+              value={maxSessionsPerCaller}
+              onChange={(e) => setMaxSessionsPerCaller(Math.max(0, parseInt(e.target.value) || 0))}
+              className="cm-number-input"
+            />
+          </div>
+          <div className="settings-row">
+            <div className="settings-row-info">
+              <span className="settings-label">{t("callerManager.autoHideInactive")}</span>
+              <span className="settings-sublabel">{t("callerManager.autoHideInactiveHint")}</span>
+            </div>
+            <div style={{ display: "flex", alignItems: "center", gap: 4 }}>
+              <input
+                type="number"
+                min={0}
+                max={9999}
+                value={autoHideInactiveHours}
+                onChange={(e) => setAutoHideInactiveHours(Math.max(0, parseInt(e.target.value) || 0))}
+                className="cm-number-input"
+              />
+              <span style={{ fontSize: 11, color: "var(--color-text-secondary)" }}>{t("callerManager.hours")}</span>
+            </div>
+          </div>
+          <div className="settings-row">
+            <div className="settings-row-info">
+              <span className="settings-label">{t("callerManager.autoRemoveEmpty")}</span>
+              <span className="settings-sublabel">{t("callerManager.autoRemoveEmptyHint")}</span>
+            </div>
+            <button
+              className={`settings-toggle${autoRemoveEmptyCallers ? " settings-toggle-on" : ""}`}
+              onClick={() => setAutoRemoveEmptyCallers(!autoRemoveEmptyCallers)}
+            >
+              <span className="settings-toggle-knob" />
+            </button>
+          </div>
+          <div className="settings-row">
+            <div className="settings-row-info">
+              <span className="settings-label">{t("callerManager.cleanEmpty")}</span>
+            </div>
+            <button className="settings-btn-option" style={{ fontSize: 10, padding: "2px 8px" }} onClick={handleCleanEmpty}>
+              {t("callerManager.cleanEmptyBtn")}
+            </button>
+          </div>
+          {cleanMessage && <span style={{ fontSize: 10, color: "var(--color-text-secondary)", padding: "2px 0" }}>{cleanMessage}</span>}
+        </div>
+      </div>
+
+      {/* Right column: Caller list */}
+      <div className="cm-col-list">
       {/* Merge bar */}
       {mergeSource && !mergeConfirm && (
         <div className="cm-merge-bar">
@@ -180,7 +291,30 @@ export function CallerManager() {
         </div>
       )}
 
-      {/* Groups */}
+      {/* Remove caller confirm dialog */}
+      {removeConfirmId && (() => {
+        const caller = callers.find((c) => c.id === removeConfirmId);
+        const count = sessionCounts[removeConfirmId]?.total || 0;
+        return (
+          <div className="cm-merge-confirm">
+            <span style={{ fontSize: 11 }}>
+              {t("callerManager.removeConfirmText", {
+                name: caller?.alias || caller?.name || removeConfirmId,
+                count,
+              })}
+            </span>
+            <div style={{ display: "flex", gap: 6, marginTop: 6 }}>
+              <button className="settings-btn-option danger active" style={{ border: "1px solid var(--color-border)", borderRadius: 4 }} onClick={handleRemoveCaller}>
+                {t("callerManager.removeConfirm")}
+              </button>
+              <button className="settings-btn-option" style={{ border: "1px solid var(--color-border)", borderRadius: 4 }} onClick={() => setRemoveConfirmId(null)}>
+                {t("callerManager.cancel")}
+              </button>
+            </div>
+          </div>
+        );
+      })()}
+
       {groups.map((group) => {
         const isCollapsed = collapsed.has(group.name);
         const groupCallerCount = group.callerIds.length;
@@ -197,15 +331,28 @@ export function CallerManager() {
           >
             {/* Group header row */}
             <button className="cm-group-header" onClick={() => toggleCollapse(group.name)}>
-              <svg
-                width="8" height="8" viewBox="0 0 8 8" fill="currentColor"
-                style={{ transform: isCollapsed ? "rotate(-90deg)" : "rotate(0deg)", transition: "transform 0.15s", flexShrink: 0 }}
-              >
-                <path d="M1.5 2l2.5 3.5L6.5 2z" />
-              </svg>
+              {isCollapsed ? (
+                <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" style={{ flexShrink: 0 }}>
+                  <path d="M4 20h16a2 2 0 0 0 2-2V8a2 2 0 0 0-2-2h-7.93a2 2 0 0 1-1.66-.9l-.82-1.2A2 2 0 0 0 7.93 3H4a2 2 0 0 0-2 2v13c0 1.1.9 2 2 2Z" />
+                </svg>
+              ) : (
+                <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" style={{ flexShrink: 0 }}>
+                  <path d="m6 14 1.5-2.9A2 2 0 0 1 9.24 10H20a2 2 0 0 1 1.94 2.5l-1.54 6a2 2 0 0 1-1.95 1.5H4a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h3.9a2 2 0 0 1 1.69.9l.81 1.2a2 2 0 0 0 1.67.9H18a2 2 0 0 1 2 2v2" />
+                </svg>
+              )}
               <span className="cm-group-name">{group.name}</span>
-              <span className="cm-group-count">{groupCallerCount}</span>
-              <span className="cm-group-count">{groupSessionCount}</span>
+              <span className="cm-group-count">
+                <svg width="9" height="9" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
+                  <rect x="3" y="8" width="18" height="12" rx="2" /><circle cx="9" cy="14" r="1" /><circle cx="15" cy="14" r="1" /><line x1="12" y1="2" x2="12" y2="8" />
+                </svg>
+                {groupCallerCount}
+              </span>
+              <span className="cm-group-count">
+                <svg width="9" height="9" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
+                  <path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z" />
+                </svg>
+                {groupSessionCount}
+              </span>
             </button>
 
             {/* Caller rows */}
@@ -253,16 +400,29 @@ export function CallerManager() {
                     <IdenticonAvatar alias={caller.alias || caller.id} color={caller.color} size={20} />
                   </div>
 
-                  {/* Alias + Client stacked */}
+                  {/* Alias + Sessions + Client stacked */}
                   <div className="cm-col-info">
-                    <span className="cm-row-alias" style={{ color: caller.color }}>{caller.alias || "—"}</span>
+                    <div className="cm-row-alias-line">
+                      <span className="cm-row-alias" style={{ color: caller.color }}>
+                        {caller.alias
+                          ? getFriendlyName(caller.alias, i18n.language === "zh" ? "zh" : "en")
+                          : "—"}
+                      </span>
+                      {caller.alias && <span style={{ fontSize: 11, color: "var(--color-text-muted)" }}>({caller.alias})</span>}
+                      {counts.pending > 0 && <span className="cm-badge-pending" style={{ background: caller.color }}>
+                        <svg width="9" height="9" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
+                          <path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z" />
+                        </svg>
+                        {counts.pending}
+                      </span>}
+                      <span className="cm-badge-total">
+                        <svg width="9" height="9" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
+                          <path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z" />
+                        </svg>
+                        {counts.total}
+                      </span>
+                    </div>
                     <span className="cm-row-client">{caller.clientName || "—"}</span>
-                  </div>
-
-                  {/* Sessions */}
-                  <div className="cm-col-sessions">
-                    {counts.pending > 0 && <span className="cm-badge-pending">{counts.pending}</span>}
-                    <span className="cm-badge-total">{counts.total}</span>
                   </div>
 
                   {/* Actions (rename, merge) */}
@@ -293,6 +453,11 @@ export function CallerManager() {
                             <circle cx="18" cy="18" r="3" /><circle cx="6" cy="6" r="3" /><path d="M6 21V9a9 9 0 0 0 9 9" />
                           </svg>
                         </button>
+                        <button className="cm-action-btn" title={t("callerManager.remove")} onClick={(e) => { e.stopPropagation(); setRemoveConfirmId(cid); }}>
+                          <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                            <polyline points="3 6 5 6 21 6" /><path d="M19 6l-1 14a2 2 0 0 1-2 2H8a2 2 0 0 1-2-2L5 6" /><path d="M10 11v6" /><path d="M14 11v6" /><path d="M9 6V4a1 1 0 0 1 1-1h4a1 1 0 0 1 1 1v2" />
+                          </svg>
+                        </button>
                       </div>
                     )}
                   </div>
@@ -302,6 +467,7 @@ export function CallerManager() {
           </div>
         );
       })}
+      </div>
     </div>
   );
 }

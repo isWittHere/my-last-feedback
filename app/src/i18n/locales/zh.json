@@ -59,7 +59,9 @@
     "groupToday": "今天",
     "groupYesterday": "昨天",
     "groupLastWeek": "上周",
-    "groupEarlier": "更早"
+    "groupEarlier": "更早",
+    "copied": "已复制！",
+    "clickToCopy": "点击复制: agent_name=\"{{alias}}\"."
   },
   "session": {
     "waitingForRequest": "等待反馈请求...",
@@ -137,11 +139,26 @@
     "colSessions": "会话",
     "rename": "重命名工作区",
     "merge": "合并到另一个 caller",
+    "remove": "移除 caller",
+    "removeConfirmText": "移除 \"{{name}}\"？将删除其全部 {{count}} 个会话。此操作不可撤销。",
+    "removeConfirm": "确认移除",
+    "cleanEmpty": "清理空 Caller",
+    "cleanEmptyBtn": "立即清理",
+    "cleanEmptyDone": "已移除 {{count}} 个空 Caller",
+    "cleanEmptyNone": "没有需要清理的空 Caller",
     "hide": "从顶栏隐藏",
     "show": "在顶栏显示",
     "mergeSelectTarget": "点击目标 caller 进行合并",
     "mergeConfirmText": "将 \"{{source}}\" 合并到 \"{{target}}\"？所有会话将被迁移。此操作不可撤销。",
     "mergeConfirm": "确认合并",
-    "cancel": "取消"
+    "cancel": "取消",
+    "maxSessionsPerCaller": "每个 Caller 最大会话数",
+    "maxSessionsHint": "0 = 不限制。超出时优先移除最旧的已完成会话。",
+    "autoRemoveEmpty": "自动移除空 Caller",
+    "autoRemoveEmptyHint": "当新会话到达时，自动移除没有会话的 Caller",
+    "autoHideInactive": "自动隐藏不活跃 Caller",
+    "autoHideInactiveHint": "隐藏指定小时内无新会话的 Caller。0 = 禁用。",
+    "hours": "小时",
+    "callerCount": "{{count}} 个 caller"
   }
 }
