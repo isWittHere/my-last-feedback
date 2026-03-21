@@ -162,6 +162,8 @@ body,
   word-break: break-word;
   overflow-x: hidden;
   zoom: var(--zoom-summary, 1);
+  user-select: text;
+  cursor: text;
 }
 .prose h1,
 .prose h2,

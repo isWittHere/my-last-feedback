@@ -31,6 +31,9 @@ export function CallerTabs({ columnCount }: CallerTabsProps = {}) {
   const containerRef = useRef<HTMLDivElement>(null);
   /** Snapshot of each tab's original left-edge & width (before transforms) */
   const tabRectsRef = useRef<{ left: number; width: number }[]>([]);
+  /** Track if pointer moved enough to count as drag (vs click) */
+  const didDragRef = useRef(false);
+  const pointerStartX = useRef(0);
 
   if (callers.length === 0) return null;
 
@@ -46,13 +49,14 @@ export function CallerTabs({ columnCount }: CallerTabsProps = {}) {
   const showDivider = columnCount != null && columnCount > 0 && columnCount < orderedCallers.length;
   const srcIndex = draggingId ? orderedCallers.findIndex(c => c.id === draggingId) : -1;
 
-  const handleDragStart = (e: React.DragEvent, callerId: string) => {
+  /** Pointer-based drag start (replaces HTML5 DnD for macOS compatibility) */
+  const handlePointerDown = (e: React.PointerEvent, callerId: string) => {
+    if (e.button !== 0) return;
+    e.preventDefault();
+    e.stopPropagation();
     dragSrcId.current = callerId;
-    setDraggingId(callerId);
-    setHoveredCallerId(null);
-    if (hoverTimerRef.current) { clearTimeout(hoverTimerRef.current); hoverTimerRef.current = null; }
-    e.dataTransfer.effectAllowed = "move";
-    e.dataTransfer.setData("text/plain", callerId);
+    didDragRef.current = false;
+    pointerStartX.current = e.clientX;
     // Snapshot tab positions before any transforms
     if (containerRef.current) {
       const buttons = containerRef.current.querySelectorAll<HTMLElement>(".caller-tab");
@@ -61,23 +65,24 @@ export function CallerTabs({ columnCount }: CallerTabsProps = {}) {
         return { left: r.left, width: r.width };
       });
     }
-    // Use a transparent drag image to hide the default ghost
-    const ghost = document.createElement("div");
-    ghost.style.opacity = "0";
-    document.body.appendChild(ghost);
-    e.dataTransfer.setDragImage(ghost, 0, 0);
-    requestAnimationFrame(() => ghost.remove());
+    (e.target as HTMLElement).setPointerCapture(e.pointerId);
   };
 
-  /** Container-level dragOver: calculate drop index from mouse X vs snapshotted tab positions */
-  const handleContainerDragOver = useCallback((e: React.DragEvent) => {
-    e.preventDefault();
-    e.dataTransfer.dropEffect = "move";
+  const handlePointerMove = useCallback((e: React.PointerEvent) => {
+    if (!dragSrcId.current) return;
+    e.stopPropagation();
+    // Start drag after 3px threshold
+    if (!didDragRef.current) {
+      if (Math.abs(e.clientX - pointerStartX.current) < 3) return;
+      didDragRef.current = true;
+      setDraggingId(dragSrcId.current);
+      setHoveredCallerId(null);
+      if (hoverTimerRef.current) { clearTimeout(hoverTimerRef.current); hoverTimerRef.current = null; }
+    }
     const rects = tabRectsRef.current;
     if (rects.length === 0) return;
     const mouseX = e.clientX;
-    // Find insertion point based on original (pre-transform) positions
-    let insertAt = rects.length; // default: after last tab
+    let insertAt = rects.length;
     for (let i = 0; i < rects.length; i++) {
       const midX = rects[i].left + rects[i].width / 2;
       if (mouseX < midX) {
@@ -88,17 +93,16 @@ export function CallerTabs({ columnCount }: CallerTabsProps = {}) {
     setDropIndex(insertAt);
   }, []);
 
-  const handleDrop = (e: React.DragEvent) => {
-    e.preventDefault();
-  };
-
-  const handleDragEnd = () => {
+  const handlePointerUp = useCallback((_e: React.PointerEvent) => {
     const srcId = dragSrcId.current;
+    const wasDrag = didDragRef.current;
     const currentDropIndex = dropIndexRef.current;
     dragSrcId.current = null;
+    didDragRef.current = false;
     setDraggingId(null);
     setDropIndex(null);
-    if (!srcId || currentDropIndex == null) return;
+
+    if (!srcId || !wasDrag || currentDropIndex == null) return;
 
     const order = [...(callerOrder.length > 0 ? callerOrder : callers.map(c => c.id))];
     const srcIdx = order.indexOf(srcId);
@@ -108,7 +112,7 @@ export function CallerTabs({ columnCount }: CallerTabsProps = {}) {
     const adjustedIdx = currentDropIndex > srcIdx ? currentDropIndex - 1 : currentDropIndex;
     order.splice(adjustedIdx, 0, srcId);
     setCallerOrder(order);
-  };
+  }, [callerOrder, callers, setCallerOrder]);
 
   /** Compute translateX using snapshotted pixel positions for accurate animation */
   const getTranslateX = (index: number): number => {
@@ -165,10 +169,13 @@ export function CallerTabs({ columnCount }: CallerTabsProps = {}) {
     renderItems.push(
       <button
         key={caller.id}
-        draggable
-        onDragStart={(e) => handleDragStart(e, caller.id)}
-        onDragEnd={handleDragEnd}
-        onClick={() => setActiveCaller(caller.id)}
+        onPointerDown={(e) => handlePointerDown(e, caller.id)}
+        onPointerMove={handlePointerMove}
+        onPointerUp={(e) => {
+          const wasClick = dragSrcId.current === caller.id && !didDragRef.current;
+          handlePointerUp(e);
+          if (wasClick) setActiveCaller(caller.id);
+        }}
         onMouseEnter={() => {
           if (hoverTimerRef.current) clearTimeout(hoverTimerRef.current);
           hoverTimerRef.current = setTimeout(() => setHoveredCallerId(caller.id), 400);
@@ -241,8 +248,7 @@ export function CallerTabs({ columnCount }: CallerTabsProps = {}) {
       ref={containerRef}
       className="flex items-center"
       style={{ gap: 0 }}
-      onDragOver={handleContainerDragOver}
-      onDrop={handleDrop}
+      onPointerMove={handlePointerMove}
     >
       {renderItems}
     </div>
