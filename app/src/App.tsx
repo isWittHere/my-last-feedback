@@ -123,6 +123,7 @@ function App() {
                     selectedOptions: q.selectedOptions || [],
                     answer: q.answer || "",
                   })),
+                  gitAction: null,
                 });
               }
               // Update pending counts for each caller
@@ -187,6 +188,7 @@ function App() {
           selectedOptions: [],
           answer: "",
         })),
+        gitAction: null,
       };
       s.addSession(session);
       s.setActiveCaller(data.caller_id);

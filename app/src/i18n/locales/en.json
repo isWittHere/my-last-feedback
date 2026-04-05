@@ -18,6 +18,13 @@
     "placeholder": "Enter test logs here, will be appended to feedback",
     "attach": "Attach Log"
   },
+  "gitAction": {
+    "button": "Git Action",
+    "commit": "Git commit backup",
+    "commitPush": "Git commit & push",
+    "createBranch": "Create branch & switch",
+    "branchPlaceholder": "Branch name (optional)"
+  },
   "quickActions": {
     "start": "Start Task",
     "continue": "Continue",

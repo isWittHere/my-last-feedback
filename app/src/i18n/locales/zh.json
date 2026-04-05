@@ -18,6 +18,13 @@
     "placeholder": "在此输入测试日志，将附加到反馈中",
     "attach": "附加日志"
   },
+  "gitAction": {
+    "button": "Git 操作",
+    "commit": "提交git备份",
+    "commitPush": "提交git备份并推送",
+    "createBranch": "创建分支并进入",
+    "branchPlaceholder": "分支名称（可留空）"
+  },
   "quickActions": {
     "start": "开始",
     "continue": "继续",

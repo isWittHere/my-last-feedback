@@ -2,6 +2,7 @@ import { forwardRef, useCallback, useEffect, useMemo, useRef, useState } from "r
 import { createPortal } from "react-dom";
 import { useTranslation } from "react-i18next";
 import { useFeedbackStore } from "../store/feedbackStore";
+import type { GitActionType } from "../store/feedbackStore";
 import { useShallow } from "zustand/react/shallow";
 import { CallerContext } from "./CallerContext";
 import type { CallerOverride } from "./CallerContext";
@@ -87,7 +88,7 @@ export function CallerPanel({ callerId }: { callerId: string }) {
   );
 }
 
-/** Attachment tag bar: images + test log as compact tags */
+/** Attachment tag bar: images + test log + git actions as compact tags */
 function AttachmentTagBar({
   controls,
   fileInput,
@@ -95,6 +96,8 @@ function AttachmentTagBar({
   setShowTestLog,
   testLogRef,
   callerColor,
+  showGitPanel,
+  setShowGitPanel,
 }: {
   controls: React.ReactNode;
   fileInput: React.ReactNode;
@@ -102,16 +105,22 @@ function AttachmentTagBar({
   setShowTestLog: (fn: (v: boolean) => boolean) => void;
   callerColor: string;
   testLogRef: React.RefObject<HTMLTextAreaElement | null>;
+  showGitPanel: boolean;
+  setShowGitPanel: (fn: (v: boolean) => boolean) => void;
 }) {
   const { t } = useTranslation();
   const { session: activeSession } = useActiveCallerSession();
   const removeSessionImage = useFeedbackStore((s) => s.removeSessionImage);
   const clearSessionImages = useFeedbackStore((s) => s.clearSessionImages);
   const updateSessionField = useFeedbackStore((s) => s.updateSessionField);
+  const setSessionGitAction = useFeedbackStore((s) => s.setSessionGitAction);
+  const updateSessionGitBranchName = useFeedbackStore((s) => s.updateSessionGitBranchName);
   const images = activeSession?.images || [];
   const hasTestLog = !!(activeSession?.testLogText?.trim());
-  const hasTags = images.length > 0 || hasTestLog || showTestLog;
+  const hasGitAction = !!activeSession?.gitAction;
+  const hasTags = images.length > 0 || hasTestLog || showTestLog || hasGitAction;
   const tagAreaRef = useRef<HTMLDivElement>(null);
+  const branchInputRef = useRef<HTMLInputElement>(null);
 
   const handleAttachLogClick = async () => {
     const wasHidden = !showTestLog;
@@ -154,6 +163,20 @@ function AttachmentTagBar({
             </span>
           )}
         </button>
+        <button
+          className="btn"
+          style={{
+            fontSize: 11,
+            padding: "3px 10px",
+            background: showGitPanel ? callerColor : undefined,
+            borderColor: showGitPanel ? callerColor : undefined,
+            color: showGitPanel ? "#fff" : undefined,
+          }}
+          onClick={() => setShowGitPanel((v) => !v)}
+        >
+          <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><circle cx="18" cy="18" r="3" /><circle cx="6" cy="6" r="3" /><path d="M13 6h3a2 2 0 0 1 2 2v7" /><line x1="6" y1="9" x2="6" y2="21" /></svg>
+          {t("gitAction.button", "Git 操作")}
+        </button>
         {fileInput}
       </div>
 
@@ -190,6 +213,15 @@ function AttachmentTagBar({
               callerColor={callerColor}
             />
           )}
+          {hasGitAction && (
+            <GitActionTag
+              gitAction={activeSession!.gitAction!}
+              showGitPanel={showGitPanel}
+              setShowGitPanel={setShowGitPanel}
+              callerColor={callerColor}
+              onRemove={() => activeSession && setSessionGitAction(activeSession.id, null)}
+            />
+          )}
         </div>
       )}
 
@@ -208,6 +240,69 @@ function AttachmentTagBar({
             }}
           >
             <TestLogInput ref={testLogRef} />
+          </div>
+        </div>
+      )}
+
+      {/* Expanded git action panel */}
+      {showGitPanel && (
+        <div className="px-3 pb-1">
+          <div
+            className="rounded-lg flex flex-wrap items-center gap-1.5 p-2"
+            style={{
+              border: "1px solid var(--color-border)",
+              background: "var(--color-bg-input)",
+            }}
+          >
+            {(["commit", "commit-push", "create-branch"] as GitActionType[]).map((type) => {
+              const isSelected = activeSession?.gitAction?.type === type;
+              return (
+                <button
+                  key={type}
+                  className="btn"
+                  style={{
+                    fontSize: 11,
+                    padding: "3px 10px",
+                    background: isSelected ? callerColor : undefined,
+                    borderColor: isSelected ? callerColor : undefined,
+                    color: isSelected ? "#fff" : undefined,
+                  }}
+                  onClick={() => {
+                    if (!activeSession) return;
+                    if (isSelected) {
+                      setSessionGitAction(activeSession.id, null);
+                    } else {
+                      setSessionGitAction(activeSession.id, { type, branchName: type === "create-branch" ? "" : undefined });
+                      if (type === "create-branch") {
+                        setTimeout(() => branchInputRef.current?.focus(), 50);
+                      }
+                    }
+                  }}
+                >
+                  {t(`gitAction.${type === "commit" ? "commit" : type === "commit-push" ? "commitPush" : "createBranch"}`)}
+                </button>
+              );
+            })}
+            {activeSession?.gitAction?.type === "create-branch" && (
+              <input
+                ref={branchInputRef}
+                type="text"
+                value={activeSession.gitAction.branchName || ""}
+                onChange={(e) => activeSession && updateSessionGitBranchName(activeSession.id, e.target.value)}
+                placeholder={t("gitAction.branchPlaceholder", "分支名称（可留空）")}
+                className="input-area"
+                style={{
+                  fontSize: 11,
+                  padding: "3px 8px",
+                  height: 26,
+                  minWidth: 120,
+                  maxWidth: 200,
+                  borderRadius: 6,
+                  border: "1px solid var(--color-border)",
+                  background: "var(--color-bg-base)",
+                }}
+              />
+            )}
           </div>
         </div>
       )}
@@ -406,10 +501,72 @@ function TestLogTag({
   );
 }
 
+/** Git action tag in the attachment tag area */
+function GitActionTag({
+  gitAction,
+  showGitPanel,
+  setShowGitPanel,
+  callerColor,
+  onRemove,
+}: {
+  gitAction: import("../store/feedbackStore").GitAction;
+  showGitPanel: boolean;
+  setShowGitPanel: (fn: (v: boolean) => boolean) => void;
+  callerColor: string;
+  onRemove: () => void;
+}) {
+  const { t } = useTranslation();
+  const labelMap: Record<string, string> = {
+    commit: t("gitAction.commit"),
+    "commit-push": t("gitAction.commitPush"),
+    "create-branch": t("gitAction.createBranch"),
+  };
+  const label = labelMap[gitAction.type] || gitAction.type;
+  const detail = gitAction.type === "create-branch" && gitAction.branchName
+    ? `: ${gitAction.branchName}`
+    : "";
+
+  return (
+    <div
+      className="attachment-tag"
+      style={{
+        background: showGitPanel ? callerColor : undefined,
+        borderColor: showGitPanel ? callerColor : "var(--color-border)",
+        color: showGitPanel ? "#fff" : "var(--color-text-secondary)",
+        cursor: "pointer",
+      }}
+      onClick={() => setShowGitPanel((v) => !v)}
+    >
+      <button
+        className="attachment-tag-remove"
+        style={{
+          display: "inline-flex",
+          color: showGitPanel ? "rgba(255,255,255,0.85)" : undefined,
+        }}
+        onClick={(e) => { e.stopPropagation(); onRemove(); }}
+      >
+        <svg width="10" height="10" viewBox="0 0 10 10"><line x1="2" y1="2" x2="8" y2="8" stroke="currentColor" strokeWidth="1.5"/><line x1="8" y1="2" x2="2" y2="8" stroke="currentColor" strokeWidth="1.5"/></svg>
+      </button>
+      <svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><circle cx="18" cy="18" r="3" /><circle cx="6" cy="6" r="3" /><path d="M13 6h3a2 2 0 0 1 2 2v7" /><line x1="6" y1="9" x2="6" y2="21" /></svg>
+      <span className="truncate" style={{ maxWidth: 140 }}>{label}{detail}</span>
+    </div>
+  );
+}
+
 /** Readonly tag bar for responded sessions — image tags with hover, test log tag with expandable preview */
 function ReadonlyTagBar({ session }: { session: import("../store/feedbackStore").Session }) {
+  const { t } = useTranslation();
   const [showLog, setShowLog] = useState(false);
   const hasLog = session.testLogText.trim().length > 0;
+  const hasGitAction = !!session.gitAction;
+
+  const gitLabel = hasGitAction ? ({
+    commit: t("gitAction.commit"),
+    "commit-push": t("gitAction.commitPush"),
+    "create-branch": t("gitAction.createBranch"),
+  } as Record<string, string>)[session.gitAction!.type] || session.gitAction!.type : "";
+  const gitDetail = hasGitAction && session.gitAction!.type === "create-branch" && session.gitAction!.branchName
+    ? `: ${session.gitAction!.branchName}` : "";
 
   return (
     <div className="shrink-0">
@@ -424,6 +581,12 @@ function ReadonlyTagBar({ session }: { session: import("../store/feedbackStore")
             expanded={showLog}
             onToggle={() => setShowLog((v) => !v)}
           />
+        )}
+        {hasGitAction && (
+          <div className="attachment-tag" style={{ cursor: "default" }}>
+            <svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><circle cx="18" cy="18" r="3" /><circle cx="6" cy="6" r="3" /><path d="M13 6h3a2 2 0 0 1 2 2v7" /><line x1="6" y1="9" x2="6" y2="21" /></svg>
+            <span className="truncate" style={{ maxWidth: 140 }}>{gitLabel}{gitDetail}</span>
+          </div>
         )}
       </div>
       {/* Expanded test log readonly */}
@@ -677,7 +840,7 @@ function CallerContent() {
   const hasQuestionAnswers = !!(activeSession?.questions?.some(
     (q) => q.answer.trim() || (q.selectedOptions && q.selectedOptions.length > 0)
   ));
-  const hasContent = !!(sessionFeedback.trim() || sessionTestLog.trim() || sessionImageCount > 0 || hasQuestionAnswers);
+  const hasContent = !!(sessionFeedback.trim() || sessionTestLog.trim() || sessionImageCount > 0 || hasQuestionAnswers || activeSession?.gitAction);
   const feedbackText = sessionFeedback;
   useEffect(() => {
     if (userResizedRef.current || isReadonly) return;
@@ -703,6 +866,9 @@ function CallerContent() {
   // Test log visibility toggle
   const [showTestLog, setShowTestLog] = useState(false);
   const testLogRef = useRef<HTMLTextAreaElement>(null);
+
+  // Git panel visibility toggle
+  const [showGitPanel, setShowGitPanel] = useState(false);
 
   // Auto-expand input panel when test log opens
   useEffect(() => {
@@ -750,6 +916,18 @@ function CallerContent() {
         sections.push(
           `## Agent Questions Response\n\n| # | Question | Selected | Answer |\n|---|----------|----------|--------|\n${tableRows.join("\n")}`
         );
+      }
+
+      // Git action instruction
+      if (activeSession.gitAction) {
+        const gitMessages: Record<string, string> = {
+          commit: "Please execute git add and git commit to backup the current changes.",
+          "commit-push": "Please execute git add, git commit, and git push to backup and push the current changes.",
+          "create-branch": activeSession.gitAction.branchName
+            ? `Please create a new branch "${activeSession.gitAction.branchName}" and switch to it.`
+            : "Please create a new branch and switch to it.",
+        };
+        sections.push(`## Git Action\n${gitMessages[activeSession.gitAction.type]}`);
       }
 
       sections.push(
@@ -826,7 +1004,7 @@ function CallerContent() {
           {isReadonly ? (
             <>
               {/* Readonly tag bar: fixed, not scrollable */}
-              {(activeSession.images.length > 0 || activeSession.testLogText.trim()) && (
+              {(activeSession.images.length > 0 || activeSession.testLogText.trim() || activeSession.gitAction) && (
                 <ReadonlyTagBar session={activeSession} />
               )}
               {/* Scrollable feedback text */}
@@ -857,6 +1035,8 @@ function CallerContent() {
                   setShowTestLog={setShowTestLog}
                   testLogRef={testLogRef}
                   callerColor={callerColor}
+                  showGitPanel={showGitPanel}
+                  setShowGitPanel={setShowGitPanel}
                 />
                 {/* Feedback text area — independent, fills remaining space */}
                 <FeedbackInput />

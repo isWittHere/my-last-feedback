@@ -2,6 +2,7 @@ import { useCallback, useMemo, useRef, useState } from "react";
 import { createPortal } from "react-dom";
 import { invoke } from "@tauri-apps/api/core";
 import { useFeedbackStore } from "../store/feedbackStore";
+import type { Session } from "../store/feedbackStore";
 import { useTranslation } from "react-i18next";
 import { useActiveCallerSession } from "./useActiveCallerSession";
 import { useCallerOverride } from "./CallerContext";
@@ -51,7 +52,7 @@ function SessionGroup({
   t,
 }: {
   label: string;
-  sessions: Array<{ id: string; status: string; requestName: string; createdAt: string }>;
+  sessions: Session[];
   activeSessionId: string | undefined;
   activeCallerColor: string | null;
   onSelect: (id: string) => void;
@@ -103,10 +104,33 @@ function SessionGroup({
                 {session.requestName || "Untitled"}
               </span>
             </div>
-            {/* Row 2: time + action buttons */}
+            {/* Row 2: time + tags + action buttons */}
             <div className="session-item-row2">
               <span className="session-item-time">
                 {timeAgo(session.createdAt, t)}
+              </span>
+              <span style={{ display: "inline-flex", alignItems: "center", gap: 3, marginLeft: 4, flexShrink: 0 }}>
+                {session.images.length > 0 && (
+                  <span title={t("images.attachments")}>
+                    <svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="var(--color-text-muted)" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                      <rect x="3" y="3" width="18" height="18" rx="2" ry="2" /><circle cx="8.5" cy="8.5" r="1.5" /><polyline points="21 15 16 10 5 21" />
+                    </svg>
+                  </span>
+                )}
+                {session.testLogText.trim().length > 0 && (
+                  <span title={t("testLog.attach")}>
+                    <svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="var(--color-text-muted)" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                      <path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z" /><polyline points="14 2 14 8 20 8" />
+                    </svg>
+                  </span>
+                )}
+                {session.gitAction && (
+                  <span title={t("gitAction.button")}>
+                    <svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="var(--color-text-muted)" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                      <circle cx="18" cy="18" r="3" /><circle cx="6" cy="6" r="3" /><path d="M13 6h3a2 2 0 0 1 2 2v7" /><line x1="6" y1="9" x2="6" y2="21" />
+                    </svg>
+                  </span>
+                )}
               </span>
               <span className="session-item-actions">
                 {isPending && (

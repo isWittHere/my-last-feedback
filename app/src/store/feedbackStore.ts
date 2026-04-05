@@ -36,6 +36,13 @@ export interface Caller {
   alias?: string;
 }
 
+export type GitActionType = "commit" | "commit-push" | "create-branch";
+
+export interface GitAction {
+  type: GitActionType;
+  branchName?: string;
+}
+
 export interface Session {
   id: string;
   callerId: string;
@@ -51,6 +58,8 @@ export interface Session {
   commandLogs: string;
   // Agent questions
   questions: QuestionItem[];
+  // Git action
+  gitAction: GitAction | null;
 }
 
 export type AppMode = "legacy" | "persistent";
@@ -120,6 +129,8 @@ export interface FeedbackState {
   addSessionImage: (sessionId: string, img: ImageAttachment) => void;
   removeSessionImage: (sessionId: string, path: string) => void;
   clearSessionImages: (sessionId: string) => void;
+  setSessionGitAction: (sessionId: string, action: GitAction | null) => void;
+  updateSessionGitBranchName: (sessionId: string, branchName: string) => void;
   markSessionResponded: (sessionId: string) => void;
   markSessionCancelled: (sessionId: string) => void;
   removeSession: (sessionId: string) => void;
@@ -480,6 +491,26 @@ export const useFeedbackStore = create<FeedbackState>((set, get) => ({
     set((state) => ({
       sessions: state.sessions.map((s) =>
         s.id === sessionId ? { ...s, images: [] } : s
+      ),
+    }));
+  },
+
+  setSessionGitAction: (sessionId, action) => {
+    set((state) => ({
+      sessions: state.sessions.map((s) =>
+        s.id === sessionId && s.status === "pending"
+          ? { ...s, gitAction: action }
+          : s
+      ),
+    }));
+  },
+
+  updateSessionGitBranchName: (sessionId, branchName) => {
+    set((state) => ({
+      sessions: state.sessions.map((s) =>
+        s.id === sessionId && s.status === "pending" && s.gitAction?.type === "create-branch"
+          ? { ...s, gitAction: { ...s.gitAction, branchName } }
+          : s
       ),
     }));
   },
