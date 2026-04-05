@@ -6,6 +6,16 @@
         "/path/to/my-last-feedback/server.mjs"
       ],
       "timeout": 600
+    },
+    "my-last-feedback-dev": {
+      "command": "node",
+      "args": [
+        "/path/to/my-last-feedback/server.mjs"
+      ],
+      "env": {
+        "MLF_DEV": "1"
+      },
+      "timeout": 600
     }
   }
 }

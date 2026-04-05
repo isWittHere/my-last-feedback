@@ -68,7 +68,9 @@
     "groupLastWeek": "Last week",
     "groupEarlier": "Earlier",
     "copied": "Copied!",
-    "clickToCopy": "Click to copy: agent_name=\"{{alias}}\"."
+    "clickToCopy": "Click to copy: agent_name=\"{{alias}}\".",
+    "collapse": "Collapse sidebar",
+    "expand": "Expand sidebar"
   },
   "session": {
     "waitingForRequest": "Waiting for feedback request...",

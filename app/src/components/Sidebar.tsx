@@ -177,6 +177,18 @@ export function Sidebar() {
   const blinkingCallerIds = useFeedbackStore((s) => s.unreadCallerIds);
   const isBlinking = caller ? blinkingCallerIds.includes(caller.id) : false;
 
+  // Collapsed sidebar state
+  const [collapsed, setCollapsed] = useState(() => {
+    try { return localStorage.getItem("mlf-sidebar-collapsed") === "true"; } catch { return false; }
+  });
+  const toggleCollapsed = useCallback(() => {
+    setCollapsed((v) => {
+      const next = !v;
+      try { localStorage.setItem("mlf-sidebar-collapsed", String(next)); } catch {}
+      return next;
+    });
+  }, []);
+
   // Copy agent_name on avatar click
   const [avatarCopied, setAvatarCopied] = useState(false);
   const avatarCopyTimer = useRef<ReturnType<typeof setTimeout>>(undefined);
@@ -200,6 +212,14 @@ export function Sidebar() {
 
   // Custom confirm dialog state for pending session deletion
   const [pendingDeleteId, setPendingDeleteId] = useState<string | null>(null);
+
+  // Collapsed item hover popup
+  const [hoveredItem, setHoveredItem] = useState<{ session: Session; top: number; left: number } | null>(null);
+  const handleCollapsedMouseEnter = useCallback((e: React.MouseEvent, session: Session) => {
+    const rect = (e.currentTarget as HTMLElement).getBoundingClientRect();
+    setHoveredItem({ session, top: rect.top + rect.height / 2, left: rect.right + 6 });
+  }, []);
+  const handleCollapsedMouseLeave = useCallback(() => setHoveredItem(null), []);
 
   const handleDeleteClick = useCallback((session: { id: string; status: string }) => {
     if (session.status === "pending") {
@@ -233,8 +253,25 @@ export function Sidebar() {
   );
 
   return (
-    <div className="session-sidebar">
-      <div className="session-sidebar-header">
+    <div className={`session-sidebar${collapsed ? " session-sidebar-collapsed" : ""}`}>
+      <div
+        className="session-sidebar-header"
+      >
+        {collapsed ? (
+          /* Collapsed header: expand button only */
+          <button
+            onClick={toggleCollapsed}
+            className="titlebar-btn"
+            style={{ width: 22, height: 22, padding: 0 }}
+            title={t("sidebar.expand", "Expand sidebar")}
+          >
+            <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+              <polyline points="9 18 15 12 9 6" />
+            </svg>
+          </button>
+        ) : (
+          /* Expanded header */
+          <>
         {caller ? (
           <div style={{ display: "flex", alignItems: "center", gap: 8, minWidth: 0, width: "100%" }}>
             <div
@@ -304,8 +341,59 @@ export function Sidebar() {
         ) : (
           t("sidebar.history", "History")
         )}
+            <button
+              onClick={toggleCollapsed}
+              className="titlebar-btn"
+              style={{ width: 22, height: 22, padding: 0, marginLeft: "auto", flexShrink: 0 }}
+              title={t("sidebar.collapse", "Collapse sidebar")}
+            >
+              <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                <polyline points="15 18 9 12 15 6" />
+              </svg>
+            </button>
+          </>
+        )}
       </div>
       <div className="session-sidebar-list">
+        {collapsed ? (
+          (() => {
+            const sorted = [...sessions].sort((a, b) => {
+              const so: Record<string, number> = { pending: 0, cancelled: 2, responded: 2 };
+              const d = (so[a.status] ?? 2) - (so[b.status] ?? 2);
+              return d !== 0 ? d : new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime();
+            });
+            return sorted.map((s) => {
+              const isActive = s.id === activeSessionId;
+              const isPending = s.status === "pending";
+              const isCancelled = s.status === "cancelled";
+              return (
+                <div key={s.id} className="session-collapsed-item"
+                  onMouseEnter={(e) => handleCollapsedMouseEnter(e, s)}
+                  onMouseLeave={handleCollapsedMouseLeave}
+                >
+                  <button
+                    onClick={() => handleSelectSession(s.id)}
+                    className={`session-item${isActive ? " session-item-active" : ""}`}
+                    style={{
+                      display: "flex", alignItems: "center", justifyContent: "center",
+                      padding: "6px 0", minHeight: 24, margin: "0", borderRadius: 4,
+                      ...(isActive && activeCallerColor ? { background: `${activeCallerColor}1a` } : {}),
+                    }}
+                  >
+                    {isPending ? (
+                      <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="#f59e0b" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z" /><circle cx="12" cy="10" r="1" fill="#f59e0b" /></svg>
+                    ) : isCancelled ? (
+                      <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="#ef4444" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round"><line x1="18" y1="6" x2="6" y2="18" /><line x1="6" y1="6" x2="18" y2="18" /></svg>
+                    ) : (
+                      <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="var(--color-success)" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round"><polyline points="20 6 9 17 4 12" /></svg>
+                    )}
+                  </button>
+                </div>
+              );
+            });
+          })()
+        ) : (
+          <>
         {sessions.length === 0 && (
           <div className="session-sidebar-empty">
             {t("sidebar.empty", "No sessions yet")}
@@ -352,7 +440,44 @@ export function Sidebar() {
               />
             ));
         })()}
+          </>
+        )}
       </div>
+
+      {/* Collapsed item hover popup (portal) */}
+      {hoveredItem && createPortal(
+        <div
+          className="session-collapsed-popup"
+          style={{
+            position: "fixed",
+            top: hoveredItem.top,
+            left: hoveredItem.left,
+            transform: "translateY(-50%)",
+            display: "block",
+          }}
+        >
+          <div className="session-collapsed-popup-title">{hoveredItem.session.requestName || "Untitled"}</div>
+          <div className="session-collapsed-popup-meta">
+            <span>{timeAgo(hoveredItem.session.createdAt, t)}</span>
+            {hoveredItem.session.images.length > 0 && (
+              <svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                <rect x="3" y="3" width="18" height="18" rx="2" ry="2" /><circle cx="8.5" cy="8.5" r="1.5" /><polyline points="21 15 16 10 5 21" />
+              </svg>
+            )}
+            {hoveredItem.session.testLogText.trim().length > 0 && (
+              <svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                <path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z" /><polyline points="14 2 14 8 20 8" />
+              </svg>
+            )}
+            {hoveredItem.session.gitAction && (
+              <svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                <circle cx="18" cy="18" r="3" /><circle cx="6" cy="6" r="3" /><path d="M13 6h3a2 2 0 0 1 2 2v7" /><line x1="6" y1="9" x2="6" y2="21" />
+              </svg>
+            )}
+          </div>
+        </div>,
+        document.body
+      )}
 
       {/* Custom confirm dialog for pending session deletion */}
       {pendingDeleteId && (() => {

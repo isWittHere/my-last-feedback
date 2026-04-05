@@ -68,7 +68,9 @@
     "groupLastWeek": "上周",
     "groupEarlier": "更早",
     "copied": "已复制！",
-    "clickToCopy": "点击复制: agent_name=\"{{alias}}\"."
+    "clickToCopy": "点击复制: agent_name=\"{{alias}}\".",
+    "collapse": "收起侧栏",
+    "expand": "展开侧栏"
   },
   "session": {
     "waitingForRequest": "等待反馈请求...",

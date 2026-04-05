@@ -7,11 +7,22 @@ use tokio::net::TcpListener;
 use tokio::sync::oneshot;
 
 /// Port range for auto-selection
+/// Debug builds use a separate range to avoid conflicting with installed release builds.
+#[cfg(debug_assertions)]
+const PORT_START: u16 = 19861;
+#[cfg(debug_assertions)]
+const PORT_END: u16 = 19870;
+#[cfg(not(debug_assertions))]
 const PORT_START: u16 = 19850;
+#[cfg(not(debug_assertions))]
 const PORT_END: u16 = 19860;
 
 /// Lock file path to store the active port
+/// Debug builds use a different file to avoid conflicting with installed release builds.
 fn lock_file_path() -> std::path::PathBuf {
+    #[cfg(debug_assertions)]
+    return std::env::temp_dir().join("my-last-feedback-dev.port");
+    #[cfg(not(debug_assertions))]
     std::env::temp_dir().join("my-last-feedback.port")
 }
 

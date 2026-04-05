@@ -647,6 +647,10 @@ body,
   display: flex;
   flex-direction: column;
   overflow: hidden;
+  transition: width 0.18s ease;
+}
+.session-sidebar.session-sidebar-collapsed {
+  width: 42px;
 }
 .session-sidebar-header {
   display: flex;
@@ -660,16 +664,59 @@ body,
   flex-shrink: 0;
   min-width: 0;
 }
+.session-sidebar-collapsed .session-sidebar-header {
+  min-width: auto;
+  padding: 8px 6px 6px;
+  justify-content: center;
+}
 .session-sidebar-list {
   flex: 1;
   overflow-y: auto;
   padding: 0 4px 4px;
+  min-width: 212px;
+}
+.session-sidebar-collapsed .session-sidebar-list {
+  min-width: auto;
 }
 .session-sidebar-empty {
   padding: 16px 8px;
   font-size: 11px;
   color: var(--color-text-muted);
   text-align: center;
+}
+
+/* Collapsed item hover popup */
+.session-collapsed-item {
+  position: relative;
+}
+.session-collapsed-popup {
+  display: none;
+  position: fixed;
+  background: var(--color-bg-elevated);
+  border: 1px solid var(--color-border);
+  border-radius: 6px;
+  padding: 6px 10px;
+  white-space: nowrap;
+  z-index: 99999;
+  box-shadow: 0 4px 16px rgba(0,0,0,0.3);
+  pointer-events: none;
+}
+.session-collapsed-popup-title {
+  font-size: 11px;
+  font-weight: 600;
+  color: var(--color-text-primary);
+  line-height: 1.3;
+  max-width: 180px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+.session-collapsed-popup-meta {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  font-size: 10px;
+  color: var(--color-text-muted);
+  margin-top: 2px;
 }
 
 /* Session item button */

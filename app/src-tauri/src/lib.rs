@@ -489,22 +489,29 @@ pub fn run() {
         AppMode::Legacy
     };
 
-    // Determine data directory for history persistence
+    // Determine data directory for history persistence.
+    // Debug builds use a separate directory to avoid conflicting with installed release builds.
+    #[cfg(debug_assertions)]
+    let app_dir_name = "my-last-feedback-dev";
+    #[cfg(not(debug_assertions))]
+    let app_dir_name = "my-last-feedback";
+
     let data_dir = {
         #[cfg(target_os = "windows")]
         {
             std::env::var("APPDATA")
-                .map(|a| std::path::PathBuf::from(a).join("my-last-feedback"))
-                .unwrap_or_else(|_| std::env::temp_dir().join("my-last-feedback"))
+                .map(|a| std::path::PathBuf::from(a).join(app_dir_name))
+                .unwrap_or_else(|_| std::env::temp_dir().join(app_dir_name))
         }
         #[cfg(target_os = "macos")]
         {
             std::env::var("HOME")
                 .map(|h| {
                     std::path::PathBuf::from(h)
-                        .join("Library/Application Support/my-last-feedback")
+                        .join("Library/Application Support")
+                        .join(app_dir_name)
                 })
-                .unwrap_or_else(|_| std::env::temp_dir().join("my-last-feedback"))
+                .unwrap_or_else(|_| std::env::temp_dir().join(app_dir_name))
         }
         #[cfg(not(any(target_os = "windows", target_os = "macos")))]
         {
@@ -515,19 +522,23 @@ pub fn run() {
                         .map(|h| std::path::PathBuf::from(h).join(".local/share"))
                 })
                 .unwrap_or_else(|_| std::env::temp_dir())
-                .join("my-last-feedback")
+                .join(app_dir_name)
         }
     };
 
     let session_mgr = session::create_session_manager(data_dir);
 
-    tauri::Builder::default()
-        .plugin(tauri_plugin_single_instance::init(|app, _args, _cwd| {
-            if let Some(window) = app.get_webview_window("main") {
-                let _ = window.show();
-                let _ = window.set_focus();
-            }
-        }))
+    let builder = tauri::Builder::default();
+    // In debug builds, skip single-instance enforcement so dev binary and installed
+    // release binary can run side-by-side for testing.
+    #[cfg(not(debug_assertions))]
+    let builder = builder.plugin(tauri_plugin_single_instance::init(|app, _args, _cwd| {
+        if let Some(window) = app.get_webview_window("main") {
+            let _ = window.show();
+            let _ = window.set_focus();
+        }
+    }));
+    builder
         .plugin(tauri_plugin_opener::init())
         .plugin(tauri_plugin_clipboard_manager::init())
         .plugin(tauri_plugin_autostart::init(MacosLauncher::LaunchAgent, None))

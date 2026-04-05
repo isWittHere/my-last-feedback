@@ -15,12 +15,14 @@ import { createInterface } from "node:readline";
 const __dirname = dirname(fileURLToPath(import.meta.url));
 
 // ── Port discovery ──
+// Set MLF_DEV=1 to connect to the debug/dev build (tauri dev) instead of the installed release.
 
-const PORT_START = 19850;
-const PORT_END = 19860;
+const IS_DEV = process.env.MLF_DEV === "1";
+const PORT_START = IS_DEV ? 19861 : 19850;
+const PORT_END   = IS_DEV ? 19870 : 19860;
 
 function lockFilePath() {
-  return join(tmpdir(), "my-last-feedback.port");
+  return join(tmpdir(), IS_DEV ? "my-last-feedback-dev.port" : "my-last-feedback.port");
 }
 
 function readPortFromLockFile() {
