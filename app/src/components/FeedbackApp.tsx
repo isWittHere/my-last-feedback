@@ -21,6 +21,7 @@ export function FeedbackApp() {
   const { t } = useTranslation();
   const appMode = useFeedbackStore((s) => s.appMode);
   const isPersistent = appMode === "persistent";
+  const [appView, setAppView] = useState<"MLFB" | "MLRA">("MLFB");
   const callers = useFeedbackStore((s) => s.callers);
   const callerOrder = useFeedbackStore((s) => s.callerOrder);
   const hiddenCallerIds = useFeedbackStore((s) => s.hiddenCallerIds);
@@ -200,13 +201,13 @@ export function FeedbackApp() {
   const displayRequestName = isPersistent ? "" : requestName;
 
   return (
-    <div className="flex flex-col h-screen select-none" style={{ background: "var(--color-bg-base)" }}>
+    <div className="flex flex-col h-screen select-none" data-app-view={appView} style={{ background: "var(--color-bg-base)" }}>
       {/* Content wrapper – blurred when settings overlay is open */}
       <div className={`flex flex-col flex-1 min-h-0${settingsOpen ? " content-blurred" : ""}`}>
       {/* Custom title bar */}
       <div
         data-tauri-drag-region
-        className="relative flex items-center justify-between px-3 shrink-0 titlebar"
+        className={`relative flex items-center justify-between px-3 shrink-0 titlebar${appView === "MLRA" ? " titlebar-mlra" : ""}`}
         style={{
           background: "var(--color-bg-surface)",
           borderBottom: "1px solid var(--color-border-subtle)",
@@ -228,9 +229,28 @@ export function FeedbackApp() {
               {displayRequestName}
             </span>
           ) : (
-            <span data-tauri-drag-region className="text-xs font-medium" style={{ color: "var(--color-text-primary)" }}>
-              {t("app.title")}
-            </span>
+            <div className="app-view-toggle">
+              <button
+                className={`app-view-toggle-btn${appView === "MLFB" ? " app-view-toggle-active" : ""}`}
+                onClick={() => setAppView("MLFB")}
+                title="My Last Feedback"
+              >
+                <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                  <path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z" />
+                </svg>
+                MLFB
+              </button>
+              <button
+                className={`app-view-toggle-btn${appView === "MLRA" ? " app-view-toggle-active" : ""}`}
+                onClick={() => setAppView("MLRA")}
+                title="My Long Running Agents"
+              >
+                <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                  <circle cx="12" cy="12" r="10" /><polyline points="12 6 12 12 16 14" />
+                </svg>
+                MLRA
+              </button>
+            </div>
           )}
         </div>
 
