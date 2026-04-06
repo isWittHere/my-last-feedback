@@ -3,7 +3,8 @@ import { useTranslation } from "react-i18next";
 import { useFeedbackStore } from "../store/feedbackStore";
 import { useShallow } from "zustand/react/shallow";
 import { IdenticonAvatar } from "./IdenticonAvatar";
-import { getFriendlyName } from "./friendlyName";
+import { useFriendlyName } from "./useFriendlyName";
+import { Icon } from "./Icons";
 
 interface WorkspaceGroup {
   name: string;
@@ -11,7 +12,8 @@ interface WorkspaceGroup {
 }
 
 export function CallerManager() {
-  const { t, i18n } = useTranslation();
+  const { t } = useTranslation();
+  const friendlyName = useFriendlyName();
   const {
     callers, sessions, renameCaller, mergeCallers, hiddenCallerIds, toggleCallerHidden,
     removeCaller, removeEmptyCallers,
@@ -332,25 +334,17 @@ export function CallerManager() {
             {/* Group header row */}
             <button className="cm-group-header" onClick={() => toggleCollapse(group.name)}>
               {isCollapsed ? (
-                <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" style={{ flexShrink: 0 }}>
-                  <path d="M4 20h16a2 2 0 0 0 2-2V8a2 2 0 0 0-2-2h-7.93a2 2 0 0 1-1.66-.9l-.82-1.2A2 2 0 0 0 7.93 3H4a2 2 0 0 0-2 2v13c0 1.1.9 2 2 2Z" />
-                </svg>
+                <Icon name="folder" size={12} style={{ flexShrink: 0 }} />
               ) : (
-                <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" style={{ flexShrink: 0 }}>
-                  <path d="m6 14 1.5-2.9A2 2 0 0 1 9.24 10H20a2 2 0 0 1 1.94 2.5l-1.54 6a2 2 0 0 1-1.95 1.5H4a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h3.9a2 2 0 0 1 1.69.9l.81 1.2a2 2 0 0 0 1.67.9H18a2 2 0 0 1 2 2v2" />
-                </svg>
+                <Icon name="folder-open" size={12} style={{ flexShrink: 0 }} />
               )}
               <span className="cm-group-name">{group.name}</span>
               <span className="cm-group-count">
-                <svg width="9" height="9" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
-                  <rect x="3" y="8" width="18" height="12" rx="2" /><circle cx="9" cy="14" r="1" /><circle cx="15" cy="14" r="1" /><line x1="12" y1="2" x2="12" y2="8" />
-                </svg>
+                <Icon name="robot" size={9} strokeWidth={2.5} />
                 {groupCallerCount}
               </span>
               <span className="cm-group-count">
-                <svg width="9" height="9" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
-                  <path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z" />
-                </svg>
+                <Icon name="message" size={9} strokeWidth={2.5} />
                 {groupSessionCount}
               </span>
             </button>
@@ -384,13 +378,9 @@ export function CallerManager() {
                   <div className="cm-col-visibility">
                     <button className="cm-action-btn" title={t(isHidden ? "callerManager.show" : "callerManager.hide")} onClick={(e) => { e.stopPropagation(); toggleCallerHidden(cid); }}>
                       {isHidden ? (
-                        <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-                          <path d="M17.94 17.94A10.07 10.07 0 0 1 12 20c-7 0-11-8-11-8a18.45 18.45 0 0 1 5.06-5.94" /><path d="M9.9 4.24A9.12 9.12 0 0 1 12 4c7 0 11 8 11 8a18.5 18.5 0 0 1-2.16 3.19" /><line x1="1" y1="1" x2="23" y2="23" />
-                        </svg>
+                        <Icon name="eye-off" size={11} />
                       ) : (
-                        <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-                          <path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z" /><circle cx="12" cy="12" r="3" />
-                        </svg>
+                        <Icon name="eye" size={11} />
                       )}
                     </button>
                   </div>
@@ -405,20 +395,16 @@ export function CallerManager() {
                     <div className="cm-row-alias-line">
                       <span className="cm-row-alias" style={{ color: caller.color }}>
                         {caller.alias
-                          ? getFriendlyName(caller.alias, i18n.language === "zh" ? "zh" : "en")
+                          ? friendlyName(caller.alias)
                           : "—"}
                       </span>
                       {caller.alias && <span style={{ fontSize: 11, color: "var(--color-text-muted)" }}>({caller.alias})</span>}
                       {counts.pending > 0 && <span className="cm-badge-pending" style={{ background: caller.color }}>
-                        <svg width="9" height="9" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
-                          <path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z" />
-                        </svg>
+                        <Icon name="message" size={9} strokeWidth={2.5} />
                         {counts.pending}
                       </span>}
                       <span className="cm-badge-total">
-                        <svg width="9" height="9" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
-                          <path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z" />
-                        </svg>
+                        <Icon name="message" size={9} strokeWidth={2.5} />
                         {counts.total}
                       </span>
                     </div>
@@ -443,20 +429,13 @@ export function CallerManager() {
                     ) : (
                       <div className="cm-row-actions">
                         <button className="cm-action-btn" title={t("callerManager.rename")} onClick={(e) => { e.stopPropagation(); startRename(cid); }}>
-                          <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-                            <path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7" />
-                            <path d="M18.5 2.5a2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z" />
-                          </svg>
+                          <Icon name="edit" size={11} />
                         </button>
                         <button className="cm-action-btn" title={t("callerManager.merge")} onClick={(e) => { e.stopPropagation(); setMergeSource(cid); setMergeTarget(null); setMergeConfirm(false); }}>
-                          <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-                            <circle cx="18" cy="18" r="3" /><circle cx="6" cy="6" r="3" /><path d="M6 21V9a9 9 0 0 0 9 9" />
-                          </svg>
+                          <Icon name="merge" size={11} />
                         </button>
                         <button className="cm-action-btn" title={t("callerManager.remove")} onClick={(e) => { e.stopPropagation(); setRemoveConfirmId(cid); }}>
-                          <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-                            <polyline points="3 6 5 6 21 6" /><path d="M19 6l-1 14a2 2 0 0 1-2 2H8a2 2 0 0 1-2-2L5 6" /><path d="M10 11v6" /><path d="M14 11v6" /><path d="M9 6V4a1 1 0 0 1 1-1h4a1 1 0 0 1 1 1v2" />
-                          </svg>
+                          <Icon name="trash-full" size={11} />
                         </button>
                       </div>
                     )}

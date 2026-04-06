@@ -3,10 +3,11 @@ import { useTranslation } from "react-i18next";
 import { useFeedbackStore } from "../store/feedbackStore";
 import { useShallow } from "zustand/react/shallow";
 import { useActiveCallerSession } from "./useActiveCallerSession";
-import { getFriendlyName } from "./friendlyName";
+import { useFriendlyName } from "./useFriendlyName";
 
 export function FeedbackInput({ minHeight }: { minHeight?: number } = {}) {
-  const { t, i18n } = useTranslation();
+  const { t } = useTranslation();
+  const friendlyName = useFriendlyName();
   const appMode = useFeedbackStore((s) => s.appMode);
   const { session: activeSession, caller } = useActiveCallerSession();
   const { feedbackText, setFeedbackText, updateSessionField, addSessionImage } = useFeedbackStore(useShallow((s) => ({
@@ -75,7 +76,7 @@ export function FeedbackInput({ minHeight }: { minHeight?: number } = {}) {
   );
 
   const placeholderText = isPersistent && caller?.alias
-    ? t("feedback.placeholderWithAlias", { alias: `${getFriendlyName(caller.alias, i18n.language === "zh" ? "zh" : "en")} (${caller.alias})`, defaultValue: "Send feedback to {{alias}}...\nCtrl+Enter to submit, Ctrl+V to paste images" })
+    ? t("feedback.placeholderWithAlias", { alias: `${friendlyName(caller.alias)} (${caller.alias})`, defaultValue: "Send feedback to {{alias}}...\nCtrl+Enter to submit, Ctrl+V to paste images" })
     : t("feedback.placeholder");
 
   return (

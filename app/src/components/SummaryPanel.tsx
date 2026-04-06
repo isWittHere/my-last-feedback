@@ -13,14 +13,17 @@ import json from "react-syntax-highlighter/dist/esm/languages/prism/json";
 import css from "react-syntax-highlighter/dist/esm/languages/prism/css";
 import markdown from "react-syntax-highlighter/dist/esm/languages/prism/markdown";
 import rust from "react-syntax-highlighter/dist/esm/languages/prism/rust";
-import { getFriendlyName } from "./friendlyName";
 import yaml from "react-syntax-highlighter/dist/esm/languages/prism/yaml";
 import jsx from "react-syntax-highlighter/dist/esm/languages/prism/jsx";
 import tsx from "react-syntax-highlighter/dist/esm/languages/prism/tsx";
 import { useTranslation } from "react-i18next";
 import { useFeedbackStore } from "../store/feedbackStore";
+import { Icon } from "./Icons";
 import { useActiveCallerSession } from "./useActiveCallerSession";
 import { IdenticonAvatar } from "./IdenticonAvatar";
+import { useCopyToClipboard } from "./useCopyToClipboard";
+import { useFriendlyName } from "./useFriendlyName";
+import { useIsLightTheme } from "./useIsLightTheme";
 import type { QuestionItem } from "../store/feedbackStore";
 
 SyntaxHighlighter.registerLanguage("typescript", typescript);
@@ -45,28 +48,10 @@ SyntaxHighlighter.registerLanguage("tsx", tsx);
 
 /** Copy-to-clipboard button inside code blocks */
 function CopyButton({ text }: { text: string }) {
-  const [copied, setCopied] = useState(false);
-  const timer = useRef<ReturnType<typeof setTimeout>>(undefined);
-
-  const handleCopy = useCallback(() => {
-    navigator.clipboard.writeText(text).then(() => {
-      setCopied(true);
-      clearTimeout(timer.current);
-      timer.current = setTimeout(() => setCopied(false), 1800);
-    });
-  }, [text]);
-
+  const { copied, copy } = useCopyToClipboard(1800);
   return (
-    <button
-      onClick={handleCopy}
-      className="code-copy-btn"
-      title="Copy"
-    >
-      {copied ? (
-        <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><polyline points="20 6 9 17 4 12" /></svg>
-      ) : (
-        <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><rect x="9" y="9" width="13" height="13" rx="2" /><path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1" /></svg>
-      )}
+    <button onClick={() => copy(text)} className="code-copy-btn" title="Copy">
+      {copied ? <Icon name="check" size={14} /> : <Icon name="copy" size={14} />}
     </button>
   );
 }
@@ -80,7 +65,7 @@ function CodeBlock({
   const { node: _node, ...filteredRest } = rest as Record<string, unknown>;
   const match = /language-(\w+)/.exec(className || "");
   const codeStr = String(children).replace(/\n$/, "");
-  const isLight = document.documentElement.getAttribute("data-theme") === "light";
+  const isLight = useIsLightTheme();
 
   if (match) {
     return (
@@ -135,7 +120,8 @@ function QuestionsForm({
   onToggleOption: (sessionId: string, index: number, option: string) => void;
   onFillTemplate: () => void;
 }) {
-  const { t, i18n } = useTranslation();
+  const { t } = useTranslation();
+  const friendlyName = useFriendlyName();
   const borderColor = callerColor || "var(--color-border)";
 
   return (
@@ -148,7 +134,7 @@ function QuestionsForm({
           <>
             <IdenticonAvatar alias={callerAlias} color={callerColor || "#888"} size={22} />
             <span style={{ fontSize: 14, lineHeight: "22px", color: "var(--color-text-muted)" }}>
-              <span style={{ fontWeight: 600, color: callerColor || "var(--color-text-primary)", fontFamily: "'Cascadia Code', 'Consolas', 'SF Mono', 'Monaco', monospace" }}>{getFriendlyName(callerAlias, i18n.language === "zh" ? "zh" : "en")} ({callerAlias})</span>
+              <span style={{ fontWeight: 600, color: callerColor || "var(--color-text-primary)", fontFamily: "'Cascadia Code', 'Consolas', 'SF Mono', 'Monaco', monospace" }}>{friendlyName(callerAlias)} ({callerAlias})</span>
               {" "}{t("questions.titleWithAlias_suffix", "asks you:")}
             </span>
           </>
@@ -163,9 +149,7 @@ function QuestionsForm({
             onClick={(e) => { e.stopPropagation(); onFillTemplate(); }}
             title={t("questions.fillTemplate", "Fill template to feedback")}
           >
-            <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-              <line x1="7" y1="7" x2="17" y2="17" /><polyline points="17 7 17 17 7 17" />
-            </svg>
+            <Icon name="arrow-down-right" size={12} />
           </button>
         )}
       </div>
@@ -294,7 +278,8 @@ function HeadingNavBar({
 }
 
 export function SummaryPanel() {
-  const { t, i18n } = useTranslation();
+  const { t } = useTranslation();
+  const friendlyName = useFriendlyName();
   const appMode = useFeedbackStore((s) => s.appMode);
   const legacySummary = useFeedbackStore((s) => s.summary);
   const { session: activeSession, caller } = useActiveCallerSession();
@@ -312,13 +297,12 @@ export function SummaryPanel() {
   const activeCallerColor = caller?.color || null;
 
   // Build a subtle tinted background from the caller's color
-  const isLightTheme = document.documentElement.getAttribute("data-theme") === "light";
+  const isLightTheme = useIsLightTheme();
   const panelBg = activeCallerColor
     ? `${activeCallerColor}${isLightTheme ? "0d" : "1a"}`  // light: ~5%, dark: ~10%
     : undefined;
 
-  const [copied, setCopied] = useState(false);
-  const copyTimer = useRef<ReturnType<typeof setTimeout>>(undefined);
+  const { copied, copy: copyMarkdown } = useCopyToClipboard(1800);
   const scrollRef = useRef<HTMLDivElement>(null);
   const [activeHeadingIdx, setActiveHeadingIdx] = useState(0);
 
@@ -349,13 +333,8 @@ export function SummaryPanel() {
   }, [activeSession, questions, updateSessionField]);
 
   const handleCopyMarkdown = useCallback(() => {
-    if (!summary) return;
-    navigator.clipboard.writeText(summary).then(() => {
-      setCopied(true);
-      clearTimeout(copyTimer.current);
-      copyTimer.current = setTimeout(() => setCopied(false), 1800);
-    });
-  }, [summary]);
+    if (summary) copyMarkdown(summary);
+  }, [summary, copyMarkdown]);
 
   return (
     <div
@@ -374,7 +353,7 @@ export function SummaryPanel() {
               <div style={{ display: "flex", alignItems: "center", gap: 6, padding: "6px 0 4px" }}>
                 <IdenticonAvatar alias={caller.alias || caller.name} color={caller.color} size={22} />
                 <span style={{ fontSize: 14, lineHeight: "22px", color: "var(--color-text-muted)" }}>
-                  <span style={{ fontWeight: 600, color: caller.color }}>{caller.alias ? getFriendlyName(caller.alias, i18n.language === "zh" ? "zh" : "en") : caller.name.charAt(0).toUpperCase()}</span>
+                  <span style={{ fontWeight: 600, color: caller.color }}>{caller.alias ? friendlyName(caller.alias) : caller.name.charAt(0).toUpperCase()}</span>
                   {" "}{t("summary.says", "says:")}
                 </span>
               </div>
@@ -438,9 +417,9 @@ export function SummaryPanel() {
           title={copied ? "Copied!" : "Copy Markdown"}
         >
           {copied ? (
-            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="var(--color-success)" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><polyline points="20 6 9 17 4 12" /></svg>
+            <Icon name="check" size={14} color="var(--color-success)" />
           ) : (
-            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><rect x="9" y="9" width="13" height="13" rx="2" /><path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1" /></svg>
+            <Icon name="copy" size={14} />
           )}
         </button>
       )}

@@ -3,14 +3,15 @@ import { useFeedbackStore } from "../store/feedbackStore";
 import { useShallow } from "zustand/react/shallow";
 import { useTranslation } from "react-i18next";
 import { IdenticonAvatar } from "./IdenticonAvatar";
-import { getFriendlyName } from "./friendlyName";
+import { useFriendlyName } from "./useFriendlyName";
 
 interface CallerTabsProps {
   columnCount?: number;
 }
 
 export function CallerTabs({ columnCount }: CallerTabsProps = {}) {
-  const { t, i18n } = useTranslation();
+  const { t } = useTranslation();
+  const friendlyName = useFriendlyName();
   const { callers, callerOrder, activeCallerId, setActiveCaller, setCallerOrder, blinkingCallerIds, sessions, hiddenCallerIds } = useFeedbackStore(useShallow((s) => ({
     callers: s.callers,
     callerOrder: s.callerOrder,
@@ -213,11 +214,11 @@ export function CallerTabs({ columnCount }: CallerTabsProps = {}) {
         )}
         {isHovered && (
           <div className="caller-tab-tooltip">
-            <div className="caller-tab-tooltip-name" style={{ color: caller.color }}>{caller.alias ? getFriendlyName(caller.alias, i18n.language === "zh" ? "zh" : "en") : caller.name}</div>
+            <div className="caller-tab-tooltip-name" style={{ color: caller.color }}>{caller.alias ? friendlyName(caller.alias) : caller.name}</div>
             {caller.alias && (
               <div className="caller-tab-tooltip-row">
                 <span className="caller-tab-tooltip-label">{t("tooltip.alias")}</span>
-                <span>{getFriendlyName(caller.alias, i18n.language === "zh" ? "zh" : "en")} ({caller.alias})</span>
+                <span>{friendlyName(caller.alias)} ({caller.alias})</span>
               </div>
             )}
             {caller.clientName && (

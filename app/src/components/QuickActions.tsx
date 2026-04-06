@@ -1,15 +1,16 @@
 import { useEffect, useRef, useState } from "react";
 import { useTranslation } from "react-i18next";
+import { Icon } from "./Icons";
 
 interface QuickActionsProps {
   onAction: (quickAction: string) => void;
 }
 
 const ACTIONS = [
-  { key: "start", text: "Start the task", icon: <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><polygon points="5 3 19 12 5 21 5 3" /></svg> },
-  { key: "analyze", text: "Please analyze the user requirements or perform a deeper analysis", icon: <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><circle cx="11" cy="11" r="8" /><line x1="21" y1="21" x2="16.65" y2="16.65" /></svg> },
-  { key: "fix", text: "Please find the root cause and fix the issue", icon: <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M14.7 6.3a1 1 0 0 0 0 1.4l1.6 1.6a1 1 0 0 0 1.4 0l3.77-3.77a6 6 0 0 1-7.94 7.94l-6.91 6.91a2.12 2.12 0 0 1-3-3l6.91-6.91a6 6 0 0 1 7.94-7.94l-3.76 3.76z" /></svg> },
-  { key: "explain", text: "Please explain this to me in detail first", icon: <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z" /></svg> },
+  { key: "start", text: "Start the task", icon: <Icon name="play" size={12} /> },
+  { key: "analyze", text: "Please analyze the user requirements or perform a deeper analysis", icon: <Icon name="search" size={12} /> },
+  { key: "fix", text: "Please find the root cause and fix the issue", icon: <Icon name="wrench" size={12} /> },
+  { key: "explain", text: "Please explain this to me in detail first", icon: <Icon name="message" size={12} /> },
 ] as const;
 
 export function QuickActions({ onAction }: QuickActionsProps) {

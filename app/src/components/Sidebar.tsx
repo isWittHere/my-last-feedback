@@ -1,4 +1,4 @@
-import { useCallback, useMemo, useRef, useState } from "react";
+import { useCallback, useMemo, useState } from "react";
 import { createPortal } from "react-dom";
 import { invoke } from "@tauri-apps/api/core";
 import { useFeedbackStore } from "../store/feedbackStore";
@@ -7,38 +7,12 @@ import { useTranslation } from "react-i18next";
 import { useActiveCallerSession } from "./useActiveCallerSession";
 import { useCallerOverride } from "./CallerContext";
 import { IdenticonAvatar } from "./IdenticonAvatar";
-import { getFriendlyName } from "./friendlyName";
-
-function timeAgo(dateStr: string, t: (key: string, opts?: Record<string, unknown>) => string): string {
-  const now = Date.now();
-  const then = new Date(dateStr).getTime();
-  const diffSec = Math.floor((now - then) / 1000);
-  if (diffSec < 60) return t("sidebar.timeJustNow", { defaultValue: "just now" });
-  const diffMin = Math.floor(diffSec / 60);
-  if (diffMin < 60) return t("sidebar.timeMinutes", { count: diffMin, defaultValue: "{{count}}m ago" });
-  const diffHr = Math.floor(diffMin / 60);
-  if (diffHr < 24) return t("sidebar.timeHours", { count: diffHr, defaultValue: "{{count}}h ago" });
-  const diffDay = Math.floor(diffHr / 24);
-  if (diffDay < 7) return t("sidebar.timeDays", { count: diffDay, defaultValue: "{{count}}d ago" });
-  // Show date: M/D
-  const d = new Date(dateStr);
-  return t("sidebar.timeDate", { month: d.getMonth() + 1, day: d.getDate(), defaultValue: "{{month}}/{{day}}" });
-}
-
-type TimeGroup = "today" | "yesterday" | "lastWeek" | "earlier";
-
-function getTimeGroup(dateStr: string): TimeGroup {
-  const now = new Date();
-  const then = new Date(dateStr);
-  const todayStart = new Date(now.getFullYear(), now.getMonth(), now.getDate()).getTime();
-  const yesterdayStart = todayStart - 86400000;
-  const weekAgoStart = todayStart - 7 * 86400000;
-  const t = then.getTime();
-  if (t >= todayStart) return "today";
-  if (t >= yesterdayStart) return "yesterday";
-  if (t >= weekAgoStart) return "lastWeek";
-  return "earlier";
-}
+import { Icon } from "./Icons";
+import { useCopyToClipboard } from "./useCopyToClipboard";
+import { useFriendlyName } from "./useFriendlyName";
+import { useIsLightTheme } from "./useIsLightTheme";
+import { timeAgo, getTimeGroup } from "./timeUtils";
+import type { TimeGroup } from "./timeUtils";
 
 /** Collapsible session group with sticky header */
 function SessionGroup({
@@ -61,6 +35,7 @@ function SessionGroup({
   t: (key: string, opts?: Record<string, unknown>) => string;
 }) {
   const [collapsed, setCollapsed] = useState(false);
+  const isLight = useIsLightTheme();
 
   return (
     <div className="session-group">
@@ -68,12 +43,7 @@ function SessionGroup({
         className="session-group-header"
         onClick={() => setCollapsed(prev => !prev)}
       >
-        <svg
-          width="8" height="8" viewBox="0 0 8 8" fill="currentColor"
-          style={{ transition: "transform 0.15s", transform: collapsed ? "rotate(-90deg)" : "rotate(0deg)", flexShrink: 0 }}
-        >
-          <path d="M1 2 L4 5.5 L7 2" />
-        </svg>
+        <Icon name="chevron-down" size={8} style={{ transition: "transform 0.15s", transform: collapsed ? "rotate(-90deg)" : "rotate(0deg)", flexShrink: 0 }} />
         <span>{label}</span>
         <span className="session-group-count">{sessions.length}</span>
       </button>
@@ -87,17 +57,17 @@ function SessionGroup({
             className={`session-item${isActive ? " session-item-active" : ""}`}
             onClick={() => onSelect(session.id)}
             title={session.requestName}
-            style={isActive && activeCallerColor ? { background: `${activeCallerColor}${document.documentElement.getAttribute("data-theme") === "light" ? "0d" : "1a"}` } : undefined}
+            style={isActive && activeCallerColor ? { background: `${activeCallerColor}${isLight ? "0d" : "1a"}` } : undefined}
           >
             {/* Row 1: icon + title */}
             <div className="session-item-row1">
               <span className="session-item-icon">
                 {isPending ? (
-                  <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="#f59e0b" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z" /><circle cx="12" cy="10" r="1" fill="#f59e0b" /></svg>
+                  <Icon name="message-dot" size={11} color="#f59e0b" fill="none" />
                 ) : isCancelled ? (
-                  <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="#ef4444" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round"><line x1="18" y1="6" x2="6" y2="18" /><line x1="6" y1="6" x2="18" y2="18" /></svg>
+                  <Icon name="close" size={11} color="#ef4444" strokeWidth={2.5} />
                 ) : (
-                  <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="var(--color-success)" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round"><polyline points="20 6 9 17 4 12" /></svg>
+                  <Icon name="check" size={11} color="var(--color-success)" strokeWidth={2.5} />
                 )}
               </span>
               <span className={`session-item-name${isPending ? "" : " session-item-name-responded"}`}>
@@ -112,23 +82,17 @@ function SessionGroup({
               <span style={{ display: "inline-flex", alignItems: "center", gap: 3, marginLeft: 4, flexShrink: 0 }}>
                 {session.images.length > 0 && (
                   <span title={t("images.attachments")}>
-                    <svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="var(--color-text-muted)" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-                      <rect x="3" y="3" width="18" height="18" rx="2" ry="2" /><circle cx="8.5" cy="8.5" r="1.5" /><polyline points="21 15 16 10 5 21" />
-                    </svg>
+                    <Icon name="image" size={10} color="var(--color-text-muted)" />
                   </span>
                 )}
                 {session.testLogText.trim().length > 0 && (
                   <span title={t("testLog.attach")}>
-                    <svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="var(--color-text-muted)" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-                      <path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z" /><polyline points="14 2 14 8 20 8" />
-                    </svg>
+                    <Icon name="file" size={10} color="var(--color-text-muted)" />
                   </span>
                 )}
                 {session.gitAction && (
                   <span title={t("gitAction.button")}>
-                    <svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="var(--color-text-muted)" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-                      <circle cx="18" cy="18" r="3" /><circle cx="6" cy="6" r="3" /><path d="M13 6h3a2 2 0 0 1 2 2v7" /><line x1="6" y1="9" x2="6" y2="21" />
-                    </svg>
+                    <Icon name="git-branch" size={10} color="var(--color-text-muted)" />
                   </span>
                 )}
               </span>
@@ -142,7 +106,7 @@ function SessionGroup({
                     }}
                     title={t("sidebar.markCancelled", { defaultValue: "Mark as cancelled" })}
                   >
-                    <svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><circle cx="12" cy="12" r="10" /><line x1="15" y1="9" x2="9" y2="15" /><line x1="9" y1="9" x2="15" y2="15" /></svg>
+                    <Icon name="circle-x" size={10} />
                   </span>
                 )}
                 <span
@@ -153,7 +117,7 @@ function SessionGroup({
                   }}
                   title={t("sidebar.delete", { defaultValue: "Delete" })}
                 >
-                  <svg width="10" height="10" viewBox="0 0 10 10"><line x1="2" y1="2" x2="8" y2="8" stroke="currentColor" strokeWidth="1.2"/><line x1="8" y1="2" x2="2" y2="8" stroke="currentColor" strokeWidth="1.2"/></svg>
+                  <Icon name="close-sm" size={10} />
                 </span>
               </span>
             </div>
@@ -165,7 +129,8 @@ function SessionGroup({
 }
 
 export function Sidebar() {
-  const { t, i18n } = useTranslation();
+  const { t } = useTranslation();
+  const friendlyName = useFriendlyName();
   const override = useCallerOverride();
   const { callerId: activeCallerId, sessionId: activeSessionId, caller } = useActiveCallerSession();
   const allSessions = useFeedbackStore((s) => s.sessions);
@@ -190,17 +155,12 @@ export function Sidebar() {
   }, []);
 
   // Copy agent_name on avatar click
-  const [avatarCopied, setAvatarCopied] = useState(false);
-  const avatarCopyTimer = useRef<ReturnType<typeof setTimeout>>(undefined);
+  const { copied: avatarCopied, copy: copyAvatar } = useCopyToClipboard();
   const handleAvatarClick = useCallback(() => {
     if (!caller) return;
     const text = `agent_name="${caller.alias || caller.name}".`;
-    navigator.clipboard.writeText(text).then(() => {
-      setAvatarCopied(true);
-      clearTimeout(avatarCopyTimer.current);
-      avatarCopyTimer.current = setTimeout(() => setAvatarCopied(false), 1500);
-    });
-  }, [caller]);
+    copyAvatar(text);
+  }, [caller, copyAvatar]);
 
   const handleSelectSession = (id: string) => {
     if (override) {
@@ -265,9 +225,7 @@ export function Sidebar() {
             style={{ width: 22, height: 22, padding: 0 }}
             title={t("sidebar.expand", "Expand sidebar")}
           >
-            <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-              <polyline points="9 18 15 12 9 6" />
-            </svg>
+            <Icon name="chevron-right" size={11} />
           </button>
         ) : (
           /* Expanded header */
@@ -281,15 +239,13 @@ export function Sidebar() {
             >
               <IdenticonAvatar alias={caller.alias || caller.name} color={caller.color} size={28} style={{ opacity: avatarCopied ? 0.5 : 1, transition: "opacity 0.15s" }} />
               {avatarCopied && (
-                <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke={caller.color} strokeWidth="3" strokeLinecap="round" strokeLinejoin="round" style={{ position: "absolute", top: "50%", left: "50%", transform: "translate(-50%, -50%)" }}>
-                  <polyline points="20 6 9 17 4 12" />
-                </svg>
+                <Icon name="check" size={14} color={caller.color} strokeWidth={3} style={{ position: "absolute", top: "50%", left: "50%", transform: "translate(-50%, -50%)" }} />
               )}
             </div>
             <div style={{ display: "flex", flexDirection: "column", minWidth: 0, flex: 1 }}>
               <div style={{ display: "flex", alignItems: "center", gap: 4 }}>
                 <span style={{ fontSize: 13, fontWeight: 600, color: caller.color, whiteSpace: "nowrap" }}>
-                  {caller.alias ? getFriendlyName(caller.alias, i18n.language === "zh" ? "zh" : "en") : caller.name.charAt(0).toUpperCase()}
+                  {caller.alias ? friendlyName(caller.alias) : caller.name.charAt(0).toUpperCase()}
                 </span>
                 {caller.alias && (
                   <span style={{ fontSize: 11, color: "var(--color-text-muted)", whiteSpace: "nowrap" }}>({caller.alias})</span>
@@ -347,9 +303,7 @@ export function Sidebar() {
               style={{ width: 22, height: 22, padding: 0, marginLeft: "auto", flexShrink: 0 }}
               title={t("sidebar.collapse", "Collapse sidebar")}
             >
-              <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-                <polyline points="15 18 9 12 15 6" />
-              </svg>
+            <Icon name="chevron-left" size={11} />
             </button>
           </>
         )}
@@ -381,11 +335,11 @@ export function Sidebar() {
                     }}
                   >
                     {isPending ? (
-                      <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="#f59e0b" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z" /><circle cx="12" cy="10" r="1" fill="#f59e0b" /></svg>
+                      <Icon name="message-dot" size={12} color="#f59e0b" fill="none" />
                     ) : isCancelled ? (
-                      <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="#ef4444" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round"><line x1="18" y1="6" x2="6" y2="18" /><line x1="6" y1="6" x2="18" y2="18" /></svg>
+                      <Icon name="close" size={12} color="#ef4444" strokeWidth={2.5} />
                     ) : (
-                      <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="var(--color-success)" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round"><polyline points="20 6 9 17 4 12" /></svg>
+                      <Icon name="check" size={12} color="var(--color-success)" strokeWidth={2.5} />
                     )}
                   </button>
                 </div>
@@ -460,19 +414,13 @@ export function Sidebar() {
           <div className="session-collapsed-popup-meta">
             <span>{timeAgo(hoveredItem.session.createdAt, t)}</span>
             {hoveredItem.session.images.length > 0 && (
-              <svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-                <rect x="3" y="3" width="18" height="18" rx="2" ry="2" /><circle cx="8.5" cy="8.5" r="1.5" /><polyline points="21 15 16 10 5 21" />
-              </svg>
+              <Icon name="image" size={10} />
             )}
             {hoveredItem.session.testLogText.trim().length > 0 && (
-              <svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-                <path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z" /><polyline points="14 2 14 8 20 8" />
-              </svg>
+              <Icon name="file" size={10} />
             )}
             {hoveredItem.session.gitAction && (
-              <svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-                <circle cx="18" cy="18" r="3" /><circle cx="6" cy="6" r="3" /><path d="M13 6h3a2 2 0 0 1 2 2v7" /><line x1="6" y1="9" x2="6" y2="21" />
-              </svg>
+              <Icon name="git-branch" size={10} />
             )}
           </div>
         </div>,
