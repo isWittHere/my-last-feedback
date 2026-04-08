@@ -1,0 +1,26 @@
+=== chat.setMode or selectAgent (16 matches) ===
+  @1947108: setModel(e){await this.request({subtype:"set_model",model:e})}async setMaxThinkingTokens(e){await this.request({subtype:"set_max_thinking_tokens",max_thinking_tokens:e})}async applyFlagSettings(e){await this.request({subtype:"apply_flag_settings",settings:e})}async getSettings(){return(await this.re
+  @13749889: setModelSnapshot(n){this._modelSnapshot=n
+  @15363919: setModelIdForSession(n,r){let o=this._sessionState.get(n)
+  @15384096: setModel(n){n!==this._currentModelId&&(this._currentModelId=n,this._queryGenerator&&(this.logService.trace(`[ClaudeCodeSession] Setting model to ${n} on active session`),await this._queryGenerator.setModel(n)))}async _setPermissionMode(n){n!==this._currentPermissionMode&&(this._currentPermissionMode
+  @15386459: setModel(l),await this._setPermissionMode(u),this._queryGenerator||await this._startSession(s)
+
+=== registerCustomAgentProvider (8 matches) ===
+  @13169638: registerCustomAgentProvider"in uL.chat){let o=this._register(new sh),a="chat.editMode.hidden",s=()=>{r.getNonExtensionConfig(a)?o.clear():o.value||(o.value=uL.chat.registerCustomAgentProvider(n.createInstance(nL)))}
+  @13170047: registerCustomAgentProvider(d))}let c=n.createInstance(xE)
+  @13170129: registerCustomAgentProvider(c))
+  @13170211: registerCustomAgentProvider(l))
+  @13170293: registerCustomAgentProvider(u))}if("registerInstructionsProvider"in uL.chat&&r.getConfig(H.EnableOrganizationInstructions)){let o=n.createInstance(new Qe(lee))
+
+=== chatAgentMode or chatModeProvider (0 matches) ===
+
+=== chat.registerChatModeCompletionProvider (0 matches) ===
+
+=== provideChatModes or provideAgentModes (1 matches) ===
+  @16102201: provideModelProxy(e,n){let r=this.instantiationService.createInstance(Ece)
+
+=== chat mode id (0 matches) ===
+
+
+Top-level files in extension:
+package.json, package.nls.cs.json, package.nls.de.json, package.nls.es.json, package.nls.fr.json, package.nls.it.json, package.nls.ja.json, package.nls.json, package.nls.ko.json, package.nls.pl.json, package.nls.pt-br.json, package.nls.qps-ploc.json, package.nls.ru.json, package.nls.tr.json, package.nls.zh-cn.json, package.nls.zh-tw.json, telemetry.json

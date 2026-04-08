@@ -1,0 +1,17 @@
+=== CustomAgentProvider full (9 matches) ===
+  @13158537: CustomAgentProvider] provideCustomAgents was cancelled"),[]):await this.githubOrgChatResourcesService.listCachedFiles("agent",o):(this.logService.trace("[GitHubOrgCustomAgentProvider] No organization available for providing agents"),[])}catch(o){return this.logService.error(`[GitHubOrgCustomAgentProvider] Error reading from cache: ${o}`),[]}}async pollAgents(n){try{let r={includeSources:["org","en
+  @13159063: CustomAgentProvider] No repositories found for org ${n}`)
+  @13159633: CustomAgentProvider] No changes detected in cache")
+  @13159836: CustomAgentProvider] Error polling for agents: ${r}`)}}generateAgentMarkdown(n){let r={}
+
+=== registerChatModeProvider (0 matches) ===
+
+=== chat.open params (3 matches) ===
+  @16104644: chat.open",{mode
+  @16105041: chat.open",{mode
+  @19772574: chat.open",{mode
+
+=== toggleAgentMode full (1 matches) ===
+  @19245664: toggleAgentMode",{modeId:r,sessionResource:e.chatSessionResource
+
+=== setSessionMode or setMode (0 matches) ===

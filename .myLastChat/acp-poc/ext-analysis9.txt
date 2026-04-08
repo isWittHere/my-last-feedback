@@ -1,0 +1,26 @@
+=== provideCustomAgents (6 matches) ===
+  @13052839: provideCustomAgents(n,r){let o=this._buildCustomizedConfig(),a=$O(o);return[{uri:await this._writeCacheFile(a)
+  @13057554: provideCustomAgents(n,r){let o=$O(idi);return[{uri:await this._writeCacheFile(o)
+  @13059286: provideCustomAgents(n,r){let o=this._buildCustomizedConfig(),a=$O(o);return[{uri:await this._writeCacheFile(a)
+  @13158361: provideCustomAgents(n,r){try{let o=await this.githubOrgChatResourcesService.getPreferredOrganizationName();return o?r.isCancellationRequested?(this.logService.trace("[GitHubOrgCustomAgentProvider] provideCustomAgents was cancelled"),[]):await this.githubOrgChatResourcesService.listCachedFiles("agent
+  @13161557: provideCustomAgents was cancelled"),[]):await this.githubOrgChatResourcesService.listCachedFiles("instructions",o):(this.logService.trace("[GitHubOrgInstructionsProvider] No organization available for providing agents"),[])
+
+=== toCustomAgent (3 matches) ===
+  @15450271: toCustomAgent(a);let r=await this.getAgents();n=n.toLowerCase();let o=r.find(a=>a.name.toLowerCase()===n||a.displayName?.toLowerCase()===n);return o?this.cloneAgent(o):void 0
+  @15450908: toCustomAgent(r);o&&n.set(o.name.toLowerCase(),o)
+  @15451306: toCustomAgent(n){let r=XRt(n.uri),o=n.header?.name?.trim(),a=o===void 0||o===""?r:o;if(!a)return;let s=n.header?.tools?.filter(l=>!!l)??[],c=n.header?.model?.[0];return{name:a,displayName:a,description:n.header?.description??"",tools:s.length>0?s:null,prompt:async()=>n.body?.getContent()??"",disable
+
+=== customAgentPromptFiles (4 matches) ===
+  @15450212: customAgentPromptFiles)if(n===a.uri.toString())return this.toCustomAgent(a)
+  @15450873: customAgentPromptFiles){let o=this.toCustomAgent(r)
+  @15512087: customAgentPromptFiles,r=new Map
+  @15589161: customAgentPromptFiles(){return[...this._customAgents]}get customAgents(){return k5.chat.customAgents}get instructions(){return k5.chat.instructions}get skills(){return k5.chat.skills}dispose(){this.refreshCts?.dispose(!0),this.refreshCts=void 0,super.dispose()}triggerRefreshCustomAgents(){this.refr
+
+=== CustomAgent type (0 matches) ===
+
+=== agentId or agentName (23 matches) ===
+  @15343787: agentId:this.chatAgentArgs.agentId,command:this.request.command}}
+  @15345268: agentId:this.chatAgentArgs.agentId,command:this.request.command}},!0),n}catch(e){throw e}}async selectInten
+  @15377446: agentId:si()},$Rt=hs({...oOn,type:gr(a0("user")),message:gr(URt),toolUseResult:o0(si(),IAn()),sourceToolAss
+  @15396579: agentId"in t.toolUseResult&&typeof t.toolUseResult.agentId=="string"&&(e=t.toolUseResult.agentId),{uuid:t.u
+  @15396912: agentId:t.agentId,toolUseResultAgentId:e}}function vKi(t){return{uuid:t.uuid,sessionId:t.sessionId,timestam

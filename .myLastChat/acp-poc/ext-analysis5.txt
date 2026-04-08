@@ -1,0 +1,25 @@
+=== modeInstructions2 assignment (0 matches) ===
+
+=== setMode or selectMode (23 matches) ===
+  @1947108: setModel(e){await this.request({subtype:"set_model",model:e})}async setMaxThinkingTokens(e){await this.request({subtype:"set_max_thinking_tokens",max_thinking_tokens:e})}async applyFlagSettings(e){await this.request({subtype:"apply_flag_settings",settings:e})}async getSettings(){return(await this.re
+  @13749889: setModelSnapshot(n){this._modelSnapshot=n
+  @15363919: setModelIdForSession(n,r){let o=this._sessionState.get(n)
+  @15384096: setModel(n){n!==this._currentModelId&&(this._currentModelId=n,this._queryGenerator&&(this.logService.trace(`[ClaudeCodeSession] Setting model to ${n} on active session`),await this._queryGenerator.setModel(n)))}async _setPermissionMode(n){n!==this._currentPermissionMode&&(this._currentPermissionMode
+  @15386459: setModel(l),await this._setPermissionMode(u),this._queryGenerator||await this._startSession(s)
+  @15406791: selectModel()
+
+=== agentSelector or agentPicker (0 matches) ===
+
+=== customAgent registration (9 matches) ===
+  @13052408: CustomAgents=this._register
+  @13058853: CustomAgents=this._register
+  @13158144: CustomAgents=this._register
+  @13163070: CustomAgents=this._register
+  @13169646: CustomAgentProvider"in uL.chat){let o=this._register
+  @13170301: CustomAgentProvider(u))}if("register
+
+=== getSessionAgent (4 matches) ===
+  @15449908: getSessionAgent(n){let r=this.extensionContext.workspaceState.get(KRt,this.sessionAgents),o=this.sessionAgents[n]?.agentId??r[n]?.agentId
+  @15511101: getSessionAgent(this.sessionId)]),a=this.createCustomAgentLookup(),s=o?this.resolveAgentModeInstructions(o,a):void 0,c=new Map
+  @15596371: getSessionAgent(n){let r=await this.getRequestDetails(n)
+  @15596488: getSessionAgent(n)}async writeRequestDetails(n,r){if(await this._intialize.value,ay(n))return

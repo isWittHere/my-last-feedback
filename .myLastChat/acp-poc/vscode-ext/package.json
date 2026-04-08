@@ -1,0 +1,40 @@
+{
+  "name": "mlra-poc-chat-automation",
+  "displayName": "MLRA PoC - Chat Automation Tests",
+  "description": "PoC extension to verify VS Code Chat programmatic commands for MLRA",
+  "version": "0.0.1",
+  "engines": {
+    "vscode": "^1.100.0"
+  },
+  "categories": ["Other"],
+  "activationEvents": ["onStartupFinished"],
+  "main": "./extension.js",
+  "contributes": {
+    "commands": [
+      {
+        "command": "mlra-poc.test1-openChat",
+        "title": "MLRA PoC: Test 1 - Open Chat with Agent Mode + Query"
+      },
+      {
+        "command": "mlra-poc.test2-changeModel",
+        "title": "MLRA PoC: Test 2 - Change Model"
+      },
+      {
+        "command": "mlra-poc.test3-multiSession",
+        "title": "MLRA PoC: Test 3 - Open Multiple Sessions"
+      },
+      {
+        "command": "mlra-poc.test4-customAgent",
+        "title": "MLRA PoC: Test 4 - Open Chat with Custom Agent"
+      },
+      {
+        "command": "mlra-poc.test5-listCommands",
+        "title": "MLRA PoC: Test 5 - List All Chat Commands"
+      },
+      {
+        "command": "mlra-poc.runAll",
+        "title": "MLRA PoC: Run All Tests (Sequential)"
+      }
+    ]
+  }
+}

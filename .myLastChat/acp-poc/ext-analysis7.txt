@@ -1,0 +1,13 @@
+=== @16104644 ===
+l=MSe.l10n.t("Copilot will resume setting up the workspace by creating the necessary files.");if(!a.initialized){a.initialized=!0,r[o]=a,this._extensionContext.globalState.update(Y5,r),await Tce.window.showInformationMessage(c,{modal:!0,detail:l},s)===s?Tce.commands.executeCommand("workbench.action.chat.open",{mode:"agent",query:`${MSe.l10n.t("Continue with #new workspace setup")}`}):(r.splice(o,1),this._extensionContext.globalState.update(Y5,r));return}(await this.fileSystemService.readDirectory(n[0])).length>0?(r.splice(o,1),this._extensionContext.globalState.update(Y5,r)):await Tce.window.showInformationMessage(c,{modal:!0,detail:l},s)===s?Tce.commands.executeCommand("workbench.action.cha
+
+=== @16105041 ===
+o,1),this._extensionContext.globalState.update(Y5,r));return}(await this.fileSystemService.readDirectory(n[0])).length>0?(r.splice(o,1),this._extensionContext.globalState.update(Y5,r)):await Tce.window.showInformationMessage(c,{modal:!0,detail:l},s)===s?Tce.commands.executeCommand("workbench.action.chat.open",{mode:"agent",query:a.userPrompt}):(r.splice(o,1),this._extensionContext.globalState.update(Y5,r))}};Sce=S([b(0,ut),b(1,Te),b(2,yt)],Sce);function cbo(t){let e=t.get(j),n=new it;return n.add(e.createInstance(Sce)),n}Ue();var Bce=class extends fe{constructor(n,r,o,a,s,c){super();this._logService=n;this._languageContextProviderService=r;this._configurationService=o;this._gitService=a;this
+
+=== @19772574 ===
+d,p);m&&(a.push({uri:Y_(c,m),historyItemId:m}),s.push({start:{uri:Y_(c,m),historyItemId:m},end:{uri:Y_(c,d),historyItemId:d}}),s.push({start:{uri:Y_(c,m),historyItemId:m},end:{uri:Y_(c,p),historyItemId:p}}))}r?.isCancellationRequested||o.length>0&&await put.commands.executeCommand("workbench.action.chat.open",{mode:"agent",attachFiles:o,attachHistoryItemChanges:a,attachHistoryItemChangeRanges:s,query:"Resolve all merge conflicts"})}};Mhe=S([b(0,ei),b(1,Dt)],Mhe);var nE=O(require("vscode"));Ot();var mut=class{async add(e,n){let r=nE.workspace.getConfiguration("launch",e),o=r.get("configurations");n.configurations.length&&await r.update("configurations",[...n.configurations,...o||[]],nE.Config
+
+=== chatMode or ChatMode (0 matches) ===
+
+=== workbench.action.chat with agent (1 matches) ===
+  @19245642: workbench.action.chat.toggleAgent

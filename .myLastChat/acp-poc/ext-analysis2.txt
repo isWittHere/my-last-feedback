@@ -1,0 +1,21 @@
+=== openSessionWithPrompt registration (12 matches) ===
+  @15710926: ...openSessionWithPrompt.copilotcli",{resource:dc.getResource(x.object.sessionId),prompt:r||n.prompt,attachedContext:_.map(I=>IWe(I,v))})}catch{this.contextForRequest.delete(x.object.sessionId),x.object.
+  @15719189: ...openSessionWithPrompt.copilotcli",{resource:_,prompt:I,attachedContext:[{id:"git-merge-changes",value:E.join(`
+`),icon:new xt.ThemeIcon("git-merge"),fullName:`${w} \u2192 ${x}`,kind:"generic"}]})}
+  @15720569: ...openSessionWithPrompt.copilotcli",{resource:v,prompt:sy.commit})})),p.add(xt.commands.registerCommand("github.copilot.sessions.discardChanges",async(y,v,..._)=>{if(!ti(y)||!v||_.length===0||_.some(q=>
+  @15721861: ...openSessionWithPrompt.copilotcli",{resource:v,prompt:sy.createPr})}})),p.add(xt.commands.registerCommand("github.copilot.chat.createDraftPullRequestCopilotCLIAgentSession.createDraftPR",async y=>{let 
+  @15722483: ...openSessionWithPrompt.copilotcli",{resource:v,prompt:sy.createDraftPr})}})),p.add(xt.commands.registerCommand("github.copilot.chat.createPullRequestCopilotCLIAgentSession.updatePR",async y=>{let v=y i
+=== newSession command (0 matches) ===
+=== createSession with agent (10 matches) ===
+  @15528444: ...createSession({model:n,workspaceInfo:r,agent
+  @15528718: ...createSessionsOptions({model:n,workspaceInfo:r,mcpServers:u,agent
+  @15531922: ...createSessionsOptions({model:r,agent
+  @15532663: ...createSessionsOptions({workspaceInfo:o,mcpServers:void 0,copilotUrl:d,agent
+  @15699744: ...CreateSession(n,s,o,{model:h,agent
+=== getOrCreateSession (4 matches) ===
+  @15699739: ...getOrCreateSession(n,s,o,{model:h,agent:y},c,a
+  @15706093: ...getOrCreateSession(n,r,o,a,s,c
+  @15750606: ...getOrCreateSession(n,s,o,{model:h,agent:y},c,a
+  @15758355: ...getOrCreateSession(n,r,o,a,s,c
+=== selectCustomAgent call (1 matches) ===
+  @15531637: ...selectCustomAgent(s.name)

@@ -1,0 +1,27 @@
+=== getAgent method (2 matches) ===
+  @15705482: getAgent(n,r,o){if(r?.modeInstructions2){let a=r.modeInstructions2.uri?await this.copilotCLIAgents.resolveAgent(r.modeInstructions2.uri.toString()):await this.copilotCLIAgents.resolveAgent(r.modeInstructions2.name);if(a){let s=(r.modeInstructions2.to
+  @15757744: getAgent(n,r,o){if(r?.modeInstructions2){let a=r.modeInstructions2.uri?await this.copilotCLIAgents.resolveAgent(r.modeInstructions2.uri.toString()):await this.copilotCLIAgents.resolveAgent(r.modeInstructions2.name);if(a){let s=(r.modeInstructions2.to
+
+=== resolveAgent (3 matches) ===
+  @15450156: resolveAgent(n){for(let a of this.chatPromptFileService.customAgentPromptFiles)if(n===a.uri.toString())return this.toCustomAgent(a)
+  @15705581: resolveAgent(r.modeInstructions2.uri.toString()):await this.copilotCLIAgents.resolveAgent(r.modeInstructions2.name)
+  @15757843: resolveAgent(r.modeInstructions2.uri.toString()):await this.copilotCLIAgents.resolveAgent(r.modeInstructions2.name)
+
+=== copilotCLIAgents (7 matches) ===
+  @15596471: copilotCLIAgents.getSessionAgent
+  @15683727: copilotCLIAgents.onDidChangeAgents
+  @15705564: copilotCLIAgents.resolveAgent
+  @15705641: copilotCLIAgents.resolveAgent
+  @15736642: copilotCLIAgents.onDidChangeAgents
+  @15757826: copilotCLIAgents.resolveAgent
+  @15757903: copilotCLIAgents.resolveAgent
+
+=== modeInstructions2 (11 matches) ===
+  @13880191: modeInstructions2,additionalHookContext:this.additionalHookContext}}shouldReportUsageToContextWidget(){return!this.options.request.subAgentInvocationId}async executeStopHook(n,r,o,a){try{let s=await this._chatHookServ
+  @15248744: modeInstructions2?.name?.toLowerCase()?this.request.modeInstructions2?.isBuiltin?this.request.modeInstructions2.name.toLowerCase():"custom":this.intent.id==="editAgent"?"agent":this.intent.id==="edit"?"edit":"ask"}pro
+  @15312527: modeInstructions2?this._request.modeInstructions2.isBuiltin?this._request.modeInstructions2.name.toLowerCase():"custom":this._intent.id===kI.ID?"agent":this._intent.id===R_.ID?"edit":this._intent.id==="inlineChat"?"in
+  @15705504: modeInstructions2){let a=r.modeInstructions2.uri?await this.copilotCLIAgents.resolveAgent(r.modeInstructions2.uri.toString()):await this.copilotCLIAgents.resolveAgent(r.modeInstructions2.name)
+  @15705712: modeInstructions2.toolReferences||[]).map(c=>c.name)
+  @15709242: modeInstructions2?{uri:n.modeInstructions2.uri?.toString(),name:n.modeInstructions2.name,content:n.modeInstructions2.content,metadata:n.modeInstructions2.metadata,isBuiltin:n.modeInstructions2.isBuiltin}:void 0}async 
+  @15757766: modeInstructions2){let a=r.modeInstructions2.uri?await this.copilotCLIAgents.resolveAgent(r.modeInstructions2.uri.toString()):await this.copilotCLIAgents.resolveAgent(r.modeInstructions2.name)
+  @15757974: modeInstructions2.toolReferences||[]).map(c=>c.name)

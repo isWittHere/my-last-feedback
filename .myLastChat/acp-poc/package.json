@@ -1,0 +1,17 @@
+{
+  "name": "mlra-acp-poc",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "description": "MLRA ACP PoC - Verify Copilot CLI ACP protocol capabilities",
+  "scripts": {
+    "test:basic": "node test-acp-basic.mjs",
+    "test:multi-session": "node test-acp-multi-session.mjs",
+    "test:mcp-inject": "node test-acp-mcp-inject.mjs"
+  },
+  "dependencies": {
+    "@agentclientprotocol/sdk": "latest",
+    "@modelcontextprotocol/sdk": "latest",
+    "zod": "^3.23.0"
+  }
+}

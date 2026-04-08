@@ -31,11 +31,11 @@ nul
 ref-repos/
 
 # Personal notes
-.myLastChat/
+#.myLastChat/
 
 # Test artifacts
-# test-ipc-result.txt
-# test-ipc.cjs
+test-ipc-result.txt
+test-ipc.cjs
 
 # Misc generated files
 app/npx
