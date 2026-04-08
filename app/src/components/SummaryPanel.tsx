@@ -100,6 +100,55 @@ function CodeBlock({
   );
 }
 
+/** Custom link renderer: web links open in browser, local paths open in file explorer / VS Code */
+function LinkRenderer({
+  href,
+  children,
+  projectDirectory,
+  ...rest
+}: ComponentProps<"a"> & { node?: unknown; projectDirectory?: string }) {
+  const { node: _node, ...filteredRest } = rest as Record<string, unknown>;
+
+  const handleClick = useCallback(
+    (e: React.MouseEvent<HTMLAnchorElement>) => {
+      if (!href) return;
+      e.preventDefault();
+
+      const isWeb = href.startsWith("http://") || href.startsWith("https://");
+      const isFileUrl = href.startsWith("file://");
+      // Windows absolute path (C:\...) or Unix absolute path (/...)
+      const isAbsolutePath = /^[a-zA-Z]:[/\\]/.test(href) || href.startsWith("/");
+
+      if (isWeb) {
+        import("@tauri-apps/plugin-opener")
+          .then(({ openUrl }) => openUrl(href))
+          .catch(() => window.open(href, "_blank", "noopener,noreferrer"));
+      } else if (isFileUrl || isAbsolutePath) {
+        const path = isFileUrl
+          ? decodeURIComponent(href.replace(/^file:\/\/\/?/, ""))
+          : href;
+        import("@tauri-apps/plugin-opener")
+          .then(({ openPath }) => openPath(path))
+          .catch(() => window.open(href, "_blank", "noopener,noreferrer"));
+      } else {
+        // Relative path — try to resolve against projectDirectory
+        const base = projectDirectory || "";
+        const resolved = base ? `${base}/${href}`.replace(/\\/g, "/") : href;
+        import("@tauri-apps/plugin-opener")
+          .then(({ openPath }) => openPath(resolved))
+          .catch(() => window.open(href, "_blank", "noopener,noreferrer"));
+      }
+    },
+    [href, projectDirectory],
+  );
+
+  return (
+    <a href={href} onClick={handleClick} style={{ cursor: "pointer" }} {...filteredRest}>
+      {children}
+    </a>
+  );
+}
+
 /** Questions form rendered at the bottom of the summary panel */
 function QuestionsForm({
   questions,
@@ -287,9 +336,15 @@ export function SummaryPanel() {
   const toggleSessionOption = useFeedbackStore((s) => s.toggleSessionOption);
   const updateSessionField = useFeedbackStore((s) => s.updateSessionField);
 
+  const legacyProjectDirectory = useFeedbackStore((s) => s.projectDirectory);
+
   const summary = appMode === "persistent"
     ? (activeSession?.summary || "")
     : legacySummary;
+
+  const projectDirectory = appMode === "persistent"
+    ? (activeSession?.projectDirectory || "")
+    : legacyProjectDirectory;
 
   const questions = activeSession?.questions || [];
   const isReadonly = activeSession?.status === "responded" || activeSession?.status === "cancelled";
@@ -336,6 +391,15 @@ export function SummaryPanel() {
     if (summary) copyMarkdown(summary);
   }, [summary, copyMarkdown]);
 
+  // Memoised link renderer that carries the current projectDirectory context
+  const LinkRendererWithDir = useMemo(
+    () =>
+      (props: ComponentProps<"a"> & { node?: unknown }) => (
+        <LinkRenderer {...props} projectDirectory={projectDirectory} />
+      ),
+    [projectDirectory],
+  );
+
   return (
     <div
       className="group/summary relative flex flex-col h-full min-h-0 min-w-0"
@@ -361,7 +425,7 @@ export function SummaryPanel() {
             <div className="prose" style={{ userSelect: "text" }}>
               <ReactMarkdown
                 remarkPlugins={[remarkGfm, remarkBreaks]}
-                components={{ code: CodeBlock }}
+                components={{ code: CodeBlock, a: LinkRendererWithDir }}
               >
                 {summary}
               </ReactMarkdown>
