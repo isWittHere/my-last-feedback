@@ -1,4 +1,5 @@
 import { create } from "zustand";
+import { invoke } from "@tauri-apps/api/core";
 
 // ── Agent Role Types ──
 
@@ -138,6 +139,18 @@ export interface MLRAState {
   setColumnOrder: (order: string[]) => void;
   setLayoutMode: (mode: "auto" | 1 | 2 | 3 | 4) => void;
   toggleLauncherSidebar: () => void;
+
+  // Actions — Daemon communication (sends to MLRA daemon via Tauri IPC)
+  sendToDaemon: (msg: Record<string, unknown>) => Promise<void>;
+  daemonAssignRole: (launcherId: string, agentId: string, role: AgentRole | null) => void;
+  daemonStartOrchestration: (launcherId: string, userTask: string) => void;
+  daemonSetControlMode: (mode: ControlMode) => void;
+  daemonReviewApproved: (content: string) => void;
+  daemonReviewRejected: (reason: string) => void;
+  daemonTerminate: () => void;
+
+  // Actions — Handle incoming MLRA daemon messages
+  handleDaemonMessage: (raw: string) => void;
 
   // Getters
   getActiveLauncher: () => Launcher | null;
@@ -380,6 +393,96 @@ export const useMLRAStore = create<MLRAState>((set, get) => ({
   setColumnOrder: (order) => set({ columnOrder: order }),
   setLayoutMode: (mode) => set({ layoutMode: mode }),
   toggleLauncherSidebar: () => set((s) => ({ launcherSidebarOpen: !s.launcherSidebarOpen })),
+
+  // ── Daemon communication ──
+
+  sendToDaemon: async (msg) => {
+    try {
+      await invoke("send_to_mlra_daemon", { message: JSON.stringify(msg) });
+    } catch (e) {
+      console.error("[MLRA] sendToDaemon failed:", e);
+    }
+  },
+
+  daemonAssignRole: (launcherId, agentId, role) => {
+    get().sendToDaemon({ type: "mlra_assign_role", launcherId, agentId, role });
+  },
+
+  daemonStartOrchestration: (launcherId, userTask) => {
+    get().sendToDaemon({ type: "mlra_start_orchestration", launcherId, userTask });
+  },
+
+  daemonSetControlMode: (mode) => {
+    get().sendToDaemon({ type: "mlra_set_control_mode", controlMode: mode });
+  },
+
+  daemonReviewApproved: (content) => {
+    get().sendToDaemon({ type: "mlra_review_approved", content });
+  },
+
+  daemonReviewRejected: (reason) => {
+    get().sendToDaemon({ type: "mlra_review_rejected", reason });
+  },
+
+  daemonTerminate: () => {
+    get().sendToDaemon({ type: "mlra_terminate" });
+  },
+
+  // ── Handle incoming daemon messages ──
+
+  handleDaemonMessage: (raw) => {
+    try {
+      const msg = JSON.parse(raw);
+      switch (msg.type) {
+        case "mlra_agent_registered": {
+          // A new agent registered on the daemon — update registeredAgents
+          const launcher = get().getActiveLauncher();
+          if (!launcher) break;
+          const existing = launcher.registeredAgents.find((a) => a.id === msg.callerId);
+          if (existing) break;
+          get().addRegisteredAgent(launcher.id, {
+            id: msg.callerId,
+            alias: msg.alias || "",
+            clientName: msg.clientName || "",
+            model: msg.model || "",
+            workspace: msg.workspace || "",
+            assignedRole: null,
+            workerRole: "",
+            registeredAt: new Date().toISOString(),
+          });
+          break;
+        }
+        case "mlra_orchestration_status": {
+          // Full state sync from daemon
+          const launcher = get().getActiveLauncher();
+          if (!launcher) break;
+          set((s) => ({
+            launchers: s.launchers.map((l) => {
+              if (l.id !== launcher.id) return l;
+              return {
+                ...l,
+                status: msg.status || l.status,
+                currentPhase: msg.phase || l.currentPhase,
+                controlMode: msg.controlMode || l.controlMode,
+                updatedAt: new Date().toISOString(),
+              };
+            }),
+          }));
+          if (msg.phase) set({ phaseView: msg.phase });
+          break;
+        }
+        case "mlra_human_review": {
+          // Daemon requests human review — could trigger UI notification
+          console.log("[MLRA] Human review requested:", msg.content);
+          break;
+        }
+        default:
+          console.log("[MLRA] Unhandled daemon message:", msg.type);
+      }
+    } catch (e) {
+      console.error("[MLRA] Failed to parse daemon message:", e);
+    }
+  },
 
   // ── Getters ──
 

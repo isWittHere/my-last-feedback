@@ -351,7 +351,10 @@ function MLRARow2() {
             <button
               key={mode}
               className={`mlra-control-mode-btn${launcher.controlMode === mode ? " active" : ""}`}
-              onClick={() => useMLRAStore.getState().setControlMode(launcher.id, mode)}
+              onClick={() => {
+                useMLRAStore.getState().setControlMode(launcher.id, mode);
+                useMLRAStore.getState().daemonSetControlMode(mode);
+              }}
               title={label}
             >
               {label}

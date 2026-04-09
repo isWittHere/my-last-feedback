@@ -134,50 +134,19 @@ export class Orchestrator {
   _buildInitialInstruction(agent, userTask) {
     const tail = buildTailInjection(agent.role, this.phase, this.currentPhaseId);
     if (agent.role === "planning-expert") {
-      return `## 角色: 规划专家
-
-你已成功注册到 MLRA 多 Agent 编排系统。
-
-## 你的任务
-
-以下是需要完成的任务：
-
-${userTask}
-
-## 行为指南
-
-1. 分析任务需求，设计详细的实施方案
-2. 你的方案将被规划监察审查
-3. 使用 submit 工具提交你的方案
-4. 根据审查反馈修改方案，直到双方达成共识
-5. 达成共识后使用 router_vote 投票${tail}`;
+      return `## 当前任务\n\n${userTask}\n\n使用 submit 工具提交你的方案。${tail}`;
     }
     if (agent.role === "planning-inspector") {
-      return `## 角色: 规划监察
-
-你已成功注册到 MLRA 多 Agent 编排系统。
-
-## 你的职责
-
-等待规划专家提交方案后进行审查。你将收到方案内容。
-
-## 审查要点
-
-1. 需求覆盖度 — 是否所有需求都被方案覆盖
-2. 技术可行性 — 方案的技术路线是否可行
-3. 边缘场景 — 是否考虑了边缘情况
-4. 过度设计 — 是否存在不必要的复杂性
-
-## 行为指南
-
-1. 使用 submit 工具提交你的审查结果
-2. 审查通过时说明理由，不通过时列出具体问题
-3. 达成共识后使用 router_vote 投票${tail}`;
+      return `等待规划专家提交方案后进行审查。使用 submit 工具提交审查结果。${tail}`;
+    }
+    if (agent.role === "execution-expert") {
+      return `等待方案批准后进入实施阶段。使用 order 工具分发工作指令。${tail}`;
+    }
+    if (agent.role === "execution-inspector") {
+      return `等待实施阶段的 Phase 完成后进行审查。使用 submit 工具提交审查结果。${tail}`;
     }
     if (agent.role === "ceo") {
-      return `## 角色: CEO
-
-你已成功注册到 MLRA 多 Agent 编排系统。当前待命中，将在关键节点被唤醒进行审查和裁决。${tail}`;
+      return `当前待命中，将在关键节点被唤醒进行审查和裁决。${tail}`;
     }
     return `注册成功，等待任务分配。${tail}`;
   }

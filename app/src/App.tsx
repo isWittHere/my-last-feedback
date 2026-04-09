@@ -3,6 +3,7 @@ import { invoke } from "@tauri-apps/api/core";
 import { listen } from "@tauri-apps/api/event";
 import { getCurrentWindow } from "@tauri-apps/api/window";
 import { useFeedbackStore } from "./store/feedbackStore";
+import { useMLRAStore } from "./store/mlraStore";
 import { FeedbackApp } from "./components/FeedbackApp";
 import type { Session } from "./store/feedbackStore";
 
@@ -204,9 +205,20 @@ function App() {
       s.markSessionCancelled(event.payload.session_id);
     });
 
+    // Listen for MLRA daemon messages
+    const unlistenMlra = listen<string>("mlra-message", (event) => {
+      useMLRAStore.getState().handleDaemonMessage(event.payload);
+    });
+
+    const unlistenMlraDisconnect = listen("mlra-disconnected", () => {
+      console.log("[MLRA] Daemon disconnected");
+    });
+
     return () => {
       unlisten.then((fn) => fn());
       unlistenCancel.then((fn) => fn());
+      unlistenMlra.then((fn) => fn());
+      unlistenMlraDisconnect.then((fn) => fn());
       window.removeEventListener("focus", reloadPrompts);
     };
   }, []);
