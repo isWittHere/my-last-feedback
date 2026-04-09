@@ -2094,6 +2094,212 @@ body,
   color: var(--color-text-primary);
 }
 
+/* ── MLRA Row 2 control buttons ── */
+.mlra-control-btn {
+  display: inline-flex;
+  align-items: center;
+  gap: 3px;
+  font-size: 10px;
+  font-weight: 600;
+  padding: 2px 8px;
+  border: 1px solid var(--color-border-subtle);
+  border-radius: 4px;
+  cursor: pointer;
+  background: transparent;
+  color: var(--color-text-secondary);
+  transition: all 0.12s;
+  white-space: nowrap;
+  flex-shrink: 0;
+}
+.mlra-control-btn:hover {
+  color: var(--color-text-primary);
+  border-color: var(--color-border);
+}
+.mlra-control-pause:hover {
+  color: #F59E0B;
+  border-color: rgba(245, 158, 11, 0.4);
+}
+.mlra-control-resume:hover {
+  color: #10B981;
+  border-color: rgba(16, 185, 129, 0.4);
+}
+
+/* ── MLRA Timer ── */
+.mlra-timer-wrapper {
+  position: relative;
+  display: inline-flex;
+  align-items: center;
+  flex-shrink: 0;
+  /* extend hover hitbox downward to bridge the gap to popover */
+  padding-bottom: 8px;
+  margin-bottom: -8px;
+}
+/* Popover hidden by default, shown on hover */
+.mlra-timer-wrapper .timer-stats-popover {
+  visibility: hidden;
+  opacity: 0;
+  transition: visibility 0s 0.15s, opacity 0.15s;
+}
+.mlra-timer-wrapper:hover .timer-stats-popover {
+  visibility: visible;
+  opacity: 1;
+  transition: visibility 0s, opacity 0.15s;
+}
+.mlra-timer {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  font-size: 11px;
+  font-weight: 600;
+  font-variant-numeric: tabular-nums;
+  color: var(--color-text-muted);
+  flex-shrink: 0;
+  letter-spacing: 0.5px;
+  cursor: default;
+}
+
+/* ── Timer Stats Popover ── */
+.timer-stats-popover {
+  position: absolute;
+  top: calc(100% + 6px);
+  right: 0;
+  background: var(--color-bg-surface);
+  border: 1px solid var(--color-border);
+  border-radius: 6px;
+  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.3);
+  z-index: 100;
+  min-width: 220px;
+  max-width: 320px;
+  overflow: hidden;
+}
+.timer-stats-popover::before {
+  content: "";
+  position: absolute;
+  top: -4px;
+  right: 16px;
+  transform: rotate(45deg);
+  width: 7px;
+  height: 7px;
+  background: var(--color-bg-surface);
+  border-left: 1px solid var(--color-border);
+  border-top: 1px solid var(--color-border);
+}
+/* Dual-track timeline container */
+.timer-stats-dual {
+  display: flex;
+  flex-direction: column;
+  padding: 6px 12px;
+  overflow-x: auto;
+  border-bottom: 1px solid var(--color-border);
+}
+.timer-stats-track {
+  position: relative;
+  min-height: 18px;
+}
+.timer-stats-track-main {
+  /* bars inside are position:absolute, bottom-aligned via top auto */
+}
+.timer-stats-track-worker {
+  /* bars inside are position:absolute, top-aligned */
+}
+.timer-stats-track-divider {
+  height: 1px;
+  background: var(--color-border-subtle);
+  flex-shrink: 0;
+}
+.timer-stats-bar {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  border-radius: 3px;
+  flex-shrink: 0;
+  transition: opacity 0.12s;
+  min-height: 4px;
+  cursor: default;
+}
+.timer-stats-bar:hover {
+  opacity: 0.75;
+  outline: 1px solid rgba(255, 255, 255, 0.3);
+}
+.timer-stats-bar-label {
+  font-size: 9px;
+  font-weight: 700;
+  color: #fff;
+  text-shadow: 0 1px 2px rgba(0, 0, 0, 0.3);
+}
+.timer-stats-summary-section {
+  display: flex;
+  align-items: flex-start;
+  gap: 12px;
+  padding: 10px 12px;
+}
+.timer-stats-donut {
+  flex-shrink: 0;
+  cursor: default;
+}
+.timer-stats-donut-arc {
+  transition: opacity 0.12s, transform 0.12s;
+  transform-origin: center;
+}
+.timer-stats-donut-arc:hover {
+  opacity: 0.75;
+  filter: brightness(1.2);
+}
+.timer-stats-summary {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+.timer-stats-row {
+  display: grid;
+  grid-template-columns: 8px minmax(40px, 1fr) 36px 32px 52px;
+  align-items: center;
+  gap: 6px;
+  font-size: 11px;
+}
+.timer-stats-dot {
+  width: 6px;
+  height: 6px;
+  border-radius: 50%;
+  flex-shrink: 0;
+}
+.timer-stats-role {
+  font-weight: 600;
+  color: var(--color-text-primary);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+.timer-stats-count {
+  color: var(--color-text-muted);
+  text-align: right;
+  white-space: nowrap;
+  font-size: 11px;
+}
+.timer-stats-pct {
+  color: var(--color-text-muted);
+  font-size: 11px;
+  text-align: right;
+  white-space: nowrap;
+}
+.timer-stats-time {
+  color: var(--color-text-secondary);
+  font-variant-numeric: tabular-nums;
+  text-align: right;
+  white-space: nowrap;
+  font-size: 11px;
+}
+.timer-stats-empty {
+  font-size: 11px;
+  color: var(--color-text-muted);
+  text-align: center;
+  padding: 8px 0;
+}
+[data-theme="light"] .timer-stats-popover {
+  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.1);
+}
+
 /* ── LauncherHome: Create mode ── */
 .mlra-home-create {
   display: flex;
@@ -2211,6 +2417,7 @@ body,
   border-radius: var(--radius-sm);
   background: var(--color-bg-surface);
   transition: background 0.1s;
+  flex-wrap: wrap;
 }
 .mlra-config-row:hover {
   background: var(--color-bg-elevated);
@@ -2276,6 +2483,62 @@ body,
 }
 .mlra-config-remove:hover {
   color: var(--color-danger);
+}
+.mlra-worker-role-row {
+  flex-basis: 100%;
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  padding: 4px 0 2px;
+}
+.mlra-worker-role-presets {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 4px;
+}
+.mlra-worker-preset-chip {
+  display: inline-flex;
+  align-items: center;
+  padding: 1px 6px;
+  font-size: 10px;
+  border: 1px solid var(--color-border);
+  border-radius: 3px;
+  background: transparent;
+  color: var(--color-text-secondary);
+  cursor: pointer;
+  transition: all 0.12s;
+  white-space: nowrap;
+}
+.mlra-worker-preset-chip:hover {
+  background: rgba(255, 255, 255, 0.08);
+  border-color: var(--color-text-muted);
+}
+.mlra-worker-preset-chip.active {
+  background: var(--color-primary);
+  border-color: var(--color-primary);
+  color: #fff;
+  font-weight: 600;
+}
+[data-theme="light"] .mlra-worker-preset-chip:hover {
+  background: rgba(0, 0, 0, 0.05);
+}
+.mlra-worker-role-input {
+  width: 100%;
+  padding: 4px 8px;
+  font-size: 11px;
+  border: 1px solid var(--color-border-subtle);
+  border-radius: 4px;
+  background: var(--color-bg-base);
+  color: var(--color-text-primary);
+  outline: none;
+  transition: border-color 0.15s;
+}
+.mlra-worker-role-input:focus {
+  border-color: var(--color-primary);
+}
+.mlra-worker-role-input::placeholder {
+  color: var(--color-text-muted);
+  font-size: 10px;
 }
 
 /* Actions row */

@@ -16,7 +16,238 @@ import { PhaseToggle } from "./PhaseToggle";
 import { MLRACallerTabs } from "./MLRACallerTabs";
 import { Icon } from "./Icons";
 import React from "react";
-import { useMLRAStore } from "../store/mlraStore";
+import { useMLRAStore, ROLE_COLORS, type RoundRecord } from "../store/mlraStore";
+
+/** Format milliseconds to MM:SS or H:MM:SS */
+function formatDuration(ms: number): string {
+  const totalSec = Math.floor(ms / 1000);
+  const h = Math.floor(totalSec / 3600);
+  const m = Math.floor((totalSec % 3600) / 60);
+  const s = totalSec % 60;
+  return h > 0
+    ? `${h}:${String(m).padStart(2, "0")}:${String(s).padStart(2, "0")}`
+    : `${String(m).padStart(2, "0")}:${String(s).padStart(2, "0")}`;
+}
+
+const ROLE_LABEL_MAP: Record<string, string> = {
+  expert: "专家",
+  inspector: "监察",
+  ceo: "CEO",
+  worker: "Worker",
+};
+
+/** Stats popover shown on timer hover */
+function TimerStatsPopover({ rounds }: { rounds: RoundRecord[] }) {
+  // Aggregate per-role stats
+  const roleStats: Record<string, { count: number; totalMs: number }> = {};
+  for (const r of rounds) {
+    const end = r.endedAt ? new Date(r.endedAt).getTime() : Date.now();
+    const dur = end - new Date(r.startedAt).getTime();
+    if (!roleStats[r.role]) roleStats[r.role] = { count: 0, totalMs: 0 };
+    roleStats[r.role].count++;
+    roleStats[r.role].totalMs += dur;
+  }
+
+  // Compute global time bounds for Gantt positioning + dynamic height
+  const MAX_H = 28; // px – maximum bar height / track height
+  const MIN_BAR_W = 6; // minimum bar width in px
+  const CANVAS_W = 300; // base canvas width
+  const GAP_PX = 0; // no gap between merged segments
+
+  const starts = rounds.map((r) => new Date(r.startedAt).getTime());
+  const ends = rounds.map((r) => (r.endedAt ? new Date(r.endedAt).getTime() : Date.now()));
+
+  // Build merged active segments (union of all round intervals)
+  const intervals = rounds.map((_r, i) => ({ s: starts[i], e: ends[i] }));
+  intervals.sort((a, b) => a.s - b.s);
+  const merged: { s: number; e: number }[] = [];
+  for (const iv of intervals) {
+    if (merged.length > 0 && iv.s <= merged[merged.length - 1].e) {
+      merged[merged.length - 1].e = Math.max(merged[merged.length - 1].e, iv.e);
+    } else {
+      merged.push({ s: iv.s, e: iv.e });
+    }
+  }
+
+  // Compact time mapping: total active ms determines canvas scale
+  const totalActiveMs = merged.reduce((s, seg) => s + (seg.e - seg.s), 0) || 1;
+  const shortestDur = Math.max(1, Math.min(...rounds.map((_r, i) => ends[i] - starts[i])));
+  const totalGapPx = Math.max(0, (merged.length - 1) * GAP_PX);
+  const pxPerMs = Math.max((CANVAS_W - totalGapPx) / totalActiveMs, MIN_BAR_W / shortestDur);
+  const totalW = Math.ceil(totalActiveMs * pxPerMs + totalGapPx);
+
+  // Map real timestamp → compact pixel position
+  const timeToX = (t: number): number => {
+    let x = 0;
+    for (let i = 0; i < merged.length; i++) {
+      const seg = merged[i];
+      if (t <= seg.e) {
+        return x + Math.max(0, t - seg.s) * pxPerMs;
+      }
+      x += (seg.e - seg.s) * pxPerMs + GAP_PX;
+    }
+    return x;
+  };
+
+  // Split into tracks & compute per-track average for dynamic height
+  const mainRounds = rounds.filter((r) => r.role !== "worker");
+  const workerRounds = rounds.filter((r) => r.role === "worker");
+
+  const avgDur = (arr: RoundRecord[]) => {
+    if (arr.length === 0) return 1;
+    const total = arr.reduce((s, r) => {
+      const e = r.endedAt ? new Date(r.endedAt).getTime() : Date.now();
+      return s + (e - new Date(r.startedAt).getTime());
+    }, 0);
+    return total / arr.length;
+  };
+  const mainAvg = avgDur(mainRounds);
+
+  // Wheel → horizontal scroll
+  const timelineRef = useRef<HTMLDivElement>(null);
+  const onWheel = useCallback((e: React.WheelEvent<HTMLDivElement>) => {
+    if (timelineRef.current && e.deltaY !== 0) {
+      e.preventDefault();
+      timelineRef.current.scrollLeft += e.deltaY;
+    }
+  }, []);
+
+  // Assign swimlanes to worker rounds (greedy: pick lowest available lane)
+  const sortedWorkers = [...workerRounds].sort(
+    (a, b) => new Date(a.startedAt).getTime() - new Date(b.startedAt).getTime()
+  );
+  const laneEnds: number[] = []; // track when each lane becomes free
+  const workerLanes = new Map<string, number>();
+  for (const w of sortedWorkers) {
+    const ws = new Date(w.startedAt).getTime();
+    let lane = laneEnds.findIndex((end) => end <= ws);
+    if (lane === -1) {
+      lane = laneEnds.length;
+      laneEnds.push(0);
+    }
+    laneEnds[lane] = w.endedAt ? new Date(w.endedAt).getTime() : Date.now();
+    workerLanes.set(w.id, lane);
+  }
+  const totalLanes = Math.max(1, laneEnds.length);
+
+  const renderMainBars = () =>
+    mainRounds.map((r, i) => {
+      const s = new Date(r.startedAt).getTime();
+      const e = r.endedAt ? new Date(r.endedAt).getTime() : Date.now();
+      const dur = e - s;
+      const left = timeToX(s) + 0.5;
+      const right = timeToX(e);
+      const w = Math.max(MIN_BAR_W, right - left - 1);
+      const h = Math.max(4, Math.min(MAX_H, Math.round((dur / mainAvg) * MAX_H)));
+      const color = (ROLE_COLORS as Record<string, string>)[r.role] || ROLE_COLORS.worker;
+      return (
+        <div
+          key={r.id || i}
+          className="timer-stats-bar"
+          style={{ position: "absolute", left, width: w, height: h, background: color, bottom: 0 }}
+          title={`${ROLE_LABEL_MAP[r.role] || r.role}  ${formatDuration(dur)}`}
+        />
+      );
+    });
+
+  const workerTrackH = MAX_H;
+  const laneH = workerTrackH / totalLanes;
+
+  const renderWorkerBars = () =>
+    workerRounds.map((r, i) => {
+      const s = new Date(r.startedAt).getTime();
+      const e = r.endedAt ? new Date(r.endedAt).getTime() : Date.now();
+      const dur = e - s;
+      const left = timeToX(s) + 0.5;
+      const right = timeToX(e);
+      const w = Math.max(MIN_BAR_W, right - left - 1);
+      const lane = workerLanes.get(r.id) ?? 0;
+      const color = (ROLE_COLORS as Record<string, string>)[r.role] || ROLE_COLORS.worker;
+      return (
+        <div
+          key={r.id || i}
+          className="timer-stats-bar"
+          style={{ position: "absolute", left, width: w, height: laneH - 1, background: color, top: lane * laneH }}
+          title={`${ROLE_LABEL_MAP[r.role] || r.role}  ${formatDuration(dur)}`}
+        />
+      );
+    });
+
+  return (
+    <div className="timer-stats-popover">
+      {/* Dual-track Gantt timeline */}
+      <div className="timer-stats-dual" ref={timelineRef} onWheel={onWheel}>
+        {rounds.length === 0 ? (
+          <div className="timer-stats-empty">暂无回合记录</div>
+        ) : (
+          <div style={{ width: totalW, flexShrink: 0 }}>
+            <div className="timer-stats-track timer-stats-track-main" style={{ height: MAX_H }}>
+              {renderMainBars()}
+            </div>
+            <div className="timer-stats-track-divider" />
+            <div className="timer-stats-track timer-stats-track-worker" style={{ height: workerTrackH }}>
+              {renderWorkerBars()}
+            </div>
+          </div>
+        )}
+      </div>
+
+      {/* Row 2: donut chart + summary table */}
+      <div className="timer-stats-summary-section">
+        {/* Donut chart */}
+        {Object.keys(roleStats).length > 0 && (() => {
+          const total = Object.values(roleStats).reduce((s, r) => s + r.totalMs, 0) || 1;
+          const entries = Object.entries(roleStats);
+          const R = 28, r = 18, cx = 36, cy = 36;
+          let cumAngle = -Math.PI / 2;
+          const arcs = entries.map(([role, stat]) => {
+            const frac = stat.totalMs / total;
+            const pct = Math.round(frac * 100);
+            const startAngle = cumAngle;
+            cumAngle += frac * 2 * Math.PI;
+            const endAngle = cumAngle;
+            const largeArc = frac > 0.5 ? 1 : 0;
+            const x1o = cx + R * Math.cos(startAngle), y1o = cy + R * Math.sin(startAngle);
+            const x2o = cx + R * Math.cos(endAngle), y2o = cy + R * Math.sin(endAngle);
+            const x1i = cx + r * Math.cos(endAngle), y1i = cy + r * Math.sin(endAngle);
+            const x2i = cx + r * Math.cos(startAngle), y2i = cy + r * Math.sin(startAngle);
+            const d = `M${x1o},${y1o} A${R},${R} 0 ${largeArc},1 ${x2o},${y2o} L${x1i},${y1i} A${r},${r} 0 ${largeArc},0 ${x2i},${y2i} Z`;
+            return (
+              <path key={role} d={d} fill={(ROLE_COLORS as Record<string, string>)[role] || ROLE_COLORS.worker} className="timer-stats-donut-arc">
+                <title>{`${ROLE_LABEL_MAP[role] || role}  ${pct}%  ${formatDuration(stat.totalMs)}`}</title>
+              </path>
+            );
+          });
+          return (
+            <svg className="timer-stats-donut" viewBox="0 0 72 72" width="60" height="60">
+              {arcs}
+            </svg>
+          );
+        })()}
+
+        {/* Summary list */}
+        <div className="timer-stats-summary">
+          {Object.entries(roleStats).map(([role, stat]) => {
+            const total = Object.values(roleStats).reduce((s, r) => s + r.totalMs, 0) || 1;
+            const pct = Math.round((stat.totalMs / total) * 100);
+            return (
+              <div key={role} className="timer-stats-row">
+                <span className="timer-stats-dot" style={{ background: (ROLE_COLORS as Record<string, string>)[role] || ROLE_COLORS.worker }} />
+                <span className="timer-stats-role">{ROLE_LABEL_MAP[role] || role}</span>
+                <span className="timer-stats-count">{stat.count} 轮</span>
+                <span className="timer-stats-pct">{pct}%</span>
+                <span className="timer-stats-time">{formatDuration(stat.totalMs)}</span>
+              </div>
+            );
+          })}
+          {Object.keys(roleStats).length === 0 && (
+            <div className="timer-stats-empty">暂无统计数据</div>
+          )}
+        </div>
+      </div>
+    </div>
+  );
+}
 
 /** Error boundary to catch MLRA render crashes */
 class MLRAErrorBoundary extends React.Component<
@@ -51,6 +282,88 @@ import { getCurrentWindow } from "@tauri-apps/api/window";
 
 const PANEL_MIN_WIDTH = 520;
 const IS_MACOS = navigator.userAgent.includes('Macintosh');
+
+/** Running timer — counts up from startedAt, subtracting paused time */
+function RunningTimer() {
+  const launcher = useMLRAStore((s) => s.getActiveLauncher());
+  const [elapsed, setElapsed] = useState(0);
+
+  useEffect(() => {
+    if (!launcher?.startedAt) { setElapsed(0); return; }
+    const startMs = new Date(launcher.startedAt).getTime();
+
+    const tick = () => {
+      if (launcher.status === "paused" && launcher.pausedAt) {
+        const pausedMs = new Date(launcher.pausedAt).getTime() - startMs - launcher.pausedElapsed;
+        setElapsed(Math.max(0, pausedMs));
+      } else {
+        const now = Date.now();
+        setElapsed(Math.max(0, now - startMs - launcher.pausedElapsed));
+      }
+    };
+    tick();
+    const id = setInterval(tick, 1000);
+    return () => clearInterval(id);
+  }, [launcher?.startedAt, launcher?.status, launcher?.pausedAt, launcher?.pausedElapsed]);
+
+  const display = formatDuration(elapsed);
+  const rounds = launcher?.roundHistory ?? [];
+
+  return (
+    <span className="mlra-timer-wrapper">
+      <span className="mlra-timer">
+        <Icon name="clock" size={10} />
+        {display}
+      </span>
+      <TimerStatsPopover rounds={rounds} />
+    </span>
+  );
+}
+
+/** MLRA title bar Row 2 */
+function MLRARow2() {
+  const launcher = useMLRAStore((s) => s.getActiveLauncher());
+  const isRunning = launcher?.status === "running";
+  const isPaused = launcher?.status === "paused";
+  const isActive = isRunning || isPaused;
+
+  return (
+    <div data-tauri-drag-region className="flex items-center gap-2 px-3" style={{ height: 26 }}>
+      <button
+        className="launcher-btn"
+        onClick={() => useMLRAStore.getState().toggleLauncherSidebar()}
+        title="Launcher 管理"
+      >
+        <Icon name="menu" size={14} />
+      </button>
+      {isActive && (
+        <MLRAErrorBoundary><PhaseToggle /></MLRAErrorBoundary>
+      )}
+      {isRunning && (
+        <button
+          className="mlra-control-btn mlra-control-pause"
+          onClick={() => launcher && useMLRAStore.getState().pauseLauncher(launcher.id)}
+          title="暂停"
+        >
+          <Icon name="pause" size={10} />
+          暂停
+        </button>
+      )}
+      {isPaused && (
+        <button
+          className="mlra-control-btn mlra-control-resume"
+          onClick={() => launcher && useMLRAStore.getState().resumeLauncher(launcher.id)}
+          title="继续"
+        >
+          <Icon name="play" size={10} />
+          继续
+        </button>
+      )}
+      <div style={{ flex: 1 }} />
+      {isActive && <RunningTimer />}
+    </div>
+  );
+}
 
 export function FeedbackApp() {
   const { t } = useTranslation();
@@ -342,20 +655,9 @@ export function FeedbackApp() {
         </div>
         {/* Row 1 end */}
 
-        {/* Row 2: MLRA second bar — ☰ launcher + PhaseToggle */}
+        {/* Row 2: MLRA second bar — ☰ launcher + PhaseToggle + Pause/Resume + Timer */}
         {appView === "MLRA" && isPersistent && (
-          <div data-tauri-drag-region className="flex items-center gap-2 px-3" style={{ height: 26 }}>
-            <button
-              className="launcher-btn"
-              onClick={() => useMLRAStore.getState().toggleLauncherSidebar()}
-              title="Launcher 管理"
-            >
-              <Icon name="menu" size={14} />
-            </button>
-            {useMLRAStore.getState().getActiveLauncher()?.status === "running" && (
-              <MLRAErrorBoundary><PhaseToggle /></MLRAErrorBoundary>
-            )}
-          </div>
+          <MLRARow2 />
         )}
       </div>
 

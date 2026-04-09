@@ -11,11 +11,11 @@ export type PhaseView = "planning" | "implementation";
 // ── Role Colors ──
 
 export const ROLE_COLORS: Record<AgentRole | "workerPool", string> = {
-  expert: "#3B82F6",
-  inspector: "#F59E0B",
-  ceo: "#8B5CF6",
-  worker: "#06B6D4",
-  workerPool: "#06B6D4",
+  expert: "#06B6D4",
+  inspector: "#06B6D4",
+  ceo: "#F59E0B",
+  worker: "#64748B",
+  workerPool: "#64748B",
 };
 
 // ── Registered Agent (before role assignment) ──
@@ -27,6 +27,7 @@ export interface RegisteredAgent {
   model: string;       // detected model name
   workspace: string;   // project directory
   assignedRole: AgentRole | null;
+  workerRole: string;  // custom routing role when assignedRole === "worker"
   registeredAt: string;
 }
 
@@ -57,6 +58,13 @@ export interface WorkerSlot {
 
 // ── Launcher ──
 
+export interface RoundRecord {
+  id: string;
+  role: string;
+  startedAt: string;
+  endedAt: string | null;
+}
+
 export interface Launcher {
   id: string;
   name: string;
@@ -64,6 +72,9 @@ export interface Launcher {
   currentPhase: PhaseView;
   createdAt: string;
   updatedAt: string;
+  startedAt: string | null;
+  pausedAt: string | null;
+  pausedElapsed: number; // total ms spent in paused state
 
   // Registered agents (configuring phase)
   registeredAgents: RegisteredAgent[];
@@ -78,6 +89,7 @@ export interface Launcher {
 
   planningSessionIds: string[];
   implementationSessionIds: string[];
+  roundHistory: RoundRecord[];
 }
 
 // ── Store ──
@@ -103,8 +115,9 @@ export interface MLRAState {
 
   // Actions — Agent registration & role assignment
   addRegisteredAgent: (launcherId: string, agent: RegisteredAgent) => void;
-  assignRole: (launcherId: string, agentId: string, role: AgentRole | null) => void;
+  assignRole: (launcherId: string, agentId: string, role: AgentRole | null, workerRole?: string) => void;
   removeRegisteredAgent: (launcherId: string, agentId: string) => void;
+  setWorkerRole: (launcherId: string, agentId: string, workerRole: string) => void;
 
   // Actions — Start orchestration
   startOrchestration: (launcherId: string) => void;
@@ -141,6 +154,49 @@ function createEmptyAgentSlot(role: "expert" | "inspector" | "ceo", agent: Regis
   };
 }
 
+/** Generate mock round history for UI development */
+function generateMockRounds(): RoundRecord[] {
+  const rounds: RoundRecord[] = [];
+  let mainCursor = Date.now() - 12 * 60 * 1000; // started ~12 min ago
+
+  // Main agent sequence (expert, inspector, ceo)
+  const mainSequence: string[] = ["expert", "inspector", "expert", "ceo", "expert", "inspector", "ceo", "expert"];
+  // Workers run in parallel, overlapping with main agents
+  const workerStartOffsets: { afterMainIdx: number; delayMs: number; durMs: number }[] = [
+    { afterMainIdx: 0, delayMs: 5000, durMs: 40000 },
+    { afterMainIdx: 1, delayMs: 3000, durMs: 25000 },
+    { afterMainIdx: 3, delayMs: 2000, durMs: 55000 },
+    { afterMainIdx: 5, delayMs: 8000, durMs: 30000 },
+  ];
+
+  const mainStarts: number[] = [];
+  for (let i = 0; i < mainSequence.length; i++) {
+    const dur = 20000 + Math.floor(Math.random() * 60000); // 20s-80s
+    mainStarts.push(mainCursor);
+    rounds.push({
+      id: `mock-main-${i}`,
+      role: mainSequence[i],
+      startedAt: new Date(mainCursor).toISOString(),
+      endedAt: new Date(mainCursor + dur).toISOString(),
+    });
+    mainCursor += dur; // no gap between main rounds — sequential
+  }
+
+  // Create parallel worker rounds
+  for (let w = 0; w < workerStartOffsets.length; w++) {
+    const cfg = workerStartOffsets[w];
+    const wStart = mainStarts[cfg.afterMainIdx] + cfg.delayMs;
+    rounds.push({
+      id: `mock-worker-${w}`,
+      role: "worker",
+      startedAt: new Date(wStart).toISOString(),
+      endedAt: new Date(wStart + cfg.durMs).toISOString(),
+    });
+  }
+
+  return rounds;
+}
+
 export const useMLRAStore = create<MLRAState>((set, get) => ({
   launchers: [],
   activeLauncherId: null,
@@ -161,10 +217,14 @@ export const useMLRAStore = create<MLRAState>((set, get) => ({
       currentPhase: "planning",
       createdAt: new Date().toISOString(),
       updatedAt: new Date().toISOString(),
+      startedAt: null,
+      pausedAt: null,
+      pausedElapsed: 0,
       registeredAgents: [],
       agents: { expert: null, inspector: null, ceo: null, workers: [] },
       planningSessionIds: [],
       implementationSessionIds: [],
+      roundHistory: [],
     };
     set((s) => ({
       launchers: [...s.launchers, launcher],
@@ -178,17 +238,25 @@ export const useMLRAStore = create<MLRAState>((set, get) => ({
   pauseLauncher: (id) =>
     set((s) => ({
       launchers: s.launchers.map((l) =>
-        l.id === id ? { ...l, status: "paused" as const, updatedAt: new Date().toISOString() } : l
+        l.id === id && l.status === "running"
+          ? { ...l, status: "paused" as const, pausedAt: new Date().toISOString(), updatedAt: new Date().toISOString() }
+          : l
       ),
     })),
 
   resumeLauncher: (id) =>
     set((s) => ({
-      launchers: s.launchers.map((l) =>
-        l.id === id && l.status === "paused"
-          ? { ...l, status: "running" as const, updatedAt: new Date().toISOString() }
-          : l
-      ),
+      launchers: s.launchers.map((l) => {
+        if (l.id !== id || l.status !== "paused") return l;
+        const pausedMs = l.pausedAt ? Date.now() - new Date(l.pausedAt).getTime() : 0;
+        return {
+          ...l,
+          status: "running" as const,
+          pausedAt: null,
+          pausedElapsed: l.pausedElapsed + pausedMs,
+          updatedAt: new Date().toISOString(),
+        };
+      }),
     })),
 
   deleteLauncher: (id) =>
@@ -219,13 +287,13 @@ export const useMLRAStore = create<MLRAState>((set, get) => ({
       ),
     })),
 
-  assignRole: (launcherId, agentId, role) =>
+  assignRole: (launcherId, agentId, role, workerRole) =>
     set((s) => ({
       launchers: s.launchers.map((l) => {
         if (l.id !== launcherId) return l;
         // If role is already assigned to another agent, unassign it first
         const updatedAgents = l.registeredAgents.map((a) => {
-          if (a.id === agentId) return { ...a, assignedRole: role };
+          if (a.id === agentId) return { ...a, assignedRole: role, workerRole: role === "worker" ? (workerRole ?? a.workerRole) : "" };
           if (role && a.assignedRole === role && role !== "worker") {
             return { ...a, assignedRole: null };
           }
@@ -248,6 +316,21 @@ export const useMLRAStore = create<MLRAState>((set, get) => ({
       ),
     })),
 
+  setWorkerRole: (launcherId, agentId, workerRole) =>
+    set((s) => ({
+      launchers: s.launchers.map((l) =>
+        l.id === launcherId
+          ? {
+              ...l,
+              registeredAgents: l.registeredAgents.map((a) =>
+                a.id === agentId ? { ...a, workerRole } : a
+              ),
+              updatedAt: new Date().toISOString(),
+            }
+          : l
+      ),
+    })),
+
   // ── Start orchestration ──
 
   startOrchestration: (launcherId) =>
@@ -264,14 +347,18 @@ export const useMLRAStore = create<MLRAState>((set, get) => ({
           ...l,
           status: "running" as const,
           updatedAt: new Date().toISOString(),
+          startedAt: new Date().toISOString(),
+          pausedAt: null,
+          pausedElapsed: 0,
+          roundHistory: generateMockRounds(),
           agents: {
             expert: expertAgent ? createEmptyAgentSlot("expert", expertAgent) : null,
             inspector: inspectorAgent ? createEmptyAgentSlot("inspector", inspectorAgent) : null,
             ceo: ceoAgent ? createEmptyAgentSlot("ceo", ceoAgent) : null,
             workers: workerAgents.map((a) => ({
               id: a.id,
-              role: "Worker",
-              displayName: `Worker ${a.alias}`,
+              role: a.workerRole || "Worker",
+              displayName: a.workerRole ? `${a.workerRole} (${a.alias})` : `Worker ${a.alias}`,
               model: a.model,
               status: "ready" as const,
               currentTask: null,

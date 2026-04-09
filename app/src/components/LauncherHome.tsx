@@ -13,6 +13,8 @@ const ROLES: { value: AgentRole; label: string }[] = [
   { value: "worker", label: "Worker" },
 ];
 
+const WORKER_ROLE_PRESETS = ["前端开发", "后端开发", "API 设计", "测试编写", "文档撰写", "数据库", "DevOps"];
+
 /**
  * MLRA Launcher homepage.
  * - No launcher: shows create prompt
@@ -23,6 +25,7 @@ export function LauncherHome({ launcher }: LauncherHomeProps) {
   const startOrchestration = useMLRAStore((s) => s.startOrchestration);
   const addRegisteredAgent = useMLRAStore((s) => s.addRegisteredAgent);
   const assignRole = useMLRAStore((s) => s.assignRole);
+  const setWorkerRole = useMLRAStore((s) => s.setWorkerRole);
   const removeRegisteredAgent = useMLRAStore((s) => s.removeRegisteredAgent);
   const [taskName, setTaskName] = useState(launcher?.name || "");
 
@@ -50,6 +53,7 @@ export function LauncherHome({ launcher }: LauncherHomeProps) {
       model: models[idx % models.length],
       workspace: "my-last-feedback",
       assignedRole: null,
+      workerRole: "",
       registeredAt: new Date().toISOString(),
     });
   }, [launcher, addRegisteredAgent]);
@@ -140,6 +144,28 @@ export function LauncherHome({ launcher }: LauncherHomeProps) {
                   >
                     <Icon name="win-close" size={8} />
                   </button>
+                  {agent.assignedRole === "worker" && (
+                    <div className="mlra-worker-role-row">
+                      <div className="mlra-worker-role-presets">
+                        {WORKER_ROLE_PRESETS.map((preset) => (
+                          <button
+                            key={preset}
+                            className={`mlra-worker-preset-chip${agent.workerRole === preset ? " active" : ""}`}
+                            onClick={() => setWorkerRole(launcher.id, agent.id, agent.workerRole === preset ? "" : preset)}
+                          >
+                            {preset}
+                          </button>
+                        ))}
+                      </div>
+                      <input
+                        type="text"
+                        className="mlra-worker-role-input"
+                        placeholder="自定义路由角色..."
+                        value={agent.workerRole}
+                        onChange={(e) => setWorkerRole(launcher.id, agent.id, e.target.value)}
+                      />
+                    </div>
+                  )}
                 </div>
               );
             })

@@ -17,7 +17,7 @@ export function MLRAView() {
   // Default column order
   const orderedRoles = columnOrder.length > 0 ? columnOrder : ["expert", "inspector", "ceo", "workers"];
 
-  const isRunning = activeLauncher?.status === "running";
+  const isActive = activeLauncher?.status === "running" || activeLauncher?.status === "paused";
 
   return (
     <div className="flex-1 flex flex-col min-h-0 relative">
@@ -29,7 +29,7 @@ export function MLRAView() {
       {/* Main content area */}
       {!activeLauncher ? (
         <LauncherHome launcher={null} />
-      ) : !isRunning ? (
+      ) : !isActive ? (
         <LauncherHome launcher={activeLauncher} />
       ) : (
         /* Four-column workspace */
