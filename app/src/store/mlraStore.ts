@@ -180,49 +180,6 @@ function createEmptyAgentSlot(role: Exclude<AgentRole, "worker">, agent: Registe
   };
 }
 
-/** Generate mock round history for UI development */
-function generateMockRounds(): RoundRecord[] {
-  const rounds: RoundRecord[] = [];
-  let mainCursor = Date.now() - 12 * 60 * 1000; // started ~12 min ago
-
-  // Main agent sequence (planning-expert, planning-inspector, ceo, execution-expert, execution-inspector)
-  const mainSequence: string[] = ["planning-expert", "planning-inspector", "planning-expert", "ceo", "execution-expert", "execution-inspector", "ceo", "execution-expert"];
-  // Workers run in parallel, overlapping with main agents
-  const workerStartOffsets: { afterMainIdx: number; delayMs: number; durMs: number }[] = [
-    { afterMainIdx: 0, delayMs: 5000, durMs: 40000 },
-    { afterMainIdx: 1, delayMs: 3000, durMs: 25000 },
-    { afterMainIdx: 3, delayMs: 2000, durMs: 55000 },
-    { afterMainIdx: 5, delayMs: 8000, durMs: 30000 },
-  ];
-
-  const mainStarts: number[] = [];
-  for (let i = 0; i < mainSequence.length; i++) {
-    const dur = 20000 + Math.floor(Math.random() * 60000); // 20s-80s
-    mainStarts.push(mainCursor);
-    rounds.push({
-      id: `mock-main-${i}`,
-      role: mainSequence[i],
-      startedAt: new Date(mainCursor).toISOString(),
-      endedAt: new Date(mainCursor + dur).toISOString(),
-    });
-    mainCursor += dur; // no gap between main rounds — sequential
-  }
-
-  // Create parallel worker rounds
-  for (let w = 0; w < workerStartOffsets.length; w++) {
-    const cfg = workerStartOffsets[w];
-    const wStart = mainStarts[cfg.afterMainIdx] + cfg.delayMs;
-    rounds.push({
-      id: `mock-worker-${w}`,
-      role: "worker",
-      startedAt: new Date(wStart).toISOString(),
-      endedAt: new Date(wStart + cfg.durMs).toISOString(),
-    });
-  }
-
-  return rounds;
-}
-
 export const useMLRAStore = create<MLRAState>((set, get) => ({
   launchers: [],
   activeLauncherId: null,
@@ -345,10 +302,17 @@ export const useMLRAStore = create<MLRAState>((set, get) => ({
 
   // ── Start orchestration ──
 
-  startOrchestration: (launcherId) =>
+  startOrchestration: (launcherId) => {
+    const launcher = get().launchers.find((l) => l.id === launcherId);
+    if (!launcher || (launcher.status !== "configuring" && launcher.status !== "ready")) return;
+
+    // Notify daemon
+    get().daemonStartOrchestration(launcherId, launcher.name);
+
+    // Update local state
     set((s) => ({
       launchers: s.launchers.map((l) => {
-        if (l.id !== launcherId || (l.status !== "configuring" && l.status !== "ready")) return l;
+        if (l.id !== launcherId) return l;
 
         const planningExpert = l.registeredAgents.find((a) => a.assignedRole === "planning-expert");
         const planningInspector = l.registeredAgents.find((a) => a.assignedRole === "planning-inspector");
@@ -364,7 +328,7 @@ export const useMLRAStore = create<MLRAState>((set, get) => ({
           startedAt: new Date().toISOString(),
           pausedAt: null,
           pausedElapsed: 0,
-          roundHistory: generateMockRounds(),
+          roundHistory: [],
           agents: {
             "planning-expert": planningExpert ? createEmptyAgentSlot("planning-expert", planningExpert) : null,
             "planning-inspector": planningInspector ? createEmptyAgentSlot("planning-inspector", planningInspector) : null,
@@ -385,7 +349,8 @@ export const useMLRAStore = create<MLRAState>((set, get) => ({
           },
         };
       }),
-    })),
+    }));
+  },
 
   // ── View ──
 
@@ -469,6 +434,39 @@ export const useMLRAStore = create<MLRAState>((set, get) => ({
             }),
           }));
           if (msg.phase) set({ phaseView: msg.phase });
+          break;
+        }
+        case "mlra_round_event": {
+          // Round start/end events — update roundHistory for timer stats
+          const launcher = get().getActiveLauncher();
+          if (!launcher || !msg.round) break;
+          const round = msg.round as { id: string; role: string; startedAt: string; endedAt: string | null };
+          if (msg.event === "start") {
+            set((s) => ({
+              launchers: s.launchers.map((l) => {
+                if (l.id !== launcher.id) return l;
+                // Add new round (avoid duplicates)
+                const exists = l.roundHistory.some((r) => r.id === round.id);
+                if (exists) return l;
+                return {
+                  ...l,
+                  roundHistory: [...l.roundHistory, { id: round.id, role: round.role, startedAt: round.startedAt, endedAt: null }],
+                };
+              }),
+            }));
+          } else if (msg.event === "end") {
+            set((s) => ({
+              launchers: s.launchers.map((l) => {
+                if (l.id !== launcher.id) return l;
+                return {
+                  ...l,
+                  roundHistory: l.roundHistory.map((r) =>
+                    r.id === round.id ? { ...r, endedAt: round.endedAt || new Date().toISOString() } : r
+                  ),
+                };
+              }),
+            }));
+          }
           break;
         }
         case "mlra_human_review": {

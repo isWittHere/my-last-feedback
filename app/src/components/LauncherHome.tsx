@@ -25,8 +25,8 @@ const WORKER_ROLE_PRESETS = ["前端开发", "后端开发", "API 设计", "测�
 export function LauncherHome({ launcher }: LauncherHomeProps) {
   const createLauncher = useMLRAStore((s) => s.createLauncher);
   const startOrchestration = useMLRAStore((s) => s.startOrchestration);
-  const addRegisteredAgent = useMLRAStore((s) => s.addRegisteredAgent);
   const assignRole = useMLRAStore((s) => s.assignRole);
+  const daemonAssignRole = useMLRAStore((s) => s.daemonAssignRole);
   const setWorkerRole = useMLRAStore((s) => s.setWorkerRole);
   const removeRegisteredAgent = useMLRAStore((s) => s.removeRegisteredAgent);
   const [taskName, setTaskName] = useState(launcher?.name || "");
@@ -41,24 +41,6 @@ export function LauncherHome({ launcher }: LauncherHomeProps) {
     ? launcher.registeredAgents.some((a) => a.assignedRole === "planning-expert") &&
       launcher.registeredAgents.some((a) => a.assignedRole === "planning-inspector")
     : false;
-
-  // Mock agent for dev testing
-  const handleAddMockAgent = useCallback(() => {
-    if (!launcher) return;
-    const aliases = ["A1B2", "X9Y8", "K7M3", "P4Q6", "R2D2", "J5N1"];
-    const models = ["Claude Sonnet 4", "GPT-4.1", "Claude Opus", "Gemini 2.5 Pro"];
-    const idx = launcher.registeredAgents.length;
-    addRegisteredAgent(launcher.id, {
-      id: `mock-agent-${Date.now()}-${idx}`,
-      alias: aliases[idx % aliases.length],
-      clientName: "VS Code Copilot",
-      model: models[idx % models.length],
-      workspace: "my-last-feedback",
-      assignedRole: null,
-      workerRole: "",
-      registeredAt: new Date().toISOString(),
-    });
-  }, [launcher, addRegisteredAgent]);
 
   // ── No launcher: create prompt ──
   if (!launcher) {
@@ -102,9 +84,6 @@ export function LauncherHome({ launcher }: LauncherHomeProps) {
         {/* Title row */}
         <div className="mlra-config-title-row">
           <span className="mlra-config-title">{launcher.name}</span>
-          <button className="btn mlra-mock-btn" onClick={handleAddMockAgent} title="添加模拟 Agent（开发调试用）">
-            + Mock
-          </button>
         </div>
 
         {/* Agent list */}
@@ -131,7 +110,11 @@ export function LauncherHome({ launcher }: LauncherHomeProps) {
                           key={r.value}
                           className={`mlra-config-role-btn${active ? " mlra-config-role-active" : ""}`}
                           style={active ? { background: ROLE_COLORS[r.value], borderColor: ROLE_COLORS[r.value] } : undefined}
-                          onClick={() => assignRole(launcher.id, agent.id, active ? null : r.value)}
+                          onClick={() => {
+                            const newRole = active ? null : r.value;
+                            assignRole(launcher.id, agent.id, newRole);
+                            daemonAssignRole(launcher.id, agent.id, newRole);
+                          }}
                           title={r.label}
                         >
                           {r.label}

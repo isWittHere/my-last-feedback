@@ -2404,17 +2404,6 @@ body,
   font-weight: 700;
   color: var(--color-text-primary);
 }
-.mlra-mock-btn {
-  font-size: 10px !important;
-  padding: 2px 8px !important;
-  border: 1px dashed var(--color-border) !important;
-  color: var(--color-text-muted) !important;
-  border-radius: var(--radius-sm) !important;
-}
-.mlra-mock-btn:hover {
-  border-color: var(--color-primary) !important;
-  color: var(--color-primary) !important;
-}
 
 /* Agent list */
 .mlra-config-list {
