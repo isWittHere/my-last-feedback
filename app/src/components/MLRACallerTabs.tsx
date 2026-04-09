@@ -12,9 +12,16 @@ interface RoleTabDef {
   color: string;
 }
 
-const ROLE_TABS: RoleTabDef[] = [
-  { id: "expert", label: "专家", color: ROLE_COLORS.expert },
-  { id: "inspector", label: "监察", color: ROLE_COLORS.inspector },
+const PLANNING_TABS: RoleTabDef[] = [
+  { id: "planning-expert", label: "规划专家", color: ROLE_COLORS["planning-expert"] },
+  { id: "planning-inspector", label: "规划监察", color: ROLE_COLORS["planning-inspector"] },
+  { id: "ceo", label: "CEO", color: ROLE_COLORS.ceo },
+  { id: "workers", label: "Worker Pool", color: ROLE_COLORS.worker },
+];
+
+const IMPLEMENTATION_TABS: RoleTabDef[] = [
+  { id: "execution-expert", label: "执行专家", color: ROLE_COLORS["execution-expert"] },
+  { id: "execution-inspector", label: "执行监察", color: ROLE_COLORS["execution-inspector"] },
   { id: "ceo", label: "CEO", color: ROLE_COLORS.ceo },
   { id: "workers", label: "Worker Pool", color: ROLE_COLORS.worker },
 ];
@@ -41,8 +48,9 @@ export function MLRACallerTabs({ columnCount }: MLRACallerTabsProps = {}) {
   const didDragRef = useRef(false);
   const pointerStartX = useRef(0);
 
-  // Order tabs by columnOrder, falling back to default
-  const defaultOrder = ROLE_TABS.map((t) => t.id);
+  // Phase-specific tabs
+  const phaseTabs = phaseView === "planning" ? PLANNING_TABS : IMPLEMENTATION_TABS;
+  const defaultOrder = phaseTabs.map((t) => t.id);
 
   // ── Drag handlers (all hooks must be before any early return) ──
 
@@ -91,9 +99,11 @@ export function MLRACallerTabs({ columnCount }: MLRACallerTabsProps = {}) {
   // ── Early return AFTER all hooks ──
   if (!activeLauncher || activeLauncher.status === "configuring") return null;
 
-  const order = columnOrder.length > 0 ? columnOrder : defaultOrder;
+  const order = columnOrder.length > 0
+    ? columnOrder.filter((id) => phaseTabs.some((t) => t.id === id))
+    : defaultOrder;
   const orderedTabs = order
-    .map((id) => ROLE_TABS.find((t) => t.id === id))
+    .map((id) => phaseTabs.find((t) => t.id === id))
     .filter(Boolean) as RoleTabDef[];
 
   const showDivider = columnCount != null && columnCount > 0 && columnCount < orderedTabs.length;
@@ -106,7 +116,7 @@ export function MLRACallerTabs({ columnCount }: MLRACallerTabsProps = {}) {
       if (phaseView === "planning") return "standby";
       return activeLauncher.agents.workers.length > 0 ? "active" : "idle";
     }
-    const slot = activeLauncher.agents[roleId as "expert" | "inspector" | "ceo"];
+    const slot = activeLauncher.agents[roleId as keyof typeof activeLauncher.agents];
     return slot?.status ?? null;
   };
 

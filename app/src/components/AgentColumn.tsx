@@ -4,16 +4,30 @@ import { IdenticonAvatar } from "./IdenticonAvatar";
 import { Icon } from "./Icons";
 
 interface AgentColumnProps {
-  role: "expert" | "inspector" | "ceo";
+  role: "planning-expert" | "planning-inspector" | "execution-expert" | "execution-inspector" | "ceo";
 }
 
 const ROLE_LABELS: Record<string, string> = {
-  expert: "专家 (Expert)",
-  inspector: "监察 (Inspector)",
+  "planning-expert": "规划专家",
+  "planning-inspector": "规划监察",
+  "execution-expert": "执行专家",
+  "execution-inspector": "执行监察",
   ceo: "CEO",
 };
 
 const STANDBY_MESSAGES: Record<string, Record<string, string>> = {
+  "planning-expert": {
+    implementation: "规划专家在执行阶段保持待命",
+  },
+  "planning-inspector": {
+    implementation: "规划监察在执行阶段保持待命",
+  },
+  "execution-expert": {
+    planning: "执行专家在规划阶段保持待命",
+  },
+  "execution-inspector": {
+    planning: "执行监察在规划阶段保持待命",
+  },
   ceo: {
     planning: "CEO 将在双方投票通过后介入门控审批",
     implementation: "CEO 将在所有 Phase 完成后进行终审",

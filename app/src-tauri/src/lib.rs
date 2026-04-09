@@ -9,6 +9,7 @@ use tauri_plugin_autostart::{MacosLauncher, ManagerExt};
 use session::{
     CallerInfo, FeedbackPayload, SessionDetail, SessionSummary, SharedSessionManager,
 };
+use ipc::SharedMlraWriter;
 
 /// Running mode: legacy (CLI args + output file) or persistent (IPC)
 #[derive(Debug, Clone, PartialEq)]
@@ -446,6 +447,31 @@ fn submit_feedback(
     Ok(())
 }
 
+/// Send a JSON message to the MLRA daemon via its stored TCP writer
+#[tauri::command]
+async fn send_to_mlra_daemon(
+    mlra_writer: State<'_, SharedMlraWriter>,
+    message: String,
+) -> Result<(), String> {
+    let mut guard = mlra_writer.lock().await;
+    match guard.as_mut() {
+        Some(writer) => {
+            use tokio::io::AsyncWriteExt;
+            let data = format!("{}\n", message);
+            writer
+                .write_all(data.as_bytes())
+                .await
+                .map_err(|e| format!("Failed to write to MLRA daemon: {}", e))?;
+            writer
+                .flush()
+                .await
+                .map_err(|e| format!("Failed to flush to MLRA daemon: {}", e))?;
+            Ok(())
+        }
+        None => Err("MLRA daemon not connected".to_string()),
+    }
+}
+
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
 pub fn run() {
     let args: Vec<String> = std::env::args().collect();
@@ -527,6 +553,7 @@ pub fn run() {
     };
 
     let session_mgr = session::create_session_manager(data_dir);
+    let mlra_writer: SharedMlraWriter = std::sync::Arc::new(tokio::sync::Mutex::new(None));
 
     let builder = tauri::Builder::default();
     // In debug builds, skip single-instance enforcement so dev binary and installed
@@ -547,6 +574,7 @@ pub fn run() {
             mode: mode.clone(),
         })
         .manage(session_mgr.clone())
+        .manage(mlra_writer.clone())
         .invoke_handler(tauri::generate_handler![
             get_app_args,
             get_app_mode,
@@ -573,6 +601,7 @@ pub fn run() {
             remove_empty_callers,
             trim_caller_sessions,
             clear_all_history,
+            send_to_mlra_daemon,
         ])
         .setup(move |app| {
             let app_handle = app.handle().clone();
@@ -581,8 +610,9 @@ pub fn run() {
                 // Start IPC server in persistent mode
                 let mgr = session_mgr.clone();
                 let handle = app_handle.clone();
+                let mlra_w = mlra_writer.clone();
                 tauri::async_runtime::spawn(async move {
-                    match ipc::start_ipc_server(mgr, handle).await {
+                    match ipc::start_ipc_server(mgr, handle, mlra_w).await {
                         Ok(port) => eprintln!("[App] IPC server started on port {}", port),
                         Err(e) => eprintln!("[App] Failed to start IPC server: {}", e),
                     }

@@ -2,17 +2,26 @@ import { create } from "zustand";
 
 // ── Agent Role Types ──
 
-export type AgentRole = "expert" | "inspector" | "ceo" | "worker";
-export type LauncherStatus = "configuring" | "running" | "paused" | "completed" | "cancelled";
+export type AgentRole =
+  | "planning-expert"
+  | "planning-inspector"
+  | "execution-expert"
+  | "execution-inspector"
+  | "ceo"
+  | "worker";
+export type ControlMode = "autopilot" | "ceo-override" | "full-override";
+export type LauncherStatus = "configuring" | "ready" | "running" | "paused" | "completed" | "cancelled";
 export type AgentSlotStatus = "active" | "standby" | "idle";
 export type WorkerStatus = "ready" | "working" | "broken";
 export type PhaseView = "planning" | "implementation";
 
 // ── Role Colors ──
 
-export const ROLE_COLORS: Record<AgentRole | "workerPool", string> = {
-  expert: "#06B6D4",
-  inspector: "#06B6D4",
+export const ROLE_COLORS: Record<string, string> = {
+  "planning-expert": "#06B6D4",
+  "planning-inspector": "#06B6D4",
+  "execution-expert": "#818CF8",
+  "execution-inspector": "#818CF8",
   ceo: "#F59E0B",
   worker: "#64748B",
   workerPool: "#64748B",
@@ -35,7 +44,7 @@ export interface RegisteredAgent {
 
 export interface AgentSlot {
   id: string;
-  role: "expert" | "inspector" | "ceo";
+  role: string;          // AgentRole excluding "worker"
   displayName: string;
   model: string;
   status: AgentSlotStatus;
@@ -70,6 +79,7 @@ export interface Launcher {
   name: string;
   status: LauncherStatus;
   currentPhase: PhaseView;
+  controlMode: ControlMode;
   createdAt: string;
   updatedAt: string;
   startedAt: string | null;
@@ -81,8 +91,10 @@ export interface Launcher {
 
   // Agent slots (after orchestration starts)
   agents: {
-    expert: AgentSlot | null;
-    inspector: AgentSlot | null;
+    "planning-expert": AgentSlot | null;
+    "planning-inspector": AgentSlot | null;
+    "execution-expert": AgentSlot | null;
+    "execution-inspector": AgentSlot | null;
     ceo: AgentSlot | null;
     workers: WorkerSlot[];
   };
@@ -108,8 +120,7 @@ export interface MLRAState {
   // Actions — Launcher CRUD
   createLauncher: (name: string) => string;
   switchLauncher: (id: string) => void;
-  pauseLauncher: (id: string) => void;
-  resumeLauncher: (id: string) => void;
+  setControlMode: (id: string, mode: ControlMode) => void;
   deleteLauncher: (id: string) => void;
   renameLauncher: (id: string, name: string) => void;
 
@@ -136,19 +147,21 @@ function generateId(): string {
   return Math.random().toString(36).slice(2, 10) + Date.now().toString(36);
 }
 
-function createEmptyAgentSlot(role: "expert" | "inspector" | "ceo", agent: RegisteredAgent): AgentSlot {
+function createEmptyAgentSlot(role: Exclude<AgentRole, "worker">, agent: RegisteredAgent): AgentSlot {
   const roleNames: Record<string, string> = {
-    expert: "专家",
-    inspector: "监察",
+    "planning-expert": "规划专家",
+    "planning-inspector": "规划监察",
+    "execution-expert": "实施专家",
+    "execution-inspector": "实施监察",
     ceo: "CEO",
   };
   return {
     id: agent.id,
-    role,
-    displayName: roleNames[role],
+    role: role as AgentSlot["role"],
+    displayName: roleNames[role] || role,
     model: agent.model,
     status: role === "ceo" ? "standby" : "active",
-    color: ROLE_COLORS[role],
+    color: ROLE_COLORS[role] || "#64748B",
     activeSessionId: null,
     sessionIds: [],
   };
@@ -159,8 +172,8 @@ function generateMockRounds(): RoundRecord[] {
   const rounds: RoundRecord[] = [];
   let mainCursor = Date.now() - 12 * 60 * 1000; // started ~12 min ago
 
-  // Main agent sequence (expert, inspector, ceo)
-  const mainSequence: string[] = ["expert", "inspector", "expert", "ceo", "expert", "inspector", "ceo", "expert"];
+  // Main agent sequence (planning-expert, planning-inspector, ceo, execution-expert, execution-inspector)
+  const mainSequence: string[] = ["planning-expert", "planning-inspector", "planning-expert", "ceo", "execution-expert", "execution-inspector", "ceo", "execution-expert"];
   // Workers run in parallel, overlapping with main agents
   const workerStartOffsets: { afterMainIdx: number; delayMs: number; durMs: number }[] = [
     { afterMainIdx: 0, delayMs: 5000, durMs: 40000 },
@@ -203,7 +216,7 @@ export const useMLRAStore = create<MLRAState>((set, get) => ({
   launcherSidebarOpen: false,
 
   phaseView: "planning",
-  columnOrder: ["expert", "inspector", "ceo", "workers"],
+  columnOrder: ["planning-expert", "planning-inspector", "execution-expert", "execution-inspector", "ceo", "workers"],
   layoutMode: "auto",
 
   // ── Launcher CRUD ──
@@ -215,13 +228,14 @@ export const useMLRAStore = create<MLRAState>((set, get) => ({
       name,
       status: "configuring",
       currentPhase: "planning",
+      controlMode: "ceo-override",
       createdAt: new Date().toISOString(),
       updatedAt: new Date().toISOString(),
       startedAt: null,
       pausedAt: null,
       pausedElapsed: 0,
       registeredAgents: [],
-      agents: { expert: null, inspector: null, ceo: null, workers: [] },
+      agents: { "planning-expert": null, "planning-inspector": null, "execution-expert": null, "execution-inspector": null, ceo: null, workers: [] },
       planningSessionIds: [],
       implementationSessionIds: [],
       roundHistory: [],
@@ -235,28 +249,13 @@ export const useMLRAStore = create<MLRAState>((set, get) => ({
 
   switchLauncher: (id) => set({ activeLauncherId: id }),
 
-  pauseLauncher: (id) =>
+  setControlMode: (id, mode) =>
     set((s) => ({
       launchers: s.launchers.map((l) =>
-        l.id === id && l.status === "running"
-          ? { ...l, status: "paused" as const, pausedAt: new Date().toISOString(), updatedAt: new Date().toISOString() }
+        l.id === id
+          ? { ...l, controlMode: mode, updatedAt: new Date().toISOString() }
           : l
       ),
-    })),
-
-  resumeLauncher: (id) =>
-    set((s) => ({
-      launchers: s.launchers.map((l) => {
-        if (l.id !== id || l.status !== "paused") return l;
-        const pausedMs = l.pausedAt ? Date.now() - new Date(l.pausedAt).getTime() : 0;
-        return {
-          ...l,
-          status: "running" as const,
-          pausedAt: null,
-          pausedElapsed: l.pausedElapsed + pausedMs,
-          updatedAt: new Date().toISOString(),
-        };
-      }),
     })),
 
   deleteLauncher: (id) =>
@@ -336,10 +335,12 @@ export const useMLRAStore = create<MLRAState>((set, get) => ({
   startOrchestration: (launcherId) =>
     set((s) => ({
       launchers: s.launchers.map((l) => {
-        if (l.id !== launcherId || l.status !== "configuring") return l;
+        if (l.id !== launcherId || (l.status !== "configuring" && l.status !== "ready")) return l;
 
-        const expertAgent = l.registeredAgents.find((a) => a.assignedRole === "expert");
-        const inspectorAgent = l.registeredAgents.find((a) => a.assignedRole === "inspector");
+        const planningExpert = l.registeredAgents.find((a) => a.assignedRole === "planning-expert");
+        const planningInspector = l.registeredAgents.find((a) => a.assignedRole === "planning-inspector");
+        const executionExpert = l.registeredAgents.find((a) => a.assignedRole === "execution-expert");
+        const executionInspector = l.registeredAgents.find((a) => a.assignedRole === "execution-inspector");
         const ceoAgent = l.registeredAgents.find((a) => a.assignedRole === "ceo");
         const workerAgents = l.registeredAgents.filter((a) => a.assignedRole === "worker");
 
@@ -352,8 +353,10 @@ export const useMLRAStore = create<MLRAState>((set, get) => ({
           pausedElapsed: 0,
           roundHistory: generateMockRounds(),
           agents: {
-            expert: expertAgent ? createEmptyAgentSlot("expert", expertAgent) : null,
-            inspector: inspectorAgent ? createEmptyAgentSlot("inspector", inspectorAgent) : null,
+            "planning-expert": planningExpert ? createEmptyAgentSlot("planning-expert", planningExpert) : null,
+            "planning-inspector": planningInspector ? createEmptyAgentSlot("planning-inspector", planningInspector) : null,
+            "execution-expert": executionExpert ? createEmptyAgentSlot("execution-expert", executionExpert) : null,
+            "execution-inspector": executionInspector ? createEmptyAgentSlot("execution-inspector", executionInspector) : null,
             ceo: ceoAgent ? createEmptyAgentSlot("ceo", ceoAgent) : null,
             workers: workerAgents.map((a) => ({
               id: a.id,

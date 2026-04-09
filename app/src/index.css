@@ -2115,13 +2115,38 @@ body,
   color: var(--color-text-primary);
   border-color: var(--color-border);
 }
-.mlra-control-pause:hover {
-  color: #F59E0B;
-  border-color: rgba(245, 158, 11, 0.4);
+
+/* ── MLRA Control Mode Switcher ── */
+.mlra-control-mode-switcher {
+  display: flex;
+  gap: 0;
+  border: 1px solid var(--color-border-subtle);
+  border-radius: 4px;
+  overflow: hidden;
+  flex-shrink: 0;
 }
-.mlra-control-resume:hover {
-  color: #10B981;
-  border-color: rgba(16, 185, 129, 0.4);
+.mlra-control-mode-btn {
+  font-size: 10px;
+  font-weight: 600;
+  padding: 2px 7px;
+  border: none;
+  border-right: 1px solid var(--color-border-subtle);
+  cursor: pointer;
+  background: transparent;
+  color: var(--color-text-secondary);
+  transition: all 0.12s;
+  white-space: nowrap;
+}
+.mlra-control-mode-btn:last-child {
+  border-right: none;
+}
+.mlra-control-mode-btn:hover {
+  color: var(--color-text-primary);
+  background: rgba(255, 255, 255, 0.04);
+}
+.mlra-control-mode-btn.active {
+  color: #fff;
+  background: var(--mode-color, #64748B);
 }
 
 /* ── MLRA Timer ── */

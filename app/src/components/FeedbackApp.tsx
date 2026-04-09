@@ -30,8 +30,10 @@ function formatDuration(ms: number): string {
 }
 
 const ROLE_LABEL_MAP: Record<string, string> = {
-  expert: "专家",
-  inspector: "监察",
+  "planning-expert": "规划专家",
+  "planning-inspector": "规划监察",
+  "execution-expert": "执行专家",
+  "execution-inspector": "执行监察",
   ceo: "CEO",
   worker: "Worker",
 };
@@ -323,9 +325,13 @@ function RunningTimer() {
 /** MLRA title bar Row 2 */
 function MLRARow2() {
   const launcher = useMLRAStore((s) => s.getActiveLauncher());
-  const isRunning = launcher?.status === "running";
-  const isPaused = launcher?.status === "paused";
-  const isActive = isRunning || isPaused;
+  const isActive = launcher?.status === "running" || launcher?.status === "paused";
+
+  const controlModes: Array<{ mode: import("../store/mlraStore").ControlMode; label: string }> = [
+    { mode: "autopilot", label: "全自动" },
+    { mode: "ceo-override", label: "接管CEO" },
+    { mode: "full-override", label: "全接管" },
+  ];
 
   return (
     <div data-tauri-drag-region className="flex items-center gap-2 px-3" style={{ height: 26 }}>
@@ -339,25 +345,19 @@ function MLRARow2() {
       {isActive && (
         <MLRAErrorBoundary><PhaseToggle /></MLRAErrorBoundary>
       )}
-      {isRunning && (
-        <button
-          className="mlra-control-btn mlra-control-pause"
-          onClick={() => launcher && useMLRAStore.getState().pauseLauncher(launcher.id)}
-          title="暂停"
-        >
-          <Icon name="pause" size={10} />
-          暂停
-        </button>
-      )}
-      {isPaused && (
-        <button
-          className="mlra-control-btn mlra-control-resume"
-          onClick={() => launcher && useMLRAStore.getState().resumeLauncher(launcher.id)}
-          title="继续"
-        >
-          <Icon name="play" size={10} />
-          继续
-        </button>
+      {isActive && launcher && (
+        <div className="mlra-control-mode-switcher">
+          {controlModes.map(({ mode, label }) => (
+            <button
+              key={mode}
+              className={`mlra-control-mode-btn${launcher.controlMode === mode ? " active" : ""}`}
+              onClick={() => useMLRAStore.getState().setControlMode(launcher.id, mode)}
+              title={label}
+            >
+              {label}
+            </button>
+          ))}
+        </div>
       )}
       <div style={{ flex: 1 }} />
       {isActive && <RunningTimer />}

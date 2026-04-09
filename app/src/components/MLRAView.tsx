@@ -12,10 +12,12 @@ export function MLRAView() {
   const activeLauncher = useMLRAStore((s) => s.getActiveLauncher());
   const launcherSidebarOpen = useMLRAStore((s) => s.launcherSidebarOpen);
   const toggleSidebar = useMLRAStore((s) => s.toggleLauncherSidebar);
-  const columnOrder = useMLRAStore((s) => s.columnOrder);
+  const phaseView = useMLRAStore((s) => s.phaseView);
 
-  // Default column order
-  const orderedRoles = columnOrder.length > 0 ? columnOrder : ["expert", "inspector", "ceo", "workers"];
+  // Show phase-specific agent pair + CEO + workers (always 4 columns)
+  const phaseRoles = phaseView === "planning"
+    ? ["planning-expert", "planning-inspector", "ceo", "workers"]
+    : ["execution-expert", "execution-inspector", "ceo", "workers"];
 
   const isActive = activeLauncher?.status === "running" || activeLauncher?.status === "paused";
 
@@ -32,13 +34,13 @@ export function MLRAView() {
       ) : !isActive ? (
         <LauncherHome launcher={activeLauncher} />
       ) : (
-        /* Four-column workspace */
+        /* Multi-column workspace */
         <div className="mlra-workspace">
-          {orderedRoles.map((role) =>
+          {phaseRoles.map((role) =>
             role === "workers" ? (
               <WorkerPoolColumn key="workers" />
             ) : (
-              <AgentColumn key={role} role={role as "expert" | "inspector" | "ceo"} />
+              <AgentColumn key={role} role={role} />
             )
           )}
         </div>

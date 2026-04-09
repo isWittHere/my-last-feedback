@@ -5,6 +5,11 @@ use tauri::{Emitter, Manager};
 use tokio::io::{AsyncBufReadExt, AsyncWriteExt, BufReader};
 use tokio::net::TcpListener;
 use tokio::sync::oneshot;
+use std::sync::Arc;
+use tokio::net::tcp::OwnedWriteHalf;
+
+/// Shared MLRA daemon writer — used to send messages from frontend to daemon
+pub type SharedMlraWriter = Arc<tokio::sync::Mutex<Option<OwnedWriteHalf>>>;
 
 /// Port range for auto-selection
 /// Debug builds use a separate range to avoid conflicting with installed release builds.
@@ -101,6 +106,7 @@ pub struct SessionCancelledEvent {
 pub async fn start_ipc_server(
     session_mgr: SharedSessionManager,
     app_handle: AppHandle,
+    mlra_writer: SharedMlraWriter,
 ) -> Result<u16, String> {
     let listener = bind_listener().await?;
     let port = listener.local_addr().unwrap().port();
@@ -120,7 +126,8 @@ pub async fn start_ipc_server(
                     eprintln!("[IPC] New connection from {}", addr);
                     let mgr = mgr.clone();
                     let handle = handle.clone();
-                    tokio::spawn(handle_connection(stream, mgr, handle));
+                    let mlra_w = mlra_writer.clone();
+                    tokio::spawn(handle_connection(stream, mgr, handle, mlra_w));
                 }
                 Err(e) => {
                     eprintln!("[IPC] Accept error: {}", e);
@@ -150,6 +157,7 @@ async fn handle_connection(
     stream: tokio::net::TcpStream,
     session_mgr: SharedSessionManager,
     app_handle: AppHandle,
+    mlra_writer: SharedMlraWriter,
 ) {
     let (reader, mut writer) = stream.into_split();
     let buf_reader = BufReader::new(reader);
@@ -331,6 +339,55 @@ async fn handle_connection(
                         }
                     }
                 }
+            }
+
+            other if other.starts_with("mlra_") => {
+                // MLRA daemon connection detected — switch to MLRA handling mode
+                eprintln!("[IPC] MLRA daemon connection detected (msg: {})", other);
+
+                // Emit the first message
+                if let Err(e) = app_handle.emit("mlra-message", &line) {
+                    eprintln!("[IPC] Failed to emit MLRA message: {}", e);
+                }
+
+                // Reassemble writer — we need to break out and handle MLRA
+                // The writer was already split above, so we just move it into the shared state.
+                // But we already split the stream above, so writer is already available.
+                {
+                    let mut w = mlra_writer.lock().await;
+                    *w = Some(writer);
+                }
+                eprintln!("[IPC] MLRA daemon writer stored for bidirectional communication");
+
+                // Continue reading MLRA messages until disconnect
+                loop {
+                    match lines.next_line().await {
+                        Ok(Some(mlra_line)) => {
+                            let mlra_line = mlra_line.trim().to_string();
+                            if mlra_line.is_empty() {
+                                continue;
+                            }
+                            eprintln!("[IPC] MLRA message: {}", &mlra_line[..mlra_line.len().min(120)]);
+                            if let Err(e) = app_handle.emit("mlra-message", &mlra_line) {
+                                eprintln!("[IPC] Failed to emit MLRA message: {}", e);
+                            }
+                        }
+                        _ => {
+                            eprintln!("[IPC] MLRA daemon disconnected");
+                            break;
+                        }
+                    }
+                }
+
+                // Clear the writer on disconnect
+                {
+                    let mut w = mlra_writer.lock().await;
+                    *w = None;
+                }
+                if let Err(e) = app_handle.emit("mlra-disconnected", ()) {
+                    eprintln!("[IPC] Failed to emit MLRA disconnect: {}", e);
+                }
+                return; // Connection fully handled
             }
 
             other => {

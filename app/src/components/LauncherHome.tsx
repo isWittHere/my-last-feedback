@@ -7,8 +7,10 @@ interface LauncherHomeProps {
 }
 
 const ROLES: { value: AgentRole; label: string }[] = [
-  { value: "expert", label: "专家" },
-  { value: "inspector", label: "监察" },
+  { value: "planning-expert", label: "规划专家" },
+  { value: "planning-inspector", label: "规划监察" },
+  { value: "execution-expert", label: "执行专家" },
+  { value: "execution-inspector", label: "执行监察" },
   { value: "ceo", label: "CEO" },
   { value: "worker", label: "Worker" },
 ];
@@ -36,8 +38,8 @@ export function LauncherHome({ launcher }: LauncherHomeProps) {
   }, [taskName, createLauncher]);
 
   const canStart = launcher
-    ? launcher.registeredAgents.some((a) => a.assignedRole === "expert") &&
-      launcher.registeredAgents.some((a) => a.assignedRole === "inspector")
+    ? launcher.registeredAgents.some((a) => a.assignedRole === "planning-expert") &&
+      launcher.registeredAgents.some((a) => a.assignedRole === "planning-inspector")
     : false;
 
   // Mock agent for dev testing
