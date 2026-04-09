@@ -2558,10 +2558,15 @@ body,
 /* Actions row */
 .mlra-home-actions {
   display: flex;
-  align-items: center;
-  gap: 12px;
+  flex-direction: column;
+  gap: 8px;
   padding-top: 8px;
   border-top: 1px solid var(--color-border);
+}
+.mlra-start-modes {
+  display: flex;
+  align-items: center;
+  gap: 10px;
 }
 .mlra-start-btn {
   display: inline-flex;
@@ -2571,9 +2576,23 @@ body,
   font-size: 13px !important;
   font-weight: 600;
 }
+.mlra-start-btn-direct {
+  background: var(--color-bg-tertiary);
+  color: var(--color-text-primary);
+  border: 1px solid var(--color-border);
+}
+.mlra-start-btn-direct:hover:not(:disabled) {
+  background: var(--color-bg-secondary);
+  border-color: var(--color-accent);
+}
 .mlra-start-btn:disabled {
   opacity: 0.4;
   cursor: not-allowed;
+}
+.mlra-start-hints {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
 }
 .mlra-start-hint {
   font-size: 11px;
@@ -2955,6 +2974,40 @@ body,
   color: var(--color-text-muted);
   background: var(--color-bg-base);
 }
+.agent-column-status-derailed {
+  color: #F59E0B;
+  background: rgba(245, 158, 11, 0.1);
+}
+.agent-column-status-broken {
+  color: #EF4444;
+  background: rgba(239, 68, 68, 0.1);
+}
+
+/* Session pool badges */
+.session-pool-badge {
+  font-size: 9px;
+  font-weight: 600;
+  padding: 1px 6px;
+  border-radius: 8px;
+  margin-left: 4px;
+  white-space: nowrap;
+}
+.session-pool-ok {
+  color: #10B981;
+  background: rgba(16, 185, 129, 0.1);
+}
+.session-pool-derailed {
+  color: #F59E0B;
+  background: rgba(245, 158, 11, 0.1);
+}
+.session-pool-broken {
+  color: #EF4444;
+  background: rgba(239, 68, 68, 0.1);
+}
+.session-pool-failover {
+  color: #818CF8;
+  background: rgba(129, 140, 248, 0.1);
+}
 
 /* Column content area */
 .agent-column-content {
@@ -2979,6 +3032,52 @@ body,
   padding: 40px 20px;
   text-align: center;
   color: var(--color-text-muted);
+}
+
+/* Expert message injection input */
+.agent-column-inject {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  padding: 6px 8px;
+  border-top: 1px solid var(--color-border);
+  background: var(--color-bg-secondary);
+}
+.agent-column-inject-input {
+  flex: 1;
+  padding: 5px 8px;
+  font-size: 12px;
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius);
+  background: var(--color-bg-primary);
+  color: var(--color-text-primary);
+  outline: none;
+}
+.agent-column-inject-input:focus {
+  border-color: var(--color-accent);
+}
+.agent-column-inject-input::placeholder {
+  color: var(--color-text-muted);
+}
+.agent-column-inject-btn {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 28px;
+  height: 28px;
+  border: none;
+  border-radius: var(--radius);
+  background: var(--color-accent);
+  color: #fff;
+  cursor: pointer;
+  flex-shrink: 0;
+}
+.agent-column-inject-btn:disabled {
+  opacity: 0.35;
+  cursor: not-allowed;
+}
+.agent-column-inject-btn:hover:not(:disabled) {
+  filter: brightness(1.1);
 }
 
 /* ── Worker Pool Column ── */

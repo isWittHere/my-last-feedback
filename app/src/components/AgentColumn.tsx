@@ -1,4 +1,5 @@
-import { useMLRAStore, type AgentSlot, ROLE_COLORS } from "../store/mlraStore";
+import { useState, useCallback } from "react";
+import { useMLRAStore, type AgentSlot, type SessionPool, ROLE_COLORS } from "../store/mlraStore";
 import { StandbyPlaceholder } from "./StandbyPlaceholder";
 import { IdenticonAvatar } from "./IdenticonAvatar";
 import { Icon } from "./Icons";
@@ -38,7 +39,79 @@ const STATUS_LABELS: Record<string, string> = {
   active: "活跃",
   standby: "待命",
   idle: "空闲",
+  derailed: "脱轨",
+  broken: "断线",
 };
+
+function SessionPoolBadge({ pool }: { pool: SessionPool }) {
+  const standbyCount = pool.standbys.length;
+  const primaryStatus = pool.primary?.status || "unknown";
+  const isDerailed = primaryStatus === "derailed";
+  const isBroken = primaryStatus === "broken";
+
+  if (isBroken && standbyCount === 0) {
+    return (
+      <span className="session-pool-badge session-pool-broken" title="无可用备用会话">
+        ✕ 已断线
+      </span>
+    );
+  }
+
+  if (isDerailed) {
+    return (
+      <span className="session-pool-badge session-pool-derailed" title={`重试 ${pool.retryCount}/${pool.maxRetries}`}>
+        ⚠ 脱轨 {pool.retryCount}/{pool.maxRetries}
+      </span>
+    );
+  }
+
+  if (standbyCount > 0) {
+    return (
+      <span className="session-pool-badge session-pool-ok" title={`${standbyCount} 个备用会话`}>
+        ● 1+{standbyCount}
+      </span>
+    );
+  }
+
+  if (pool.failoverCount > 0) {
+    return (
+      <span className="session-pool-badge session-pool-failover" title={`已故障转移 ${pool.failoverCount} 次`}>
+        ↻ 转移×{pool.failoverCount}
+      </span>
+    );
+  }
+
+  return null;
+}
+
+/** Inline message input for expert columns — allows user to inject messages to experts */
+function ExpertMessageInput({ callerId }: { callerId: string }) {
+  const [text, setText] = useState("");
+  const daemonInjectMessage = useMLRAStore((s) => s.daemonInjectMessage);
+
+  const handleSend = useCallback(() => {
+    const trimmed = text.trim();
+    if (!trimmed) return;
+    daemonInjectMessage(callerId, trimmed);
+    setText("");
+  }, [text, callerId, daemonInjectMessage]);
+
+  return (
+    <div className="agent-column-inject">
+      <input
+        type="text"
+        className="agent-column-inject-input"
+        placeholder="向专家发送指令..."
+        value={text}
+        onChange={(e) => setText(e.target.value)}
+        onKeyDown={(e) => { if (e.key === "Enter") handleSend(); }}
+      />
+      <button className="agent-column-inject-btn" onClick={handleSend} disabled={!text.trim()}>
+        <Icon name="send" size={12} />
+      </button>
+    </div>
+  );
+}
 
 /**
  * MLRA Agent column — wraps a main agent role (Expert / Inspector / CEO).
@@ -49,8 +122,10 @@ export function AgentColumn({ role }: AgentColumnProps) {
   const phaseView = useMLRAStore((s) => s.phaseView);
   const color = ROLE_COLORS[role];
   const slot: AgentSlot | null = activeLauncher?.agents[role] ?? null;
+  const pool: SessionPool | undefined = activeLauncher?.sessionPools[role];
 
   const isStandby = !slot || slot.status === "standby";
+  const isExpert = role === "planning-expert" || role === "execution-expert";
 
   return (
     <div
@@ -64,6 +139,7 @@ export function AgentColumn({ role }: AgentColumnProps) {
         {slot && (
           <span className="agent-column-model-tag">{slot.model}</span>
         )}
+        {pool && <SessionPoolBadge pool={pool} />}
         {slot && (
           <span className={`agent-column-status agent-column-status-${slot.status}`}>
             {STATUS_LABELS[slot.status]}
@@ -88,6 +164,8 @@ export function AgentColumn({ role }: AgentColumnProps) {
               Session 内容将在后端连接后显示
             </div>
           </div>
+          {/* Expert message injection */}
+          {isExpert && slot && <ExpertMessageInput callerId={slot.id} />}
         </div>
       )}
     </div>

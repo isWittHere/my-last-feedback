@@ -29,6 +29,8 @@ export const MSG = {
   AGENT_SUBMIT: "agent_submit",
   // Agent vote
   AGENT_VOTE: "agent_vote",
+  // CEO verdict (blocking)
+  CEO_VERDICT: "ceo_verdict",
   // Expert → Worker delegation
   AGENT_ORDER: "agent_order",
   // Expert check worker status
@@ -51,6 +53,14 @@ export const MSG = {
   MLRA_ROUND_EVENT: "mlra_round_event",
   MLRA_WORKER_STATUS: "mlra_worker_status",
   MLRA_ORCHESTRATION_STATUS: "mlra_orchestration_status",
+  MLRA_CEO_GATE_STATUS: "mlra_ceo_gate_status",
+  MLRA_SESSION_DERAILED: "mlra_session_derailed",
+  MLRA_SESSION_RECOVERED: "mlra_session_recovered",
+  MLRA_SESSION_FAILOVER: "mlra_session_failover",
+  MLRA_SESSION_BROKEN: "mlra_session_broken",
+  MLRA_SESSION_POOL_UPDATE: "mlra_session_pool_update",
+  MLRA_BUDGET_UPDATE: "mlra_budget_update",
+  MLRA_BUDGET_PAUSE: "mlra_budget_pause",
 
   // ── Tauri App → Daemon (user actions) ──
   MLRA_ASSIGN_ROLE: "mlra_assign_role",
@@ -60,6 +70,28 @@ export const MSG = {
   MLRA_REVIEW_REJECTED: "mlra_review_rejected",
   MLRA_INJECT_MESSAGE: "mlra_inject_message",
   MLRA_TERMINATE: "mlra_terminate",
+  MLRA_SET_BUDGET: "mlra_set_budget",
+  MLRA_INCREASE_BUDGET: "mlra_increase_budget",
+
+  // ── Hook → Daemon (session notifications) ──
+  SESSION_HOOK_NOTIFY: "session_hook_notify",
+};
+
+// ── Start Modes ──
+export const START_MODES = {
+  FULL: "full",                    // All 5 main agents + ≥1 worker
+  DIRECT_EXECUTION: "direct-execution", // execution-expert + execution-inspector + ceo + ≥1 worker
+};
+
+export const START_MODE_REQUIREMENTS = {
+  [START_MODES.FULL]: {
+    required: ["planning-expert", "planning-inspector", "execution-expert", "execution-inspector", "ceo"],
+    minWorkers: 1,
+  },
+  [START_MODES.DIRECT_EXECUTION]: {
+    required: ["execution-expert", "execution-inspector", "ceo"],
+    minWorkers: 1,
+  },
 };
 
 // ── Role labels for tail injection ──

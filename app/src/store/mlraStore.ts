@@ -15,6 +15,47 @@ export type LauncherStatus = "configuring" | "ready" | "running" | "paused" | "c
 export type AgentSlotStatus = "active" | "standby" | "idle";
 export type WorkerStatus = "ready" | "working" | "broken";
 export type PhaseView = "planning" | "implementation";
+export type StartMode = "full" | "direct-execution";
+
+// ── Session Pool Types ──
+
+export interface SessionPoolEntry {
+  callerId: string;
+  alias: string;
+  status: "connected" | "derailed" | "broken";
+}
+
+export interface SessionPool {
+  role: string;
+  primary: SessionPoolEntry | null;
+  standbys: SessionPoolEntry[];
+  retryCount: number;
+  maxRetries: number;
+  failoverCount: number;
+}
+
+export interface BudgetStatus {
+  limit: number;
+  consumed: number;
+  remaining: number;
+  warningThreshold: number;
+  canProceed: boolean;
+  isWarning: boolean;
+  records: Array<{
+    timestamp: string;
+    multiplier: number;
+    role: string;
+    reason: string;
+    details: string;
+  }>;
+}
+
+export interface CeoGateStatus {
+  active: boolean;
+  type: "planning_gate" | "final_review" | "arbitration" | null;
+  round: number;
+  history: Array<{ round: number; verdict: string; reason: string }>;
+}
 
 // ── Role Colors ──
 
@@ -103,6 +144,14 @@ export interface Launcher {
   planningSessionIds: string[];
   implementationSessionIds: string[];
   roundHistory: RoundRecord[];
+
+  // Session pools & budget
+  sessionPools: Record<string, SessionPool>;
+  budget: BudgetStatus | null;
+
+  // Start mode & CEO gate
+  startMode: StartMode | null;
+  ceoGate: CeoGateStatus | null;
 }
 
 // ── Store ──
@@ -132,7 +181,7 @@ export interface MLRAState {
   setWorkerRole: (launcherId: string, agentId: string, workerRole: string) => void;
 
   // Actions — Start orchestration
-  startOrchestration: (launcherId: string) => void;
+  startOrchestration: (launcherId: string, startMode: StartMode) => void;
 
   // Actions — View
   setPhaseView: (phase: PhaseView) => void;
@@ -143,11 +192,14 @@ export interface MLRAState {
   // Actions — Daemon communication (sends to MLRA daemon via Tauri IPC)
   sendToDaemon: (msg: Record<string, unknown>) => Promise<void>;
   daemonAssignRole: (launcherId: string, agentId: string, role: AgentRole | null) => void;
-  daemonStartOrchestration: (launcherId: string, userTask: string) => void;
+  daemonStartOrchestration: (launcherId: string, userTask: string, startMode: StartMode) => void;
   daemonSetControlMode: (mode: ControlMode) => void;
   daemonReviewApproved: (content: string) => void;
   daemonReviewRejected: (reason: string) => void;
   daemonTerminate: () => void;
+  daemonSetBudget: (limit: number) => void;
+  daemonIncreaseBudget: (amount: number) => void;
+  daemonInjectMessage: (callerId: string, content: string) => void;
 
   // Actions — Handle incoming MLRA daemon messages
   handleDaemonMessage: (raw: string) => void;
@@ -209,6 +261,10 @@ export const useMLRAStore = create<MLRAState>((set, get) => ({
       planningSessionIds: [],
       implementationSessionIds: [],
       roundHistory: [],
+      sessionPools: {},
+      budget: null,
+      startMode: null,
+      ceoGate: null,
     };
     set((s) => ({
       launchers: [...s.launchers, launcher],
@@ -302,12 +358,12 @@ export const useMLRAStore = create<MLRAState>((set, get) => ({
 
   // ── Start orchestration ──
 
-  startOrchestration: (launcherId) => {
+  startOrchestration: (launcherId, startMode) => {
     const launcher = get().launchers.find((l) => l.id === launcherId);
     if (!launcher || (launcher.status !== "configuring" && launcher.status !== "ready")) return;
 
     // Notify daemon
-    get().daemonStartOrchestration(launcherId, launcher.name);
+    get().daemonStartOrchestration(launcherId, launcher.name, startMode);
 
     // Update local state
     set((s) => ({
@@ -324,11 +380,13 @@ export const useMLRAStore = create<MLRAState>((set, get) => ({
         return {
           ...l,
           status: "running" as const,
+          startMode,
           updatedAt: new Date().toISOString(),
           startedAt: new Date().toISOString(),
           pausedAt: null,
           pausedElapsed: 0,
           roundHistory: [],
+          currentPhase: startMode === "direct-execution" ? "implementation" as const : "planning" as const,
           agents: {
             "planning-expert": planningExpert ? createEmptyAgentSlot("planning-expert", planningExpert) : null,
             "planning-inspector": planningInspector ? createEmptyAgentSlot("planning-inspector", planningInspector) : null,
@@ -373,8 +431,8 @@ export const useMLRAStore = create<MLRAState>((set, get) => ({
     get().sendToDaemon({ type: "mlra_assign_role", launcherId, agentId, role });
   },
 
-  daemonStartOrchestration: (launcherId, userTask) => {
-    get().sendToDaemon({ type: "mlra_start_orchestration", launcherId, userTask });
+  daemonStartOrchestration: (launcherId, userTask, startMode) => {
+    get().sendToDaemon({ type: "mlra_start_orchestration", launcherId, userTask, startMode });
   },
 
   daemonSetControlMode: (mode) => {
@@ -391,6 +449,18 @@ export const useMLRAStore = create<MLRAState>((set, get) => ({
 
   daemonTerminate: () => {
     get().sendToDaemon({ type: "mlra_terminate" });
+  },
+
+  daemonSetBudget: (limit) => {
+    get().sendToDaemon({ type: "mlra_set_budget", limit });
+  },
+
+  daemonIncreaseBudget: (amount) => {
+    get().sendToDaemon({ type: "mlra_increase_budget", amount });
+  },
+
+  daemonInjectMessage: (callerId, content) => {
+    get().sendToDaemon({ type: "mlra_inject_message", callerId, content });
   },
 
   // ── Handle incoming daemon messages ──
@@ -418,22 +488,25 @@ export const useMLRAStore = create<MLRAState>((set, get) => ({
           break;
         }
         case "mlra_orchestration_status": {
-          // Full state sync from daemon
+          // Full state sync from daemon — data is nested under msg.state
           const launcher = get().getActiveLauncher();
           if (!launcher) break;
+          const state = msg.state || msg; // Support both nested and flat
           set((s) => ({
             launchers: s.launchers.map((l) => {
               if (l.id !== launcher.id) return l;
               return {
                 ...l,
-                status: msg.status || l.status,
-                currentPhase: msg.phase || l.currentPhase,
-                controlMode: msg.controlMode || l.controlMode,
+                status: state.status || l.status,
+                currentPhase: state.phase || l.currentPhase,
+                controlMode: state.controlMode || l.controlMode,
+                startMode: state.startMode || l.startMode,
+                ceoGate: state.ceoGate || l.ceoGate,
                 updatedAt: new Date().toISOString(),
               };
             }),
           }));
-          if (msg.phase) set({ phaseView: msg.phase });
+          if (state.phase) set({ phaseView: state.phase });
           break;
         }
         case "mlra_round_event": {
@@ -472,6 +545,104 @@ export const useMLRAStore = create<MLRAState>((set, get) => ({
         case "mlra_human_review": {
           // Daemon requests human review — could trigger UI notification
           console.log("[MLRA] Human review requested:", msg.content);
+          break;
+        }
+        case "mlra_session_derailed": {
+          const launcher = get().getActiveLauncher();
+          if (!launcher) break;
+          console.warn(`[MLRA] Session derailed: ${msg.callerId} (${msg.role}), reason=${msg.reason}, retry=${msg.retryCount}/${msg.maxRetries}`);
+          // Agent slot status update is handled via orchestration_status sync
+          break;
+        }
+        case "mlra_session_recovered": {
+          console.log(`[MLRA] Session recovered: ${msg.callerId} (${msg.role})`);
+          break;
+        }
+        case "mlra_session_failover": {
+          console.warn(`[MLRA] Failover: ${msg.role} ${msg.oldCallerId} → ${msg.newCallerId}`);
+          break;
+        }
+        case "mlra_session_broken": {
+          console.error(`[MLRA] Session broken (no standbys): ${msg.callerId} (${msg.role})`);
+          break;
+        }
+        case "mlra_session_pool_update": {
+          const launcher = get().getActiveLauncher();
+          if (!launcher) break;
+          const pool = msg.pool as SessionPool;
+          set((s) => ({
+            launchers: s.launchers.map((l) => {
+              if (l.id !== launcher.id) return l;
+              return {
+                ...l,
+                sessionPools: { ...l.sessionPools, [pool.role]: pool },
+                updatedAt: new Date().toISOString(),
+              };
+            }),
+          }));
+          break;
+        }
+        case "mlra_budget_update": {
+          const launcher = get().getActiveLauncher();
+          if (!launcher) break;
+          set((s) => ({
+            launchers: s.launchers.map((l) => {
+              if (l.id !== launcher.id) return l;
+              return {
+                ...l,
+                budget: msg.budget as BudgetStatus,
+                updatedAt: new Date().toISOString(),
+              };
+            }),
+          }));
+          break;
+        }
+        case "mlra_budget_pause": {
+          const launcher = get().getActiveLauncher();
+          if (!launcher) break;
+          set((s) => ({
+            launchers: s.launchers.map((l) => {
+              if (l.id !== launcher.id) return l;
+              return {
+                ...l,
+                status: "paused" as const,
+                budget: msg.budget as BudgetStatus,
+                pausedAt: new Date().toISOString(),
+                updatedAt: new Date().toISOString(),
+              };
+            }),
+          }));
+          break;
+        }
+        case "mlra_ceo_gate_status": {
+          const launcher = get().getActiveLauncher();
+          if (!launcher) break;
+          set((s) => ({
+            launchers: s.launchers.map((l) => {
+              if (l.id !== launcher.id) return l;
+              return {
+                ...l,
+                ceoGate: msg.ceoGate as CeoGateStatus,
+                updatedAt: new Date().toISOString(),
+              };
+            }),
+          }));
+          break;
+        }
+        case "mlra_phase_change": {
+          const launcher = get().getActiveLauncher();
+          if (!launcher) break;
+          set((s) => ({
+            launchers: s.launchers.map((l) => {
+              if (l.id !== launcher.id) return l;
+              return {
+                ...l,
+                currentPhase: msg.to as PhaseView,
+                updatedAt: new Date().toISOString(),
+              };
+            }),
+          }));
+          set({ phaseView: msg.to as PhaseView });
           break;
         }
         default:

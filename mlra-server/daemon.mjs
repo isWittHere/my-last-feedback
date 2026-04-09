@@ -12,6 +12,7 @@ import { randomUUID } from "node:crypto";
 import { Orchestrator } from "./orchestrator.mjs";
 import { MessageRouter } from "./router.mjs";
 import { IpcBridge } from "./ipc-bridge.mjs";
+import { SessionManager } from "./session-manager.mjs";
 import { MSG } from "./protocol.mjs";
 
 // ── Port config ──
@@ -34,6 +35,7 @@ class OrchestratorDaemon {
     this.orchestrator = new Orchestrator();
     this.router = new MessageRouter();
     this.ipcBridge = new IpcBridge({ isDev: IS_DEV });
+    this.sessionManager = new SessionManager();
     this.server = null;
     this.port = null;
 
@@ -46,6 +48,9 @@ class OrchestratorDaemon {
 
     // Wire orchestrator events to IPC bridge
     this.orchestrator.onEvent = (event) => this._handleOrchestrationEvent(event);
+
+    // Wire SessionManager events
+    this._wireSessionManagerEvents();
   }
 
   async start() {
@@ -104,14 +109,16 @@ class OrchestratorDaemon {
     rl.on("line", async (line) => {
       try {
         const msg = JSON.parse(line.trim());
+
+        // Track connection BEFORE blocking (so socket.close knows callerId)
+        if (msg.type === MSG.AGENT_REGISTER && !callerId && msg.callerId) {
+          callerId = msg.callerId;
+          this.connections.set(callerId, { socket, rl });
+        }
+
         const response = await this._handleMcpMessage(msg, socket);
         if (response !== undefined) {
           socket.write(JSON.stringify(response) + "\n");
-        }
-        // Track connection after registration
-        if (msg.type === MSG.AGENT_REGISTER && !callerId) {
-          callerId = msg.callerId;
-          this.connections.set(callerId, { socket, rl });
         }
       } catch (e) {
         console.error("[MLRA-Daemon] Error handling MCP message:", e.message);
@@ -125,6 +132,8 @@ class OrchestratorDaemon {
         this.connections.delete(callerId);
         // Cancel any pending blocking calls for this agent
         this.router.reject(callerId, "Agent disconnected");
+        // Notify SessionManager of TCP disconnect
+        this.sessionManager.handleTcpDisconnect(callerId);
       }
     });
 
@@ -141,11 +150,14 @@ class OrchestratorDaemon {
   async _handleMcpMessage(msg, socket) {
     switch (msg.type) {
       case MSG.AGENT_REGISTER: {
-        const { callerId, alias, workspace } = msg;
+        const { callerId, alias, workspace, model } = msg;
         const result = this.orchestrator.registerAgent(callerId, alias, workspace);
         if (result.error) {
           return { type: MSG.ERROR, callerId, message: result.error };
         }
+
+        // Register with SessionManager (links transcript monitoring)
+        this.sessionManager.registerAgent(callerId, alias, model || "unknown", workspace);
 
         // Notify Tauri UI
         this.ipcBridge.send({
@@ -196,6 +208,32 @@ class OrchestratorDaemon {
           // Route to target agent
           this._routeToAgent(decision.targetCallerId, decision.content);
           // Block submitter until their next instruction arrives
+          try {
+            const instruction = await this.router.block(callerId, "submit");
+            return { type: MSG.RESOLVE, callerId, content: instruction };
+          } catch (e) {
+            return { type: MSG.ERROR, callerId, message: e.message };
+          }
+        }
+
+        if (decision.action === "wake_ceo") {
+          // Wake the CEO by releasing their blocked call
+          this.router.release(decision.targetCallerId, decision.content);
+          // Block submitter until next instruction
+          try {
+            const instruction = await this.router.block(callerId, "submit");
+            return { type: MSG.RESOLVE, callerId, content: instruction };
+          } catch (e) {
+            return { type: MSG.ERROR, callerId, message: e.message };
+          }
+        }
+
+        if (decision.action === "route_multiple") {
+          // Route to multiple targets
+          for (const t of decision.targets) {
+            this._routeToAgent(t.targetCallerId, t.content);
+          }
+          // Block submitter
           try {
             const instruction = await this.router.block(callerId, "submit");
             return { type: MSG.RESOLVE, callerId, content: instruction };
@@ -282,7 +320,56 @@ class OrchestratorDaemon {
         }
       }
 
+      case MSG.CEO_VERDICT: {
+        const { callerId, verdict, reason, targets } = msg;
+        console.error(`[MLRA-Daemon] CEO verdict: ${verdict} from ${callerId}`);
+
+        const decision = this.orchestrator.handleCeoVerdict(callerId, verdict, reason, targets);
+
+        if (decision.error) {
+          return { type: MSG.ERROR, callerId, message: decision.error };
+        }
+
+        // Execute the decision
+        this._executeCeoDecision(decision);
+
+        // Push updated status to Tauri
+        this.ipcBridge.send({
+          type: MSG.MLRA_CEO_GATE_STATUS,
+          ceoGate: this.orchestrator.ceoGate,
+        });
+        this.ipcBridge.send({
+          type: MSG.MLRA_ORCHESTRATION_STATUS,
+          state: this.orchestrator.toJSON(),
+        });
+
+        // If task is complete, release CEO immediately
+        if (decision.action === "complete") {
+          return { type: MSG.RESOLVE, callerId, content: "编排已完成。" };
+        }
+
+        // CEO goes back to sleep — block until next trigger point
+        try {
+          const nextMaterials = await this.router.block(callerId, "ceo_verdict");
+          return { type: MSG.RESOLVE, callerId, content: nextMaterials };
+        } catch (e) {
+          return { type: MSG.ERROR, callerId, message: e.message };
+        }
+      }
+
       default:
+        // ── Hook TCP Notification ──
+        if (msg.type === MSG.SESSION_HOOK_NOTIFY) {
+          const { session_id, agent_name, transcript_dir, workspace } = msg;
+          this.sessionManager.handleHookNotify(session_id, agent_name, transcript_dir, workspace);
+          return undefined; // Fire-and-forget, no response
+        }
+        // ── Admin messages (mlra_* prefix) routed to Tauri handler ──
+        // Allows test scripts and CLI tools to control the daemon directly
+        if (msg.type?.startsWith("mlra_")) {
+          this._handleTauriMessage(msg);
+          return undefined;
+        }
         return { type: MSG.ERROR, message: `Unknown message type: ${msg.type}` };
     }
   }
@@ -310,6 +397,11 @@ class OrchestratorDaemon {
         const result = this.orchestrator.assignRole(callerId, role, workerRole);
         if (result.error) {
           console.error("[MLRA-Daemon] Role assignment error:", result.error);
+        } else if (role) {
+          // Assign to SessionManager pool — first agent per role becomes primary
+          const existingPool = this.sessionManager.getPool(role);
+          const isPrimary = !existingPool || !existingPool.primary;
+          this.sessionManager.assignToPool(callerId, role, isPrimary);
         }
         // Push updated status to Tauri
         this.ipcBridge.send({
@@ -320,15 +412,19 @@ class OrchestratorDaemon {
       }
 
       case MSG.MLRA_START_ORCHESTRATION: {
-        const { userTask } = msg;
-        const result = this.orchestrator.startOrchestration(userTask || "");
+        const { userTask, startMode } = msg;
+        const result = this.orchestrator.startOrchestration(userTask || "", startMode || "full");
         if (result.error) {
           console.error("[MLRA-Daemon] Start error:", result.error);
           break;
         }
-        // Release register_LRA blocks for planning agents
+        // Release register_LRA blocks for active-phase agents (NOT CEO) & record initial budget cost
         for (const { callerId, instruction } of result.instructions) {
           this.router.release(callerId, instruction);
+          const agent = this.orchestrator.agents.get(callerId);
+          if (agent) {
+            this.sessionManager.recordInitialCost(callerId, agent.role, "unknown", agent.alias);
+          }
         }
         // Push status
         this.ipcBridge.send({
@@ -384,9 +480,31 @@ class OrchestratorDaemon {
         console.error("[MLRA-Daemon] Termination requested");
         this.orchestrator.status = "cancelled";
         this.router.cancelAll("Orchestration terminated by user");
+        this.sessionManager.shutdown();
         this.ipcBridge.send({
           type: MSG.MLRA_ORCHESTRATION_STATUS,
           state: this.orchestrator.toJSON(),
+        });
+        break;
+      }
+
+      case MSG.MLRA_SET_BUDGET: {
+        const { limit } = msg;
+        this.sessionManager.setBudgetLimit(limit);
+        this.ipcBridge.send({
+          type: MSG.MLRA_BUDGET_UPDATE,
+          budget: this.sessionManager.getBudgetStatus(),
+        });
+        break;
+      }
+
+      case MSG.MLRA_INCREASE_BUDGET: {
+        const { amount } = msg;
+        const currentLimit = this.sessionManager.budget.limit;
+        this.sessionManager.setBudgetLimit(currentLimit + amount);
+        this.ipcBridge.send({
+          type: MSG.MLRA_BUDGET_UPDATE,
+          budget: this.sessionManager.getBudgetStatus(),
         });
         break;
       }
@@ -401,6 +519,26 @@ class OrchestratorDaemon {
     // Forward relevant events to Tauri UI
     switch (event.type) {
       case "status_change":
+        this.ipcBridge.send({
+          type: MSG.MLRA_ORCHESTRATION_STATUS,
+          state: this.orchestrator.toJSON(),
+        });
+        break;
+      case "agent_status_change":
+        // Status sync only — typed notifications (derailed/broken/recovered) are
+        // emitted by SessionManager events wired in _wireSessionManagerEvents()
+        this.ipcBridge.send({
+          type: MSG.MLRA_ORCHESTRATION_STATUS,
+          state: this.orchestrator.toJSON(),
+        });
+        break;
+      case "agent_failover":
+        this.ipcBridge.send({
+          type: MSG.MLRA_SESSION_FAILOVER,
+          oldCallerId: event.oldCallerId,
+          newCallerId: event.newCallerId,
+          role: event.role,
+        });
         this.ipcBridge.send({
           type: MSG.MLRA_ORCHESTRATION_STATUS,
           state: this.orchestrator.toJSON(),
@@ -432,22 +570,197 @@ class OrchestratorDaemon {
     }
   }
 
+  // ── SessionManager Event Wiring ──
+
+  _wireSessionManagerEvents() {
+    this.sessionManager.on("session_derailed", (callerId, role, reason, retryCount, maxRetries) => {
+      console.error(`[MLRA-Daemon] Session derailed: ${callerId} (${role}), reason=${reason}`);
+      this.orchestrator.setAgentStatus(callerId, "derailed");
+      this.ipcBridge.send({
+        type: MSG.MLRA_SESSION_DERAILED,
+        callerId,
+        role,
+        reason,
+        retryCount,
+        maxRetries,
+      });
+    });
+
+    this.sessionManager.on("session_recovered", (callerId, role) => {
+      console.error(`[MLRA-Daemon] Session recovered: ${callerId} (${role})`);
+      this.orchestrator.setAgentStatus(callerId, "idle");
+      this.ipcBridge.send({
+        type: MSG.MLRA_SESSION_RECOVERED,
+        callerId,
+        role,
+      });
+    });
+
+    this.sessionManager.on("retry_requested", (callerId, role, retryCount) => {
+      console.error(`[MLRA-Daemon] Retry requested: ${callerId} (${role}), attempt ${retryCount}`);
+      // Re-inject instruction to get agent back on track
+      this._reinjectAgent(callerId, role);
+    });
+
+    this.sessionManager.on("failover_requested", (newCallerId, oldCallerId, role) => {
+      console.error(`[MLRA-Daemon] Failover: ${role} ${oldCallerId} → ${newCallerId}`);
+      this.orchestrator.failoverAgent(oldCallerId, newCallerId);
+      // Release the standby's register_LRA block with recovery context
+      this._activateStandby(newCallerId, oldCallerId, role);
+    });
+
+    this.sessionManager.on("session_broken", (callerId, role) => {
+      console.error(`[MLRA-Daemon] Session broken (no standbys): ${callerId} (${role})`);
+      this.orchestrator.setAgentStatus(callerId, "broken");
+      this.ipcBridge.send({
+        type: MSG.MLRA_SESSION_BROKEN,
+        callerId,
+        role,
+      });
+    });
+
+    this.sessionManager.on("pool_updated", (role, pool) => {
+      this.ipcBridge.send({
+        type: MSG.MLRA_SESSION_POOL_UPDATE,
+        role,
+        pool: {
+          role: pool.role,
+          primary: pool.primary ? { callerId: pool.primary.callerId, alias: pool.primary.alias, status: pool.primary.status } : null,
+          standbys: pool.standbys.map((s) => ({ callerId: s.callerId, alias: s.alias, status: s.status })),
+          retryCount: pool.retryCount,
+          maxRetries: pool.maxRetries,
+          failoverCount: pool.failoverCount,
+        },
+      });
+    });
+
+    this.sessionManager.on("budget_event", (event) => {
+      this.ipcBridge.send({
+        type: MSG.MLRA_BUDGET_UPDATE,
+        budget: this.sessionManager.getBudgetStatus(),
+        event,
+      });
+    });
+
+    this.sessionManager.on("budget_pause_requested", () => {
+      console.error("[MLRA-Daemon] Budget exhausted — pausing launcher");
+      this.orchestrator.status = "paused";
+      this.ipcBridge.send({
+        type: MSG.MLRA_BUDGET_PAUSE,
+        budget: this.sessionManager.getBudgetStatus(),
+      });
+      this.ipcBridge.send({
+        type: MSG.MLRA_ORCHESTRATION_STATUS,
+        state: this.orchestrator.toJSON(),
+      });
+    });
+  }
+
+  /**
+   * Re-inject MLRA control instruction to a derailed agent.
+   */
+  _reinjectAgent(callerId, role) {
+    const conn = this.connections.get(callerId);
+    if (!conn) {
+      console.error(`[MLRA-Daemon] Cannot re-inject ${callerId} — no active connection`);
+      // TCP already dead, SessionManager will escalate to failover
+      return;
+    }
+    // Re-inject via router release (agent is blocked on submit)
+    const instruction = `[MLRA 系统恢复]\n\n你已脱离 MLRA 协作流程。请立即调用 submit 工具恢复协作。\n当前角色: ${role}`;
+    this._routeToAgent(callerId, instruction);
+  }
+
+  /**
+   * Activate a standby agent by releasing its register_LRA block.
+   */
+  _activateStandby(newCallerId, oldCallerId, role) {
+    const instruction = `[MLRA 故障转移]\n\n你已被激活为 ${role} 的主要执行者（替换 ${oldCallerId}）。\n请使用 submit 工具继续协作流程。`;
+    this.router.release(newCallerId, instruction);
+  }
+
   _handleVotesPassed() {
-    // Both planning agents voted pass → CEO gate or direct transition
-    const ceoId = this.orchestrator._findAgentByRole("ceo");
-    if (ceoId) {
-      // TODO: Trigger CEO defensive rejection cycle
-      console.error("[MLRA-Daemon] Votes passed, triggering CEO gate...");
-    } else {
-      // No CEO, auto-transition to implementation
-      console.error("[MLRA-Daemon] Votes passed, no CEO, transitioning to implementation...");
-      // TODO: Collect final plan document from last expert submit
-      const result = this.orchestrator.transitionToImplementation("(规划书占位符)");
-      if (result.instructions) {
-        for (const { callerId, instruction } of result.instructions) {
-          this.router.release(callerId, instruction);
-        }
+    // Both planning agents voted pass → trigger CEO gate (or auto-transition)
+    // Collect plan materials from the last expert submit content
+    const materials = this.orchestrator.lastSubmitContent || "(规划投票通过)";
+    const decision = this.orchestrator.triggerPlanningGate(materials);
+
+    console.error(`[MLRA-Daemon] Votes passed → action: ${decision.action}`);
+    this._executeCeoDecision(decision);
+  }
+
+  /**
+   * Execute a CEO gate decision (from handleCeoVerdict or triggerPlanningGate).
+   * Handles all possible action types returned by the orchestrator.
+   */
+  _executeCeoDecision(decision) {
+    switch (decision.action) {
+      case "wake_ceo": {
+        // Release CEO's blocked register_LRA or ceo_verdict call
+        this.router.release(decision.targetCallerId, decision.content);
+        break;
       }
+
+      case "auto_transition": {
+        // No CEO present → transition directly to implementation
+        console.error("[MLRA-Daemon] No CEO, auto-transitioning to implementation...");
+        const result = this.orchestrator.transitionToImplementation(decision.materials);
+        if (result.instructions) {
+          for (const { callerId, instruction } of result.instructions) {
+            this.router.release(callerId, instruction);
+          }
+        }
+        this.ipcBridge.send({
+          type: MSG.MLRA_ORCHESTRATION_STATUS,
+          state: this.orchestrator.toJSON(),
+        });
+        break;
+      }
+
+      case "transition_to_implementation": {
+        // CEO approved planning → transition to implementation phase
+        console.error("[MLRA-Daemon] CEO approved, transitioning to implementation...");
+        const result = this.orchestrator.transitionToImplementation(decision.materials);
+        if (result.instructions) {
+          for (const { callerId, instruction } of result.instructions) {
+            this.router.release(callerId, instruction);
+          }
+        }
+        this.ipcBridge.send({
+          type: MSG.MLRA_ORCHESTRATION_STATUS,
+          state: this.orchestrator.toJSON(),
+        });
+        break;
+      }
+
+      case "route_multiple": {
+        // Release multiple agents (e.g., CEO rejected → send back to expert + inspector)
+        for (const t of decision.targets) {
+          this.router.release(t.targetCallerId, t.content);
+        }
+        break;
+      }
+
+      case "complete": {
+        // Task is fully complete
+        console.error("[MLRA-Daemon] Orchestration complete.");
+        this.ipcBridge.send({
+          type: MSG.MLRA_ORCHESTRATION_STATUS,
+          state: this.orchestrator.toJSON(),
+        });
+        break;
+      }
+
+      case "arbitration_resolved": {
+        console.error("[MLRA-Daemon] CEO arbitration resolved.");
+        break;
+      }
+
+      case "noop":
+        break;
+
+      default:
+        console.error(`[MLRA-Daemon] Unknown CEO decision action: ${decision.action}`);
     }
   }
 
@@ -456,6 +769,7 @@ class OrchestratorDaemon {
   _shutdown() {
     console.error("[MLRA-Daemon] Shutting down...");
     this.router.cancelAll("Daemon shutting down");
+    this.sessionManager.shutdown();
     this.ipcBridge.disconnect();
     if (this.server) this.server.close();
     try {

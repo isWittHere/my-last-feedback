@@ -36,6 +36,7 @@ fn lock_file_path() -> std::path::PathBuf {
 struct IpcRequest {
     #[serde(rename = "type")]
     msg_type: String,
+    #[serde(default)]
     session_id: String,
     #[serde(default)]
     caller: Option<CallerField>,

@@ -1,5 +1,5 @@
-import { useCallback, useState } from "react";
-import { useMLRAStore, type Launcher, ROLE_COLORS, type AgentRole } from "../store/mlraStore";
+import { useCallback, useMemo, useState } from "react";
+import { useMLRAStore, type Launcher, ROLE_COLORS, type AgentRole, type StartMode } from "../store/mlraStore";
 import { Icon } from "./Icons";
 
 interface LauncherHomeProps {
@@ -37,10 +37,38 @@ export function LauncherHome({ launcher }: LauncherHomeProps) {
     setTaskName("");
   }, [taskName, createLauncher]);
 
-  const canStart = launcher
-    ? launcher.registeredAgents.some((a) => a.assignedRole === "planning-expert") &&
-      launcher.registeredAgents.some((a) => a.assignedRole === "planning-inspector")
-    : false;
+  // ── Readiness checks for two start modes ──
+  const readiness = useMemo(() => {
+    if (!launcher) return { full: { ready: false, missing: [] as string[], workerCount: 0 }, direct: { ready: false, missing: [] as string[], workerCount: 0 } };
+    const agents = launcher.registeredAgents;
+    const hasRole = (role: string) => agents.some((a) => a.assignedRole === role);
+    const workerCount = agents.filter((a) => a.assignedRole === "worker").length;
+
+    // Full start: all 5 main roles + ≥1 worker
+    const fullRequired: { role: AgentRole; label: string }[] = [
+      { role: "planning-expert", label: "规划专家" },
+      { role: "planning-inspector", label: "规划监察" },
+      { role: "execution-expert", label: "执行专家" },
+      { role: "execution-inspector", label: "执行监察" },
+      { role: "ceo", label: "CEO" },
+    ];
+    const fullMissing = fullRequired.filter((r) => !hasRole(r.role)).map((r) => r.label);
+    if (workerCount < 1) fullMissing.push("≥1 Worker");
+
+    // Direct execution: exec-expert + exec-inspector + ceo + ≥1 worker
+    const directRequired: { role: AgentRole; label: string }[] = [
+      { role: "execution-expert", label: "执行专家" },
+      { role: "execution-inspector", label: "执行监察" },
+      { role: "ceo", label: "CEO" },
+    ];
+    const directMissing = directRequired.filter((r) => !hasRole(r.role)).map((r) => r.label);
+    if (workerCount < 1) directMissing.push("≥1 Worker");
+
+    return {
+      full: { ready: fullMissing.length === 0, missing: fullMissing, workerCount },
+      direct: { ready: directMissing.length === 0, missing: directMissing, workerCount },
+    };
+  }, [launcher]);
 
   // ── No launcher: create prompt ──
   if (!launcher) {
@@ -157,18 +185,37 @@ export function LauncherHome({ launcher }: LauncherHomeProps) {
           )}
         </div>
 
-        {/* Start */}
+        {/* Start Modes */}
         <div className="mlra-home-actions">
-          <button
-            className="btn btn-primary mlra-start-btn"
-            disabled={!canStart}
-            onClick={() => startOrchestration(launcher.id)}
-          >
-            <Icon name="send" size={14} />
-            开始编排
-          </button>
-          {!canStart && launcher.registeredAgents.length > 0 && (
-            <span className="mlra-start-hint">需要分配专家和监察</span>
+          <div className="mlra-start-modes">
+            <button
+              className="btn btn-primary mlra-start-btn"
+              disabled={!readiness.full.ready}
+              onClick={() => startOrchestration(launcher.id, "full" as StartMode)}
+              title={readiness.full.ready ? "全部5个主Agent + Worker 就位，从规划对峙阶段开始" : `缺少: ${readiness.full.missing.join(", ")}`}
+            >
+              <Icon name="send" size={14} />
+              全开局
+            </button>
+            <button
+              className="btn mlra-start-btn mlra-start-btn-direct"
+              disabled={!readiness.direct.ready}
+              onClick={() => startOrchestration(launcher.id, "direct-execution" as StartMode)}
+              title={readiness.direct.ready ? "跳过规划，直接进入实施阶段" : `缺少: ${readiness.direct.missing.join(", ")}`}
+            >
+              <Icon name="send" size={14} />
+              直接执行
+            </button>
+          </div>
+          {launcher.registeredAgents.length > 0 && (!readiness.full.ready || !readiness.direct.ready) && (
+            <div className="mlra-start-hints">
+              {!readiness.full.ready && (
+                <span className="mlra-start-hint">全开局缺少: {readiness.full.missing.join(", ")}</span>
+              )}
+              {!readiness.direct.ready && (
+                <span className="mlra-start-hint">直接执行缺少: {readiness.direct.missing.join(", ")}</span>
+              )}
+            </div>
           )}
         </div>
       </div>

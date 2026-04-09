@@ -1,7 +1,7 @@
 // ── MLRA Orchestrator State Machine ──
 // Pure logic module — no I/O, no network, fully testable.
 
-import { PHASE_AGENTS, buildTailInjection } from "./protocol.mjs";
+import { PHASE_AGENTS, buildTailInjection, START_MODES, START_MODE_REQUIREMENTS } from "./protocol.mjs";
 import { createHash } from "node:crypto";
 
 // ── Submit Types ──
@@ -24,12 +24,30 @@ export class Orchestrator {
     this.phase = "planning";
     /** @type {string|null} */
     this.currentPhaseId = null;
+    /** @type {"full"|"direct-execution"} */
+    this.startMode = START_MODES.FULL;
 
     /** @type {Map<string, AgentEntry>} callerId → AgentEntry */
     this.agents = new Map();
 
     // Votes (planning confrontation consensus)
     this.votes = { expert: null, inspector: null };
+
+    // Track last submit content for CEO gate materials
+    this.lastSubmitContent = null;
+
+    // CEO Gate — defensive rejection state machine
+    this.ceoGate = {
+      active: false,
+      /** @type {"planning_gate"|"final_review"|"arbitration"|null} */
+      type: null,
+      round: 0,
+      minRounds: 2,
+      /** @type {string|null} */
+      materials: null,
+      /** @type {Array<{round: number, verdict: string, reason: string}>} */
+      history: [],
+    };
 
     // Defensive rejection
     this.defensiveRejectionCount = 0;
@@ -93,38 +111,84 @@ export class Orchestrator {
   // ── Orchestration Lifecycle ──
 
   _checkReady() {
+    // Readiness depends on startMode — but during configuring we don't check yet.
+    // Readiness is checked explicitly via checkStartReady(startMode).
+    // Keep minimal check for backward compat: at least 2 agents with roles assigned.
     if (this.status !== "configuring") return;
-    // Need at minimum: planning-expert + planning-inspector
-    const roles = new Set();
-    for (const a of this.agents.values()) {
-      if (a.role) roles.add(a.role);
-    }
-    if (roles.has("planning-expert") && roles.has("planning-inspector")) {
-      this.status = "ready";
-      this._emit({ type: "status_change", status: "ready" });
+    const rolesAssigned = [...this.agents.values()].filter((a) => a.role).length;
+    if (rolesAssigned >= 2) {
+      // Don't auto-transition to ready; let frontend/daemon check explicitly
     }
   }
 
   /**
-   * Start orchestration. Returns initial instructions for each active-phase agent.
-   * @param {string} userTask - The user's original task description
-   * @returns {{ callerId: string, instruction: string }[]}
+   * Check if enough agents are registered and assigned for the given start mode.
+   * @param {"full"|"direct-execution"} startMode
+   * @returns {{ ready: boolean, missing: string[], workerCount: number }}
    */
-  startOrchestration(userTask) {
-    if (this.status !== "ready") {
-      return { error: `Cannot start: status is ${this.status}` };
+  checkStartReady(startMode) {
+    const req = START_MODE_REQUIREMENTS[startMode];
+    if (!req) return { ready: false, missing: [`Unknown start mode: ${startMode}`], workerCount: 0 };
+    const assignedRoles = new Map();
+    let workerCount = 0;
+    for (const a of this.agents.values()) {
+      if (a.role === "worker") workerCount++;
+      else if (a.role) assignedRoles.set(a.role, true);
     }
-    this.status = "running";
-    this.phase = "planning";
-    this.userTask = userTask;
-    this._emit({ type: "status_change", status: "running", phase: "planning" });
+    const missing = req.required.filter((r) => !assignedRoles.has(r));
+    const needWorkers = Math.max(0, req.minWorkers - workerCount);
+    if (needWorkers > 0) missing.push(`worker ×${needWorkers}`);
+    return { ready: missing.length === 0, missing, workerCount };
+  }
 
-    // Build initial instructions for planning-phase agents
+  /**
+   * Start orchestration. Returns initial instructions for each active-phase agent.
+   * CEO is NOT released — it stays blocked until a trigger point.
+   * @param {string} userTask - The user's original task description
+   * @param {"full"|"direct-execution"} startMode
+   * @returns {{ callerId: string, instruction: string }[] | { error: string }}
+   */
+  startOrchestration(userTask, startMode = START_MODES.FULL) {
+    const readiness = this.checkStartReady(startMode);
+    if (!readiness.ready) {
+      return { error: `Cannot start: missing ${readiness.missing.join(", ")}` };
+    }
+
+    this.startMode = startMode;
+    this.status = "running";
+    this.userTask = userTask;
+
+    // Determine initial phase based on start mode
+    if (startMode === START_MODES.DIRECT_EXECUTION) {
+      this.phase = "implementation";
+      this.currentPhaseId = "Phase 1";
+    } else {
+      this.phase = "planning";
+    }
+
+    this._emit({ type: "status_change", status: "running", phase: this.phase });
+
+    // Build initial instructions for active-phase agents (excluding CEO)
+    const activeRoles = startMode === START_MODES.DIRECT_EXECUTION
+      ? PHASE_AGENTS.implementation
+      : PHASE_AGENTS.planning;
+
     const instructions = [];
     for (const [callerId, agent] of this.agents) {
-      if (PHASE_AGENTS.planning.includes(agent.role)) {
+      // CEO stays blocked — never released at start
+      if (agent.role === "ceo") continue;
+      // Workers get a standby instruction
+      if (agent.role === "worker") {
+        agent.status = "idle";
+        instructions.push({
+          callerId,
+          instruction: this._buildInitialInstruction(agent, userTask),
+        });
+        continue;
+      }
+      if (activeRoles.includes(agent.role)) {
         const instruction = this._buildInitialInstruction(agent, userTask);
-        agent.status = "idle"; // Will become "working" when resolve is sent
+        agent.status = "idle";
         instructions.push({ callerId, instruction });
       }
     }
@@ -140,9 +204,15 @@ export class Orchestrator {
       return `等待规划专家提交方案后进行审查。使用 submit 工具提交审查结果。${tail}`;
     }
     if (agent.role === "execution-expert") {
+      if (this.startMode === START_MODES.DIRECT_EXECUTION) {
+        return `## 当前任务（直接执行模式）\n\n${userTask}\n\n已跳过规划阶段，直接进入实施。\n1. 分析任务并制定执行计划\n2. 使用 order 工具分发工作指令给 Worker\n3. 每个 Phase 完成后使用 submit 工具提交进度报告${tail}`;
+      }
       return `等待方案批准后进入实施阶段。使用 order 工具分发工作指令。${tail}`;
     }
     if (agent.role === "execution-inspector") {
+      if (this.startMode === START_MODES.DIRECT_EXECUTION) {
+        return `## 审查任务（直接执行模式）\n\n原始任务: ${userTask}\n\n已跳过规划阶段。请直接审查执行专家的提交。\n1. 检查代码质量和架构一致性\n2. 使用 submit 工具提交审查结果${tail}`;
+      }
       return `等待实施阶段的 Phase 完成后进行审查。使用 submit 工具提交审查结果。${tail}`;
     }
     if (agent.role === "ceo") {
@@ -173,6 +243,9 @@ export class Orchestrator {
 
     // Update agent status
     agent.status = "blocked";
+
+    // Track last submit content for CEO gate materials
+    this.lastSubmitContent = content;
 
     // Track round
     this._endCurrentRound();
@@ -473,12 +546,178 @@ export class Orchestrator {
       return { action: "complete" };
     }
 
+    // Activate CEO gate for final review
+    this.ceoGate = {
+      active: true,
+      type: "final_review",
+      round: 0,
+      minRounds: 1, // Less defensive for final review
+      materials: content,
+      history: [],
+    };
+
     const tail = buildTailInjection("ceo", this.phase, null);
     return {
-      action: "route",
+      action: "wake_ceo",
       targetCallerId: ceoId,
-      content: `[CEO 终审请求]\n\n以下是全部实施结果的审查报告，请进行最终验证：\n\n${content}${tail}`,
+      content: `[CEO 终审请求]\n\n以下是全部实施结果的审查报告，请进行最终验证。\n审查后请使用 ceo_verdict 工具提交你的裁决。\n\n${content}${tail}`,
     };
+  }
+
+  /**
+   * Trigger CEO gate after router_vote passes.
+   * Starts the defensive rejection sequence before CEO gets to make a real verdict.
+   * @param {string} materials - Vote reasons and plan content
+   * @returns {{ action: string, ... }}
+   */
+  triggerPlanningGate(materials) {
+    const ceoId = this._findAgentByRole("ceo");
+    if (!ceoId) {
+      // No CEO → auto-approve, transition to implementation
+      return { action: "auto_transition", materials };
+    }
+
+    this.ceoGate = {
+      active: true,
+      type: "planning_gate",
+      round: 0,
+      minRounds: 2,
+      materials,
+      history: [],
+    };
+
+    // Start defensive rejection sequence — round 0: wake CEO with review materials
+    const tail = buildTailInjection("ceo", "planning", null);
+    return {
+      action: "wake_ceo",
+      targetCallerId: ceoId,
+      content: `[CEO 门控审批 — 规划对峙投票已通过]\n\n专家和监察已就方案达成一致。请审查以下材料并做出裁决。\n审查后请使用 ceo_verdict 工具提交你的裁决（approved/rejected）。\n\n## 原始任务\n\n${this.userTask}\n\n## 投票理由\n\n${materials}${tail}`,
+    };
+  }
+
+  /**
+   * Handle CEO verdict from ceo_verdict tool.
+   * @returns {{ action: string, ... }}
+   */
+  handleCeoVerdict(callerId, verdict, reason, targets = []) {
+    const agent = this.agents.get(callerId);
+    if (!agent || agent.role !== "ceo") {
+      return { error: "Not the CEO agent" };
+    }
+    if (!this.ceoGate.active) {
+      return { error: "No active CEO gate" };
+    }
+
+    // Record verdict in history
+    this.ceoGate.history.push({
+      round: this.ceoGate.round,
+      verdict,
+      reason,
+    });
+
+    if (verdict === "approved") {
+      return this._handleCeoApproval();
+    } else if (verdict === "rejected") {
+      return this._handleCeoRejection(reason);
+    } else if (verdict === "arbitration") {
+      return this._handleCeoArbitration(reason, targets);
+    }
+
+    return { error: `Unknown verdict: ${verdict}` };
+  }
+
+  _handleCeoApproval() {
+    const gateType = this.ceoGate.type;
+    this.ceoGate.active = false;
+
+    if (gateType === "planning_gate") {
+      // CEO approved planning → transition to implementation
+      this._emit({ type: "ceo_gate_resolved", gateType, verdict: "approved" });
+      return { action: "transition_to_implementation", materials: this.ceoGate.materials };
+    }
+    if (gateType === "final_review") {
+      // CEO approved final → task complete
+      this.status = "completed";
+      this._emit({ type: "status_change", status: "completed" });
+      this._emit({ type: "ceo_gate_resolved", gateType, verdict: "approved" });
+      return { action: "complete" };
+    }
+    if (gateType === "arbitration") {
+      this._emit({ type: "ceo_gate_resolved", gateType, verdict: "approved" });
+      return { action: "arbitration_resolved" };
+    }
+    return { action: "noop" };
+  }
+
+  _handleCeoRejection(reason) {
+    const gateType = this.ceoGate.type;
+    this.ceoGate.round++;
+
+    if (gateType === "planning_gate") {
+      // Reset votes, send rejection back to expert+inspector
+      this.votes = { expert: null, inspector: null };
+      this.ceoGate.active = false;
+      this._emit({ type: "ceo_gate_resolved", gateType, verdict: "rejected", reason });
+
+      const expertId = this._findAgentByRole("planning-expert");
+      const inspectorId = this._findAgentByRole("planning-inspector");
+      const routeTargets = [];
+      if (expertId) {
+        routeTargets.push({
+          targetCallerId: expertId,
+          content: `[CEO 裁决: 方案被退回]\n\n${reason}\n\n请根据以上反馈修改方案后重新提交。`,
+        });
+      }
+      if (inspectorId) {
+        routeTargets.push({
+          targetCallerId: inspectorId,
+          content: `[CEO 裁决: 方案被退回]\n\nCEO认为方案存在问题：\n${reason}\n\n请在专家修改方案后重新审查。`,
+        });
+      }
+      return { action: "route_multiple", targets: routeTargets };
+    }
+
+    if (gateType === "final_review") {
+      this.ceoGate.active = false;
+      this._emit({ type: "ceo_gate_resolved", gateType, verdict: "rejected", reason });
+
+      const expertId = this._findAgentByRole("execution-expert");
+      const inspectorId = this._findAgentByRole("execution-inspector");
+      const routeTargets = [];
+      if (expertId) {
+        routeTargets.push({
+          targetCallerId: expertId,
+          content: `[CEO 终审未通过]\n\n${reason}\n\n请根据以上反馈修复后重新提交。`,
+        });
+      }
+      if (inspectorId) {
+        routeTargets.push({
+          targetCallerId: inspectorId,
+          content: `[CEO 终审未通过]\n\nCEO 发现问题：\n${reason}\n\n请在专家修复后重新审查。`,
+        });
+      }
+      return { action: "route_multiple", targets: routeTargets };
+    }
+
+    this.ceoGate.active = false;
+    return { action: "noop" };
+  }
+
+  _handleCeoArbitration(reason, targets) {
+    this.ceoGate.active = false;
+    this._emit({ type: "ceo_gate_resolved", gateType: "arbitration", verdict: "arbitration", reason });
+
+    const routeTargets = [];
+    for (const targetRole of targets) {
+      const targetId = this._findAgentByRole(targetRole);
+      if (targetId) {
+        routeTargets.push({
+          targetCallerId: targetId,
+          content: `[CEO 仲裁裁决]\n\n${reason}`,
+        });
+      }
+    }
+    return { action: "route_multiple", targets: routeTargets };
   }
 
   /**
@@ -540,6 +779,50 @@ ${planDocument}
       }
     }
     return { instructions };
+  }
+
+  // ── Session Status ──
+
+  /**
+   * Set agent session status externally (e.g. from SessionManager).
+   * Valid statuses: "derailed", "broken", "registered" (reset after recovery).
+   */
+  setAgentStatus(callerId, status) {
+    const agent = this.agents.get(callerId);
+    if (!agent) return { error: "Agent not found" };
+    const prev = agent.status;
+    agent.status = status;
+    this._emit({ type: "agent_status_change", callerId, prev, status, role: agent.role });
+    return { ok: true, prev };
+  }
+
+  /**
+   * Replace a broken/derailed agent with a standby.
+   * Transfers role and workerRole from the old agent to the new one.
+   */
+  failoverAgent(oldCallerId, newCallerId) {
+    const oldAgent = this.agents.get(oldCallerId);
+    const newAgent = this.agents.get(newCallerId);
+    if (!oldAgent) return { error: "Old agent not found" };
+    if (!newAgent) return { error: "Standby agent not found" };
+
+    const role = oldAgent.role;
+    const workerRole = oldAgent.workerRole;
+
+    oldAgent.status = "broken";
+    oldAgent.role = null;
+
+    newAgent.role = role;
+    newAgent.workerRole = workerRole;
+    newAgent.status = "idle";
+
+    this._emit({
+      type: "agent_failover",
+      oldCallerId,
+      newCallerId,
+      role,
+    });
+    return { ok: true, role };
   }
 
   // ── Control Mode ──
@@ -623,11 +906,18 @@ ${planDocument}
       status: this.status,
       phase: this.phase,
       currentPhaseId: this.currentPhaseId,
+      startMode: this.startMode,
       controlMode: this.controlMode,
       agents: Object.fromEntries(
         [...this.agents].map(([k, v]) => [k, { ...v }])
       ),
       votes: this.votes,
+      ceoGate: {
+        active: this.ceoGate.active,
+        type: this.ceoGate.type,
+        round: this.ceoGate.round,
+        history: this.ceoGate.history,
+      },
       rounds: this.rounds,
       humanReviewPending: this.humanReviewPending,
     };

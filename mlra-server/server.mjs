@@ -11,6 +11,7 @@ import { readFileSync } from "node:fs";
 import { join } from "node:path";
 import { tmpdir } from "node:os";
 import { createHash, randomBytes } from "node:crypto";
+import { basename } from "node:path";
 import { MSG } from "./protocol.mjs";
 
 // ── Daemon Connection ──
@@ -208,9 +209,22 @@ Do NOT call any other tool before register_LRA returns.`,
     // Generate caller identity
     const info = await getCallerInfo(mcpServer, workspace);
     callerAlias = generateAlias(info.baseName, info.clientName);
-    callerId = `mlra_${callerAlias}_${Date.now().toString(36)}`;
 
-    console.error(`[MLRA-MCP] Registering as ${callerId} (${callerAlias})`);
+    // Use real VS Code session ID if available, otherwise generate one
+    const logPath = process.env.VSCODE_TARGET_SESSION_LOG;
+    if (logPath) {
+      callerId = basename(logPath);
+      console.error(`[MLRA-MCP] Using real session ID: ${callerId}`);
+    } else {
+      callerId = `mlra_${callerAlias}_${Date.now().toString(36)}`;
+      console.error(`[MLRA-MCP] No VSCODE_TARGET_SESSION_LOG, generated ID: ${callerId}`);
+    }
+
+    // Detect model from client info
+    const clientInfo = mcpServer.server?.getClientVersion?.();
+    const model = clientInfo?.name || process.env.MLRA_MODEL || "unknown";
+
+    console.error(`[MLRA-MCP] Registering as ${callerId} (${callerAlias}), model=${model}`);
 
     // Send registration and BLOCK until orchestration starts
     const response = await sendAndWait(
@@ -220,6 +234,7 @@ Do NOT call any other tool before register_LRA returns.`,
         callerId,
         alias: callerAlias,
         workspace: workspace.replace(/\\/g, "/"),
+        model,
       },
       callerId
     );
@@ -441,6 +456,49 @@ Only worker agents should use this tool.`,
         callerId,
         result,
         filesModified: files_modified || [],
+      },
+      callerId
+    );
+
+    return {
+      content: [{ type: "text", text: response.content }],
+    };
+  }
+);
+
+// ── Tool: ceo_verdict (CEO only) ──
+
+mcpServer.tool(
+  "ceo_verdict",
+  `CEO exclusive verdict tool. Submit your decision and automatically enter standby
+until the next critical review point arrives.
+This tool will BLOCK until the next trigger point wakes you up.
+Only the CEO agent should use this tool.`,
+  {
+    verdict: z.enum(["approved", "rejected", "arbitration"])
+      .describe("Your verdict: approved (pass), rejected (reject with reason), arbitration (resolve dispute)"),
+    reason: z.string().optional()
+      .describe("Verdict reason or specific instructions (required for rejected/arbitration)"),
+    targets: z.array(z.string()).optional()
+      .describe("Target roles for arbitration result routing"),
+  },
+  async ({ verdict, reason, targets }) => {
+    if (!daemonSocket || !callerId) {
+      return {
+        content: [{ type: "text", text: "Error: You must call register_LRA first." }],
+        isError: true,
+      };
+    }
+
+    // Send verdict and BLOCK until next trigger point
+    const response = await sendAndWait(
+      daemonSocket,
+      {
+        type: MSG.CEO_VERDICT,
+        callerId,
+        verdict,
+        reason: reason || "",
+        targets: targets || [],
       },
       callerId
     );
