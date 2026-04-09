@@ -152,6 +152,15 @@ const ICONS: Record<string, IconDef> = {
   sidebar: {
     paths: '<rect x="3" y="3" width="18" height="18" rx="2" /><line x1="9" y1="3" x2="9" y2="21" />',
   },
+  menu: {
+    paths: '<line x1="3" y1="6" x2="21" y2="6" /><line x1="3" y1="12" x2="21" y2="12" /><line x1="3" y1="18" x2="21" y2="18" />',
+  },
+  pause: {
+    paths: '<rect x="6" y="4" width="4" height="16" /><rect x="14" y="4" width="4" height="16" />',
+  },
+  radio: {
+    paths: '<path d="M16.24 7.76a6 6 0 0 1 0 8.49" /><path d="M19.07 4.93a10 10 0 0 1 0 14.14" /><path d="M7.76 16.24a6 6 0 0 1 0-8.49" /><path d="M4.93 19.07a10 10 0 0 1 0-14.14" /><circle cx="12" cy="12" r="2" />',
+  },
 
   // ── Window controls (10×10 viewBox) ──
   "win-minimize": {

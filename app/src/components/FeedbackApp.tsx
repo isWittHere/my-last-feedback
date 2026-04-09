@@ -11,7 +11,41 @@ import { CallerTabs } from "./CallerTabs";
 import { CallerPanel } from "./CallerPanel";
 import { SettingsDialog } from "./SettingsDialog";
 import { WelcomeHome } from "./WelcomeHome";
+import { MLRAView } from "./MLRAView";
+import { PhaseToggle } from "./PhaseToggle";
+import { MLRACallerTabs } from "./MLRACallerTabs";
 import { Icon } from "./Icons";
+import React from "react";
+import { useMLRAStore } from "../store/mlraStore";
+
+/** Error boundary to catch MLRA render crashes */
+class MLRAErrorBoundary extends React.Component<
+  { children: React.ReactNode },
+  { error: Error | null }
+> {
+  state = { error: null as Error | null };
+  static getDerivedStateFromError(error: Error) {
+    return { error };
+  }
+  componentDidCatch(error: Error, info: React.ErrorInfo) {
+    console.error("[MLRA crash]", error, info.componentStack);
+  }
+  render() {
+    if (this.state.error) {
+      return (
+        <div style={{ flex: 1, display: "flex", alignItems: "center", justifyContent: "center", color: "#f06060", padding: 20, fontSize: 13, flexDirection: "column", gap: 8 }}>
+          <div style={{ fontWeight: 700, fontSize: 16 }}>MLRA Render Error</div>
+          <div style={{ color: "#999", fontSize: 11, maxWidth: 500, wordBreak: "break-all" }}>{this.state.error.message}</div>
+          <div style={{ color: "#666", fontSize: 10, maxWidth: 500, wordBreak: "break-all" }}>{this.state.error.stack?.split("\n").slice(0, 5).join("\n")}</div>
+          <button onClick={() => this.setState({ error: null })} style={{ marginTop: 12, padding: "4px 12px", background: "#333", color: "#ddd", border: "1px solid #555", borderRadius: 4, cursor: "pointer" }}>
+            重试
+          </button>
+        </div>
+      );
+    }
+    return this.props.children;
+  }
+}
 import { invoke } from "@tauri-apps/api/core";
 import { getCurrentWindow } from "@tauri-apps/api/window";
 
@@ -208,18 +242,19 @@ export function FeedbackApp() {
       {/* Custom title bar */}
       <div
         data-tauri-drag-region
-        className={`relative flex items-center justify-between px-3 shrink-0 titlebar${appView === "MLRA" ? " titlebar-mlra" : ""}`}
+        className={`relative flex flex-col shrink-0 titlebar${appView === "MLRA" ? " titlebar-mlra" : ""}`}
         style={{
           background: "var(--color-bg-surface)",
           borderBottom: "1px solid var(--color-border-subtle)",
-          height: 34,
           cursor: "default",
           userSelect: "none",
           ...(IS_MACOS ? { paddingLeft: 78 } : {}),
         }}
       >
+        {/* Row 1: main title bar */}
+        <div data-tauri-drag-region className="relative flex items-center justify-between px-3" style={{ height: 34 }}>
         {/* Left: title or request name */}
-        <div data-tauri-drag-region className="flex items-center gap-2 min-w-0 flex-shrink-0 z-10" style={{ maxWidth: "30%" }}>
+        <div data-tauri-drag-region className="flex items-center gap-2 min-w-0 flex-shrink-0 z-10" style={{ maxWidth: "40%" }}>
           <svg data-tauri-drag-region width="14" height="14" viewBox="0 0 16 16" fill="currentColor" style={{ flexShrink: 0 }}>
             <path d="M4,3L11.995,3L11.995,4L4,4C3.45,4 3,4.45 3,5L3,10C3,10.55 3.45,11.001 4,11.001L6,11.001L6,13.001L8.75,11.001C8.75,11.001 10.744,11.001 12,11C12.265,11.001 12.52,10.895 12.707,10.708C12.895,10.52 13,10.266 13,10.001L13,5.004L14,5.004L14,10.017C14,11.115 13.115,12.008 12.017,12.017C10.625,12.029 9.012,12.042 9.012,12.042L6.59,13.81C5.93,14.291 5,13.82 5,13.001L5,12.001L4,12.001C2.9,12 2,11.1 2,10L2,5C2,3.9 2.9,3.001 4,3Z" fillRule="nonzero"/>
             <g transform="matrix(1,0,0,1,1.4995,1)"><path d="M12.364,0L14.5,2.137L7.637,9L5.5,9L5.5,6.864L12.364,0ZM13.086,2.137L12.364,1.414L6.5,7.278L6.5,8L7.223,8L13.086,2.137Z"/></g>
@@ -252,12 +287,22 @@ export function FeedbackApp() {
         </div>
 
         {/* Center: Caller tabs - always visible in persistent mode with multiple callers */}
-        {isPersistent && visibleCallers.length > 1 && (
+        {isPersistent && appView === "MLFB" && visibleCallers.length > 1 && (
           <div className="absolute inset-0 flex items-center justify-center pointer-events-none" style={IS_MACOS ? { left: 70 } : undefined}>
             <div className="pointer-events-auto">
               <CallerTabs columnCount={columnCount} />
             </div>
           </div>
+        )}
+        {/* Center: MLRA role tabs when in MLRA mode with active running launcher */}
+        {isPersistent && appView === "MLRA" && (
+          <MLRAErrorBoundary>
+          <div className="absolute inset-0 flex items-center justify-center pointer-events-none" style={IS_MACOS ? { left: 70 } : undefined}>
+            <div className="pointer-events-auto">
+              <MLRACallerTabs />
+            </div>
+          </div>
+          </MLRAErrorBoundary>
         )}
 
         {/* Right: controls */}
@@ -294,11 +339,34 @@ export function FeedbackApp() {
             </>
           )}
         </div>
+        </div>
+        {/* Row 1 end */}
+
+        {/* Row 2: MLRA second bar — ☰ launcher + PhaseToggle */}
+        {appView === "MLRA" && isPersistent && (
+          <div data-tauri-drag-region className="flex items-center gap-2 px-3" style={{ height: 26 }}>
+            <button
+              className="launcher-btn"
+              onClick={() => useMLRAStore.getState().toggleLauncherSidebar()}
+              title="Launcher 管理"
+            >
+              <Icon name="menu" size={14} />
+            </button>
+            {useMLRAStore.getState().getActiveLauncher()?.status === "running" && (
+              <MLRAErrorBoundary><PhaseToggle /></MLRAErrorBoundary>
+            )}
+          </div>
+        )}
       </div>
 
       {/* Body */}
       <div className="flex-1 flex min-h-0">
-        {isPersistent ? (
+        {appView === "MLRA" && isPersistent ? (
+          /* MLRA view — wrapped in error boundary to prevent full app crash */
+          <MLRAErrorBoundary>
+            <MLRAView />
+          </MLRAErrorBoundary>
+        ) : isPersistent ? (
           useMultiColumn ? (
             /* Multi-column: parallel CallerPanels for column callers */
             columnCallerIds.map((id) => (
