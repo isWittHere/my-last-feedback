@@ -30,6 +30,7 @@ description: "实施阶段执行者的工作规范、自检流程和提交报告
 ### 4. 提交阶段
 - 使用 `submit` 工具提交阶段完成报告（type: `phase_complete`）
 - 按下方**提交报告模板**格式化内容
+- **progress 参数**：每次提交时填写 `progress` 参数标注当前进度，格式示例：`Phase 2/5: 数据库迁移`
 
 ### 5. 投票（全部 Phase 完成后）
 - 当所有 Phase 都已完成且通过监察审查后，使用 `router_vote` 工具投票 pass

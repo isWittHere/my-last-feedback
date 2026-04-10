@@ -159,6 +159,9 @@ export interface Launcher {
   // Task description & type
   taskType: string | null;
   userTask: string;
+
+  // Agent self-reported progress (display-only)
+  lastProgress: string | null;
 }
 
 // ── Store ──
@@ -276,6 +279,7 @@ export const useMLRAStore = create<MLRAState>((set, get) => ({
       ceoGate: null,
       taskType: null,
       userTask: "",
+      lastProgress: null,
     };
     set((s) => ({
       launchers: [...s.launchers, launcher],
@@ -527,6 +531,7 @@ export const useMLRAStore = create<MLRAState>((set, get) => ({
                 controlMode: state.controlMode || l.controlMode,
                 startMode: state.startMode || l.startMode,
                 ceoGate: state.ceoGate || l.ceoGate,
+                lastProgress: state.lastProgress !== undefined ? state.lastProgress : l.lastProgress,
                 updatedAt: new Date().toISOString(),
               };
             }),

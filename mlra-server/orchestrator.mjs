@@ -1,7 +1,7 @@
 // ── MLRA Orchestrator State Machine ──
 // Pure logic module — no I/O, no network, fully testable.
 
-import { PHASE_AGENTS, buildRoutingPrompt, buildInitialPrompt, buildTailInjection, START_MODES, START_MODE_REQUIREMENTS } from "./protocol.mjs";
+import { PHASE_AGENTS, ROLE_LABELS, buildRoutingPrompt, buildInitialPrompt, buildTailInjection, START_MODES, START_MODE_REQUIREMENTS } from "./protocol.mjs";
 import { createHash } from "node:crypto";
 
 // ── Submit Types ──
@@ -35,10 +35,13 @@ export class Orchestrator {
     // Track last submit content for CEO gate materials
     this.lastSubmitContent = null;
 
+    // Progress tracking (agent self-reported, display-only)
+    this.lastProgress = null;
+
     // CEO Gate — defensive rejection state machine
     this.ceoGate = {
       active: false,
-      /** @type {"planning_gate"|"final_review"|"arbitration"|null} */
+      /** @type {"planning_gate"|"final_review"|"arbitration"|"stagnation_arbitration"|null} */
       type: null,
       round: 0,
       /** Minimum defensive rounds where approvals are force-downgraded */
@@ -232,6 +235,11 @@ export class Orchestrator {
     // Track last submit content for CEO gate materials
     this.lastSubmitContent = content;
 
+    // Track progress if provided
+    if (metadata.progress) {
+      this.lastProgress = metadata.progress;
+    }
+
     // Track round
     this._endCurrentRound();
     this._startRound(callerId, agent.role);
@@ -258,8 +266,8 @@ export class Orchestrator {
       case "autopilot":
         return false;
       case "ceo-override":
-        // Only pause on CEO review points (e.g. after vote pass, final review)
-        return role === "ceo" || submitType === "final_complete";
+        // Only pause on CEO review points
+        return role === "ceo";
       case "full-override":
         return true;
       default:
@@ -606,7 +614,7 @@ export class Orchestrator {
     if (verdict === "approved") {
       return this._handleCeoApproval();
     } else if (verdict === "rejected") {
-      return this._handleCeoRejection(reason);
+      return this._handleCeoRejection(reason, targets);
     } else if (verdict === "arbitration") {
       return this._handleCeoArbitration(reason, targets);
     }
@@ -682,10 +690,15 @@ export class Orchestrator {
       this._emit({ type: "ceo_gate_resolved", gateType, verdict: "approved" });
       return { action: "arbitration_resolved" };
     }
+    if (gateType === "stagnation_arbitration") {
+      this._emit({ type: "ceo_gate_resolved", gateType, verdict: "approved" });
+      // Stagnation resolved — CEO says current work is fine, resume normal flow
+      return { action: "arbitration_resolved" };
+    }
     return { action: "noop" };
   }
 
-  _handleCeoRejection(reason) {
+  _handleCeoRejection(reason, targets = []) {
     const gateType = this.ceoGate.type;
     this.ceoGate.round++;
     // Reset consecutive approvals on rejection
@@ -742,6 +755,15 @@ export class Orchestrator {
     }
 
     this.ceoGate.active = false;
+    // Handle stagnation_arbitration rejection — CEO gives specific direction to break deadlock
+    if (gateType === "stagnation_arbitration") {
+      this._emit({ type: "ceo_gate_resolved", gateType, verdict: "rejected", reason });
+      // Reset stagnation counter so detection can re-trigger if still stuck
+      this.sameFeedbackCount = 0;
+      this.lastFeedbackHash = null;
+      // Route CEO's direction to the stalled roles
+      return this._handleCeoArbitration(reason, targets.length > 0 ? targets : this._getStalledRoles());
+    }
     return { action: "noop" };
   }
 
@@ -859,12 +881,67 @@ export class Orchestrator {
     if (hash === this.lastFeedbackHash) {
       this.sameFeedbackCount++;
       if (this.sameFeedbackCount >= this.maxSameFeedback) {
-        this._emit({ type: "stagnation_detected", count: this.sameFeedbackCount });
+        // Identify stalled roles from recent rounds
+        const stalledRoles = [...new Set(
+          this.rounds.slice(-this.maxSameFeedback).map(r => r.role).filter(Boolean)
+        )];
+        this._emit({
+          type: "stagnation_detected",
+          count: this.sameFeedbackCount,
+          stalledRoles,
+          phase: this.phase,
+          totalRounds: this.rounds.length,
+        });
       }
     } else {
       this.sameFeedbackCount = 0;
       this.lastFeedbackHash = hash;
     }
+  }
+
+  /**
+   * Trigger CEO stagnation arbitration.
+   * Called by daemon when stagnation_detected event fires.
+   * @param {{ count: number, stalledRoles: string[], phase: string, totalRounds: number }} stagnationData
+   * @returns {{ action: string, ... }}
+   */
+  triggerStagnationArbitration(stagnationData) {
+    const ceoId = this._findAgentByRole("ceo");
+    if (!ceoId) {
+      // No CEO — cannot arbitrate, return noop for daemon to push to UI
+      return { action: "noop", reason: "no_ceo_for_arbitration", stagnationData };
+    }
+
+    // Don't interrupt active CEO gate
+    if (this.ceoGate.active) {
+      return { action: "noop", reason: "ceo_gate_already_active" };
+    }
+
+    // Activate CEO gate for stagnation arbitration
+    this.ceoGate = {
+      active: true,
+      type: "stagnation_arbitration",
+      round: 0,
+      minDefensiveRounds: 0,
+      requiredConsecutive: 1,
+      consecutiveApprovals: 0,
+      materials: JSON.stringify(stagnationData),
+      history: [],
+    };
+
+    const { prefix, suffix } = buildRoutingPrompt("orchestrator", "ceo", this.phase, {
+      routingReason: "stagnation_arbitration",
+    });
+
+    const stalledRolesStr = stagnationData.stalledRoles
+      .map(r => ROLE_LABELS[r] || r)
+      .join("、");
+
+    return {
+      action: "wake_ceo",
+      targetCallerId: ceoId,
+      content: `${prefix}\n\n## 停滞信息\n- **阶段**: ${this.phase}\n- **连续相同提交**: ${stagnationData.count} 次\n- **停滞角色**: ${stalledRolesStr}\n- **已完成轮次**: ${stagnationData.totalRounds}\n\n## 原始任务\n\n${this.userTask}\n\n## 最近提交内容\n\n${this.lastSubmitContent || "(无)"}\n\n${suffix}`,
+    };
   }
 
   // ── Round Tracking ──
@@ -899,6 +976,12 @@ export class Orchestrator {
 
   _findAgentById(callerId) {
     return this.agents.get(callerId) || null;
+  }
+
+  _getStalledRoles() {
+    // Infer stalled roles from recent rounds
+    const recent = this.rounds.slice(-this.maxSameFeedback);
+    return [...new Set(recent.map(r => r.role).filter(Boolean))];
   }
 
   _findIdleWorker() {
@@ -940,6 +1023,7 @@ export class Orchestrator {
       },
       rounds: this.rounds,
       humanReviewPending: this.humanReviewPending,
+      lastProgress: this.lastProgress,
     };
   }
 }

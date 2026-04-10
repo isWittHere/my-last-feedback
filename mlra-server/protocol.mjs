@@ -192,6 +192,12 @@ const ROUTING_TEMPLATES = {
     suffix: "",
   },
 
+  // CEO stagnation arbitration
+  "orchestrator→ceo:stagnation_arbitration": {
+    prefix: "系统检测到编排停滞 — 角色之间反复提交相同内容，无实质进展。作为CEO，请介入仲裁，判断根本原因并给出明确指令打破僵局。",
+    suffix: "请使用 ceo_verdict 工具提交你的仲裁裁决。可选择：\n- approved: 认为当前成果已足够，直接推进\n- rejected: 指出问题并给出具体修改方向\n你可以在 targets 中指定需要接收裁决的角色。",
+  },
+
   // CEO defensive review (rejection lock)
   "orchestrator→ceo:defensive_review": {
     prefix: "你的审批已被系统驳斥锁降级为「进一步审查」。这是防御性审查机制。",

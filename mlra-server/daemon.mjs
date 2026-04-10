@@ -399,9 +399,7 @@ class OrchestratorDaemon {
   _routeToAgent(targetCallerId, content) {
     const released = this.router.release(targetCallerId, content);
     if (!released) {
-      console.error(`[MLRA-Daemon] Warning: target agent ${targetCallerId} is not blocked`);
-      // The agent may not have called submit yet. Queue the message.
-      // For now, log warning. TODO: implement message queue.
+      console.error(`[MLRA-Daemon] Message queued for agent ${targetCallerId} (not currently blocked)`);
     }
   }
 
@@ -580,8 +578,8 @@ class OrchestratorDaemon {
         this._handleImplementationVotesPassed();
         break;
       case "stagnation_detected":
-        console.error(`[MLRA-Daemon] Stagnation detected (${event.count} same feedbacks)`);
-        // TODO: trigger CEO intervention
+        console.error(`[MLRA-Daemon] Stagnation detected (${event.count} same feedbacks, roles: ${event.stalledRoles?.join(", ")})`);
+        this._handleStagnation(event);
         break;
       case "phase_transition":
         this.ipcBridge.send({
@@ -719,6 +717,33 @@ class OrchestratorDaemon {
 
     console.error(`[MLRA-Daemon] Implementation votes passed → action: ${decision.action}`);
     this._executeCeoDecision(decision);
+  }
+
+  _handleStagnation(event) {
+    const decision = this.orchestrator.triggerStagnationArbitration(event);
+    console.error(`[MLRA-Daemon] Stagnation arbitration → action: ${decision.action}, reason: ${decision.reason || ""}`);
+
+    if (decision.action === "noop" && decision.reason === "no_ceo_for_arbitration") {
+      // No CEO available → push stagnation alert to UI for human review
+      this.ipcBridge.send({
+        type: MSG.MLRA_ORCHESTRATION_STATUS,
+        state: this.orchestrator.toJSON(),
+        alert: {
+          level: "warning",
+          message: `停滞检测: ${event.count} 次相同提交，无CEO可仲裁，需人工介入`,
+          stalledRoles: event.stalledRoles,
+        },
+      });
+      return;
+    }
+
+    this._executeCeoDecision(decision);
+
+    // Push state update
+    this.ipcBridge.send({
+      type: MSG.MLRA_ORCHESTRATION_STATUS,
+      state: this.orchestrator.toJSON(),
+    });
   }
 
   /**

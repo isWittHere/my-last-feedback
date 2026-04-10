@@ -291,8 +291,9 @@ Format your content according to your role's Skill specification.`,
       .describe("Type of submission: plan_draft (expert plan), review_result (inspector review), phase_complete (expert phase report)"),
     content: z.string().describe("Your submission content formatted per your Skill specification"),
     passed: z.boolean().optional().describe("For inspectors: whether the review passed (true) or found blocking issues (false)"),
+    progress: z.string().optional().describe("Optional progress indicator, e.g. 'Phase 2/5: 数据库迁移'. Displayed in UI for status tracking."),
   },
-  async ({ type, content, passed }) => {
+  async ({ type, content, passed, progress }) => {
     if (!daemonSocket || !callerId) {
       return {
         content: [{ type: "text", text: "Error: You must call register_LRA first." }],
@@ -307,7 +308,7 @@ Format your content according to your role's Skill specification.`,
         callerId,
         submitType: type,
         content,
-        metadata: { passed },
+        metadata: { passed, progress },
       },
       callerId
     );

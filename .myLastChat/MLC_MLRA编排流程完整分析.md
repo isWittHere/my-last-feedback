@@ -1,6 +1,6 @@
 ---
 title: MLRA 编排运行流程完整分析
-description: 状态机、触发条件、信息格式规范、边缘情况分析、自治能力评估（含提示词工程重构、驳斥锁、任务上下文）
+description: 状态机、触发条件、信息格式规范、边缘情况分析、自治能力评估（含提示词工程重构、驳斥锁、任务上下文、风险修复）
 workplace: ${workspaceFolder}
 project: my-last-feedback
 type: knowledge
@@ -18,6 +18,11 @@ solved_lists:
     - get_task_context MCP工具
     - Worker委派结构化改进
     - 任务输入UI（类型选择器 + 描述框）
+    - 消息队列（router 消息不丢失）
+    - 停滞CEO仲裁（自动触发）
+    - Progress参数（Agent自报进度）
+    - Worker超时（30分钟自动derail）
+    - 死代码清理（final_complete残留）
 ---
 
 # MLRA 编排运行流程完整分析
@@ -623,11 +628,59 @@ graph TD
 4. **持久运行**：阻塞/释放机制 + SessionManager 存活检测 + 预算管理
 5. **提示词工程**：6个 Skill 文件 + 14+ 路由模板，编排器纯传话不解析内容
 
-**关键差距**：Phase 管理过于简单（无真正的 Phase 列表和进度追踪）、停滞检测仅告警不干预、消息可能在竞态中丢失。这些是从"能运行"到"可靠生产使用"的关键距离。
+**关键差距**：Phase 管理过于简单（无真正的 Phase 列表和进度追踪）。~~停滞检测仅告警不干预~~（v3已修复）、~~消息可能在竞态中丢失~~（v3已修复）。Agent 自报 `progress` 参数提供了轻量级进度可视化。
 
 ## 十、变更日志
 
-### v2 (latest) — 提示词工程重构 + 驳斥锁 + 任务上下文
+### v3 — 风险修复（消息队列 + 停滞仲裁 + Progress + Worker超时）
+
+#### Fix 1: 消息队列 (`router.mjs`)
+- 新增 `messageQueue: Map<string, string[]>`
+- `release()`: 目标未阻塞时，消息入队而非返回 false
+- `block()`: 阻塞前先检查队列，有消息则 `Promise.resolve` 立即返回
+- `cancelAll()`: 清理 messageQueue
+- daemon `_routeToAgent()` 日志更新：已队列化
+
+#### Fix 2: 停滞CEO仲裁 (`orchestrator.mjs` + `daemon.mjs` + `protocol.mjs`)
+- `_checkStagnation()` 增强：发出 `stalledRoles`, `phase`, `totalRounds`
+- 新增 `triggerStagnationArbitration(event)` 方法（三路径：无CEO/gate已激活/正常唤醒）
+- `stagnation_arbitration` 类型 CEO gate：无驳斥锁 (`minDefensiveRounds: 0`, `requiredConsecutive: 1`)
+- CEO verdict 处理覆盖 approved（标记 arbitration_resolved）和 rejected（重置停滞计数器 + 路由到停滞角色）
+- daemon `_handleStagnation()`：无CEO时推送 UI 警告
+- 新增路由模板 `orchestrator→ceo:stagnation_arbitration`
+
+#### Fix 3: Progress 参数 (`server.mjs` + `orchestrator.mjs` + `mlraStore.ts` + Skill)
+- submit 工具新增 `progress: z.string().optional()` 参数
+- orchestrator `handleSubmit()` 存储 `this.lastProgress`
+- `toJSON()` 输出包含 `lastProgress`
+- `Launcher` 接口新增 `lastProgress: string | null`
+- Store 状态同步包含 lastProgress
+- Skill 文件添加 progress 填写指引（格式：`Phase 2/5: 数据库迁移`）
+
+#### Fix 4: Worker 超时 (`router.mjs`)
+- `blockAwaitOrder()` 新增 `timeoutMs` 参数（默认 30 分钟）
+- 超时自动 reject + 清理回调，错误信息标记为 derailed
+- `releaseAwaitOrder()` 成功时 clearTimeout
+- `cancelAll()` 清理所有 timer
+
+#### 额外清理
+- 清除 `_needsHumanReview` 中 `final_complete` 死代码引用
+- 清除 `_routeToAgent` 中过时的 TODO 注释
+- `ceoGate.type` JSDoc 注释补充 `stagnation_arbitration`
+- `_handleCeoRejection` 签名扩展为 `(reason, targets = [])` 以支持停滞仲裁
+
+#### 文件变更清单
+| 文件 | 变更 |
+|------|------|
+| `router.mjs` | messageQueue + blockAwaitOrder timeout + cancelAll 增强 |
+| `orchestrator.mjs` | triggerStagnationArbitration + lastProgress + _getStalledRoles + 死代码清理 |
+| `daemon.mjs` | _handleStagnation + _routeToAgent 日志更新 |
+| `protocol.mjs` | 新增 stagnation_arbitration 路由模板 |
+| `server.mjs` | submit 工具 progress 参数 |
+| `mlraStore.ts` | Launcher.lastProgress 字段 + 状态同步 |
+| `skill_execution_expert.md` | progress 填写指引 |
+
+### v2 — 提示词工程重构 + 驳斥锁 + 任务上下文
 
 #### 核心架构变革
 - **编排器 → 纯传话**: `_routeSubmit()` 不再解析 submit 内容，只做 `prefix + content + suffix` 包装
