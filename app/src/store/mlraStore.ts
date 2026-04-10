@@ -54,6 +54,9 @@ export interface CeoGateStatus {
   active: boolean;
   type: "planning_gate" | "final_review" | "arbitration" | null;
   round: number;
+  minDefensiveRounds: number;
+  consecutiveApprovals: number;
+  requiredConsecutive: number;
   history: Array<{ round: number; verdict: string; reason: string }>;
 }
 
@@ -152,6 +155,10 @@ export interface Launcher {
   // Start mode & CEO gate
   startMode: StartMode | null;
   ceoGate: CeoGateStatus | null;
+
+  // Task description & type
+  taskType: string | null;
+  userTask: string;
 }
 
 // ── Store ──
@@ -179,6 +186,8 @@ export interface MLRAState {
   assignRole: (launcherId: string, agentId: string, role: AgentRole | null, workerRole?: string) => void;
   removeRegisteredAgent: (launcherId: string, agentId: string) => void;
   setWorkerRole: (launcherId: string, agentId: string, workerRole: string) => void;
+  setTaskType: (launcherId: string, taskType: string | null) => void;
+  setUserTask: (launcherId: string, userTask: string) => void;
 
   // Actions — Start orchestration
   startOrchestration: (launcherId: string, startMode: StartMode) => void;
@@ -192,7 +201,7 @@ export interface MLRAState {
   // Actions — Daemon communication (sends to MLRA daemon via Tauri IPC)
   sendToDaemon: (msg: Record<string, unknown>) => Promise<void>;
   daemonAssignRole: (launcherId: string, agentId: string, role: AgentRole | null) => void;
-  daemonStartOrchestration: (launcherId: string, userTask: string, startMode: StartMode) => void;
+  daemonStartOrchestration: (launcherId: string, userTask: string, startMode: StartMode, taskType?: string) => void;
   daemonSetControlMode: (mode: ControlMode) => void;
   daemonReviewApproved: (content: string) => void;
   daemonReviewRejected: (reason: string) => void;
@@ -265,6 +274,8 @@ export const useMLRAStore = create<MLRAState>((set, get) => ({
       budget: null,
       startMode: null,
       ceoGate: null,
+      taskType: null,
+      userTask: "",
     };
     set((s) => ({
       launchers: [...s.launchers, launcher],
@@ -356,6 +367,20 @@ export const useMLRAStore = create<MLRAState>((set, get) => ({
       ),
     })),
 
+  setTaskType: (launcherId, taskType) =>
+    set((s) => ({
+      launchers: s.launchers.map((l) =>
+        l.id === launcherId ? { ...l, taskType, updatedAt: new Date().toISOString() } : l
+      ),
+    })),
+
+  setUserTask: (launcherId, userTask) =>
+    set((s) => ({
+      launchers: s.launchers.map((l) =>
+        l.id === launcherId ? { ...l, userTask, updatedAt: new Date().toISOString() } : l
+      ),
+    })),
+
   // ── Start orchestration ──
 
   startOrchestration: (launcherId, startMode) => {
@@ -363,7 +388,7 @@ export const useMLRAStore = create<MLRAState>((set, get) => ({
     if (!launcher || (launcher.status !== "configuring" && launcher.status !== "ready")) return;
 
     // Notify daemon
-    get().daemonStartOrchestration(launcherId, launcher.name, startMode);
+    get().daemonStartOrchestration(launcherId, launcher.userTask || launcher.name, startMode, launcher.taskType || undefined);
 
     // Update local state
     set((s) => ({
@@ -431,8 +456,8 @@ export const useMLRAStore = create<MLRAState>((set, get) => ({
     get().sendToDaemon({ type: "mlra_assign_role", launcherId, agentId, role });
   },
 
-  daemonStartOrchestration: (launcherId, userTask, startMode) => {
-    get().sendToDaemon({ type: "mlra_start_orchestration", launcherId, userTask, startMode });
+  daemonStartOrchestration: (launcherId, userTask, startMode, taskType) => {
+    get().sendToDaemon({ type: "mlra_start_orchestration", launcherId, userTask, startMode, taskType: taskType || null });
   },
 
   daemonSetControlMode: (mode) => {

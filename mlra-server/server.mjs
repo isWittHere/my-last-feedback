@@ -250,22 +250,49 @@ Do NOT call any other tool before register_LRA returns.`,
   }
 );
 
+// ── Tool: get_task_context ──
+
+mcpServer.tool(
+  "get_task_context",
+  `Retrieve the original user request and task type.
+Use this tool when you need to recall the original task description.
+Only main agents (experts, inspectors, CEO) can use this tool — workers cannot.`,
+  {},
+  async () => {
+    if (!daemonSocket || !callerId) {
+      return {
+        content: [{ type: "text", text: "Error: You must call register_LRA first." }],
+        isError: true,
+      };
+    }
+
+    const response = await sendAndWait(
+      daemonSocket,
+      { type: MSG.GET_TASK_CONTEXT, callerId },
+      callerId
+    );
+
+    return {
+      content: [{ type: "text", text: response.content }],
+    };
+  }
+);
+
 // ── Tool: submit ──
 
 mcpServer.tool(
   "submit",
   `Submit your work result to the orchestrator.
 This tool will BLOCK until the orchestrator sends your next instruction.
-Use this to submit plans, review results, phase completions, etc.`,
+Use this to submit plans, review results, phase completions, etc.
+Format your content according to your role's Skill specification.`,
   {
-    type: z.enum(["plan_draft", "review_result", "phase_complete", "final_complete"])
-      .describe("Type of submission"),
-    content: z.string().describe("Your submission content in Markdown format"),
-    phase: z.string().optional().describe("Current phase identifier (e.g. 'Phase 1')"),
-    passed: z.boolean().optional().describe("Whether review passed (for inspector)"),
-    issues: z.array(z.string()).optional().describe("List of issues found (for inspector)"),
+    type: z.enum(["plan_draft", "review_result", "phase_complete"])
+      .describe("Type of submission: plan_draft (expert plan), review_result (inspector review), phase_complete (expert phase report)"),
+    content: z.string().describe("Your submission content formatted per your Skill specification"),
+    passed: z.boolean().optional().describe("For inspectors: whether the review passed (true) or found blocking issues (false)"),
   },
-  async ({ type, content, phase, passed, issues }) => {
+  async ({ type, content, passed }) => {
     if (!daemonSocket || !callerId) {
       return {
         content: [{ type: "text", text: "Error: You must call register_LRA first." }],
@@ -280,7 +307,7 @@ Use this to submit plans, review results, phase completions, etc.`,
         callerId,
         submitType: type,
         content,
-        metadata: { phase, passed, issues },
+        metadata: { passed },
       },
       callerId
     );
@@ -328,7 +355,15 @@ mcpServer.tool(
   "order",
   `Delegate a task to a worker sub-agent.
 Only experts can issue orders. This is a quick-return tool.
-The worker will receive the task and begin working independently.`,
+
+Your task_description MUST be structured for clarity:
+- **行动背景**: Why this task is needed (which Phase, what purpose)
+- **目标定位**: Exact files and code locations to modify
+- **操作指引**: Step-by-step what to do (create/modify/delete)
+- **预期交付**: What the result should look like (interfaces, behavior)
+
+Worker does NOT have access to the original user request or planning docs.
+You must provide all necessary context in the task description.`,
   {
     worker_id: z.string().optional().describe("Target worker ID (optional, auto-assigned if omitted)"),
     task_description: z.string().describe("Clear task description for the worker"),
@@ -436,7 +471,15 @@ mcpServer.tool(
   "submit_feedback",
   `Submit your completed work as a worker sub-agent.
 This tool will BLOCK until the orchestrator assigns your next task.
-Only worker agents should use this tool.`,
+Only worker agents should use this tool.
+
+Format your result as a structured delivery report:
+- 任务描述: Restate the task you received
+- 执行结果: Checklist of completed items with file:line references
+- 修改文件: List of files modified with change summary
+- 备注: Any issues or concerns
+
+Refer to your Skill file (mcp_prompts/skill_worker.md) for the full template.`,
   {
     result: z.string().describe("Your work result"),
     files_modified: z.array(z.string()).optional().describe("List of files you modified"),

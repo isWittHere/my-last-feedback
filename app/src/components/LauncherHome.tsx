@@ -2,6 +2,14 @@ import { useCallback, useMemo, useState } from "react";
 import { useMLRAStore, type Launcher, ROLE_COLORS, type AgentRole, type StartMode } from "../store/mlraStore";
 import { Icon } from "./Icons";
 
+const TASK_TYPES = [
+  { value: "brainstorm", label: "头脑风暴" },
+  { value: "shortlist", label: "海选题" },
+  { value: "architecture", label: "规划架构构思" },
+  { value: "execution", label: "计划落地" },
+  { value: "full-chain", label: "全链路" },
+] as const;
+
 interface LauncherHomeProps {
   launcher: Launcher | null;
 }
@@ -29,6 +37,8 @@ export function LauncherHome({ launcher }: LauncherHomeProps) {
   const daemonAssignRole = useMLRAStore((s) => s.daemonAssignRole);
   const setWorkerRole = useMLRAStore((s) => s.setWorkerRole);
   const removeRegisteredAgent = useMLRAStore((s) => s.removeRegisteredAgent);
+  const setTaskType = useMLRAStore((s) => s.setTaskType);
+  const setUserTask = useMLRAStore((s) => s.setUserTask);
   const [taskName, setTaskName] = useState(launcher?.name || "");
 
   const handleCreate = useCallback(() => {
@@ -112,6 +122,34 @@ export function LauncherHome({ launcher }: LauncherHomeProps) {
         {/* Title row */}
         <div className="mlra-config-title-row">
           <span className="mlra-config-title">{launcher.name}</span>
+        </div>
+
+        {/* Task configuration */}
+        <div className="mlra-task-config">
+          <div className="mlra-task-type-row">
+            <label className="mlra-task-label">任务类型</label>
+            <div className="mlra-task-type-chips">
+              {TASK_TYPES.map((t) => (
+                <button
+                  key={t.value}
+                  className={`mlra-task-type-chip${launcher.taskType === t.value ? " active" : ""}`}
+                  onClick={() => setTaskType(launcher.id, launcher.taskType === t.value ? null : t.value)}
+                >
+                  {t.label}
+                </button>
+              ))}
+            </div>
+          </div>
+          <div className="mlra-task-desc-row">
+            <label className="mlra-task-label">任务描述</label>
+            <textarea
+              className="mlra-task-desc-input"
+              placeholder="描述你的任务需求，例如：重构用户登录系统，支持 OAuth2 和 MFA..."
+              value={launcher.userTask}
+              onChange={(e) => setUserTask(launcher.id, e.target.value)}
+              rows={3}
+            />
+          </div>
         </div>
 
         {/* Agent list */}

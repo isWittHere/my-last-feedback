@@ -1,6 +1,6 @@
 ---
 title: MLRA 编排运行流程完整分析
-description: 状态机、触发条件、信息格式规范、边缘情况分析、自治能力评估
+description: 状态机、触发条件、信息格式规范、边缘情况分析、自治能力评估（含提示词工程重构、驳斥锁、任务上下文）
 workplace: ${workspaceFolder}
 project: my-last-feedback
 type: knowledge
@@ -9,6 +9,15 @@ tags:
     - orchestration
     - state-machine
     - architecture
+    - prompt-engineering
+    - rejection-lock
+solved_lists:
+    - 提示词工程重构 (Skill文件 + 路由模板)
+    - CEO驳斥锁机制
+    - 移除final_complete，扩展投票至实施阶段
+    - get_task_context MCP工具
+    - Worker委派结构化改进
+    - 任务输入UI（类型选择器 + 描述框）
 ---
 
 # MLRA 编排运行流程完整分析
@@ -54,10 +63,10 @@ graph TB
 stateDiagram-v2
     [*] --> configuring: 创建 Launcher
 
-    configuring --> running: startOrchestration(userTask, startMode)
+    configuring --> running: startOrchestration(userTask, startMode, taskType)
     running --> paused: 预算耗尽 / 手动暂停
     paused --> running: increaseBudget / 手动恢复
-    running --> completed: CEO 终审通过 / 无 CEO 直接完成
+    running --> completed: CEO 终审通过 (驳斥锁4轮后)
     running --> cancelled: 用户终止
     paused --> cancelled: 用户终止
 
@@ -73,19 +82,21 @@ stateDiagram-v2
     [*] --> implementation: startMode = "direct-execution"
 
     planning --> ceo_planning_gate: 双方 router_vote 通过
-    ceo_planning_gate --> planning: CEO rejected → 退回修改
-    ceo_planning_gate --> implementation: CEO approved → transitionToImplementation
+    ceo_planning_gate --> planning: CEO rejected (驳斥锁) → 退回修改
+    ceo_planning_gate --> implementation: CEO approved (需连续2次) → transitionToImplementation
 
     implementation --> phase_review: submit(phase_complete)
     phase_review --> implementation: inspector 通过 → advancePhase
     phase_review --> implementation: inspector 拒绝 → 返回修改
 
-    implementation --> ceo_final_review: submit(final_complete)
-    ceo_final_review --> implementation: CEO rejected → 退回修改
-    ceo_final_review --> completed: CEO approved
+    implementation --> ceo_final_review: 双方 router_vote 通过 (implementation_votes_passed)
+    ceo_final_review --> implementation: CEO rejected (驳斥锁) → 退回修改
+    ceo_final_review --> completed: CEO approved (需连续2次)
 ```
 
-### 2.3 CEO 门控状态机 (ceoGate)
+> **重要变更 (v2)**: `final_complete` 已移除。实施阶段通过 `router_vote` 投票触发 CEO 终审，与规划阶段一致。
+
+### 2.3 CEO 门控状态机 (ceoGate) — 含驳斥锁
 
 ```mermaid
 stateDiagram-v2
@@ -94,15 +105,35 @@ stateDiagram-v2
     inactive --> planning_gate: triggerPlanningGate(materials)
     inactive --> final_review: _triggerCeoFinalReview(content)
 
-    planning_gate --> inactive: CEO approved → transition_to_implementation
-    planning_gate --> inactive: CEO rejected → route_multiple (退回 expert + inspector)
+    state planning_gate {
+        [*] --> defensive_round: round ≤ minDefensiveRounds(2)
+        defensive_round --> defensive_round: approved → 强制降级为 further_review
+        defensive_round --> consecutive_check: round > minDefensiveRounds
+        consecutive_check --> consecutive_check: approved → consecutiveApprovals++
+        consecutive_check --> pass: consecutiveApprovals ≥ requiredConsecutive(2)
+    }
+    planning_gate --> inactive: pass → transition_to_implementation
+    planning_gate --> inactive: rejected (任意时刻) → route_multiple + reset consecutiveApprovals
     planning_gate --> arbitration: CEO arbitration
 
-    final_review --> inactive: CEO approved → complete
-    final_review --> inactive: CEO rejected → route_multiple (退回 exec-expert + inspector)
+    state final_review {
+        [*] --> fr_defensive: 同上驳斥锁逻辑
+        fr_defensive --> fr_pass: 4轮最低通过
+    }
+    final_review --> inactive: fr_pass → complete
+    final_review --> inactive: rejected → route_multiple (退回 exec-expert + inspector)
 
     arbitration --> inactive: CEO approved → arbitration_resolved
 ```
+
+#### 驳斥锁机制 (Rejection Lock)
+
+| 参数 | 值 | 说明 |
+|------|---|------|
+| `minDefensiveRounds` | 2 | 前2轮 CEO 审批自动降级为「进一步审查」 |
+| `requiredConsecutive` | 2 | 需连续2次 approved 才能真正通过 |
+| `consecutiveApprovals` | 0→N | 连续审批计数器，任何 rejected 重置为 0 |
+| **最少通过轮数** | **4** | 2轮防御 + 2轮连续确认 |
 
 ### 2.4 Agent 阻塞/释放循环
 
@@ -173,9 +204,10 @@ sequenceDiagram
     Daemon->>Router: block(ceoId, "ceo_verdict")
     Note over CEO: ⏸ 阻塞，等待终审触发
 
-    Note over Daemon: submit(final_complete) 触发终审
+    Note over Daemon: implementation_votes_passed 触发终审
     Daemon->>Router: release(ceoId, finalReviewContent)
-    Note over CEO: ▶ 终审
+    Note over CEO: ▶ 终审 (含原始任务+实施报告)
+    Note over CEO: 驳斥锁: 最少4轮审批才能通过
     CEO->>Daemon: CEO_VERDICT { verdict: "approved" }
     Note over CEO: ✅ action="complete" → 直接 RESOLVE, 不再阻塞
 ```
@@ -186,13 +218,13 @@ sequenceDiagram
 |----------|------|------|----------|
 | `startOrchestration` | Tauri UI | `checkStartReady(mode).ready === true` | 释放活跃阶段 agents (非 CEO) |
 | `votes_passed` | Orchestrator 事件 | `votes.expert.vote === "pass" && votes.inspector.vote === "pass"` | `triggerPlanningGate()` → 唤醒 CEO 或自动转换 |
-| `planning_gate` CEO approved | CEO ceo_verdict | `ceoGate.type === "planning_gate"` | `transitionToImplementation()` → 释放实施 agents |
+| `planning_gate` CEO approved | CEO ceo_verdict | `ceoGate.type === "planning_gate"` + 驳斥锁通过 | `transitionToImplementation()` → 释放实施 agents |
 | `planning_gate` CEO rejected | CEO ceo_verdict | `ceoGate.type === "planning_gate"` | 重置 votes → route_multiple → 退回 expert + inspector |
 | `phase_complete` | exec-expert submit | `submitType === "phase_complete"` | 路由到 exec-inspector 审查 |
 | `review_result (passed)` | exec-inspector submit | `metadata.passed !== false` | `_advancePhase()` → 路由回 exec-expert |
 | `review_result (failed)` | exec-inspector submit | `metadata.passed === false` | 路由回 exec-expert 修改 |
-| `final_complete` | exec-expert submit | `submitType === "final_complete"` | `_triggerCeoFinalReview()` → 唤醒 CEO |
-| `final_review` CEO approved | CEO ceo_verdict | `ceoGate.type === "final_review"` | `status = "completed"` → 终止 |
+| `implementation_votes_passed` | exec-expert + exec-inspector 投票 | 双方 `router_vote pass` | `_triggerCeoFinalReview()` → 唤醒 CEO |
+| `final_review` CEO approved | CEO ceo_verdict | `ceoGate.type === "final_review"` + 驳斥锁通过 | `status = "completed"` → 终止 |
 | `human_review` | 任何 submit | `controlMode === "full-override"` 或特定条件 | 推送到 Tauri UI → 阻塞等待人工 |
 | `inject_message` | Tauri UI | 任意时机 | `_routeToAgent(callerId, content)` → release 目标 agent |
 | `stagnation_detected` | Orchestrator | 连续 5 次相同 hash 的 submit | 日志警告 (TODO: CEO 介入) |
@@ -218,15 +250,40 @@ sequenceDiagram
 {
   "type": "agent_submit",
   "callerId": "...",
-  "submitType": "plan_draft | review_result | phase_complete | final_complete",
-  "content": "Markdown 格式的提交内容",
+  "submitType": "plan_draft | review_result | phase_complete",
+  "content": "Markdown 格式的提交内容 (按 Skill 规范)",
   "metadata": {
-    "phase": "Phase 1",
-    "passed": true,
-    "issues": ["issue1", "issue2"]
+    "passed": true
   }
 }
 ```
+
+> **变更**: `final_complete` 已移除，`metadata.phase` 和 `metadata.issues` 已移除。实施完成通过 `router_vote` 投票触发。
+
+#### `get_task_context`
+```json
+{
+  "type": "get_task_context",
+  "callerId": "..."
+}
+```
+
+返回:
+```markdown
+## 原始用户请求
+{userTask}
+
+## 任务类型
+{taskType}
+
+## 当前阶段
+planning | implementation
+
+## 启动模式
+full | direct-execution
+```
+
+> Worker 调用此工具会收到错误 — Worker 的信息来源是专家的结构化委派。
 
 #### `router_vote`
 ```json
@@ -260,59 +317,88 @@ sequenceDiagram
 }
 ```
 
-### 4.2 Tail 注入规范
+### 4.2 提示词工程架构 (v2 — Skill + Routing Templates)
 
-每条给 Agent 的指令末尾都附加 `buildTailInjection(role, phase, phaseId)`:
+> **架构变革**: 编排器从「智能路由器」变为「纯传话 + 尾部组装」。所有智能行为通过 Skill 文件 + 路由模板实现。
 
+#### Skill 文件 (Agent 自行读取)
+
+| 角色 | Skill 文件 | 核心内容 |
+|------|-----------|----------|
+| 规划专家 | `mcp_prompts/skill_planning_expert.md` | 规划书模板 + 自检 + 投票指引 |
+| 规划监察 | `mcp_prompts/skill_planning_inspector.md` | 6审查维度 + 决策级别 + 报告模板 |
+| 实施专家 | `mcp_prompts/skill_execution_expert.md` | re_verify自检 + Phase报告 + Worker委派模板 |
+| 实施监察 | `mcp_prompts/skill_execution_inspector.md` | 代码审查6维度 + 安全检查 + 报告模板 |
+| CEO | `mcp_prompts/skill_ceo.md` | 勘察 + 裁决标准 + 驳斥锁说明 + 仲裁 |
+| Worker | `mcp_prompts/skill_worker.md` | 接单执行 + 结构化交付报告 |
+
+#### 路由模板 (`buildRoutingPrompt`)
+
+```js
+buildRoutingPrompt(sourceRole, targetRole, phase, { routingReason }) → { prefix, suffix }
 ```
-[SYSTEM REMINDER]
-你是 {角色名}。你正在与工程团队负责人交流。
-当前阶段: {规划对峙 | 实施循环}
-当前Phase: {Phase ID}
-你必须使用 submit 工具提交你的工作结果。
-不要在没有提交结果的情况下结束对话。
-{角色特定的 AGENTS.md 提示}
+
+14+ 模板，key 格式: `sourceRole→targetRole:routingReason`
+
+编排器路由时仅做: `prefix + 原始内容 + suffix`，不解析内容。
+
+#### 初始提示 (`buildInitialPrompt`)
+
+```js
+buildInitialPrompt(role, userTask, phase, { isDirectExecution }) → string
 ```
 
-**角色特定提示**：
-- 专家/监察：阅读 AGENTS.md，发现需要更新时主动更新
-- CEO：**必须先勘察项目现状**（读 AGENTS.md + 核心代码），不得仅凭文本裁决
-- Worker：阅读 AGENTS.md
+每角色专属初始指令，包含 Skill 文件引用和 AGENTS.md 引用。
+
+#### `buildTailInjection` (已废弃)
+
+保留兼容，新流程使用 `buildRoutingPrompt`。
 
 ### 4.3 路由消息格式
 
 Agent 之间的消息通过 Orchestrator 路由时，格式为：
 
 ```
-[来自工程团队负责人]
+{路由模板 prefix}
 
-{审查反馈 / 任务指令 / CEO 裁决}
+{Agent 提交的原始内容}
 
-{Tail 注入}
+{路由模板 suffix}
 ```
 
-CEO 门控消息格式：
+CEO 审批消息格式：
 ```
-[CEO 门控审批 — 规划对峙投票已通过]
-
-专家和监察已就方案达成一致。请审查以下材料并做出裁决。
-审查后请使用 ceo_verdict 工具提交你的裁决（approved/rejected）。
+{prefix: "规划投票已通过...请参考阅读规划书。"}
 
 ## 原始任务
 {userTask}
 
-## 投票理由
+## 投票理由 / 实施报告
 {materials}
 
-{Tail 注入}
+{suffix: "审查后请使用 ceo_verdict 工具提交裁决"}
 ```
 
-### 4.4 Frontend ↔ Daemon 消息格式
+### 4.4 MCP 工具表
+
+| 工具 | 类型 | 可用角色 | 说明 |
+|------|------|---------|------|
+| `register_LRA` | 阻塞 | 所有 | 注册并等待初始指令 |
+| `get_task_context` | 即时 | 主Agent (非Worker) | 获取原始请求 + 任务类型 + 阶段 |
+| `submit` | 阻塞 | 主Agent | 提交工作结果 (`plan_draft`/`review_result`/`phase_complete`) |
+| `router_vote` | 即时 | 专家/监察 | 方案/实施投票 |
+| `order` | 即时 | 专家 | 结构化委派给 Worker |
+| `check_orders` | 即时 | 专家 | 查看 Worker 状态 |
+| `await_order_finish` | 阻塞 | 专家 | 等待 Worker 完成 |
+| `submit_feedback` | 阻塞 | Worker | 提交结构化交付报告 |
+| `ceo_verdict` | 阻塞 | CEO | 提交裁决后进入休眠 |
+
+### 4.5 Frontend ↔ Daemon 消息格式
 
 #### Daemon → Frontend (Push)
 ```json
-{ "type": "mlra_orchestration_status", "state": { "status", "phase", "startMode", "ceoGate", ... } }
-{ "type": "mlra_ceo_gate_status", "ceoGate": { "active", "type", "round", "history" } }
+{ "type": "mlra_orchestration_status", "state": { "status", "phase", "startMode", "taskType", "ceoGate", ... } }
+{ "type": "mlra_ceo_gate_status", "ceoGate": { "active", "type", "round", "minDefensiveRounds", "consecutiveApprovals", "requiredConsecutive", "history" } }
 { "type": "mlra_phase_change", "from": "planning", "to": "implementation" }
 { "type": "mlra_agent_registered", "callerId", "alias", "model", "workspace" }
 { "type": "mlra_round_event", "event": "start|end", "round": { ... } }
@@ -321,7 +407,7 @@ CEO 门控消息格式：
 
 #### Frontend → Daemon (User Actions)
 ```json
-{ "type": "mlra_start_orchestration", "launcherId", "userTask", "startMode": "full|direct-execution" }
+{ "type": "mlra_start_orchestration", "launcherId", "userTask", "startMode": "full|direct-execution", "taskType": "brainstorm|shortlist|architecture|execution|full-chain|null" }
 { "type": "mlra_inject_message", "callerId", "content" }
 { "type": "mlra_review_approved", "content" }
 { "type": "mlra_review_rejected", "reason" }
@@ -382,9 +468,14 @@ flowchart TD
     SUBMIT_EXEC_REV -->|failed| ROUTE_BACK[退回 expert 修改]
     ROUTE_BACK --> EXEC_WORK
 
-    EXEC_WORK --> SUBMIT_FINAL[submit final_complete]
-    SUBMIT_FINAL --> FINAL_GATE[_triggerCeoFinalReview]
-    FINAL_GATE --> WAKE_CEO_FINAL[释放 CEO 阻塞<br/>发送终审材料]
+    EXEC_WORK --> IMPL_VOTE_E[router_vote pass]
+    EXEC_INS_REVIEW --> IMPL_VOTE_I[router_vote pass]
+    IMPL_VOTE_E --> IMPL_BOTH{双方都投 pass?}
+    IMPL_VOTE_I --> IMPL_BOTH
+    IMPL_BOTH -->|否| EXEC_WORK
+    IMPL_BOTH -->|是| IMPL_VOTES[implementation_votes_passed]
+    IMPL_VOTES --> FINAL_GATE[_triggerCeoFinalReview]
+    FINAL_GATE --> WAKE_CEO_FINAL[释放 CEO 阻塞<br/>发送原始任务+终审材料]
     WAKE_CEO_FINAL --> CEO_FINAL[CEO 终审]
     CEO_FINAL --> CEO_FINAL_V{ceo_verdict}
     CEO_FINAL_V -->|approved| COMPLETE[status = completed ✅]
@@ -417,8 +508,8 @@ flowchart TD
     SUBMIT_REV -->|failed| ROUTE_BACK[退回修改]
     ROUTE_BACK --> EXEC_WORK
 
-    EXEC_WORK --> SUBMIT_FINAL[submit final_complete]
-    SUBMIT_FINAL --> CEO_FINAL[触发 CEO 终审]
+    EXEC_WORK --> IMPL_VOTE[双方 router_vote pass]
+    IMPL_VOTE --> CEO_FINAL[触发 CEO 终审]
     CEO_FINAL --> CEO_V{ceo_verdict}
     CEO_V -->|approved| COMPLETE[✅ 完成]
     CEO_V -->|rejected| REJECT[退回修改]
@@ -491,10 +582,12 @@ graph LR
 | **委派分工** | ✅ 已实现 | order 工具 → Worker 执行子任务 → submit_feedback |
 | **多轮修改** | ✅ 已实现 | submit 路由循环，无限轮次直到通过 |
 | **长期运行** | ✅ 基本实现 | 阻塞/释放机制保持 session 存活，SessionManager 监控 |
-| **质量门控** | ✅ 已实现 | CEO 门控 + 防御性拒绝 (planning_gate minRounds=2) |
+| **质量门控** | ✅ 已实现 | CEO 驳斥锁 (4轮最低) + 规划/实施双阶段投票 |
 | **人工介入** | ✅ 已实现 | controlMode + human_review + inject_message |
 | **故障恢复** | ✅ 已实现 | SessionManager 脱轨检测 → 重试 → failover |
 | **预算控制** | ✅ 已实现 | BudgetTracker 限额 → 暂停 → 增加后恢复 |
+| **提示词工程** | ✅ 已实现 | 6 Skill 文件 + 14+ 路由模板，编排器纯传话 |
+| **任务上下文** | ✅ 已实现 | get_task_context 工具 + CEO 审批时注入原始请求 |
 
 ### 9.2 当前瓶颈与改进方向
 
@@ -524,9 +617,45 @@ graph TD
 
 当前编排系统**已具备基本的自治能力链**：
 
-1. **规划阶段**：Expert 生成方案 → Inspector 审查 → 循环修改 → 投票通过 → CEO 门控审批（含防御性拒绝）
-2. **执行阶段**：Expert 按 Phase 编码 + 委派 Worker → Inspector 审查每个 Phase → CEO 终审
-3. **质量保证**：三角对峙（Expert ↔ Inspector ↔ CEO）确保方案和代码质量
+1. **规划阶段**：Expert 生成方案 → Inspector 审查 → 循环修改 → 投票通过 → CEO 门控审批（含驳斥锁：最少4轮）
+2. **执行阶段**：Expert 按 Phase 编码 + 委派 Worker → Inspector 审查每个 Phase → 投票通过 → CEO 终审（含驳斥锁）
+3. **质量保证**：三角对峙（Expert ↔ Inspector ↔ CEO）确保方案和代码质量，驳斥锁消除 CEO 橡皮章风险
 4. **持久运行**：阻塞/释放机制 + SessionManager 存活检测 + 预算管理
+5. **提示词工程**：6个 Skill 文件 + 14+ 路由模板，编排器纯传话不解析内容
 
 **关键差距**：Phase 管理过于简单（无真正的 Phase 列表和进度追踪）、停滞检测仅告警不干预、消息可能在竞态中丢失。这些是从"能运行"到"可靠生产使用"的关键距离。
+
+## 十、变更日志
+
+### v2 (latest) — 提示词工程重构 + 驳斥锁 + 任务上下文
+
+#### 核心架构变革
+- **编排器 → 纯传话**: `_routeSubmit()` 不再解析 submit 内容，只做 `prefix + content + suffix` 包装
+- **Skill 自读取**: 6 个 Skill 文件，Agent 通过 `buildInitialPrompt` 中的文件路径引用自行读取
+- **路由模板系统**: `buildRoutingPrompt()` + `ROUTING_TEMPLATES` 替代旧的 `buildTailInjection`
+
+#### 功能变更
+| 变更 | 说明 |
+|------|------|
+| 移除 `final_complete` | submit 类型缩减为 `plan_draft / review_result / phase_complete` |
+| 实施阶段投票 | exec-expert + exec-inspector 可投票 → `implementation_votes_passed` → CEO 终审 |
+| CEO 驳斥锁 | `minDefensiveRounds: 2` + `requiredConsecutive: 2`，最少4轮通过 |
+| `get_task_context` 工具 | 主Agent 可获取原始请求、任务类型、阶段、模式。Worker 被拒绝 |
+| CEO 审批注入原始请求 | `triggerPlanningGate` 和 `_triggerCeoFinalReview` 内容包含 `## 原始任务` |
+| CEO 规划书提醒 | 路由模板 prefix 包含"请参考阅读规划书" |
+| Worker 结构化委派 | `order` 工具描述要求行动背景/目标定位/操作指引/预期交付 |
+| Worker 结构化交付 | `submit_feedback` 引导按 Skill 模板提交含自检确认的报告 |
+| 任务输入 UI | LauncherHome 新增任务类型选择器（5种）+ 任务描述文本框 |
+| `taskType` 字段 | 流经 `Launcher → daemon → orchestrator → toJSON`，可选 |
+
+#### 文件变更清单
+| 文件 | 变更 |
+|------|------|
+| `protocol.mjs` | 新增 `SKILL_PATHS`, `ROUTING_TEMPLATES`, `buildRoutingPrompt()`, `buildInitialPrompt()`, `MSG.GET_TASK_CONTEXT` |
+| `orchestrator.mjs` | 重写 `_routeSubmit`, `_advancePhase`, `transitionToImplementation` 等为纯路由；新增驳斥锁逻辑；新增 `taskType` 字段 |
+| `server.mjs` | 简化 `submit` 参数；新增 `get_task_context` 工具；强化 `order` 和 `submit_feedback` 描述 |
+| `daemon.mjs` | 新增 `GET_TASK_CONTEXT` 处理；新增 `implementation_votes_passed` 事件处理；传递 `taskType` |
+| `mlraStore.ts` | `Launcher` 新增 `taskType`, `userTask`；`CeoGateStatus` 新增驳斥锁字段；新增 `setTaskType`, `setUserTask` |
+| `LauncherHome.tsx` | 新增任务配置区（类型选择器 + 描述文本框） |
+| `index.css` | 新增 `.mlra-task-*` 样式 |
+| `mcp_prompts/skill_*.md` | 6 个新 Skill 文件 |

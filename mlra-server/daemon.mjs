@@ -357,6 +357,25 @@ class OrchestratorDaemon {
         }
       }
 
+      case MSG.GET_TASK_CONTEXT: {
+        const { callerId } = msg;
+        // Only main agents can request task context — workers are denied
+        const agent = this.orchestrator.agents.get(callerId);
+        if (!agent) {
+          return { type: MSG.ERROR, callerId, message: "Agent not registered" };
+        }
+        if (agent.role === "worker") {
+          return { type: MSG.ERROR, callerId, message: "Worker 不可使用此工具。请通过专家委派的任务描述获取所需信息。" };
+        }
+        const taskContext = [
+          `## 原始用户请求\n\n${this.orchestrator.userTask || "(未设置)"}`,
+          `## 任务类型\n\n${this.orchestrator.taskType || "未指定"}`,
+          `## 当前阶段\n\n${this.orchestrator.phase}`,
+          `## 启动模式\n\n${this.orchestrator.startMode}`,
+        ].join("\n\n");
+        return { type: MSG.RESOLVE, callerId, content: taskContext };
+      }
+
       default:
         // ── Hook TCP Notification ──
         if (msg.type === MSG.SESSION_HOOK_NOTIFY) {
@@ -412,8 +431,8 @@ class OrchestratorDaemon {
       }
 
       case MSG.MLRA_START_ORCHESTRATION: {
-        const { userTask, startMode } = msg;
-        const result = this.orchestrator.startOrchestration(userTask || "", startMode || "full");
+        const { userTask, startMode, taskType } = msg;
+        const result = this.orchestrator.startOrchestration(userTask || "", startMode || "full", taskType || null);
         if (result.error) {
           console.error("[MLRA-Daemon] Start error:", result.error);
           break;
@@ -553,8 +572,12 @@ class OrchestratorDaemon {
         });
         break;
       case "votes_passed":
-        // Trigger CEO gate (or auto-transition if no CEO)
+        // Planning agents voted pass → trigger CEO planning gate
         this._handleVotesPassed();
+        break;
+      case "implementation_votes_passed":
+        // Implementation agents voted pass → trigger CEO final review
+        this._handleImplementationVotesPassed();
         break;
       case "stagnation_detected":
         console.error(`[MLRA-Daemon] Stagnation detected (${event.count} same feedbacks)`);
@@ -686,6 +709,15 @@ class OrchestratorDaemon {
     const decision = this.orchestrator.triggerPlanningGate(materials);
 
     console.error(`[MLRA-Daemon] Votes passed → action: ${decision.action}`);
+    this._executeCeoDecision(decision);
+  }
+
+  _handleImplementationVotesPassed() {
+    // Both implementation agents voted pass → trigger CEO final review
+    const materials = this.orchestrator.lastSubmitContent || "(实施投票通过)";
+    const decision = this.orchestrator._triggerCeoFinalReview(materials);
+
+    console.error(`[MLRA-Daemon] Implementation votes passed → action: ${decision.action}`);
     this._executeCeoDecision(decision);
   }
 

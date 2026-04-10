@@ -1,7 +1,7 @@
 // ── MLRA Orchestrator State Machine ──
 // Pure logic module — no I/O, no network, fully testable.
 
-import { PHASE_AGENTS, buildTailInjection, START_MODES, START_MODE_REQUIREMENTS } from "./protocol.mjs";
+import { PHASE_AGENTS, buildRoutingPrompt, buildInitialPrompt, buildTailInjection, START_MODES, START_MODE_REQUIREMENTS } from "./protocol.mjs";
 import { createHash } from "node:crypto";
 
 // ── Submit Types ──
@@ -9,7 +9,6 @@ const SUBMIT_TYPES = [
   "plan_draft",
   "review_result",
   "phase_complete",
-  "final_complete",
 ];
 
 // ── Orchestrator ──
@@ -42,7 +41,12 @@ export class Orchestrator {
       /** @type {"planning_gate"|"final_review"|"arbitration"|null} */
       type: null,
       round: 0,
-      minRounds: 2,
+      /** Minimum defensive rounds where approvals are force-downgraded */
+      minDefensiveRounds: 2,
+      /** Required consecutive approvals after defensive rounds to pass */
+      requiredConsecutive: 2,
+      /** Current consecutive approval count (after defensive rounds) */
+      consecutiveApprovals: 0,
       /** @type {string|null} */
       materials: null,
       /** @type {Array<{round: number, verdict: string, reason: string}>} */
@@ -146,9 +150,10 @@ export class Orchestrator {
    * CEO is NOT released — it stays blocked until a trigger point.
    * @param {string} userTask - The user's original task description
    * @param {"full"|"direct-execution"} startMode
+   * @param {string} [taskType] - Task type category
    * @returns {{ callerId: string, instruction: string }[] | { error: string }}
    */
-  startOrchestration(userTask, startMode = START_MODES.FULL) {
+  startOrchestration(userTask, startMode = START_MODES.FULL, taskType = null) {
     const readiness = this.checkStartReady(startMode);
     if (!readiness.ready) {
       return { error: `Cannot start: missing ${readiness.missing.join(", ")}` };
@@ -157,11 +162,11 @@ export class Orchestrator {
     this.startMode = startMode;
     this.status = "running";
     this.userTask = userTask;
+    this.taskType = taskType || null;
 
     // Determine initial phase based on start mode
     if (startMode === START_MODES.DIRECT_EXECUTION) {
       this.phase = "implementation";
-      this.currentPhaseId = "Phase 1";
     } else {
       this.phase = "planning";
     }
@@ -196,29 +201,9 @@ export class Orchestrator {
   }
 
   _buildInitialInstruction(agent, userTask) {
-    const tail = buildTailInjection(agent.role, this.phase, this.currentPhaseId);
-    if (agent.role === "planning-expert") {
-      return `## 当前任务\n\n${userTask}\n\n使用 submit 工具提交你的方案。${tail}`;
-    }
-    if (agent.role === "planning-inspector") {
-      return `等待规划专家提交方案后进行审查。使用 submit 工具提交审查结果。${tail}`;
-    }
-    if (agent.role === "execution-expert") {
-      if (this.startMode === START_MODES.DIRECT_EXECUTION) {
-        return `## 当前任务（直接执行模式）\n\n${userTask}\n\n已跳过规划阶段，直接进入实施。\n1. 分析任务并制定执行计划\n2. 使用 order 工具分发工作指令给 Worker\n3. 每个 Phase 完成后使用 submit 工具提交进度报告${tail}`;
-      }
-      return `等待方案批准后进入实施阶段。使用 order 工具分发工作指令。${tail}`;
-    }
-    if (agent.role === "execution-inspector") {
-      if (this.startMode === START_MODES.DIRECT_EXECUTION) {
-        return `## 审查任务（直接执行模式）\n\n原始任务: ${userTask}\n\n已跳过规划阶段。请直接审查执行专家的提交。\n1. 检查代码质量和架构一致性\n2. 使用 submit 工具提交审查结果${tail}`;
-      }
-      return `等待实施阶段的 Phase 完成后进行审查。使用 submit 工具提交审查结果。${tail}`;
-    }
-    if (agent.role === "ceo") {
-      return `当前待命中，将在关键节点被唤醒进行审查和裁决。${tail}`;
-    }
-    return `注册成功，等待任务分配。${tail}`;
+    return buildInitialPrompt(agent.role, userTask, this.phase, {
+      isDirectExecution: this.startMode === START_MODES.DIRECT_EXECUTION,
+    });
   }
 
   // ── Submit Handling ──
@@ -311,30 +296,26 @@ export class Orchestrator {
   }
 
   _routeSubmit(callerId, role, submitType, content, metadata) {
-    const tail = buildTailInjection(
-      this._getRouteTarget(role),
-      this.phase,
-      this.currentPhaseId
-    );
-
     // Planning phase routing
     if (this.phase === "planning") {
       if (role === "planning-expert") {
         const inspectorId = this._findAgentByRole("planning-inspector");
         if (!inspectorId) return { error: "Planning inspector not found" };
+        const { prefix, suffix } = buildRoutingPrompt("planning-expert", "planning-inspector", this.phase);
         return {
           action: "route",
           targetCallerId: inspectorId,
-          content: `[来自工程团队负责人]\n\n请审查以下方案：\n\n${content}${tail}`,
+          content: `${prefix}\n\n${content}\n\n${suffix}`,
         };
       }
       if (role === "planning-inspector") {
         const expertId = this._findAgentByRole("planning-expert");
         if (!expertId) return { error: "Planning expert not found" };
+        const { prefix, suffix } = buildRoutingPrompt("planning-inspector", "planning-expert", this.phase);
         return {
           action: "route",
           targetCallerId: expertId,
-          content: `[来自工程团队负责人]\n\n审查反馈：\n\n${content}${tail}`,
+          content: `${prefix}\n\n${content}\n\n${suffix}`,
         };
       }
     }
@@ -344,28 +325,26 @@ export class Orchestrator {
       if (role === "execution-expert" && submitType === "phase_complete") {
         const inspectorId = this._findAgentByRole("execution-inspector");
         if (!inspectorId) return { error: "Execution inspector not found" };
+        const { prefix, suffix } = buildRoutingPrompt("execution-expert", "execution-inspector", this.phase);
         return {
           action: "route",
           targetCallerId: inspectorId,
-          content: `[来自工程团队负责人]\n\n请审查以下Phase完成报告：\n\n${content}${tail}`,
+          content: `${prefix}\n\n${content}\n\n${suffix}`,
         };
       }
       if (role === "execution-inspector" && submitType === "review_result") {
         const passed = metadata.passed !== false;
         if (passed) {
-          // Move to next phase or final review
           return this._advancePhase(content);
         }
         const expertId = this._findAgentByRole("execution-expert");
         if (!expertId) return { error: "Execution expert not found" };
+        const { prefix, suffix } = buildRoutingPrompt("execution-inspector", "execution-expert", this.phase);
         return {
           action: "route",
           targetCallerId: expertId,
-          content: `[来自工程团队负责人]\n\n审查未通过，请修复以下问题：\n\n${content}${tail}`,
+          content: `${prefix}\n\n${content}\n\n${suffix}`,
         };
-      }
-      if (submitType === "final_complete") {
-        return this._triggerCeoFinalReview(content);
       }
     }
 
@@ -388,22 +367,25 @@ export class Orchestrator {
     const agent = this.agents.get(callerId);
     if (!agent) return { error: "Agent not found" };
 
-    if (agent.role === "planning-expert") {
+    // Determine which vote slot based on role
+    if (agent.role === "planning-expert" || agent.role === "execution-expert") {
       this.votes.expert = { vote, reason };
-    } else if (agent.role === "planning-inspector") {
+    } else if (agent.role === "planning-inspector" || agent.role === "execution-inspector") {
       this.votes.inspector = { vote, reason };
     } else {
-      return { error: "Only planning expert/inspector can vote" };
+      return { error: "Only expert/inspector can vote" };
     }
 
     // Check if both voted
     if (this.votes.expert && this.votes.inspector) {
       if (this.votes.expert.vote === "pass" && this.votes.inspector.vote === "pass") {
-        // Both passed → CEO gate
-        this._emit({ type: "votes_passed" });
-        return { status: "recorded", message: "投票通过，进入CEO门控审批" };
+        // Both passed → CEO gate (type depends on current phase)
+        const gateType = this.phase === "planning" ? "votes_passed" : "implementation_votes_passed";
+        this._emit({ type: gateType });
+        const gateLabel = this.phase === "planning" ? "CEO门控审批" : "CEO终审";
+        return { status: "recorded", message: `投票通过，进入${gateLabel}` };
       }
-      // At least one rejected → reset votes, continue confrontation
+      // At least one rejected → reset votes, continue loop
       const rejectReason = this.votes.expert?.vote === "reject"
         ? this.votes.expert.reason
         : this.votes.inspector.reason;
@@ -518,22 +500,21 @@ export class Orchestrator {
   // ── Phase Management ──
 
   _advancePhase(reviewContent) {
-    // TODO: Phase tracking logic
-    // For now, signal that the current phase is complete
     this._emit({
       type: "phase_advance",
       phase: this.phase,
-      phaseId: this.currentPhaseId,
     });
 
     const expertId = this._findAgentByRole("execution-expert");
     if (!expertId) return { error: "Execution expert not found" };
 
-    const tail = buildTailInjection("execution-expert", this.phase, this.currentPhaseId);
+    const { prefix, suffix } = buildRoutingPrompt("orchestrator", "execution-expert", this.phase, {
+      routingReason: "phase_advance",
+    });
     return {
       action: "route",
       targetCallerId: expertId,
-      content: `[来自工程团队负责人]\n\n当前Phase审查通过。请继续执行下一个Phase。\n\n${reviewContent}${tail}`,
+      content: `${prefix}\n\n${reviewContent}\n\n${suffix}`,
     };
   }
 
@@ -551,16 +532,20 @@ export class Orchestrator {
       active: true,
       type: "final_review",
       round: 0,
-      minRounds: 1, // Less defensive for final review
+      minDefensiveRounds: 2,
+      requiredConsecutive: 2,
+      consecutiveApprovals: 0,
       materials: content,
       history: [],
     };
 
-    const tail = buildTailInjection("ceo", this.phase, null);
+    const { prefix, suffix } = buildRoutingPrompt("orchestrator", "ceo", this.phase, {
+      routingReason: "final_review",
+    });
     return {
       action: "wake_ceo",
       targetCallerId: ceoId,
-      content: `[CEO 终审请求]\n\n以下是全部实施结果的审查报告，请进行最终验证。\n审查后请使用 ceo_verdict 工具提交你的裁决。\n\n${content}${tail}`,
+      content: `${prefix}\n\n## 原始任务\n\n${this.userTask}\n\n## 实施报告\n\n${content}\n\n${suffix}`,
     };
   }
 
@@ -581,17 +566,20 @@ export class Orchestrator {
       active: true,
       type: "planning_gate",
       round: 0,
-      minRounds: 2,
+      minDefensiveRounds: 2,
+      requiredConsecutive: 2,
+      consecutiveApprovals: 0,
       materials,
       history: [],
     };
 
-    // Start defensive rejection sequence — round 0: wake CEO with review materials
-    const tail = buildTailInjection("ceo", "planning", null);
+    const { prefix, suffix } = buildRoutingPrompt("orchestrator", "ceo", "planning", {
+      routingReason: "planning_gate",
+    });
     return {
       action: "wake_ceo",
       targetCallerId: ceoId,
-      content: `[CEO 门控审批 — 规划对峙投票已通过]\n\n专家和监察已就方案达成一致。请审查以下材料并做出裁决。\n审查后请使用 ceo_verdict 工具提交你的裁决（approved/rejected）。\n\n## 原始任务\n\n${this.userTask}\n\n## 投票理由\n\n${materials}${tail}`,
+      content: `${prefix}\n\n## 原始任务\n\n${this.userTask}\n\n## 投票理由\n\n${materials}\n\n${suffix}`,
     };
   }
 
@@ -627,16 +615,64 @@ export class Orchestrator {
   }
 
   _handleCeoApproval() {
-    const gateType = this.ceoGate.type;
-    this.ceoGate.active = false;
+    const gate = this.ceoGate;
+    gate.round++;
+
+    // ── Rejection Lock (驳斥锁) ──
+    // Phase 1: Defensive rounds — first N rounds force-downgrade any approval
+    if (gate.round <= gate.minDefensiveRounds) {
+      // Force downgrade: approval is not accepted, send CEO back to review
+      this._emit({
+        type: "ceo_gate_defensive",
+        gateType: gate.type,
+        round: gate.round,
+        minDefensiveRounds: gate.minDefensiveRounds,
+      });
+
+      const { prefix, suffix } = buildRoutingPrompt("orchestrator", "ceo", this.phase, {
+        routingReason: "defensive_review",
+      });
+      const ceoId = this._findAgentByRole("ceo");
+      return {
+        action: "wake_ceo",
+        targetCallerId: ceoId,
+        content: `${prefix}\n\n[驳斥锁 — 第 ${gate.round}/${gate.minDefensiveRounds} 轮防御审查]\n你的审批被系统降级为「进一步审查」。这是防御性审查机制的一部分，前 ${gate.minDefensiveRounds} 轮审批不论结论如何都会被降级。\n请利用这次机会进行更深入的审视，寻找可能遗漏的问题。\n\n## 审查材料\n\n${gate.materials}\n\n${suffix}`,
+      };
+    }
+
+    // Phase 2: After defensive rounds — count consecutive approvals
+    gate.consecutiveApprovals++;
+
+    if (gate.consecutiveApprovals < gate.requiredConsecutive) {
+      // Not enough consecutive approvals yet — send back for confirmation
+      this._emit({
+        type: "ceo_gate_consecutive",
+        gateType: gate.type,
+        round: gate.round,
+        consecutiveApprovals: gate.consecutiveApprovals,
+        requiredConsecutive: gate.requiredConsecutive,
+      });
+
+      const { prefix, suffix } = buildRoutingPrompt("orchestrator", "ceo", this.phase, {
+        routingReason: "consecutive_confirm",
+      });
+      const ceoId = this._findAgentByRole("ceo");
+      return {
+        action: "wake_ceo",
+        targetCallerId: ceoId,
+        content: `${prefix}\n\n[连续确认 — 第 ${gate.consecutiveApprovals}/${gate.requiredConsecutive} 次]\n需要连续 ${gate.requiredConsecutive} 次审批通过才能最终确认。当前连续通过 ${gate.consecutiveApprovals} 次。\n请再次仔细确认你的审批决定。\n\n## 审查材料\n\n${gate.materials}\n\n${suffix}`,
+      };
+    }
+
+    // Phase 3: Full pass — defensive rounds exhausted + consecutive confirmations met
+    const gateType = gate.type;
+    gate.active = false;
 
     if (gateType === "planning_gate") {
-      // CEO approved planning → transition to implementation
       this._emit({ type: "ceo_gate_resolved", gateType, verdict: "approved" });
-      return { action: "transition_to_implementation", materials: this.ceoGate.materials };
+      return { action: "transition_to_implementation", materials: gate.materials };
     }
     if (gateType === "final_review") {
-      // CEO approved final → task complete
       this.status = "completed";
       this._emit({ type: "status_change", status: "completed" });
       this._emit({ type: "ceo_gate_resolved", gateType, verdict: "approved" });
@@ -652,6 +688,8 @@ export class Orchestrator {
   _handleCeoRejection(reason) {
     const gateType = this.ceoGate.type;
     this.ceoGate.round++;
+    // Reset consecutive approvals on rejection
+    this.ceoGate.consecutiveApprovals = 0;
 
     if (gateType === "planning_gate") {
       // Reset votes, send rejection back to expert+inspector
@@ -663,15 +701,17 @@ export class Orchestrator {
       const inspectorId = this._findAgentByRole("planning-inspector");
       const routeTargets = [];
       if (expertId) {
+        const { prefix, suffix } = buildRoutingPrompt("ceo", "planning-expert", "planning", { routingReason: "rejection" });
         routeTargets.push({
           targetCallerId: expertId,
-          content: `[CEO 裁决: 方案被退回]\n\n${reason}\n\n请根据以上反馈修改方案后重新提交。`,
+          content: `${prefix}\n\n${reason}\n\n${suffix}`,
         });
       }
       if (inspectorId) {
+        const { prefix, suffix } = buildRoutingPrompt("ceo", "planning-inspector", "planning", { routingReason: "rejection" });
         routeTargets.push({
           targetCallerId: inspectorId,
-          content: `[CEO 裁决: 方案被退回]\n\nCEO认为方案存在问题：\n${reason}\n\n请在专家修改方案后重新审查。`,
+          content: `${prefix}\n\n${reason}\n\n${suffix}`,
         });
       }
       return { action: "route_multiple", targets: routeTargets };
@@ -685,15 +725,17 @@ export class Orchestrator {
       const inspectorId = this._findAgentByRole("execution-inspector");
       const routeTargets = [];
       if (expertId) {
+        const { prefix, suffix } = buildRoutingPrompt("ceo", "execution-expert", "implementation", { routingReason: "rejection" });
         routeTargets.push({
           targetCallerId: expertId,
-          content: `[CEO 终审未通过]\n\n${reason}\n\n请根据以上反馈修复后重新提交。`,
+          content: `${prefix}\n\n${reason}\n\n${suffix}`,
         });
       }
       if (inspectorId) {
+        const { prefix, suffix } = buildRoutingPrompt("ceo", "execution-inspector", "implementation", { routingReason: "rejection" });
         routeTargets.push({
           targetCallerId: inspectorId,
-          content: `[CEO 终审未通过]\n\nCEO 发现问题：\n${reason}\n\n请在专家修复后重新审查。`,
+          content: `${prefix}\n\n${reason}\n\n${suffix}`,
         });
       }
       return { action: "route_multiple", targets: routeTargets };
@@ -711,9 +753,10 @@ export class Orchestrator {
     for (const targetRole of targets) {
       const targetId = this._findAgentByRole(targetRole);
       if (targetId) {
+        const { prefix, suffix } = buildRoutingPrompt("ceo", targetRole, this.phase, { routingReason: "arbitration" });
         routeTargets.push({
           targetCallerId: targetId,
-          content: `[CEO 仲裁裁决]\n\n${reason}`,
+          content: `${prefix}\n\n${reason}\n\n${suffix}`,
         });
       }
     }
@@ -725,7 +768,6 @@ export class Orchestrator {
    */
   transitionToImplementation(planDocument) {
     this.phase = "implementation";
-    this.currentPhaseId = "Phase 1";
 
     // Mark planning agents as standby
     for (const [, agent] of this.agents) {
@@ -740,40 +782,14 @@ export class Orchestrator {
       to: "implementation",
     });
 
-    // Build instructions for implementation agents
+    // Build instructions for implementation agents using routing prompts
     const instructions = [];
     for (const [callerId, agent] of this.agents) {
       if (PHASE_AGENTS.implementation.includes(agent.role)) {
-        const tail = buildTailInjection(agent.role, "implementation", "Phase 1");
-        let instruction;
-        if (agent.role === "execution-expert") {
-          instruction = `## 角色: 实施专家
-
-规划阶段已完成。以下是最终规划书：
-
-${planDocument}
-
-## 行为指南
-
-1. 按规划书中的 Phase 顺序执行编码
-2. 每个 Phase 完成后使用 submit 工具提交完成报告
-3. 可使用 order 工具委派子任务给 Worker
-4. 可使用 check_orders 查看 Worker 状态
-5. 保证每个 Phase 有 git checkpoint${tail}`;
-        } else {
-          instruction = `## 角色: 实施监察
-
-规划阶段已完成。以下是最终规划书供参考：
-
-${planDocument}
-
-## 审查要点
-
-1. 直接检查仓库代码，不信专家自述
-2. 代码质量、架构一致性
-3. 测试覆盖
-4. 需求逐项对照${tail}`;
-        }
+        const { prefix, suffix } = buildRoutingPrompt("orchestrator", agent.role, "implementation", {
+          routingReason: "transition",
+        });
+        const instruction = `${prefix}\n\n${planDocument}\n\n${suffix}`;
         agent.status = "idle";
         instructions.push({ callerId, instruction });
       }
@@ -907,6 +923,7 @@ ${planDocument}
       phase: this.phase,
       currentPhaseId: this.currentPhaseId,
       startMode: this.startMode,
+      taskType: this.taskType || null,
       controlMode: this.controlMode,
       agents: Object.fromEntries(
         [...this.agents].map(([k, v]) => [k, { ...v }])
@@ -916,6 +933,9 @@ ${planDocument}
         active: this.ceoGate.active,
         type: this.ceoGate.type,
         round: this.ceoGate.round,
+        minDefensiveRounds: this.ceoGate.minDefensiveRounds,
+        consecutiveApprovals: this.ceoGate.consecutiveApprovals,
+        requiredConsecutive: this.ceoGate.requiredConsecutive,
         history: this.ceoGate.history,
       },
       rounds: this.rounds,
