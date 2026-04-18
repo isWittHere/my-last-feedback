@@ -426,7 +426,9 @@ IMPORTANT - rules for AI agents calling this tool:
 );
 
 // ── register_agent tool ──
-
+// TEMPORARILY DISABLED: uncomment to re-enable the MLFB register_agent tool.
+// Disabled per user request to hide this tool from the MCP client surface.
+/*
 server.tool(
   "register_agent",
   `Register as an agent and obtain a unique agent identifier (alias) from the MCP server.
@@ -454,6 +456,10 @@ IMPORTANT: Do NOT use escape characters (\\n, \\t, etc.) in any string parameter
     };
   }
 );
+*/  };
+  }
+);
+*/
 
 const transport = new StdioServerTransport();
 await server.connect(transport);

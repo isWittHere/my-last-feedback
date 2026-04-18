@@ -158,8 +158,6 @@ function LauncherSidebarItem({
   onDelete: () => void;
 }) {
   const { t } = useTranslation();
-  const pauseLauncher = useMLRAStore((s) => s.pauseLauncher);
-  const resumeLauncher = useMLRAStore((s) => s.resumeLauncher);
   const renameLauncher = useMLRAStore((s) => s.renameLauncher);
   const [showMenu, setShowMenu] = useState(false);
   const [isRenaming, setIsRenaming] = useState(false);
@@ -224,8 +222,10 @@ function LauncherSidebarItem({
       </div>
       {launcher.status !== "configuring" && (
         <div className="launcher-sidebar-item-agents">
-          {launcher.agents.expert && <span style={{ color: "#3B82F6" }}>专家:活跃</span>}
-          {launcher.agents.inspector && <span style={{ color: "#F59E0B" }}>监察:活跃</span>}
+          {launcher.agents["planning-expert"] && <span style={{ color: "#3B82F6" }}>规划专家</span>}
+          {launcher.agents["planning-inspector"] && <span style={{ color: "#F59E0B" }}>规划监察</span>}
+          {launcher.agents["execution-expert"] && <span style={{ color: "#3B82F6" }}>执行专家</span>}
+          {launcher.agents["execution-inspector"] && <span style={{ color: "#F59E0B" }}>执行监察</span>}
           {launcher.agents.ceo && <span style={{ color: "#8B5CF6" }}>CEO:待命</span>}
         </div>
       )}
@@ -236,16 +236,7 @@ function LauncherSidebarItem({
           <button onClick={() => { setIsRenaming(true); setRenameValue(launcher.name); setShowMenu(false); }}>
             <Icon name="edit" size={10} /> 重命名
           </button>
-          {launcher.status === "running" && (
-            <button onClick={() => { pauseLauncher(launcher.id); setShowMenu(false); }}>
-              <Icon name="pause" size={10} /> 暂停
-            </button>
-          )}
-          {launcher.status === "paused" && (
-            <button onClick={() => { resumeLauncher(launcher.id); setShowMenu(false); }}>
-              <Icon name="play" size={10} /> 恢复
-            </button>
-          )}
+          {/* pause / resume buttons removed: store no longer exposes pauseLauncher / resumeLauncher */}
           <div className="launcher-sidebar-item-menu-sep" />
           {confirmDelete ? (
             <button className="launcher-sidebar-item-menu-danger" onClick={() => { onDelete(); setShowMenu(false); setConfirmDelete(false); }}>

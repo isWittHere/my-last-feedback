@@ -117,7 +117,9 @@ export function MLRACallerTabs({ columnCount }: MLRACallerTabsProps = {}) {
       return activeLauncher.agents.workers.length > 0 ? "active" : "idle";
     }
     const slot = activeLauncher.agents[roleId as keyof typeof activeLauncher.agents];
-    return slot?.status ?? null;
+    // Narrow out the workers[] union branch — only AgentSlot has .status
+    if (!slot || Array.isArray(slot)) return null;
+    return slot.status ?? null;
   };
 
   const handlePointerDown = (e: React.PointerEvent, tabId: string) => {

@@ -13,6 +13,7 @@ import { tmpdir } from "node:os";
 import { createHash, randomBytes } from "node:crypto";
 import { basename } from "node:path";
 import { MSG } from "./protocol.mjs";
+import { WORKER_ENABLED } from "./feature-flags.mjs";
 
 // ── Daemon Connection ──
 
@@ -255,8 +256,7 @@ Do NOT call any other tool before register_LRA returns.`,
 mcpServer.tool(
   "get_task_context",
   `Retrieve the original user request and task type.
-Use this tool when you need to recall the original task description.
-Only main agents (experts, inspectors, CEO) can use this tool — workers cannot.`,
+Use this tool when you need to recall the original task description.`,
   {},
   async () => {
     if (!daemonSocket || !callerId) {
@@ -349,6 +349,12 @@ This is a quick-return tool (non-blocking).`,
     };
   }
 );
+
+// ── Worker-related tools (dormant when WORKER_ENABLED=false) ──
+// The following 4 tools (order, check_orders, await_order_finish, submit_feedback)
+// are only registered when the worker subsystem is enabled. While dormant, main
+// agents see no worker tools in their MCP tool list and cannot hallucinate delegation.
+if (WORKER_ENABLED) {
 
 // ── Tool: order ──
 
@@ -509,6 +515,8 @@ Refer to your Skill file (mcp_prompts/skill_worker.md) for the full template.`,
     };
   }
 );
+
+} // end if (WORKER_ENABLED)
 
 // ── Tool: ceo_verdict (CEO only) ──
 

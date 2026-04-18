@@ -2387,9 +2387,46 @@ body,
   flex-direction: column;
   gap: 20px;
   padding: 20px 24px 24px;
-  max-width: 640px;
+  max-width: 1180px;
   width: 100%;
   margin: 0 auto;
+}
+
+/* Two-column layout: left = task config + start, right = agent list */
+.mlra-home-two-col {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) minmax(0, 1fr);
+  gap: 20px;
+  align-items: start;
+}
+.mlra-home-col-left,
+.mlra-home-col-right {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  min-width: 0;
+}
+.mlra-home-col-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 0 4px 6px;
+  border-bottom: 1px solid var(--color-border, rgba(255, 255, 255, 0.08));
+}
+.mlra-home-col-title {
+  font-size: 13px;
+  font-weight: 600;
+  color: var(--color-text-primary);
+}
+.mlra-home-col-count {
+  font-size: 12px;
+  color: var(--color-text-secondary, rgba(255, 255, 255, 0.55));
+  font-variant-numeric: tabular-nums;
+}
+@media (max-width: 900px) {
+  .mlra-home-two-col {
+    grid-template-columns: minmax(0, 1fr);
+  }
 }
 
 /* Config title row */

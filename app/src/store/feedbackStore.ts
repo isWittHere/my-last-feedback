@@ -395,9 +395,18 @@ export const useFeedbackStore = create<FeedbackState>((set, get) => ({
 
   addSession: (session) => {
     const wasHidden = get().hiddenCallerIds.includes(session.callerId);
-    set((state) => ({
-      sessions: [...state.sessions, session],
-    }));
+    set((state) => {
+      // Idempotent upsert: if a session with the same id already exists,
+      // replace it (covers StrictMode double-invoke of load_history and any
+      // other duplicate-add path). Otherwise append.
+      const idx = state.sessions.findIndex((s) => s.id === session.id);
+      if (idx >= 0) {
+        const next = state.sessions.slice();
+        next[idx] = session;
+        return { sessions: next };
+      }
+      return { sessions: [...state.sessions, session] };
+    });
     // Auto-unhide caller when a new pending session arrives
     if (session.status === "pending") {
       get().unhideCaller(session.callerId);

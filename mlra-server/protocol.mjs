@@ -1,6 +1,8 @@
 // ── MLRA Protocol Definitions ──
 // Shared message types between MCP Server ↔ Daemon ↔ Tauri App
 
+import { NO_WORKER_NOTICE } from "./feature-flags.mjs";
+
 // ── Agent Role Types ──
 
 export const AGENT_ROLES = [
@@ -80,19 +82,21 @@ export const MSG = {
 };
 
 // ── Start Modes ──
+// NOTE: Worker sub-agents are currently disabled (see feature-flags.mjs WORKER_ENABLED=false).
+// minWorkers is set to 0 so orchestration can start with main agents only.
 export const START_MODES = {
-  FULL: "full",                    // All 5 main agents + ≥1 worker
-  DIRECT_EXECUTION: "direct-execution", // execution-expert + execution-inspector + ceo + ≥1 worker
+  FULL: "full",                    // All 5 main agents
+  DIRECT_EXECUTION: "direct-execution", // execution-expert + execution-inspector + ceo
 };
 
 export const START_MODE_REQUIREMENTS = {
   [START_MODES.FULL]: {
     required: ["planning-expert", "planning-inspector", "execution-expert", "execution-inspector", "ceo"],
-    minWorkers: 1,
+    minWorkers: 0,
   },
   [START_MODES.DIRECT_EXECUTION]: {
     required: ["execution-expert", "execution-inspector", "ceo"],
-    minWorkers: 1,
+    minWorkers: 0,
   },
 };
 
@@ -108,14 +112,16 @@ export const ROLE_LABELS = {
 };
 
 // ── Skill file paths per role ──
+// NOTE: Skill files live under `skills/` in the workspace root.
+// The `worker` entry is intentionally omitted because workers are dormant
+// (see feature-flags.mjs WORKER_ENABLED). Re-add it when re-activating.
 
 const SKILL_PATHS = {
-  "planning-expert": "mcp_prompts/skill_planning_expert.md",
-  "planning-inspector": "mcp_prompts/skill_planning_inspector.md",
-  "execution-expert": "mcp_prompts/skill_execution_expert.md",
-  "execution-inspector": "mcp_prompts/skill_execution_inspector.md",
-  ceo: "mcp_prompts/skill_ceo.md",
-  worker: "mcp_prompts/skill_worker.md",
+  "planning-expert": "skills/skill_planning_expert.md",
+  "planning-inspector": "skills/skill_planning_inspector.md",
+  "execution-expert": "skills/skill_execution_expert.md",
+  "execution-inspector": "skills/skill_execution_inspector.md",
+  ceo: "skills/skill_ceo.md",
 };
 
 // ── Routing prompt templates ──
@@ -273,9 +279,9 @@ export function buildInitialPrompt(role, userTask, phase, options = {}) {
 
   if (role === "execution-expert") {
     if (options.isDirectExecution) {
-      return `## 角色: ${label}（直接执行模式）\n\n你是 MLRA 编排系统中的实施专家。已跳过规划阶段，直接进入实施。${skillRef}\n\n## 当前任务\n\n${userTask}\n\n## 行动\n1. 分析任务并制定执行计划\n2. 使用 order 工具分发工作指令给 Worker\n3. 每个 Phase 完成后使用 submit 工具提交进度报告\n4. 提交前进行自检（参照 Skill 中的 re_verify 流程）`;
+      return `## 角色: ${label}（直接执行模式）\n\n你是 MLRA 编排系统中的实施专家。已跳过规划阶段，直接进入实施。${skillRef}\n\n## 执行纪律\n\n${NO_WORKER_NOTICE}\n\n## 当前任务\n\n${userTask}\n\n## 行动\n1. 分析任务并亲自制定执行计划\n2. 亲自完成所有代码改动与验证工作\n3. 每个 Phase 完成后使用 submit 工具提交进度报告\n4. 提交前进行自检（参照 Skill 中的 re_verify 流程）`;
     }
-    return `## 角色: ${label}\n\n你是 MLRA 编排系统中的实施专家。当前处于规划阶段，等待规划完成后进入实施。${skillRef}\n\n## 原始任务\n\n${userTask}\n\n## 行动\n等待规划阶段完成并通过审批后，你将收到最终规划书和实施指令。`;
+    return `## 角色: ${label}\n\n你是 MLRA 编排系统中的实施专家。当前处于规划阶段，等待规划完成后进入实施。${skillRef}\n\n## 执行纪律\n\n${NO_WORKER_NOTICE}\n\n## 原始任务\n\n${userTask}\n\n## 行动\n等待规划阶段完成并通过审批后，你将收到最终规划书和实施指令。`;
   }
 
   if (role === "execution-inspector") {

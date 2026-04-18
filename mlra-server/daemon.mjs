@@ -14,6 +14,7 @@ import { MessageRouter } from "./router.mjs";
 import { IpcBridge } from "./ipc-bridge.mjs";
 import { SessionManager } from "./session-manager.mjs";
 import { MSG } from "./protocol.mjs";
+import { WORKER_ENABLED } from "./feature-flags.mjs";
 
 // ── Port config ──
 
@@ -257,6 +258,9 @@ class OrchestratorDaemon {
       }
 
       case MSG.AGENT_ORDER: {
+        if (!WORKER_ENABLED) {
+          return { type: MSG.ERROR, callerId: msg.callerId, message: "Worker subsystem is dormant. Delegation is not available." };
+        }
         const { callerId, workerId, taskDescription, priority } = msg;
         const result = this.orchestrator.handleOrder(callerId, workerId, taskDescription, priority);
 
@@ -279,12 +283,18 @@ class OrchestratorDaemon {
       }
 
       case MSG.AGENT_CHECK_ORDERS: {
+        if (!WORKER_ENABLED) {
+          return { type: MSG.ORDERS_STATUS, callerId: msg.callerId, orders: [] };
+        }
         const { callerId } = msg;
         const result = this.orchestrator.handleCheckOrders(callerId);
         return { type: MSG.ORDERS_STATUS, callerId, orders: result.orders };
       }
 
       case MSG.AGENT_AWAIT_ORDER: {
+        if (!WORKER_ENABLED) {
+          return { type: MSG.ERROR, callerId: msg.callerId, message: "Worker subsystem is dormant." };
+        }
         const { callerId, workerId } = msg;
         console.error(`[MLRA-Daemon] ${callerId} awaiting worker ${workerId}`);
         try {
@@ -296,6 +306,9 @@ class OrchestratorDaemon {
       }
 
       case MSG.WORKER_SUBMIT_FEEDBACK: {
+        if (!WORKER_ENABLED) {
+          return { type: MSG.ERROR, callerId: msg.callerId, message: "Worker subsystem is dormant." };
+        }
         const { callerId, result, filesModified } = msg;
         const decision = this.orchestrator.handleWorkerFeedback(callerId, result, filesModified);
 

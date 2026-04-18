@@ -2,11 +2,16 @@ import { useMLRAStore } from "../store/mlraStore";
 import { LauncherHome } from "./LauncherHome";
 import { LauncherSidebar } from "./LauncherSidebar";
 import { AgentColumn } from "./AgentColumn";
-import { WorkerPoolColumn } from "./WorkerPoolColumn";
+// import { WorkerPoolColumn } from "./WorkerPoolColumn"; // Dormant: hidden while WORKER_ENABLED=false on backend
+
+type MainAgentRole = "planning-expert" | "planning-inspector" | "execution-expert" | "execution-inspector" | "ceo";
 
 /**
  * MLRA root view component.
- * Shows LauncherHome when configuring, or four-column workspace when running.
+ * - When launcher is not running: renders the unified LauncherHome page
+ *   (it handles both the "create" and "configure" states internally).
+ * - When launcher is running/paused: renders the multi-column workspace.
+ * (Worker Pool column is dormant; see mlra-server/feature-flags.mjs)
  */
 export function MLRAView() {
   const activeLauncher = useMLRAStore((s) => s.getActiveLauncher());
@@ -14,10 +19,10 @@ export function MLRAView() {
   const toggleSidebar = useMLRAStore((s) => s.toggleLauncherSidebar);
   const phaseView = useMLRAStore((s) => s.phaseView);
 
-  // Show phase-specific agent pair + CEO + workers (always 4 columns)
-  const phaseRoles = phaseView === "planning"
-    ? ["planning-expert", "planning-inspector", "ceo", "workers"]
-    : ["execution-expert", "execution-inspector", "ceo", "workers"];
+  // Show phase-specific agent pair + CEO (3 columns while workers are dormant)
+  const phaseRoles: MainAgentRole[] = phaseView === "planning"
+    ? ["planning-expert", "planning-inspector", "ceo"]
+    : ["execution-expert", "execution-inspector", "ceo"];
 
   const isActive = activeLauncher?.status === "running" || activeLauncher?.status === "paused";
 
@@ -28,22 +33,15 @@ export function MLRAView() {
         <LauncherSidebar onClose={() => toggleSidebar()} />
       )}
 
-      {/* Main content area */}
-      {!activeLauncher ? (
-        <LauncherHome launcher={null} />
-      ) : !isActive ? (
-        <LauncherHome launcher={activeLauncher} />
-      ) : (
-        /* Multi-column workspace */
+      {/* Main content area — single unified launcher page, or running workspace */}
+      {isActive ? (
         <div className="mlra-workspace">
-          {phaseRoles.map((role) =>
-            role === "workers" ? (
-              <WorkerPoolColumn key="workers" />
-            ) : (
-              <AgentColumn key={role} role={role} />
-            )
-          )}
+          {phaseRoles.map((role) => (
+            <AgentColumn key={role} role={role} />
+          ))}
         </div>
+      ) : (
+        <LauncherHome launcher={activeLauncher ?? null} />
       )}
     </div>
   );

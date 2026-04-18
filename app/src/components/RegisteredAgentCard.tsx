@@ -10,10 +10,12 @@ interface RegisteredAgentCardProps {
 
 const ROLE_OPTIONS: { value: AgentRole | ""; label: string }[] = [
   { value: "", label: "未分配" },
-  { value: "expert", label: "专家 (Expert)" },
-  { value: "inspector", label: "监察 (Inspector)" },
+  { value: "planning-expert", label: "规划专家" },
+  { value: "planning-inspector", label: "规划监察" },
+  { value: "execution-expert", label: "执行专家" },
+  { value: "execution-inspector", label: "执行监察" },
   { value: "ceo", label: "CEO" },
-  { value: "worker", label: "Worker" },
+  // { value: "worker", label: "Worker" }, // Dormant: hidden while WORKER_ENABLED=false
 ];
 
 /**
