@@ -1,6 +1,12 @@
 // mcp/mlra/protocol/prompts.mjs
-// Phase 3 skeleton: routing / initial-prompt templates for v2's 3-role topology.
-// Full template set is populated during Phase 4 (daemon migration) / Phase 5 (skill merge).
+// v2 routing / initial-prompt templates for the 3-role topology.
+//
+// Design philosophy (2026-02 clarification):
+// Every agent should feel as if the USER is speaking to it. Other agents are
+// INVISIBLE. Routing prompts never mention "the Expert submitted", "the
+// Inspector reviewed", etc. — relayed content is framed as input from the
+// user (or unattributed external material). An agent knows its own role
+// (from Skill) but does not know other roles exist.
 
 import { ROLES, ROLE_LABELS, PHASES } from "./roles.mjs";
 
@@ -10,10 +16,15 @@ const SKILL_PATHS = {
   [ROLES.INSPECTOR]: "skills/skill_inspector.md",
 };
 
+export { SKILL_PATHS };
+
+function capitalize(s) {
+  return s ? s.charAt(0).toUpperCase() + s.slice(1) : s;
+}
+
 /**
- * Build the system-message routing hint appended by the daemon on every
- * relayed message. Keeps the agent aware of the current phase and the tool
- * expected for the next action.
+ * Build a short routing hint appended (by the daemon) to every relayed
+ * message. Keeps the agent oriented without mentioning other agents.
  *
  * @param {"ceo"|"expert"|"inspector"} role
  * @param {"planning"|"execution"} phase
@@ -25,33 +36,34 @@ export function buildRoutingHint(role, phase) {
       ? 'expert_submit(type="plan_draft", ...)'
       : 'expert_submit(type="phase_complete", ...)';
     return [
-      "[MLRA Routing]",
-      `Phase: ${phase}`,
-      `Expected action: ${action}`,
-      `Skill reference: Read \`## Phase: ${capitalize(phase)}\` section of ${SKILL_PATHS[role]}`,
+      "[Context]",
+      `Current phase: ${phase}`,
+      `Next action: call ${action}`,
+      `Skill: \`${SKILL_PATHS[role]}\` — see section \`## Phase: ${capitalize(phase)}\``,
     ].join("\n");
   }
   if (role === ROLES.INSPECTOR) {
     return [
-      "[MLRA Routing]",
-      `Phase: ${phase}`,
-      `Expected action: inspector_submit({ passed: boolean, content })`,
-      `Skill reference: Read \`## Phase: ${capitalize(phase)}\` section of ${SKILL_PATHS[role]}`,
+      "[Context]",
+      `Current phase: ${phase}`,
+      `Next action: call inspector_submit({ passed, content })`,
+      `Skill: \`${SKILL_PATHS[role]}\` — see section \`## Phase: ${capitalize(phase)}\``,
     ].join("\n");
   }
   if (role === ROLES.CEO) {
     return [
-      "[MLRA Routing]",
-      `Phase: ${phase}`,
-      `Expected action: ceo_verdict({ verdict: "approved"|"rejected"|"arbitration", reason, targets? })`,
-      `Skill reference: ${SKILL_PATHS[role]}`,
+      "[Context]",
+      `Current phase: ${phase}`,
+      `Next action: call ceo_verdict({ verdict, reason, targets? })`,
+      `Skill: \`${SKILL_PATHS[role]}\``,
     ].join("\n");
   }
-  return "[MLRA Routing] Unknown role — no guidance available.";
+  return "[Context] Unknown role.";
 }
 
 /**
- * Build the initial prompt sent to a role when the workflow starts.
+ * Build the initial system prompt delivered to a role at workflow start.
+ * Written in user voice — no mention of other roles.
  *
  * @param {"ceo"|"expert"|"inspector"} role
  * @param {string} userTask
@@ -62,136 +74,130 @@ export function buildRoutingHint(role, phase) {
 export function buildInitialPrompt(role, userTask, phase, options = {}) {
   const label = ROLE_LABELS[role] || role;
   const skill = SKILL_PATHS[role];
-  const header = `## Role: ${label}`;
-  const skillRef = skill
-    ? `\n\n## Behavior\nBefore starting, read:\n- \`${skill}\` — your role guide and submission templates\n- \`AGENTS.md\` — project architecture & conventions`
-    : "";
+  const phaseSection = `## Phase: ${capitalize(phase)}`;
 
-  const taskBlock = `\n\n## Task\n\n${userTask}`;
-  const phaseBlock = `\n\n## Current phase: ${phase}`;
+  const skillRef = skill
+    ? `\n\n## 行为规范\n开始工作前请阅读：\n- \`${skill}\` — 你的角色规范和提交模板（尤其是 \`${phaseSection}\` 小节）\n- 项目根目录 \`AGENTS.md\` — 项目架构与约束`
+    : `\n\n## 行为规范\n请阅读项目根目录 \`AGENTS.md\`。`;
+
+  const taskBlock = `\n\n## 我的任务\n\n${userTask}`;
 
   if (role === ROLES.EXPERT) {
-    const action = phase === PHASES.PLANNING
-      ? "Analyse the task, draft a plan, and submit it via `expert_submit(type=\"plan_draft\", ...)`."
-      : "Execute the approved plan phase by phase. After each phase, submit a progress report via `expert_submit(type=\"phase_complete\", ...)`.";
-    return `${header}${skillRef}${taskBlock}${phaseBlock}\n\n## Action\n${action}`;
+    if (phase === PHASES.PLANNING) {
+      return `## 角色\n你是 ${label}（当前 Phase: planning）。${skillRef}${taskBlock}\n\n## 行动\n请分析任务需求，制定详细的规划方案，然后使用 \`expert_submit(type="plan_draft", content=...)\` 提交。提交后你会陆续收到针对方案的审查反馈，请按反馈迭代修改。当你认为方案成熟时，可使用 \`expert_vote(vote="pass", ...)\` 投票进入下一阶段。`;
+    }
+    if (options.isDirectExecution) {
+      return `## 角色\n你是 ${label}（当前 Phase: execution，直接执行模式）。${skillRef}${taskBlock}\n\n## 行动\n1. 分析任务并制定执行计划\n2. 亲自完成所有代码改动与验证工作\n3. 每个 Phase 完成后使用 \`expert_submit(type="phase_complete", content=...)\` 提交报告\n4. 提交前先自检（参照 Skill 中的 re_verify 流程）`;
+    }
+    return `## 角色\n你是 ${label}。${skillRef}${taskBlock}\n\n## 行动\n待命中。任务到达后按 Skill 指引处理。`;
   }
 
   if (role === ROLES.INSPECTOR) {
-    const action = phase === PHASES.PLANNING
-      ? "Wait for the Expert to submit a plan draft; then review it per your Skill and submit a structured review via `inspector_submit({passed, content})`."
-      : "Wait for the Expert's phase-complete report; then verify the code directly and submit your review via `inspector_submit({passed, content})`.";
-    return `${header}${skillRef}${taskBlock}${phaseBlock}\n\n## Action\n${action}`;
+    return `## 角色\n你是 ${label}（当前 Phase: ${phase}）。${skillRef}${taskBlock}\n\n## 行动\n待命中。当收到需要审查的内容（如规划方案草案或阶段完成报告）时，按 Skill \`${phaseSection}\` 小节的审查规范输出结构化报告，使用 \`inspector_submit({ passed, content })\` 提交。当你认为方案/成果已成熟时，可使用 \`inspector_vote(vote="pass", ...)\` 投票。`;
   }
 
   if (role === ROLES.CEO) {
-    return `${header}${skillRef}${taskBlock}${phaseBlock}\n\n## Action\nYou are on standby. You will be woken at critical gates (planning approval, final verification, arbitration). When woken, use \`ceo_verdict\` to submit your decision.`;
+    return `## 角色\n你是 ${label}。${skillRef}${taskBlock}\n\n## 行动\n待命中。你会在关键节点（规划审批、终审、仲裁）被唤醒 — 届时会收到需要审查的材料。收到后使用 \`ceo_verdict({ verdict, reason, targets? })\` 提交裁决。`;
   }
 
-  return `${header}${skillRef}${taskBlock}`;
+  return `## 角色\n你是 ${label}。${skillRef}${taskBlock}`;
 }
 
-function capitalize(s) {
-  return s ? s.charAt(0).toUpperCase() + s.slice(1) : s;
-}
-
-export { SKILL_PATHS };
-
-// ── Routing prompt templates (v2, 3-role × 2-phase) ──
+// ── Routing prompt templates (v2, user-voice) ──
 // Key formats:
-//   "<source>→<target>"                (standard relay, phase-agnostic)
-//   "<source>→<target>:<phase>"        (phase-specific variant, tried before the phase-agnostic key)
-//   "<source>→<target>:<reason>"       (special routing reason, e.g. "rejection", "transition")
-//   "<source>:<reason>"                (source-only special trigger)
+//   "<source>→<target>"                standard relay (phase-agnostic)
+//   "<source>→<target>:<phase>"        phase-specific variant
+//   "<source>→<target>:<reason>"       special reason (rejection/transition/...)
+//   "<source>:<reason>"                source-only special trigger
 //
-// During Phase 5 the Skill files will provide richer per-phase guidance; keep
-// these prompts short and tool-oriented so they survive a Skill rewrite.
+// Lookup order handled by buildRoutingPrompt() below:
+//   1. source→target:reason
+//   2. source:reason
+//   3. source→target:phase
+//   4. source→target
+//   5. generic fallback
+//
+// IMPORTANT: never mention the source role ("Expert/Inspector/CEO") to the
+// recipient. Frame content as material delivered to the recipient for action.
 
 const ROUTING_TEMPLATES = Object.freeze({
-  // ── expert ↔ inspector, planning phase ──
+  // ── Planning phase: plan ↔ review ──
   "expert→inspector:planning": {
-    prefix: "规划专家提交了方案。作为 Inspector（当前 Phase: planning），请按你的 Skill 中的 `## Phase: Planning` 小节进行全面审查，输出结构化审查报告。",
-    suffix: "完成后使用 inspector_submit({passed, content}) 提交审查结果。如果你认为方案已足够成熟，也可以使用 inspector_vote 投票。",
+    prefix: "这是一份需要你独立审查的规划方案草案。请按你的 Skill `## Phase: Planning` 小节审查规范，对方案逐维度审查。",
+    suffix: "完成后使用 `inspector_submit({passed, content})` 提交结构化审查报告。若你认为方案已成熟，也可使用 `inspector_vote(vote=\"pass\", ...)` 投票。",
   },
   "inspector→expert:planning": {
-    prefix: "Inspector 的审查反馈已送达。作为 Expert（当前 Phase: planning），请逐条分析每条反馈的决策级别，针对性修改方案，修改完成后自检再提交。",
-    suffix: "完成后使用 expert_submit(type=\"plan_draft\", ...) 提交修改后的方案。若你认为方案已足够成熟，也可以使用 expert_vote 投票。",
+    prefix: "以下是针对你先前方案的审查反馈。请逐条分析每条反馈的决策级别（必须修复 / 建议改进 / 自行决定），针对性修改方案。",
+    suffix: "修改完成后使用 `expert_submit(type=\"plan_draft\", content=...)` 提交修改版方案。若你认为方案已成熟，也可使用 `expert_vote(vote=\"pass\", ...)` 投票。",
   },
 
-  // ── expert ↔ inspector, execution phase ──
+  // ── Execution phase: phase-complete ↔ review ──
   "expert→inspector:execution": {
-    prefix: "Expert 提交了阶段完成报告。作为 Inspector（当前 Phase: execution），请直接检查仓库代码（不信专家自述），按 Skill 中的 `## Phase: Execution` 小节审查规范输出报告。",
-    suffix: "完成后使用 inspector_submit({passed, content}) 提交审查结果。",
+    prefix: "这是一份需要你审查的阶段完成报告。不要仅凭报告自述下结论 — 请直接检查仓库代码确认。",
+    suffix: "按你的 Skill `## Phase: Execution` 小节审查规范输出报告，完成后使用 `inspector_submit({passed, content})` 提交。",
   },
   "inspector→expert:execution": {
-    prefix: "Inspector 的审查报告已送达。作为 Expert（当前 Phase: execution），请按报告中的决策级别处理每条反馈，完成修复后先自检再提交。",
-    suffix: "完成后使用 expert_submit(type=\"phase_complete\", ...) 提交修复后的阶段报告。",
+    prefix: "以下是针对你先前阶段报告的审查反馈。请按每条反馈的决策级别处理，完成修复工作。",
+    suffix: "完成后使用 `expert_submit(type=\"phase_complete\", content=...)` 提交修复后的阶段报告。",
   },
 
-  // ── orchestrator → CEO (gates) ──
+  // ── Gate trigger → CEO ──
   "orchestrator→ceo:planning_gate": {
-    prefix: "规划投票已通过，Expert 与 Inspector 已就方案达成一致。作为 CEO，请先勘察项目现状（阅读 AGENTS.md + 核心代码），再审查规划方案。",
-    suffix: "审查后使用 ceo_verdict({verdict: \"approved\"|\"rejected\", reason}) 提交裁决。",
+    prefix: "以下是一份已经过充分讨论、等待你审批的规划方案。在做出裁决前，请先勘察项目现状（阅读 AGENTS.md 与核心代码文件），再审查方案。",
+    suffix: "审查后使用 `ceo_verdict({verdict: \"approved\"|\"rejected\", reason})` 提交裁决。",
   },
   "orchestrator→ceo:final_review": {
-    prefix: "全部实施已完成。作为 CEO，请对最终产出进行全面验证 — 直接检查代码确认所有需求已实现。",
-    suffix: "验证后使用 ceo_verdict({verdict, reason}) 提交裁决。",
+    prefix: "以下是全部实施工作的最终产出。请对产出进行全面验证 — 直接检查代码确认所有需求已实现。",
+    suffix: "验证后使用 `ceo_verdict({verdict, reason})` 提交终审裁决。",
   },
   "orchestrator→ceo:stagnation_arbitration": {
-    prefix: "系统检测到编排停滞 — Expert / Inspector 反复提交相同内容，无实质进展。作为 CEO，请介入仲裁，判断根本原因并给出明确指令打破僵局。",
-    suffix: "请使用 ceo_verdict({verdict: \"approved\"|\"rejected\"|\"arbitration\", reason, targets?}) 提交仲裁裁决。targets 可指定需要接收裁决的角色（expert / inspector）。",
+    prefix: "系统检测到编排停滞 — 反复提交相同内容，无实质进展。请作为仲裁者介入，判断根本原因并给出明确指令打破僵局。",
+    suffix: "请使用 `ceo_verdict({verdict: \"approved\"|\"rejected\"|\"arbitration\", reason, targets?})` 提交仲裁裁决。targets 可指定接收方（expert / inspector）。",
   },
   "orchestrator→ceo:defensive_review": {
-    prefix: "你的 approved 裁决已被系统防御性降级为「进一步审查」。这是 CEO Gate 的防御机制 — 为避免轻率放行，前 N 轮的 approved 会被强制转为 rejected。",
-    suffix: "请利用这次机会更深入地审视方案，寻找遗漏的问题和风险。审查后使用 ceo_verdict 再次提交你的裁决。",
+    prefix: "你的 approved 裁决已被系统防御性降级为「进一步审查」。这是 CEO Gate 的防御机制 — 前若干轮的 approved 会被强制转为更深入的审查。",
+    suffix: "请利用这次机会更深入地审视材料，寻找遗漏的问题和风险。审查后使用 `ceo_verdict` 再次提交你的裁决。",
   },
   "orchestrator→ceo:consecutive_confirm": {
     prefix: "你的 approved 裁决已记录。系统要求连续多次确认才能最终通过。",
-    suffix: "请再次仔细确认。确认无误后使用 ceo_verdict({verdict: \"approved\", reason}) 再次提交。",
+    suffix: "请再次仔细确认。确认无误后使用 `ceo_verdict({verdict: \"approved\", reason})` 再次提交。",
   },
 
-  // ── CEO → expert / inspector (rejection fallback) ──
+  // ── CEO rejection → expert / inspector (source identity hidden) ──
   "ceo→expert:rejection": {
-    prefix: "CEO 退回了方案 / 阶段报告，请根据以下退回理由修改后重新提交。",
-    suffix: "修改完成后使用 expert_submit 提交修改后的内容。",
+    prefix: "你先前提交的内容收到了退回反馈（详见下文）。请根据反馈修改后重新提交。",
+    suffix: "修改完成后使用 `expert_submit(...)` 提交修改版。",
   },
   "ceo→inspector:rejection": {
-    prefix: "CEO 退回了方案 / 阶段报告。请等待 Expert 修改后重新审查。以下是 CEO 的退回理由：",
-    suffix: "等待 Expert 提交修改后的内容，届时按 Skill 规范重新审查。",
+    prefix: "先前审查的内容收到了退回反馈（详见下文）。后续会有修改版送达，届时请按 Skill 规范重新审查。",
+    suffix: "等待修改版到达后继续审查流程。",
   },
 
   // ── Transition planning → execution ──
   "orchestrator→expert:transition": {
-    prefix: "规划已通过 CEO 审批，现在进入 execution 阶段。以下是最终规划书，请按规划执行。",
-    suffix: "请阅读你的 Skill 中的 `## Phase: Execution` 小节了解执行流程和提交格式。按 Phase 顺序逐步执行，每个 Phase 完成后使用 expert_submit(type=\"phase_complete\", ...) 提交报告。",
+    prefix: "规划阶段已通过审批。以下是最终规划书，请按规划进入执行阶段。",
+    suffix: "请阅读你的 Skill `## Phase: Execution` 小节了解执行流程和提交格式。按 Phase 顺序逐步执行，每个 Phase 完成后使用 `expert_submit(type=\"phase_complete\", content=...)` 提交报告。",
   },
   "orchestrator→inspector:transition": {
-    prefix: "规划已通过 CEO 审批，现在进入 execution 阶段。以下是最终规划书供审查参考。",
-    suffix: "请等待 Expert 提交阶段完成报告后，按 Skill 中的 `## Phase: Execution` 审查规范进行代码审查。",
+    prefix: "规划阶段已通过审批。以下是最终规划书，供你后续审查参考。",
+    suffix: "后续会有阶段完成报告送达，届时按 Skill `## Phase: Execution` 审查规范进行代码审查。",
   },
 
-  // ── Phase advance (inspector passed in execution) ──
+  // ── Phase advance (passed) ──
   "orchestrator→expert:phase_advance": {
-    prefix: "Inspector 已通过当前 Phase 的审查。请继续执行下一个 Phase。以下是 Inspector 的审查通过报告：",
-    suffix: "请继续按规划书执行下一个 Phase，完成后使用 expert_submit(type=\"phase_complete\", ...) 提交报告。",
+    prefix: "当前 Phase 已通过审查。以下是审查通过报告，请继续执行下一个 Phase。",
+    suffix: "继续按规划书执行下一个 Phase，完成后使用 `expert_submit(type=\"phase_complete\", content=...)` 提交报告。",
   },
 
-  // ── CEO arbitration delivery ──
+  // ── CEO arbitration delivery (source identity hidden) ──
   "ceo:arbitration": {
-    prefix: "CEO 做出了仲裁裁决。请遵照以下裁决执行：",
+    prefix: "以下是一份仲裁裁决，请遵照裁决内容执行：",
     suffix: "",
   },
 });
 
 /**
  * Build a routing prompt used by the daemon to wrap a relayed message.
- *
- * Lookup order:
- *   1. `${source}→${target}:${routingReason}`   (special reason takes precedence)
- *   2. `${source}:${routingReason}`              (source-only special reason)
- *   3. `${source}→${target}:${phase}`            (phase-scoped standard relay)
- *   4. `${source}→${target}`                     (plain relay, phase-agnostic)
- *   5. Generic fallback
  *
  * @param {"ceo"|"expert"|"inspector"|"orchestrator"} sourceRole
  * @param {"ceo"|"expert"|"inspector"|"orchestrator"} targetRole
@@ -215,10 +221,9 @@ export function buildRoutingPrompt(sourceRole, targetRole, phase, context = {}) 
   const standardKey = `${sourceRole}→${targetRole}`;
   if (ROUTING_TEMPLATES[standardKey]) return { ...ROUTING_TEMPLATES[standardKey] };
 
-  const targetLabel = ROLE_LABELS[targetRole] || targetRole;
-  const sourceLabel = ROLE_LABELS[sourceRole] || sourceRole;
+  // Generic fallback — avoid naming other roles; frame as external material.
   return {
-    prefix: `来自 ${sourceLabel} 的消息（Phase: ${phase}）：`,
-    suffix: `你是 ${targetLabel}。请使用相应的 submit 工具提交你的工作结果。`,
+    prefix: `以下是送达给你的内容（Phase: ${phase}）：`,
+    suffix: "请按你的 Skill 规范处理并使用相应的 submit 工具提交结果。",
   };
 }
