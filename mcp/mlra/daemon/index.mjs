@@ -118,7 +118,7 @@ class OrchestratorDaemon {
         if (msg.type === MSG.ROLE_HELLO && !connRole && msg.role) {
           // Reject duplicate role connections
           if (this.connections.has(msg.role)) {
-            socket.write(JSON.stringify({ type: MSG.ERROR, message: `Role already connected: ${msg.role}` }) + "\n");
+            socket.write(JSON.stringify({ type: MSG.ERROR, reqId: msg.reqId, message: `Role already connected: ${msg.role}` }) + "\n");
             return;
           }
           connRole = msg.role;
@@ -127,6 +127,7 @@ class OrchestratorDaemon {
 
         const response = await this._handleMcpMessage(msg, connRole);
         if (response !== undefined) {
+          if (msg.reqId && !response.reqId) response.reqId = msg.reqId;
           socket.write(JSON.stringify(response) + "\n");
         }
       } catch (e) {
