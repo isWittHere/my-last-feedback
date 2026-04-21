@@ -195,9 +195,10 @@ class OrchestratorDaemon {
 
       // ── INSPECTOR_SUBMIT ──
       case MSG.INSPECTOR_SUBMIT: {
-        const { content, metadata } = msg;
-        console.error(`[MLRA-Daemon] inspector_submit (passed=${metadata?.passed})`);
-        const decision = this.orchestrator.handleInspectorSubmit(content, metadata || {});
+        const { content, passed, metadata } = msg;
+        const meta = { ...(metadata || {}), passed: passed ?? metadata?.passed };
+        console.error(`[MLRA-Daemon] inspector_submit (passed=${meta.passed})`);
+        const decision = this.orchestrator.handleInspectorSubmit(content, meta);
         return await this._followDecision(decision, ROLES.INSPECTOR);
       }
 
