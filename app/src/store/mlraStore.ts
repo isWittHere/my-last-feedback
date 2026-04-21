@@ -391,10 +391,11 @@ export const useMLRAStore = create<MLRAState>((set, get) => ({
     const launcher = get().launchers.find((l) => l.id === launcherId);
     if (!launcher || (launcher.status !== "configuring" && launcher.status !== "ready")) return;
 
-    // Notify daemon
+    // Notify daemon (v2 mlra_start IPC)
     get().daemonStartOrchestration(launcherId, launcher.userTask || launcher.name, startMode, launcher.taskType || undefined);
 
-    // Update local state
+    // Update local state — v2 mode (no registeredAgents) starts with empty
+    // agent slots that get auto-populated by mlra_role_connected events.
     set((s) => ({
       launchers: s.launchers.map((l) => {
         if (l.id !== launcherId) return l;
@@ -417,11 +418,11 @@ export const useMLRAStore = create<MLRAState>((set, get) => ({
           roundHistory: [],
           currentPhase: startMode === "direct-execution" ? "implementation" as const : "planning" as const,
           agents: {
-            "planning-expert": planningExpert ? createEmptyAgentSlot("planning-expert", planningExpert) : null,
-            "planning-inspector": planningInspector ? createEmptyAgentSlot("planning-inspector", planningInspector) : null,
-            "execution-expert": executionExpert ? createEmptyAgentSlot("execution-expert", executionExpert) : null,
-            "execution-inspector": executionInspector ? createEmptyAgentSlot("execution-inspector", executionInspector) : null,
-            ceo: ceoAgent ? createEmptyAgentSlot("ceo", ceoAgent) : null,
+            "planning-expert": planningExpert ? createEmptyAgentSlot("planning-expert", planningExpert) : l.agents["planning-expert"],
+            "planning-inspector": planningInspector ? createEmptyAgentSlot("planning-inspector", planningInspector) : l.agents["planning-inspector"],
+            "execution-expert": executionExpert ? createEmptyAgentSlot("execution-expert", executionExpert) : l.agents["execution-expert"],
+            "execution-inspector": executionInspector ? createEmptyAgentSlot("execution-inspector", executionInspector) : l.agents["execution-inspector"],
+            ceo: ceoAgent ? createEmptyAgentSlot("ceo", ceoAgent) : l.agents.ceo,
             workers: workerAgents.map((a) => ({
               id: a.id,
               role: a.workerRole || "Worker",
@@ -683,12 +684,66 @@ export const useMLRAStore = create<MLRAState>((set, get) => ({
 
         // ── v2 events ──
         case "mlra_role_connected": {
-          // v2: role-keyed connections (ceo/expert/inspector)
+          // v2: role-keyed connections (ceo/expert/inspector).
+          // Bridge to v1 4-slot model: expert fills both planning-expert +
+          // execution-expert; inspector fills both; ceo fills ceo.
           console.log(`[MLRA v2] Role connected: ${msg.role} (${msg.clientName})`);
+          const launcher = get().getActiveLauncher();
+          if (!launcher) break;
+          const v2Role = msg.role as "ceo" | "expert" | "inspector";
+          const makeSlot = (v1role: Exclude<AgentRole, "worker">): AgentSlot => ({
+            id: `v2-${v2Role}`,
+            role: v1role,
+            displayName: ({
+              "planning-expert": "规划专家",
+              "planning-inspector": "规划监察",
+              "execution-expert": "执行专家",
+              "execution-inspector": "执行监察",
+              ceo: "CEO",
+            } as Record<string, string>)[v1role] || v1role,
+            model: msg.model || "",
+            status: v1role === "ceo" ? "standby" : "active",
+            color: ROLE_COLORS[v1role] || "#64748B",
+            activeSessionId: null,
+            sessionIds: [],
+          });
+          const targets: Array<Exclude<AgentRole, "worker">> =
+            v2Role === "ceo"
+              ? ["ceo"]
+              : v2Role === "expert"
+              ? ["planning-expert", "execution-expert"]
+              : ["planning-inspector", "execution-inspector"];
+          set((s) => ({
+            launchers: s.launchers.map((l) => {
+              if (l.id !== launcher.id) return l;
+              const next = { ...l.agents };
+              for (const t of targets) {
+                next[t] = makeSlot(t);
+              }
+              return { ...l, agents: next, updatedAt: new Date().toISOString() };
+            }),
+          }));
           break;
         }
         case "mlra_role_disconnected": {
           console.log(`[MLRA v2] Role disconnected: ${msg.role}`);
+          const launcher = get().getActiveLauncher();
+          if (!launcher) break;
+          const v2Role = msg.role as "ceo" | "expert" | "inspector";
+          const targets: Array<Exclude<AgentRole, "worker">> =
+            v2Role === "ceo"
+              ? ["ceo"]
+              : v2Role === "expert"
+              ? ["planning-expert", "execution-expert"]
+              : ["planning-inspector", "execution-inspector"];
+          set((s) => ({
+            launchers: s.launchers.map((l) => {
+              if (l.id !== launcher.id) return l;
+              const next = { ...l.agents };
+              for (const t of targets) next[t] = null;
+              return { ...l, agents: next, updatedAt: new Date().toISOString() };
+            }),
+          }));
           break;
         }
         case "mlra_gate_status": {

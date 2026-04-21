@@ -92,16 +92,29 @@ export function LauncherHome({ launcher }: LauncherHomeProps) {
   // ── Readiness checks for two start modes ──
   const readiness = useMemo(() => {
     if (!launcher) {
-      // No launcher yet: need name first, then waiting for agents.
+      // No launcher yet: need name first.
       const missing: string[] = [];
       if (!draftName.trim()) missing.push("请填写 Launcher 名称");
-      else missing.push("请等待 Agent 注册并分配角色");
       return {
-        full: { ready: false, missing, workerCount: 0 },
-        direct: { ready: false, missing, workerCount: 0 },
+        full: { ready: draftName.trim().length > 0, missing, workerCount: 0 },
+        direct: { ready: draftName.trim().length > 0, missing, workerCount: 0 },
       };
     }
     const agents = launcher.registeredAgents;
+
+    // v2 mode: 0 registered agents means MCP clients auto-connect on start.
+    // Only require a task description.
+    if (agents.length === 0) {
+      const missing: string[] = [];
+      if (!launcher.userTask.trim() && !launcher.name.trim()) missing.push("请填写任务描述");
+      const ready = missing.length === 0;
+      return {
+        full: { ready, missing, workerCount: 0 },
+        direct: { ready, missing, workerCount: 0 },
+      };
+    }
+
+    // v1 mode: full role readiness check.
     const hasRole = (role: string) => agents.some((a) => a.assignedRole === role);
     const workerCount = agents.filter((a) => a.assignedRole === "worker").length;
 
