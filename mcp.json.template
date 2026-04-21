@@ -16,6 +16,53 @@
         "MLF_DEV": "1"
       },
       "timeout": 600
+    },
+
+    "mlra-ceo": {
+      "command": "node",
+      "args": [
+        "/path/to/my-last-feedback/mcp/mlra/servers/mcp-ceo.mjs"
+      ],
+      "timeout": 86400
+    },
+    "mlra-expert": {
+      "command": "node",
+      "args": [
+        "/path/to/my-last-feedback/mcp/mlra/servers/mcp-expert.mjs"
+      ],
+      "timeout": 86400
+    },
+    "mlra-inspector": {
+      "command": "node",
+      "args": [
+        "/path/to/my-last-feedback/mcp/mlra/servers/mcp-inspector.mjs"
+      ],
+      "timeout": 86400
+    },
+
+    "mlra-ceo-dev": {
+      "command": "node",
+      "args": [
+        "/path/to/my-last-feedback/mcp/mlra/servers/mcp-ceo.mjs"
+      ],
+      "env": { "MLRA_DEV": "1" },
+      "timeout": 86400
+    },
+    "mlra-expert-dev": {
+      "command": "node",
+      "args": [
+        "/path/to/my-last-feedback/mcp/mlra/servers/mcp-expert.mjs"
+      ],
+      "env": { "MLRA_DEV": "1" },
+      "timeout": 86400
+    },
+    "mlra-inspector-dev": {
+      "command": "node",
+      "args": [
+        "/path/to/my-last-feedback/mcp/mlra/servers/mcp-inspector.mjs"
+      ],
+      "env": { "MLRA_DEV": "1" },
+      "timeout": 86400
     }
   }
 }

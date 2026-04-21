@@ -3,8 +3,8 @@
 // Integrates TranscriptMonitorPool and BudgetTracker.
 
 import { EventEmitter } from "node:events";
-import { TranscriptMonitorPool } from "./transcript-monitor.mjs";
-import { BudgetTracker } from "./budget-tracker.mjs";
+import { TranscriptMonitorPool } from "./transcript-monitor-v1.legacy.mjs";
+import { BudgetTracker } from "./budget-tracker-v1.legacy.mjs";
 
 /**
  * @typedef {"connected"|"derailed"|"broken"} SessionStatus
