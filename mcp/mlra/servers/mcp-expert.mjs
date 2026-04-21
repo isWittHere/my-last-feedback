@@ -24,13 +24,14 @@ await bootstrapMcpServer({
       `Submit your work result to the orchestrator.
 This tool will BLOCK until the orchestrator sends your next instruction.
 Use this to submit plan drafts (type="plan_draft") or phase-complete reports
-(type="phase_complete"). Format your content according to skill_expert.md.`,
+(type="phase_complete"). Format per the skill referenced in the most recent
+orchestrator message (skill_submit_plan_draft.md or skill_phase_complete_report.md).`,
       {
         type: z.enum(["plan_draft", "phase_complete"]).describe(
           "Type of submission: plan_draft (planning phase) or phase_complete (execution phase)"
         ),
         content: z.string().describe(
-          "Your submission content formatted per skill_expert.md"
+          "Submission content formatted per the relevant skill (plan draft or phase-complete report)"
         ),
         progress: z.string().optional().describe(
           "Optional progress indicator, e.g. 'Phase 2/5: database migration'"
