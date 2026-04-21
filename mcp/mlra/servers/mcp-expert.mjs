@@ -21,17 +21,17 @@ await bootstrapMcpServer({
   register(server) {
     server.tool(
       "expert_submit",
-      `Submit your work result to the orchestrator.
-This tool will BLOCK until the orchestrator sends your next instruction.
-Use this to submit plan drafts (type="plan_draft") or phase-complete reports
-(type="phase_complete"). Format per the skill referenced in the most recent
-orchestrator message (submit_plan_draft.md or submit_phase_report.md).`,
+      `Hand off a completed deliverable for the user's review.
+This tool will BLOCK until the user sends their next message.
+Use type="plan_draft" when submitting a plan; use type="phase_complete" when
+a Phase of implementation is finished. Format the content per the skill named
+in the most recent user message (submit_plan_draft.md or submit_phase_report.md).`,
       {
         type: z.enum(["plan_draft", "phase_complete"]).describe(
-          "Type of submission: plan_draft (planning phase) or phase_complete (execution phase)"
+          "Kind of deliverable: plan_draft (a plan proposal) or phase_complete (a completed execution Phase)"
         ),
         content: z.string().describe(
-          "Submission content formatted per the relevant skill (plan draft or phase-complete report)"
+          "Full content of the deliverable, formatted per the relevant skill"
         ),
         progress: z.string().optional().describe(
           "Optional progress indicator, e.g. 'Phase 2/5: database migration'"
@@ -50,12 +50,12 @@ orchestrator message (submit_plan_draft.md or submit_phase_report.md).`,
 
     server.tool(
       "expert_vote",
-      `Vote on whether the current plan/proposal is ready to proceed.
-Use this when you believe the planning confrontation has reached consensus.
-This is a quick-return tool (non-blocking).`,
+      `Record your stance on whether the current plan is mature enough to move on.
+Use this once iteration has settled and you believe the plan is ready (or still
+needs more work). Non-blocking — returns immediately.`,
       {
-        vote: z.enum(["pass", "reject"]).describe("Your vote"),
-        reason: z.string().describe("Reason for your vote"),
+        vote: z.enum(["pass", "reject"]).describe("Your stance"),
+        reason: z.string().describe("Reason for your stance"),
       },
       async ({ vote, reason }) => {
         if (!client) throw new Error("Daemon client not initialised");
@@ -69,8 +69,8 @@ This is a quick-return tool (non-blocking).`,
 
     server.tool(
       "get_task_context",
-      `Retrieve the original user request and task type.
-Use this tool when you need to recall the original task description.`,
+      `Recall the user's original request and task type. Use this whenever you
+need to re-anchor on the original goal — for example after a long iteration.`,
       {},
       async () => {
         if (!client) throw new Error("Daemon client not initialised");

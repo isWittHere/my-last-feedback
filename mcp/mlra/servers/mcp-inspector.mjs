@@ -21,17 +21,17 @@ await bootstrapMcpServer({
   register(server) {
     server.tool(
       "inspector_submit",
-      `Submit your review result to the orchestrator.
-This tool will BLOCK until the orchestrator sends your next instruction.
-Use \`passed: true\` when the work under review is acceptable, \`passed: false\`
-to send it back for rework. Format per the skill referenced in the most recent
-orchestrator message (review_plan.md or review_phase.md).`,
+      `Return your review to the user.
+This tool will BLOCK until the user sends their next message.
+Use \`passed: true\` when the material under review is acceptable; use
+\`passed: false\` when it needs rework. Format the content per the skill named
+in the most recent user message (review_plan.md or review_phase.md).`,
       {
         passed: z.boolean().describe(
-          "Whether the review passed (true) or found blocking issues (false)"
+          "Whether the material passes review (true) or needs rework (false)"
         ),
         content: z.string().describe(
-          "Review content formatted per the relevant review skill"
+          "Review content, formatted per the relevant review skill"
         ),
       },
       async ({ passed, content }) => {
@@ -46,12 +46,11 @@ orchestrator message (review_plan.md or review_phase.md).`,
 
     server.tool(
       "inspector_vote",
-      `Vote on whether the current plan/proposal is ready to proceed.
-Use this when you believe the planning confrontation has reached consensus.
-This is a quick-return tool (non-blocking).`,
+      `Record your stance on whether the current plan is mature enough to move on.
+Use this once iteration has settled. Non-blocking — returns immediately.`,
       {
-        vote: z.enum(["pass", "reject"]).describe("Your vote"),
-        reason: z.string().describe("Reason for your vote"),
+        vote: z.enum(["pass", "reject"]).describe("Your stance"),
+        reason: z.string().describe("Reason for your stance"),
       },
       async ({ vote, reason }) => {
         if (!client) throw new Error("Daemon client not initialised");
@@ -65,8 +64,8 @@ This is a quick-return tool (non-blocking).`,
 
     server.tool(
       "get_task_context",
-      `Retrieve the original user request and task type.
-Use this tool when you need to recall the original task description.`,
+      `Recall the user's original request and task type. Use this whenever you
+need to re-anchor on the original goal.`,
       {},
       async () => {
         if (!client) throw new Error("Daemon client not initialised");

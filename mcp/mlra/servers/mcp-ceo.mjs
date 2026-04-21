@@ -22,19 +22,18 @@ await bootstrapMcpServer({
   register(server) {
     server.tool(
       "ceo_verdict",
-      `CEO exclusive verdict tool. Submit your decision and automatically enter standby
-until the next critical review point arrives.
-This tool will BLOCK until the next trigger point wakes you up.
-Only the CEO agent should use this tool.`,
+      `Issue your ruling on the material the user just presented, then stand by
+until the user returns with the next gate.
+This tool will BLOCK until the user sends their next message.`,
       {
         verdict: z.enum(["approved", "rejected", "arbitration"]).describe(
-          "Your verdict: approved (pass), rejected (reject with reason), arbitration (resolve dispute)"
+          "Your ruling: approved (pass), rejected (send back with reason), arbitration (resolve a deadlock)"
         ),
         reason: z.string().optional().describe(
-          "Verdict reason or specific instructions (required for rejected/arbitration)"
+          "Rationale or specific directives (required for rejected / arbitration)"
         ),
         targets: z.array(z.string()).optional().describe(
-          "Target roles for arbitration result routing"
+          "Optional scope for arbitration — names the parties your directives apply to"
         ),
       },
       async ({ verdict, reason, targets }) => {
@@ -50,8 +49,8 @@ Only the CEO agent should use this tool.`,
 
     server.tool(
       "get_task_context",
-      `Retrieve the original user request and task type.
-Use this tool when you need to recall the original task description.`,
+      `Recall the user's original request and task type. Use this whenever you
+need to re-anchor on the original goal.`,
       {},
       async () => {
         if (!client) throw new Error("Daemon client not initialised");

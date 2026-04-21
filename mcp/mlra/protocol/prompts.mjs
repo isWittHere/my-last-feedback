@@ -140,7 +140,7 @@ export function buildInitialPrompt(role, userTask, phase, options = {}) {
 
   if (role === ROLES.CEO) {
     const skills = renderSkillRefs(["ceo_verdict", "hallucination_check"]);
-    return `${phaseBlock}${taskBlock}${preparation}${skills}\n\n## Action\nStanding by. You will be woken at key gates (plan gate, final verification, arbitration) with review material. Issue a ruling via \`ceo_verdict({ verdict, reason, targets? })\`.`;
+    return `${phaseBlock}${taskBlock}${preparation}${skills}\n\n## Action\nStanding by. You will be consulted at key gates (plan gate, final verification, arbitration). Issue a ruling via \`ceo_verdict({ verdict, reason, targets? })\`.`;
   }
 
   return `${phaseBlock}${taskBlock}${preparation}`;
@@ -191,7 +191,7 @@ const ROUTING_TEMPLATES = Object.freeze({
     suffix: `See skills \`${SKILLS.ceo_verdict}\` and \`${SKILLS.hallucination_check}\`. Submit final verdict via \`ceo_verdict({verdict, reason})\`.`,
   },
   "orchestrator→ceo:stagnation_arbitration": {
-    prefix: "The orchestrator has detected stagnation — repeated submissions without substantive progress. Intervene as arbitrator: diagnose the root cause and issue clear directives to break the deadlock.",
+    prefix: "Progress has stalled — repeated submissions without substantive movement. Please step in as arbitrator: diagnose the root cause and issue clear directives to break the deadlock.",
     suffix: "Submit via `ceo_verdict({verdict, reason, targets?})`. `targets` may scope the ruling to specific roles.",
   },
   "orchestrator→ceo:defensive_review": {
@@ -205,11 +205,11 @@ const ROUTING_TEMPLATES = Object.freeze({
 
   // CEO rejection → expert / inspector (source identity hidden)
   "ceo→expert:rejection": {
-    prefix: "Your previous submission received rejection feedback (below).",
+    prefix: "Your previous submission was sent back with the following feedback.",
     suffix: "Address the feedback and resubmit via `expert_submit(...)`.",
   },
   "ceo→inspector:rejection": {
-    prefix: "The previously reviewed material received rejection feedback (below). A revised version will arrive shortly.",
+    prefix: "The material you reviewed was sent back with the following feedback. A revised version will arrive shortly.",
     suffix: "Wait for the revised version and continue the review cycle.",
   },
 
@@ -231,7 +231,7 @@ const ROUTING_TEMPLATES = Object.freeze({
 
   // CEO arbitration delivery (source identity hidden)
   "ceo:arbitration": {
-    prefix: "The following is an arbitration ruling. Execute per its directives:",
+    prefix: "Here is a directive for you. Execute per its instructions:",
     suffix: "",
   },
 });
@@ -261,9 +261,9 @@ export function buildRoutingPrompt(sourceRole, targetRole, phase, context = {}) 
   const standardKey = `${sourceRole}→${targetRole}`;
   if (ROUTING_TEMPLATES[standardKey]) return { ...ROUTING_TEMPLATES[standardKey] };
 
-  // Generic fallback — avoid naming other roles; frame as external material.
+  // Generic fallback — avoid naming other roles; frame as content from the user.
   return {
-    prefix: `The following material is delivered to you (Phase: ${phase}):`,
+    prefix: `Here is material for you (Phase: ${phase}):`,
     suffix: "Handle it per the relevant skill and submit via the corresponding tool.",
   };
 }
