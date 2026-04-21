@@ -457,11 +457,16 @@ export const useMLRAStore = create<MLRAState>((set, get) => ({
   },
 
   daemonAssignRole: (launcherId, agentId, role) => {
+    // v1 shim — v2 no longer supports pre-assignment; kept for UI compatibility
     get().sendToDaemon({ type: "mlra_assign_role", launcherId, agentId, role });
   },
 
   daemonStartOrchestration: (launcherId, userTask, startMode, taskType) => {
-    get().sendToDaemon({ type: "mlra_start_orchestration", launcherId, userTask, startMode, taskType: taskType || null });
+    // v2 MLRA_START — launcherId/agent assignment dropped (roles are fixed at MCP spawn)
+    get().sendToDaemon({
+      type: "mlra_start",
+      config: { userTask, startMode, taskType: taskType || null, launcherId },
+    });
   },
 
   daemonSetControlMode: (mode) => {
@@ -675,6 +680,54 @@ export const useMLRAStore = create<MLRAState>((set, get) => ({
           set({ phaseView: msg.to as PhaseView });
           break;
         }
+
+        // ── v2 events ──
+        case "mlra_role_connected": {
+          // v2: role-keyed connections (ceo/expert/inspector)
+          console.log(`[MLRA v2] Role connected: ${msg.role} (${msg.clientName})`);
+          break;
+        }
+        case "mlra_role_disconnected": {
+          console.log(`[MLRA v2] Role disconnected: ${msg.role}`);
+          break;
+        }
+        case "mlra_gate_status": {
+          const launcher = get().getActiveLauncher();
+          if (!launcher) break;
+          if (msg.ceoGate) {
+            set((s) => ({
+              launchers: s.launchers.map((l) =>
+                l.id === launcher.id
+                  ? { ...l, ceoGate: msg.ceoGate as CeoGateStatus, updatedAt: new Date().toISOString() }
+                  : l
+              ),
+            }));
+          }
+          break;
+        }
+        case "mlra_workflow_paused": {
+          console.log(`[MLRA v2] Workflow paused: ${msg.reason}`);
+          const launcher = get().getActiveLauncher();
+          if (!launcher) break;
+          set((s) => ({
+            launchers: s.launchers.map((l) =>
+              l.id === launcher.id ? { ...l, status: "paused", updatedAt: new Date().toISOString() } : l
+            ),
+          }));
+          break;
+        }
+        case "mlra_workflow_complete": {
+          console.log("[MLRA v2] Workflow complete");
+          const launcher = get().getActiveLauncher();
+          if (!launcher) break;
+          set((s) => ({
+            launchers: s.launchers.map((l) =>
+              l.id === launcher.id ? { ...l, status: "completed", updatedAt: new Date().toISOString() } : l
+            ),
+          }));
+          break;
+        }
+
         default:
           console.log("[MLRA] Unhandled daemon message:", msg.type);
       }
