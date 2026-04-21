@@ -507,7 +507,7 @@ export function FeedbackApp() {
       const sections: string[] = [];
       if (feedbackText.trim()) sections.push(`## User Feedback\n${feedbackText.trim()}`);
       if (quickAction) sections.push(`## User Requirement\n${quickAction}`);
-      sections.push("## Reminder\nPlease use the interactive_feedback tool again after completing this operation.");
+      sections.push("[System] Reminder: You MUST call the interactive_feedback tool again after completing this operation. Do NOT end your turn without invoking interactive_feedback.");
       if (testLogText.trim()) sections.push(`## Attachment: Test Logs\n${testLogText.trim()}`);
       const imageList = images.map((i) => ({ path: i.path, data_url: i.dataUrl }));
       if (imageList.length > 0) sections.push(`## Attachment: Images\n${imageList.length} image(s) attached, please review the accompanying image content.`);

@@ -174,8 +174,14 @@ async function getCallerInfo(mcpServer, workspace) {
   return { baseName, clientName };
 }
 
-function generateAlias(baseName, clientName) {
-  const key = `${baseName}:${clientName}:${randomBytes(4).toString("hex")}`;
+// Deterministic alias generator.
+// When a VS Code session_id is available we align with the hook script
+// (`~/.copilot/hooks/scripts/inject-agent-name.mjs`) which computes
+// `md5(session_id).slice(0,4).toUpperCase()`. This keeps the alias displayed
+// in hook-injected context identical to what this server uses internally.
+// Falls back to a deterministic workspace+client hash when no session_id.
+function generateAlias(sessionId, baseName, clientName) {
+  const key = sessionId || `${baseName}:${clientName}`;
   const hash = createHash("md5").update(key).digest("hex");
   return hash.slice(0, 4).toUpperCase();
 }
@@ -209,17 +215,23 @@ Do NOT call any other tool before register_LRA returns.`,
 
     // Generate caller identity
     const info = await getCallerInfo(mcpServer, workspace);
-    callerAlias = generateAlias(info.baseName, info.clientName);
 
-    // Use real VS Code session ID if available, otherwise generate one
+    // Resolve session ID first (so alias can be derived from it, matching the hook).
     const logPath = process.env.VSCODE_TARGET_SESSION_LOG;
+    let sessionId = null;
     if (logPath) {
-      callerId = basename(logPath);
+      sessionId = basename(logPath);
+      callerId = sessionId;
       console.error(`[MLRA-MCP] Using real session ID: ${callerId}`);
     } else {
-      callerId = `mlra_${callerAlias}_${Date.now().toString(36)}`;
+      // No session_id available — generate a deterministic-per-boot fallback.
+      // Alias below will fall back to md5(workspace:client) so it stays stable
+      // across restarts within the same workspace.
+      callerId = `mlra_${info.baseName}_${Date.now().toString(36)}`;
       console.error(`[MLRA-MCP] No VSCODE_TARGET_SESSION_LOG, generated ID: ${callerId}`);
     }
+
+    callerAlias = generateAlias(sessionId, info.baseName, info.clientName);
 
     // Detect model from client info
     const clientInfo = mcpServer.server?.getClientVersion?.();

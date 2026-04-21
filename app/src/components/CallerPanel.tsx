@@ -12,6 +12,7 @@ import { Sidebar } from "./Sidebar";
 import { invoke } from "@tauri-apps/api/core";
 import { useActiveCallerSession } from "./useActiveCallerSession";
 import { Icon } from "./Icons";
+import { TransferSubmitSplit } from "./TransferSubmitSplit";
 import { AttachmentTagBar, ReadonlyTagBar, RichText } from "./CallerPanelParts";
 
 /**
@@ -197,8 +198,21 @@ function CallerContent() {
 
   // Submit handler
   const [sessionSubmitting, setSessionSubmitting] = useState(false);
+  // Transfer-submit state: when set, the next submit will one-shot override
+  // the agent_name in the MCP [System] notice. Reset after each submit / on
+  // session switch.
+  const [transferAlias, setTransferAlias] = useState<string | null>(null);
+  const [transferPopoverOpen, setTransferPopoverOpen] = useState(false);
+  const [transferDraft, setTransferDraft] = useState("");
   const markSessionResponded = useFeedbackStore((s) => s.markSessionResponded);
   const updateSessionField = useFeedbackStore((s) => s.updateSessionField);
+
+  // Reset transfer state when the active session changes
+  useEffect(() => {
+    setTransferAlias(null);
+    setTransferPopoverOpen(false);
+    setTransferDraft("");
+  }, [activeSession?.id]);
 
   const handleSubmit = useCallback(
     async (quickAction?: string) => {
@@ -241,7 +255,7 @@ function CallerContent() {
       }
 
       sections.push(
-        "## Reminder\nPlease use the interactive_feedback tool again after completing this operation."
+        "[System] Reminder: You MUST call the interactive_feedback tool again after completing this operation. Do NOT end your turn without invoking interactive_feedback."
       );
       if (activeSession.testLogText.trim()) {
         sections.push(`## Attachment: Test Logs\n${activeSession.testLogText.trim()}`);
@@ -267,15 +281,20 @@ function CallerContent() {
           feedbackText: finalFeedback,
           commandLogs: activeSession.commandLogs,
           images: imageList,
+          transferToAlias: transferAlias,
         });
         markSessionResponded(activeSession.id);
+        // Clear transfer state after successful submit
+        setTransferAlias(null);
+        setTransferPopoverOpen(false);
+        setTransferDraft("");
       } catch (e) {
         console.error("Submit failed:", e);
       } finally {
         setSessionSubmitting(false);
       }
     },
-    [activeSession, sessionSubmitting, markSessionResponded, updateSessionField]
+    [activeSession, sessionSubmitting, markSessionResponded, updateSessionField, transferAlias]
   );
 
   // Ctrl+Enter shortcut — scoped to this panel
@@ -363,33 +382,26 @@ function CallerContent() {
           <div className="flex items-center gap-2">
             <QuickActions onAction={handleSubmit} />
             <div className="flex-1" />
-            <button
-              onClick={() => handleSubmit()}
+            <TransferSubmitSplit
+              color={callerColor}
               disabled={sessionSubmitting || !hasContent}
-              className="btn"
-              title="Submit (Ctrl+Enter)"
-              style={{
-                width: 34,
-                height: 34,
-                flexShrink: 0,
-                display: "inline-flex",
-                alignItems: "center",
-                justifyContent: "center",
-                padding: 0,
-                background: (sessionSubmitting || !hasContent) ? "var(--color-bg-elevated)" : callerColor,
-                borderColor: (sessionSubmitting || !hasContent) ? "var(--color-border)" : callerColor,
-                color: "#fff",
-                opacity: (sessionSubmitting || !hasContent) ? 0.4 : 1,
-                cursor: (sessionSubmitting || !hasContent) ? "not-allowed" : "pointer",
-                pointerEvents: (sessionSubmitting || !hasContent) ? "none" : "auto",
+              submitting={sessionSubmitting}
+              transferAlias={transferAlias}
+              popoverOpen={transferPopoverOpen}
+              draft={transferDraft}
+              setDraft={setTransferDraft}
+              onSubmit={() => handleSubmit()}
+              onOpenPopover={() => {
+                setTransferDraft(transferAlias ?? "");
+                setTransferPopoverOpen(true);
               }}
-            >
-              {sessionSubmitting ? (
-                <Icon name="spinner" size={15} style={{ animation: "spin 1s linear infinite" }} />
-              ) : (
-                <Icon name="send" size={15} />
-              )}
-            </button>
+              onClosePopover={() => setTransferPopoverOpen(false)}
+              onConfirmTransfer={(alias) => {
+                setTransferAlias(alias);
+                setTransferPopoverOpen(false);
+              }}
+              onCancelTransfer={() => setTransferAlias(null)}
+            />
           </div>
         </div>
       )}

@@ -17,7 +17,6 @@ The #tool:my-last-feedback/interactive_feedback tool must be used in any of the 
 
 ## Agent Identity (`agent_name`)
 - `agent_name` is a 4-character random combination consisting of uppercase letters and numbers, such as "A1B2" or "X9Y8".
-- you **MUST** register a new identifier using #tool:my-last-feedback/register_agent back as `agent_name` if you don't have an `agent_name` yet.
 - you **MUST** pass that identifier back as `agent_name` if you already had a known one.
 - This ensures the desktop app correctly associates all your requests under one persistent caller tab.
 

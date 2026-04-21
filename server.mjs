@@ -331,7 +331,7 @@ IMPORTANT - rules for AI agents calling this tool:
 1. request_name MUST always be provided with a meaningful task title. Never omit it or leave it blank.
 2. summary MUST be written in standard Markdown format (headings, lists, bold, code blocks). Do NOT use escape characters such as \\n or \\t.
 3. Describe full context, suggestions, and detailed information in summary. Use questions only for concise, actionable choices or brief input fields.
-4. agent_name: You MUST call register_agent ONCE first to obtain your identifier, then reuse it in ALL subsequent interactive_feedback calls.`,
+4. agent_name: REQUIRED. Your 4-char uppercase hex identifier assigned by the hook system (delivered via PostToolUse additionalContext, e.g. "[my-last-feedback] Your agent_name is \"A1B2\""). If unknown, call the `whoami` tool first to trigger hook injection.`,
   {
     project_directory: z.string().describe("Full path to the project directory"),
     summary: z.string().describe(
@@ -343,9 +343,9 @@ IMPORTANT - rules for AI agents calling this tool:
       "A concise title (5-10 words) for the current task, displayed in the window title bar. " +
       "This parameter is REQUIRED and MUST NOT be left empty."
     ),
-    agent_name: z.string().optional().describe(
-      "Your agent identifier obtained from register_agent. " +
-      "You MUST call register_agent first to get this, then include it in ALL subsequent interactive_feedback calls."
+    agent_name: z.string().regex(/^[A-Z0-9]{4}$/, "agent_name must be 4 uppercase hex chars (e.g. A1B2)").describe(
+      "REQUIRED. Your 4-char uppercase hex agent identifier (e.g. A1B2). " +
+      "Provided by the hook system via PostToolUse additionalContext. Use the same value in ALL calls."
     ),
     questions: z.array(z.object({
       label: z.string().describe("Short question label, e.g. 'Database choice', 'Need caching?'"),
@@ -357,8 +357,8 @@ IMPORTANT - rules for AI agents calling this tool:
   async ({ project_directory, summary, request_name, agent_name, questions }) => {
     const projectDir = project_directory.split("\n")[0].trim();
     const callerInfo = await getCallerInfo(server, projectDir);
-    // Use agent_name if provided; otherwise generate alias from base identity
-    const alias = agent_name || generateAlias(callerInfo.name, "", callerInfo.clientName);
+    // agent_name is required and validated by zod schema — trust it directly.
+    const alias = agent_name;
     callerInfo.alias = alias;
     console.error("[MCP] callerInfo:", JSON.stringify(callerInfo));
 
@@ -413,15 +413,56 @@ IMPORTANT - rules for AI agents calling this tool:
     }
 
     // Use caller_alias from response if available (may differ after merge), otherwise use original alias
-    const effectiveAlias = result.caller_alias || alias;
+    // transfer_to_alias takes priority — one-shot override from the UI submit button.
+    const transferTo = result.transfer_to_alias || null;
+    const effectiveAlias = transferTo || result.caller_alias || alias;
 
     // Append agent alias confirmation to reinforce identity across calls
+    const systemText = transferTo
+      ? `[System] Agent identifier has been TRANSFERRED from "${alias}" to "${effectiveAlias}". From now on you MUST include agent_name="${effectiveAlias}" in ALL subsequent interactive_feedback calls. Discard the previous agent_name.\n[System] IMPORTANT: In your summary parameter, use standard Markdown only. Do NOT use escape characters such as \\n, \\t, \\\\n, or any other backslash-escaped sequences. Write actual line breaks and formatting directly in Markdown.`
+      : `[System] Agent identifier "${effectiveAlias}" confirmed. You MUST include agent_name="${effectiveAlias}" in ALL subsequent interactive_feedback calls.\n[System] IMPORTANT: In your summary parameter, use standard Markdown only. Do NOT use escape characters such as \\n, \\t, \\\\n, or any other backslash-escaped sequences. Write actual line breaks and formatting directly in Markdown.`;
+
     content.push({
       type: "text",
-      text: `[System] Agent identifier "${effectiveAlias}" confirmed. You MUST include agent_name="${effectiveAlias}" in ALL subsequent interactive_feedback calls.\n[System] IMPORTANT: In your summary parameter, use standard Markdown only. Do NOT use escape characters such as \\n, \\t, \\\\n, or any other backslash-escaped sequences. Write actual line breaks and formatting directly in Markdown.`,
+      text: systemText,
     });
 
     return { content };
+  }
+);
+
+// ── whoami tool ──
+// Lightweight query tool: agents call this to discover their assigned agent_name.
+// The server itself cannot compute md5(session_id) because VSCODE_TARGET_SESSION_LOG
+// is not injected into MCP server processes. Instead, we rely on the PostToolUse
+// hook (`~/.copilot/hooks/scripts/inject-agent-name.mjs`) to append the real
+// `[my-last-feedback] Your agent_name is "XXXX"` line into additionalContext
+// immediately after this tool returns.
+server.tool(
+  "whoami",
+  `Query your assigned agent_name for use in interactive_feedback calls.
+
+The server returns a placeholder response; your real agent_name is injected by the
+my-last-feedback hook system into the PostToolUse additionalContext that follows
+this tool's return. Look for a line formatted as:
+
+    [my-last-feedback] Your agent_name is "XXXX"
+
+Use that XXXX as the agent_name parameter in ALL subsequent interactive_feedback calls.`,
+  {},
+  async () => {
+    return {
+      content: [
+        {
+          type: "text",
+          text:
+            "Your agent_name is delivered via the PostToolUse hook injection that follows this response. " +
+            "Look for the line '[my-last-feedback] Your agent_name is \"XXXX\"' and use that value as agent_name " +
+            "in all subsequent interactive_feedback calls. " +
+            "If no such line appears, the my-last-feedback hook is not installed \u2014 the feedback tool will reject calls without a valid agent_name.",
+        },
+      ],
+    };
   }
 );
 
@@ -454,9 +495,6 @@ IMPORTANT: Do NOT use escape characters (\\n, \\t, etc.) in any string parameter
         },
       ],
     };
-  }
-);
-*/  };
   }
 );
 */

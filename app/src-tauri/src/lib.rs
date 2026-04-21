@@ -109,6 +109,7 @@ async fn submit_session_feedback(
     feedback_text: String,
     command_logs: String,
     images: Vec<ImageData>,
+    transfer_to_alias: Option<String>,
 ) -> Result<(), String> {
     let image_values: Vec<serde_json::Value> = images
         .iter()
@@ -140,6 +141,9 @@ async fn submit_session_feedback(
         command_logs,
         images: image_values,
         caller_alias: None,
+        transfer_to_alias: transfer_to_alias
+            .map(|s| s.trim().to_string())
+            .filter(|s| !s.is_empty()),
     };
 
     let mut mgr = session_mgr.lock().await;

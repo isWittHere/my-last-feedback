@@ -99,6 +99,11 @@ pub struct FeedbackPayload {
     /// Set by backend when responding — the current caller alias (may differ from original after merge)
     #[serde(default, skip_deserializing)]
     pub caller_alias: Option<String>,
+    /// One-shot alias override requested by the UI for this submission only.
+    /// Takes priority over `caller_alias` in the MCP [System] notice.
+    /// Does NOT mutate the persistent caller record — unlike merge.
+    #[serde(default)]
+    pub transfer_to_alias: Option<String>,
 }
 
 // ── Persistence types ──
