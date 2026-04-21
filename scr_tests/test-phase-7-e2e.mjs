@@ -40,11 +40,26 @@ class MockClient {
   }
 
   async connect(port) {
-    this.socket = createConnection(port, "127.0.0.1");
-    await new Promise((res, rej) => {
-      this.socket.once("connect", res);
-      this.socket.once("error", rej);
-    });
+    // Retry up to 10x (200ms apart) to tolerate daemon listen() race
+    let lastErr;
+    for (let i = 0; i < 10; i++) {
+      try {
+        this.socket = createConnection(port, "127.0.0.1");
+        await new Promise((res, rej) => {
+          const onErr = (e) => { this.socket.removeListener("connect", onOk); rej(e); };
+          const onOk = () => { this.socket.removeListener("error", onErr); res(); };
+          this.socket.once("connect", onOk);
+          this.socket.once("error", onErr);
+        });
+        lastErr = null;
+        break;
+      } catch (e) {
+        lastErr = e;
+        try { this.socket.destroy(); } catch {}
+        await new Promise(r => setTimeout(r, 200));
+      }
+    }
+    if (lastErr) throw lastErr;
     const rl = createInterface({ input: this.socket });
     rl.on("line", (line) => {
       let msg;
