@@ -116,11 +116,14 @@ export const ROLE_LABELS = {
 // The `worker` entry is intentionally omitted because workers are dormant
 // (see feature-flags.mjs WORKER_ENABLED). Re-add it when re-activating.
 
+// NOTE: v1 skills were archived to skills/_archive/v1/ in Phase 0 of the v2
+// restructure; legacy-protocol still references them for backward compat until
+// Phase 5 introduces the merged skill_expert.md / skill_inspector.md.
 const SKILL_PATHS = {
-  "planning-expert": "skills/skill_planning_expert.md",
-  "planning-inspector": "skills/skill_planning_inspector.md",
-  "execution-expert": "skills/skill_execution_expert.md",
-  "execution-inspector": "skills/skill_execution_inspector.md",
+  "planning-expert": "skills/_archive/v1/skill_planning_expert.md",
+  "planning-inspector": "skills/_archive/v1/skill_planning_inspector.md",
+  "execution-expert": "skills/_archive/v1/skill_execution_expert.md",
+  "execution-inspector": "skills/_archive/v1/skill_execution_inspector.md",
   ceo: "skills/skill_ceo.md",
 };
 
