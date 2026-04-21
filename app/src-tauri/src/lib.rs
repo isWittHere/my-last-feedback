@@ -298,26 +298,39 @@ fn set_autostart(app: tauri::AppHandle, enabled: bool) -> Result<(), String> {
     }
 }
 
-/// Get the server.mjs path for MCP config
+/// Get the MLFB MCP server entry-point path for MCP config.
+/// Checks both the new location (`mcp/mlfb/index.mjs`) and the legacy
+/// `server.mjs` for backward compatibility with older packaged bundles.
 #[tauri::command]
 fn get_server_path() -> String {
     let exe_dir = std::env::current_exe()
         .ok()
         .and_then(|p| p.parent().map(|d| d.to_path_buf()));
+
+    // Candidates ordered by preference: new path first, legacy second.
+    let rel_candidates = [
+        std::path::PathBuf::from("mcp").join("mlfb").join("index.mjs"),
+        std::path::PathBuf::from("server.mjs"),
+    ];
+
     if let Some(dir) = exe_dir {
         // 1) Next to executable (production layout)
-        let server_path = dir.join("server.mjs");
-        if server_path.exists() {
-            return server_path.to_string_lossy().to_string();
+        for rel in &rel_candidates {
+            let p = dir.join(rel);
+            if p.exists() {
+                return p.to_string_lossy().to_string();
+            }
         }
-        // 2) Dev mode: exe is at app/src-tauri/target/{profile}/, server.mjs at workspace root
-        //    Walk up to find server.mjs (max 6 levels)
+
+        // 2) Dev mode: exe is at app/src-tauri/target/{profile}/, walk up (max 6 levels)
         let mut ancestor = dir.clone();
         for _ in 0..6 {
             if let Some(parent) = ancestor.parent() {
-                let candidate = parent.join("server.mjs");
-                if candidate.exists() {
-                    return candidate.to_string_lossy().to_string();
+                for rel in &rel_candidates {
+                    let p = parent.join(rel);
+                    if p.exists() {
+                        return p.to_string_lossy().to_string();
+                    }
                 }
                 ancestor = parent.to_path_buf();
             } else {
@@ -325,8 +338,8 @@ fn get_server_path() -> String {
             }
         }
     }
-    // Fallback: show placeholder
-    "/path/to/my-last-feedback/server.mjs".to_string()
+    // Fallback: show placeholder pointing at the new canonical path.
+    "/path/to/my-last-feedback/mcp/mlfb/index.mjs".to_string()
 }
 
 /// Load .prompt.md files from the mcp_prompts/ directory next to the executable

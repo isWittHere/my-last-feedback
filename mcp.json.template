@@ -3,14 +3,14 @@
     "my-last-feedback": {
       "command": "node",
       "args": [
-        "/path/to/my-last-feedback/server.mjs"
+        "/path/to/my-last-feedback/mcp/mlfb/index.mjs"
       ],
       "timeout": 600
     },
     "my-last-feedback-dev": {
       "command": "node",
       "args": [
-        "/path/to/my-last-feedback/server.mjs"
+        "/path/to/my-last-feedback/mcp/mlfb/index.mjs"
       ],
       "env": {
         "MLF_DEV": "1"
