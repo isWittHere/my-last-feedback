@@ -1,7 +1,7 @@
 // ── MLRA Orchestrator State Machine ──
 // Pure logic module — no I/O, no network, fully testable.
 
-import { PHASE_AGENTS, ROLE_LABELS, buildRoutingPrompt, buildInitialPrompt, buildTailInjection, START_MODES, START_MODE_REQUIREMENTS } from "./protocol.mjs";
+import { PHASE_AGENTS, ROLE_LABELS, buildRoutingPrompt, buildInitialPrompt, buildTailInjection, START_MODES, START_MODE_REQUIREMENTS } from "./legacy-protocol.mjs";
 import { createHash } from "node:crypto";
 
 // ── Submit Types ──

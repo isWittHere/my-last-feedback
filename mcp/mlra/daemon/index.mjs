@@ -13,7 +13,7 @@ import { Orchestrator } from "./orchestrator.mjs";
 import { MessageRouter } from "./router.mjs";
 import { IpcBridge } from "./ipc-bridge.mjs";
 import { SessionManager } from "./session-manager.mjs";
-import { MSG } from "./protocol.mjs";
+import { MSG } from "./legacy-protocol.mjs";
 import { WORKER_ENABLED } from "./feature-flags.mjs";
 
 // ── Port config ──

@@ -16,23 +16,7 @@
         "MLF_DEV": "1"
       },
       "timeout": 600
-    },
-    "my-long-running-agent": {
-      "command": "node",
-      "args": [
-        "/path/to/my-last-feedback/mlra-server/server.mjs"
-      ],
-      "timeout": 600
-    },
-    "my-long-running-agent-dev": {
-      "command": "node",
-      "args": [
-        "/path/to/my-last-feedback/mlra-server/server.mjs"
-      ],
-      "env": {
-        "MLRA_DEV": "1"
-      },
-      "timeout": 600
     }
   }
 }
+
