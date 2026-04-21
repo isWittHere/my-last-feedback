@@ -25,7 +25,7 @@ await bootstrapMcpServer({
 This tool will BLOCK until the orchestrator sends your next instruction.
 Use \`passed: true\` when the work under review is acceptable, \`passed: false\`
 to send it back for rework. Format per the skill referenced in the most recent
-orchestrator message (skill_review_plan.md or skill_review_phase.md).`,
+orchestrator message (review_plan.md or review_phase.md).`,
       {
         passed: z.boolean().describe(
           "Whether the review passed (true) or found blocking issues (false)"

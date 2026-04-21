@@ -1,56 +1,54 @@
 // mcp/mlra/protocol/prompts.mjs
-// v2 routing / initial-prompt templates for the 3-role topology.
+// v2 routing / initial-prompt templates for the 3-role MLRA topology.
 //
 // Design philosophy:
-// - Agent identity is defined by the user's Copilot chatmode (external to
-//   this repo, in %APPDATA%\Code\User\prompts\). We do NOT restate identity
-//   here.
-// - Skills are action-oriented tutorials (how to submit a plan, how to review,
-//   etc.) that the agent loads on demand. We reference them by short name.
-// - Orchestrator-delivered messages only provide:
+// - Agent identity lives in the user's Copilot chatmode files
+//   (%APPDATA%\Code\User\prompts\mlra-*.agent.md). We do NOT restate identity here.
+// - Skills are action-oriented tutorials living in ~/.copilot/skills/mlra/.
+//   The orchestrator references them by short logical name; the agent loads
+//   the file on demand.
+// - Orchestrator-delivered messages provide:
 //     1. Task / phase context
-//     2. A short list of relevant skill references
-//     3. The tool call expected next
+//     2. Short list of relevant skill references
+//     3. Expected next tool call
 // - Every agent should feel as if the USER is speaking to it. Other agents
-//   are invisible. Relayed content is framed as input from the user.
+//   remain invisible; relayed content is framed as input from the user.
 
 import { ROLES, PHASES } from "./roles.mjs";
 
-// Action-based skill library. Keys are short logical names; paths are
-// workspace-relative. Agents load on demand (orchestrator just references).
+// Skill library — keys are short logical names, values are paths relative to
+// the agent's skill root (~/.copilot/skills/mlra/).
+const SKILL_ROOT = "~/.copilot/skills/mlra";
+
 const SKILLS = {
-  submit_plan_draft: "skills/skill_submit_plan_draft.md",
-  phase_complete_report: "skills/skill_phase_complete_report.md",
-  review_plan: "skills/skill_review_plan.md",
-  review_phase: "skills/skill_review_phase.md",
-  decision_levels: "skills/skill_decision_levels.md",
-  hallucination_check: "skills/skill_hallucination_check.md",
-  ceo_verdict: "skills/skill_ceo_verdict.md",
-  re_verify: "skills/skill_re_verify.md",
-  vote_discipline: "skills/skill_vote_discipline.md",
+  submit_plan_draft: `${SKILL_ROOT}/submit_plan_draft.md`,
+  submit_phase_report: `${SKILL_ROOT}/submit_phase_report.md`,
+  review_plan: `${SKILL_ROOT}/review_plan.md`,
+  review_phase: `${SKILL_ROOT}/review_phase.md`,
+  decision_levels: `${SKILL_ROOT}/decision_levels.md`,
+  hallucination_check: `${SKILL_ROOT}/hallucination_check.md`,
+  ceo_verdict: `${SKILL_ROOT}/ceo_verdict.md`,
+  re_verify: `${SKILL_ROOT}/re_verify.md`,
+  vote_discipline: `${SKILL_ROOT}/vote_discipline.md`,
+  intent_classification: `${SKILL_ROOT}/intent_classification.md`,
+  codebase_assessment: `${SKILL_ROOT}/codebase_assessment.md`,
+  failure_recovery: `${SKILL_ROOT}/failure_recovery.md`,
 };
 
-// Back-compat export (used by daemon for validation). Returns the set of
-// skill paths that should exist on disk.
+// Back-compat export consumed by the daemon for validation/listing.
 export const SKILL_PATHS = Object.freeze({ ...SKILLS });
 
-/**
- * Render a list of skill references as a short bullet list.
- * Prefers short names (agent resolves via repo skills/ directory).
- */
 function renderSkillRefs(keys) {
   if (!keys || keys.length === 0) return "";
-  const lines = keys.map((k) => {
-    const path = SKILLS[k];
-    return path ? `- 请参考 skill: \`${path}\`` : null;
-  }).filter(Boolean);
+  const lines = keys
+    .map((k) => (SKILLS[k] ? `- skill: \`${SKILLS[k]}\`` : null))
+    .filter(Boolean);
   if (lines.length === 0) return "";
-  return `\n\n## 建议加载的 skills\n${lines.join("\n")}`;
+  return `\n\n## Suggested skills\n${lines.join("\n")}`;
 }
 
 /**
- * Build a short routing hint appended to every relayed message. Keeps the
- * agent oriented without redefining identity.
+ * Short routing hint appended to every relayed message.
  *
  * @param {"ceo"|"expert"|"inspector"} role
  * @param {"planning"|"execution"} phase
@@ -60,7 +58,7 @@ export function buildRoutingHint(role, phase) {
   if (role === ROLES.EXPERT) {
     const skills = phase === PHASES.PLANNING
       ? ["submit_plan_draft", "decision_levels", "hallucination_check"]
-      : ["phase_complete_report", "re_verify", "decision_levels", "hallucination_check"];
+      : ["submit_phase_report", "re_verify", "decision_levels", "hallucination_check"];
     const action = phase === PHASES.PLANNING
       ? 'expert_submit(type="plan_draft", ...)'
       : 'expert_submit(type="phase_complete", ...)';
@@ -87,16 +85,14 @@ export function buildRoutingHint(role, phase) {
       "[Context]",
       `Phase: ${phase}`,
       `Next action: ceo_verdict({ verdict, reason, targets? })`,
-      `Relevant skills: ${SKILLS.ceo_verdict}`,
+      `Relevant skills: ${SKILLS.ceo_verdict}, ${SKILLS.hallucination_check}`,
     ].join("\n");
   }
   return "[Context] Unknown role.";
 }
 
 /**
- * Build the initial message delivered to a role at workflow start.
- * Does NOT restate role identity (that's the agent's chatmode job).
- * Provides: task + phase + relevant skill references + expected tool call.
+ * Initial message delivered to a role at workflow start.
  *
  * @param {"ceo"|"expert"|"inspector"} role
  * @param {string} userTask
@@ -105,130 +101,137 @@ export function buildRoutingHint(role, phase) {
  * @returns {string}
  */
 export function buildInitialPrompt(role, userTask, phase, options = {}) {
-  const phaseBlock = `## 当前阶段\n${phase}`;
-  const taskBlock = `\n\n## 任务\n\n${userTask}`;
-  const agentsMd = `\n\n## 通用准备\n开始前请阅读项目根目录的 \`AGENTS.md\` 了解架构与规范。`;
+  const phaseBlock = `## Current Phase\n${phase}`;
+  const taskBlock = `\n\n## Task\n\n${userTask}`;
+  const preparation = `\n\n## Preparation\nBefore starting, read \`AGENTS.md\` at the project root to understand architecture and conventions.`;
 
   if (role === ROLES.EXPERT) {
     if (phase === PHASES.PLANNING) {
-      const skills = renderSkillRefs(["submit_plan_draft", "decision_levels", "hallucination_check", "vote_discipline"]);
-      return `${phaseBlock}${taskBlock}${agentsMd}${skills}\n\n## 行动\n请分析任务需求并提交规划方案：\`expert_submit(type="plan_draft", content=...)\`。之后会收到针对方案的审查反馈，请迭代修改。方案成熟时可用 \`expert_vote(vote="pass", reason=...)\` 投票推进。`;
+      const skills = renderSkillRefs([
+        "intent_classification",
+        "codebase_assessment",
+        "submit_plan_draft",
+        "decision_levels",
+        "hallucination_check",
+        "vote_discipline",
+      ]);
+      return `${phaseBlock}${taskBlock}${preparation}${skills}\n\n## Action\nAnalyze the task and submit a plan via \`expert_submit(type="plan_draft", content=...)\`. You will then receive review feedback — iterate accordingly. When the plan is mature, use \`expert_vote(vote="pass", reason=...)\` to advance.`;
     }
-    const skills = renderSkillRefs(["phase_complete_report", "re_verify", "decision_levels", "hallucination_check", "vote_discipline"]);
+    const skills = renderSkillRefs([
+      "submit_phase_report",
+      "re_verify",
+      "failure_recovery",
+      "decision_levels",
+      "hallucination_check",
+      "vote_discipline",
+    ]);
     if (options.isDirectExecution) {
-      return `${phaseBlock}（直接执行模式）${taskBlock}${agentsMd}${skills}\n\n## 行动\n\n1. 分析任务并制定执行计划\n2. 亲自完成所有代码改动与本地验证\n3. 每个 Phase 完成后提交 \`expert_submit(type="phase_complete", content=..., progress="Phase N/M")\`\n4. 提交前先走一遍 re-verify`;
+      return `${phaseBlock} (direct execution mode)${taskBlock}${preparation}${skills}\n\n## Action\n\n1. Analyze the task and form an execution plan\n2. Implement all code changes and local verification yourself\n3. After each Phase, submit \`expert_submit(type="phase_complete", content=..., progress="Phase N/M")\`\n4. Walk the re-verify flow before every submission`;
     }
-    return `${phaseBlock}${taskBlock}${agentsMd}${skills}\n\n## 行动\n待命中。任务到达后按 skill 指引处理。`;
+    return `${phaseBlock}${taskBlock}${preparation}${skills}\n\n## Action\nStanding by. When work arrives, handle it per the referenced skills.`;
   }
 
   if (role === ROLES.INSPECTOR) {
     const skills = phase === PHASES.PLANNING
       ? renderSkillRefs(["review_plan", "decision_levels", "hallucination_check", "vote_discipline"])
       : renderSkillRefs(["review_phase", "decision_levels", "hallucination_check", "vote_discipline"]);
-    return `${phaseBlock}${taskBlock}${agentsMd}${skills}\n\n## 行动\n待命中。收到需要审查的材料后，按 skill 规范输出结构化审查报告并使用 \`inspector_submit({ passed, content })\` 提交。方案/成果成熟时可用 \`inspector_vote(vote="pass", reason=...)\` 投票推进。`;
+    return `${phaseBlock}${taskBlock}${preparation}${skills}\n\n## Action\nStanding by. When material arrives for review, produce a structured report per the relevant skill and submit via \`inspector_submit({ passed, content })\`. When mature, use \`inspector_vote(vote="pass", reason=...)\` to advance.`;
   }
 
   if (role === ROLES.CEO) {
     const skills = renderSkillRefs(["ceo_verdict", "hallucination_check"]);
-    return `${phaseBlock}${taskBlock}${agentsMd}${skills}\n\n## 行动\n待命中。关键节点（规划审批、终审、仲裁）会被唤醒并收到需要审查的材料。收到后使用 \`ceo_verdict({ verdict, reason, targets? })\` 提交裁决。`;
+    return `${phaseBlock}${taskBlock}${preparation}${skills}\n\n## Action\nStanding by. You will be woken at key gates (plan gate, final verification, arbitration) with review material. Issue a ruling via \`ceo_verdict({ verdict, reason, targets? })\`.`;
   }
 
-  return `${phaseBlock}${taskBlock}${agentsMd}`;
+  return `${phaseBlock}${taskBlock}${preparation}`;
 }
 
-// ── Routing prompt templates (v2, user-voice) ──
-// Templates keep prefixes/suffixes short: they bridge context + refer to the
-// relevant skill. Operational details (review dimensions, report format) live
-// in the skills themselves, not here.
+// ── Routing prompt templates (v2, user-voice, English) ──
+// Templates keep prefixes/suffixes short: they bridge context and reference
+// the relevant skill. Operational details (review dimensions, report format)
+// live in the skill files, not here.
 //
 // Key formats:
-//   "<source>→<target>"                standard relay (phase-agnostic)
+//   "<source>→<target>"                standard relay
 //   "<source>→<target>:<phase>"        phase-specific variant
 //   "<source>→<target>:<reason>"       special reason (rejection/transition/...)
 //   "<source>:<reason>"                source-only special trigger
 //
-// Lookup order in buildRoutingPrompt():
-//   1. source→target:reason
-//   2. source:reason
-//   3. source→target:phase
-//   4. source→target
-//   5. generic fallback
-//
-// IMPORTANT: never mention the source role ("Expert/Inspector/CEO"). Frame
-// content as material delivered to the recipient for action.
+// IMPORTANT: never name the source role. Frame content as material delivered
+// to the recipient for action.
 
 const ROUTING_TEMPLATES = Object.freeze({
-  // ── Planning phase: plan ↔ review ──
+  // Planning: plan ↔ review
   "expert→inspector:planning": {
-    prefix: "以下是一份需要你独立审查的规划方案草案。",
-    suffix: "请参考 skill `skills/skill_review_plan.md` 完成审查，并使用 `inspector_submit({ passed, content })` 提交。成熟时可用 `inspector_vote(vote=\"pass\", ...)` 投票。",
+    prefix: "The following is a plan draft awaiting your independent review.",
+    suffix: `See skill \`${SKILLS.review_plan}\`. Submit your review via \`inspector_submit({ passed, content })\`. When mature, use \`inspector_vote(vote="pass", ...)\`.`,
   },
   "inspector→expert:planning": {
-    prefix: "以下是针对你先前方案的审查反馈。",
-    suffix: "请参考 skill `skills/skill_decision_levels.md` 逐条处理反馈，然后使用 `expert_submit(type=\"plan_draft\", content=...)` 提交修改版。成熟时可用 `expert_vote(vote=\"pass\", ...)` 投票。",
+    prefix: "The following is review feedback on your previous plan.",
+    suffix: `See skill \`${SKILLS.decision_levels}\`. Address each item, then resubmit via \`expert_submit(type="plan_draft", content=...)\`. When mature, use \`expert_vote(vote="pass", ...)\`.`,
   },
 
-  // ── Execution phase: phase-complete ↔ review ──
+  // Execution: phase report ↔ review
   "expert→inspector:execution": {
-    prefix: "以下是一份需要你审查的阶段完成报告。不要只看报告自述 — 请直接检查仓库代码确认。",
-    suffix: "请参考 skill `skills/skill_review_phase.md` 完成审查，并使用 `inspector_submit({ passed, content })` 提交。",
+    prefix: "The following is a phase-completion report awaiting your review. Do not trust the report narrative alone — open the cited files and verify against actual code.",
+    suffix: `See skill \`${SKILLS.review_phase}\`. Submit via \`inspector_submit({ passed, content })\`.`,
   },
   "inspector→expert:execution": {
-    prefix: "以下是针对你先前阶段报告的审查反馈。",
-    suffix: "请参考 skill `skills/skill_decision_levels.md` 逐条处理，修复后使用 `expert_submit(type=\"phase_complete\", content=...)` 重新提交。",
+    prefix: "The following is review feedback on your previous phase report.",
+    suffix: `See skill \`${SKILLS.decision_levels}\`. Address each item and resubmit via \`expert_submit(type="phase_complete", content=...)\`.`,
   },
 
-  // ── Gate trigger → CEO ──
+  // Gate triggers → CEO
   "orchestrator→ceo:planning_gate": {
-    prefix: "以下是一份已经过充分讨论、等待你审批的规划方案。在裁决前请先勘察项目现状（AGENTS.md + 核心代码）。",
-    suffix: "请参考 skill `skills/skill_ceo_verdict.md`，使用 `ceo_verdict({verdict, reason})` 提交裁决。",
+    prefix: "The following is a plan that has reached consensus and awaits your approval. Before ruling, survey the project state (AGENTS.md + core code).",
+    suffix: `See skill \`${SKILLS.ceo_verdict}\`. Submit via \`ceo_verdict({verdict, reason})\`.`,
   },
   "orchestrator→ceo:final_review": {
-    prefix: "以下是全部实施工作的最终产出。请对产出进行全面验证 — 直接检查代码确认所有需求已实现。",
-    suffix: "请参考 skill `skills/skill_ceo_verdict.md` 与 `skills/skill_hallucination_check.md`，使用 `ceo_verdict({verdict, reason})` 提交终审。",
+    prefix: "The following is the final output of all execution work. Verify thoroughly by opening the code — do not rely on report self-descriptions.",
+    suffix: `See skills \`${SKILLS.ceo_verdict}\` and \`${SKILLS.hallucination_check}\`. Submit final verdict via \`ceo_verdict({verdict, reason})\`.`,
   },
   "orchestrator→ceo:stagnation_arbitration": {
-    prefix: "系统检测到编排停滞 — 反复提交相同内容，无实质进展。请作为仲裁者介入，判断根本原因并给出明确指令打破僵局。",
-    suffix: "请使用 `ceo_verdict({verdict, reason, targets?})` 提交仲裁。targets 可指定接收方。",
+    prefix: "The orchestrator has detected stagnation — repeated submissions without substantive progress. Intervene as arbitrator: diagnose the root cause and issue clear directives to break the deadlock.",
+    suffix: "Submit via `ceo_verdict({verdict, reason, targets?})`. `targets` may scope the ruling to specific roles.",
   },
   "orchestrator→ceo:defensive_review": {
-    prefix: "你的 approved 裁决已被系统防御性降级为「进一步审查」。参见 skill `skills/skill_ceo_verdict.md` 的驳斥锁机制说明。",
-    suffix: "请利用这次机会更深入审视，寻找遗漏的问题和风险。审查后再次使用 `ceo_verdict` 提交。",
+    prefix: `Your \`approved\` verdict has been defensively downgraded to "further review". See the defensive-lock section of \`${SKILLS.ceo_verdict}\`.`,
+    suffix: "Use this round to dig deeper — look for issues and risks that may have been missed. Then submit via `ceo_verdict` again.",
   },
   "orchestrator→ceo:consecutive_confirm": {
-    prefix: "你的 approved 裁决已记录。系统要求连续多次确认才能最终通过。",
-    suffix: "请再次仔细确认。确认无误后使用 `ceo_verdict({verdict: \"approved\", reason})` 再次提交。",
+    prefix: "Your `approved` verdict has been recorded. The system requires consecutive confirmations before final passage.",
+    suffix: 'Confirm once more carefully, then submit via `ceo_verdict({verdict: "approved", reason})` again.',
   },
 
-  // ── CEO rejection → expert / inspector (source identity hidden) ──
+  // CEO rejection → expert / inspector (source identity hidden)
   "ceo→expert:rejection": {
-    prefix: "你先前提交的内容收到了退回反馈（详见下文）。",
-    suffix: "请根据反馈修改后使用 `expert_submit(...)` 重新提交。",
+    prefix: "Your previous submission received rejection feedback (below).",
+    suffix: "Address the feedback and resubmit via `expert_submit(...)`.",
   },
   "ceo→inspector:rejection": {
-    prefix: "先前审查的内容收到了退回反馈（详见下文）。后续会有修改版送达。",
-    suffix: "等待修改版到达后继续审查流程。",
+    prefix: "The previously reviewed material received rejection feedback (below). A revised version will arrive shortly.",
+    suffix: "Wait for the revised version and continue the review cycle.",
   },
 
-  // ── Transition planning → execution ──
+  // Planning → execution transition
   "orchestrator→expert:transition": {
-    prefix: "规划阶段已通过审批。以下是最终规划书，请按规划进入执行阶段。",
-    suffix: "请参考 skill `skills/skill_phase_complete_report.md` 与 `skills/skill_re_verify.md`。按 Phase 顺序逐步执行，每个 Phase 完成后使用 `expert_submit(type=\"phase_complete\", content=...)` 提交。",
+    prefix: "The planning phase has been approved. Below is the final plan — enter the execution phase.",
+    suffix: `See skills \`${SKILLS.submit_phase_report}\` and \`${SKILLS.re_verify}\`. Execute Phase-by-Phase and after each Phase submit via \`expert_submit(type="phase_complete", content=...)\`.`,
   },
   "orchestrator→inspector:transition": {
-    prefix: "规划阶段已通过审批。以下是最终规划书，供你后续审查参考。",
-    suffix: "后续会有阶段完成报告送达，届时请参考 skill `skills/skill_review_phase.md` 进行审查。",
+    prefix: "The planning phase has been approved. Below is the final plan for your future review reference.",
+    suffix: `Phase-completion reports will arrive shortly. Review each per skill \`${SKILLS.review_phase}\`.`,
   },
 
-  // ── Phase advance (passed) ──
+  // Phase advance (passed)
   "orchestrator→expert:phase_advance": {
-    prefix: "当前 Phase 已通过审查。以下是审查通过报告，请继续执行下一个 Phase。",
-    suffix: "继续按规划书执行，完成后使用 `expert_submit(type=\"phase_complete\", content=...)` 提交。",
+    prefix: "The current Phase passed review. Below is the approved review report — proceed to the next Phase.",
+    suffix: 'Continue executing per the plan; submit the next Phase via `expert_submit(type="phase_complete", content=...)`.',
   },
 
-  // ── CEO arbitration delivery (source identity hidden) ──
+  // CEO arbitration delivery (source identity hidden)
   "ceo:arbitration": {
-    prefix: "以下是一份仲裁裁决，请遵照裁决内容执行：",
+    prefix: "The following is an arbitration ruling. Execute per its directives:",
     suffix: "",
   },
 });
@@ -260,7 +263,7 @@ export function buildRoutingPrompt(sourceRole, targetRole, phase, context = {}) 
 
   // Generic fallback — avoid naming other roles; frame as external material.
   return {
-    prefix: `以下是送达给你的内容（Phase: ${phase}）：`,
-    suffix: "请按相关 skill 的规范处理并使用相应的 submit 工具提交结果。",
+    prefix: `The following material is delivered to you (Phase: ${phase}):`,
+    suffix: "Handle it per the relevant skill and submit via the corresponding tool.",
   };
 }
