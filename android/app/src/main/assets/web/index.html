@@ -1,0 +1,46 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width,initial-scale=1,maximum-scale=1,viewport-fit=cover">
+<meta name="theme-color" content="#ffffff">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="mobile-web-app-capable" content="yes">
+<title>MLFB Remote</title>
+<script>
+/* 同步注入 safe-area insets（在 CSS 解析前拿到真实值，避免首屏竞态）。
+   JSBridge 名沿用 DJIBridge，复用 MainActivity.kt 现有实现。 */
+(function(){
+  try{
+    if(window.DJIBridge && typeof window.DJIBridge.getInsets === "function"){
+      var p = String(window.DJIBridge.getInsets()).split(",");
+      var s = document.documentElement.style;
+      s.setProperty("--sat", (parseFloat(p[0])||0) + "px");
+      s.setProperty("--sab", (parseFloat(p[1])||0) + "px");
+      s.setProperty("--sal", (parseFloat(p[2])||0) + "px");
+      s.setProperty("--sar", (parseFloat(p[3])||0) + "px");
+    }
+  }catch(e){}
+})();
+</script>
+<link rel="stylesheet" href="app.css">
+</head>
+<body>
+  <!-- 所有视图都挂在 #app 下，由 app.js 根据 route 切换 -->
+  <div id="app"></div>
+
+  <!-- 底部弹出 Modal（提交确认 / 撤销等） -->
+  <div id="modal" class="modal-mask" hidden>
+    <div class="modal-sheet">
+      <div class="modal-msg" id="modalMsg"></div>
+      <div class="modal-actions">
+        <button class="modal-cancel" id="modalCancel">取消</button>
+        <button class="modal-ok" id="modalOk">确定</button>
+      </div>
+    </div>
+  </div>
+
+  <script src="mock.js"></script>
+  <script src="app.js"></script>
+</body>
+</html>

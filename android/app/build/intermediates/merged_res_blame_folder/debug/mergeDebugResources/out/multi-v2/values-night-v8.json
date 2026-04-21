@@ -1,0 +1,43 @@
+{
+    "logs": [
+        {
+            "outputFile": "com.dji.quiz.app-mergeDebugResources-26:/values-night-v8/values-night-v8.xml",
+            "map": [
+                {
+                    "source": "E:\\Dev\\dji\\android\\app\\src\\main\\res\\values-night\\colors.xml",
+                    "from": {
+                        "startLines": "3,5,2,4,6",
+                        "startColumns": "4,4,4,4,4",
+                        "startOffsets": "98,176,57,136,218",
+                        "endColumns": "36,40,39,38,46",
+                        "endOffsets": "130,212,92,170,260"
+                    },
+                    "to": {
+                        "startLines": "2,3,4,5,6",
+                        "startColumns": "4,4,4,4,4",
+                        "startOffsets": "55,92,133,173,212",
+                        "endColumns": "36,40,39,38,46",
+                        "endOffsets": "87,128,168,207,254"
+                    }
+                },
+                {
+                    "source": "C:\\Users\\Aftersix\\.gradle\\caches\\8.9\\transforms\\c7ceb06cad513c2e720cb3c83575edf6\\transformed\\appcompat-1.7.0\\res\\values-night-v8\\values-night-v8.xml",
+                    "from": {
+                        "startLines": "2,3,4,5,6,7,8,9",
+                        "startColumns": "4,4,4,4,4,4,4,4",
+                        "startOffsets": "55,125,209,293,389,491,593,687",
+                        "endColumns": "69,83,83,95,101,101,93,88",
+                        "endOffsets": "120,204,288,384,486,588,682,771"
+                    },
+                    "to": {
+                        "startLines": "7,8,9,10,11,12,13,14",
+                        "startColumns": "4,4,4,4,4,4,4,4",
+                        "startOffsets": "259,329,413,497,593,695,797,891",
+                        "endColumns": "69,83,83,95,101,101,93,88",
+                        "endOffsets": "324,408,492,588,690,792,886,975"
+                    }
+                }
+            ]
+        }
+    ]
+}

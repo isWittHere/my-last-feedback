@@ -1,0 +1,8 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <color name="brand">#2563eb</color>
+    <color name="bg">#FFFFFF</color>
+    <color name="card">#FFFFFF</color>
+    <color name="border">#E5E7EB</color>
+    <color name="text_primary">#1F2329</color>
+</resources>

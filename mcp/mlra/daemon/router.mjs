@@ -1,31 +1,25 @@
 // ── MLRA Message Router ──
-// Manages blocking queues for agent submit/register calls.
-// Pure logic + Promise management, no network I/O.
+// Manages blocking queues keyed by identity (v2: role). Pure logic +
+// Promise management, no network I/O.
+//
+// v2 note: param name `callerId` is retained for API stability, but the
+// key is conceptually a role name ("ceo" / "expert" / "inspector").
 
 export class MessageRouter {
   constructor() {
     /**
-     * Pending blocking callbacks.
-     * callerId → { resolve, reject, type }
+     * Pending blocking callbacks keyed by identity.
      * @type {Map<string, { resolve: Function, reject: Function, type: string }>}
      */
     this.pending = new Map();
 
     /**
-     * Message queue for agents not currently blocked.
-     * When release() is called but target has no pending callback,
-     * messages are queued here and delivered on next block().
-     * callerId → string[]
+     * Message queue for identities not currently blocked. When release() is
+     * called but the target has no pending callback, the message is queued
+     * and delivered on the next block().
      * @type {Map<string, string[]>}
      */
     this.messageQueue = new Map();
-
-    /**
-     * Await-order callbacks.
-     * `${callerId}:${workerId}` → { resolve, reject, timer }
-     * @type {Map<string, { resolve: Function, reject: Function, timer: ReturnType<typeof setTimeout>|null }>}
-     */
-    this.awaitCallbacks = new Map();
   }
 
   /**
@@ -107,40 +101,6 @@ export class MessageRouter {
   }
 
   /**
-   * Block an expert waiting for a specific worker order.
-   * @param {string} callerId - The expert's caller ID
-   * @param {string} workerId - The worker to wait for
-   * @param {number} timeoutMs - Timeout in ms (default 30 minutes)
-   * @returns {Promise<{ result: string, filesModified: string[] }>}
-   */
-  blockAwaitOrder(callerId, workerId, timeoutMs = 30 * 60 * 1000) {
-    const key = `${callerId}:${workerId}`;
-    return new Promise((resolve, reject) => {
-      const timer = setTimeout(() => {
-        this.awaitCallbacks.delete(key);
-        reject(new Error(`Worker ${workerId} timed out after ${timeoutMs / 60000} minutes — treating as derailed`));
-      }, timeoutMs);
-      this.awaitCallbacks.set(key, { resolve, reject, timer });
-    });
-  }
-
-  /**
-   * Release an expert waiting for a worker order.
-   * @param {string} callerId - The expert's caller ID
-   * @param {string} workerId - The worker that completed
-   * @param {{ result: string, filesModified: string[] }} data
-   */
-  releaseAwaitOrder(callerId, workerId, data) {
-    const key = `${callerId}:${workerId}`;
-    const cb = this.awaitCallbacks.get(key);
-    if (!cb) return false;
-    if (cb.timer) clearTimeout(cb.timer);
-    this.awaitCallbacks.delete(key);
-    cb.resolve(data);
-    return true;
-  }
-
-  /**
    * Cancel all pending callbacks (e.g. on shutdown).
    */
   cancelAll(reason = "Orchestration terminated") {
@@ -149,11 +109,6 @@ export class MessageRouter {
     }
     this.pending.clear();
     this.messageQueue.clear();
-    for (const [, cb] of this.awaitCallbacks) {
-      if (cb.timer) clearTimeout(cb.timer);
-      cb.reject(new Error(reason));
-    }
-    this.awaitCallbacks.clear();
   }
 
   /**
