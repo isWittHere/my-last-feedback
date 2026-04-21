@@ -24,13 +24,22 @@ await bootstrapMcpServer({
       "ceo_verdict",
       `Issue your ruling on the material the user just presented, then stand by
 until the user returns with the next gate.
-This tool will BLOCK until the user sends their next message.`,
+This tool will BLOCK until the user sends their next message.
+
+Verdict semantics:
+- \`approved\`: the material passes. NOTE: a defensive-lock applies — your first
+  two approvals for any given gate will be downgraded and sent back for another
+  pass, and two consecutive approvals are required before final passage.
+- \`rejected\`: send the material back for rework with a reason. All iteration
+  state and vote counters reset.
+- \`arbitration\`: issue directives to break a deadlock or correct a stalled
+  cycle. Optionally scope directives to specific parties via \`targets\`.`,
       {
         verdict: z.enum(["approved", "rejected", "arbitration"]).describe(
-          "Your ruling: approved (pass), rejected (send back with reason), arbitration (resolve a deadlock)"
+          "approved / rejected / arbitration (see tool description for semantics)"
         ),
         reason: z.string().optional().describe(
-          "Rationale or specific directives (required for rejected / arbitration)"
+          "Rationale or directives (required for rejected / arbitration)"
         ),
         targets: z.array(z.string()).optional().describe(
           "Optional scope for arbitration — names the parties your directives apply to"

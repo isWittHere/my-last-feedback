@@ -23,12 +23,17 @@ await bootstrapMcpServer({
       "inspector_submit",
       `Return your review to the user.
 This tool will BLOCK until the user sends their next message.
-Use \`passed: true\` when the material under review is acceptable; use
-\`passed: false\` when it needs rework. Format the content per the skill named
-in the most recent user message (review_plan.md or review_phase.md).`,
+
+During planning: \`passed\` is informational — iteration continues via this tool
+until both sides vote to request the plan gate.
+During execution: \`passed: true\` means the Phase under review is acceptable
+and work moves to the next Phase; \`passed: false\` sends it back for rework.
+
+Format the content per the skill named in the most recent user message
+(review_plan.md or review_phase.md).`,
       {
         passed: z.boolean().describe(
-          "Whether the material passes review (true) or needs rework (false)"
+          "true = material is acceptable; false = needs rework. In execution phase, true advances to the next Phase."
         ),
         content: z.string().describe(
           "Review content, formatted per the relevant review skill"
@@ -46,11 +51,15 @@ in the most recent user message (review_plan.md or review_phase.md).`,
 
     server.tool(
       "inspector_vote",
-      `Record your stance on whether the current plan is mature enough to move on.
-Use this once iteration has settled. Non-blocking — returns immediately.`,
+      `Declare that the current work is mature enough to request CEO review.
+Applies in both phases: during planning this requests the plan gate; during
+execution (after the final Phase) this requests the final verdict. Only when
+BOTH sides (this role and the expert) vote \`pass\` does the CEO wake up.
+Voting \`reject\` signals you are not yet ready — the cycle continues.
+Non-blocking — returns immediately.`,
       {
-        vote: z.enum(["pass", "reject"]).describe("Your stance"),
-        reason: z.string().describe("Reason for your stance"),
+        vote: z.enum(["pass", "reject"]).describe("pass = request CEO review; reject = keep iterating"),
+        reason: z.string().describe("Why you are (or are not) ready"),
       },
       async ({ vote, reason }) => {
         if (!client) throw new Error("Daemon client not initialised");

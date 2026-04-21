@@ -50,12 +50,15 @@ in the most recent user message (submit_plan_draft.md or submit_phase_report.md)
 
     server.tool(
       "expert_vote",
-      `Record your stance on whether the current plan is mature enough to move on.
-Use this once iteration has settled and you believe the plan is ready (or still
-needs more work). Non-blocking — returns immediately.`,
+      `Declare that the current work is mature enough to request CEO review.
+Applies in both phases: during planning this requests the plan gate; during
+execution (after the final Phase) this requests the final verdict. Only when
+BOTH sides (this role and the reviewer) vote \`pass\` does the CEO wake up.
+Voting \`reject\` signals you are not yet ready — the cycle continues.
+Non-blocking — returns immediately.`,
       {
-        vote: z.enum(["pass", "reject"]).describe("Your stance"),
-        reason: z.string().describe("Reason for your stance"),
+        vote: z.enum(["pass", "reject"]).describe("pass = request CEO review; reject = keep iterating"),
+        reason: z.string().describe("Why you are (or are not) ready"),
       },
       async ({ vote, reason }) => {
         if (!client) throw new Error("Daemon client not initialised");

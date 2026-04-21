@@ -115,7 +115,7 @@ export function buildInitialPrompt(role, userTask, phase, options = {}) {
         "hallucination_check",
         "vote_discipline",
       ]);
-      return `${phaseBlock}${taskBlock}${preparation}${skills}\n\n## Action\nAnalyze the task and submit a plan via \`expert_submit(type="plan_draft", content=...)\`. You will then receive review feedback — iterate accordingly. When the plan is mature, use \`expert_vote(vote="pass", reason=...)\` to advance.`;
+      return `${phaseBlock}${taskBlock}${preparation}${skills}\n\n## Action\nAnalyze the task and submit a plan via \`expert_submit(type="plan_draft", content=...)\`. You will then receive review feedback — iterate accordingly. When the plan is mature enough to warrant CEO review, use \`expert_vote(vote="pass", reason=...)\`. Only when both sides vote \`pass\` is the plan gate triggered; a single \`reject\` resets voting and iteration continues.`;
     }
     const skills = renderSkillRefs([
       "submit_phase_report",
@@ -126,21 +126,21 @@ export function buildInitialPrompt(role, userTask, phase, options = {}) {
       "vote_discipline",
     ]);
     if (options.isDirectExecution) {
-      return `${phaseBlock} (direct execution mode)${taskBlock}${preparation}${skills}\n\n## Action\n\n1. Analyze the task and form an execution plan\n2. Implement all code changes and local verification yourself\n3. After each Phase, submit \`expert_submit(type="phase_complete", content=..., progress="Phase N/M")\`\n4. Walk the re-verify flow before every submission`;
+      return `${phaseBlock} (direct execution mode)${taskBlock}${preparation}${skills}\n\n## Action\n\n1. Analyze the task and form an execution plan\n2. Implement all code changes and local verification yourself\n3. After each Phase, submit \`expert_submit(type="phase_complete", content=..., progress="Phase N/M")\` and continue to the next Phase when the reviewer accepts it\n4. Walk the re-verify flow before every submission\n5. After the final Phase is accepted, use \`expert_vote(vote="pass", reason=...)\` to request final review`;
     }
-    return `${phaseBlock}${taskBlock}${preparation}${skills}\n\n## Action\nStanding by. When work arrives, handle it per the referenced skills.`;
+    return `${phaseBlock}${taskBlock}${preparation}${skills}\n\n## Action\nStanding by. When work arrives, handle it per the referenced skills. Submit each completed Phase via \`expert_submit(type="phase_complete", ...)\`. After the final Phase is accepted, use \`expert_vote(vote="pass", ...)\` to request the final verdict.`;
   }
 
   if (role === ROLES.INSPECTOR) {
     const skills = phase === PHASES.PLANNING
       ? renderSkillRefs(["review_plan", "decision_levels", "hallucination_check", "vote_discipline"])
       : renderSkillRefs(["review_phase", "decision_levels", "hallucination_check", "vote_discipline"]);
-    return `${phaseBlock}${taskBlock}${preparation}${skills}\n\n## Action\nStanding by. When material arrives for review, produce a structured report per the relevant skill and submit via \`inspector_submit({ passed, content })\`. When mature, use \`inspector_vote(vote="pass", reason=...)\` to advance.`;
+    return `${phaseBlock}${taskBlock}${preparation}${skills}\n\n## Action\nStanding by. When material arrives for review, produce a structured report per the relevant skill and submit via \`inspector_submit({ passed, content })\`. During planning, iterate through this loop until the plan is mature; during execution, \`passed: true\` advances the work to the next Phase. When the overall work is ready for CEO review, use \`inspector_vote(vote="pass", reason=...)\`.`;
   }
 
   if (role === ROLES.CEO) {
     const skills = renderSkillRefs(["ceo_verdict", "hallucination_check"]);
-    return `${phaseBlock}${taskBlock}${preparation}${skills}\n\n## Action\nStanding by. You will be consulted at key gates (plan gate, final verification, arbitration). Issue a ruling via \`ceo_verdict({ verdict, reason, targets? })\`.`;
+    return `${phaseBlock}${taskBlock}${preparation}${skills}\n\n## Action\nStanding by. You will be consulted at key gates (plan gate, final verification, arbitration). Issue a ruling via \`ceo_verdict({ verdict, reason, targets? })\`. Note: any \`approved\` verdict first passes through defensive-lock (two mandatory re-reviews + two consecutive confirms) before taking effect, so your first approval will be sent back for deeper scrutiny.`;
   }
 
   return `${phaseBlock}${taskBlock}${preparation}`;
@@ -164,21 +164,21 @@ const ROUTING_TEMPLATES = Object.freeze({
   // Planning: plan ↔ review
   "expert→inspector:planning": {
     prefix: "The following is a plan draft awaiting your independent review.",
-    suffix: `See skill \`${SKILLS.review_plan}\`. Submit your review via \`inspector_submit({ passed, content })\`. When mature, use \`inspector_vote(vote="pass", ...)\`.`,
+    suffix: `See skill \`${SKILLS.review_plan}\`. Submit your review via \`inspector_submit({ passed, content })\`. When the plan is mature enough to request the CEO plan gate, use \`inspector_vote(vote="pass", ...)\` — the gate only opens when both sides vote pass.`,
   },
   "inspector→expert:planning": {
     prefix: "The following is review feedback on your previous plan.",
-    suffix: `See skill \`${SKILLS.decision_levels}\`. Address each item, then resubmit via \`expert_submit(type="plan_draft", content=...)\`. When mature, use \`expert_vote(vote="pass", ...)\`.`,
+    suffix: `See skill \`${SKILLS.decision_levels}\`. Address each item, then resubmit via \`expert_submit(type="plan_draft", content=...)\`. When you believe the plan is mature, use \`expert_vote(vote="pass", ...)\` — the gate only opens when both sides vote pass.`,
   },
 
   // Execution: phase report ↔ review
   "expert→inspector:execution": {
     prefix: "The following is a phase-completion report awaiting your review. Do not trust the report narrative alone — open the cited files and verify against actual code.",
-    suffix: `See skill \`${SKILLS.review_phase}\`. Submit via \`inspector_submit({ passed, content })\`.`,
+    suffix: `See skill \`${SKILLS.review_phase}\`. Submit via \`inspector_submit({ passed, content })\` — \`passed: true\` advances to the next Phase; \`passed: false\` sends it back for rework. After the final Phase is accepted, use \`inspector_vote(vote="pass", ...)\` to request the final verdict.`,
   },
   "inspector→expert:execution": {
     prefix: "The following is review feedback on your previous phase report.",
-    suffix: `See skill \`${SKILLS.decision_levels}\`. Address each item and resubmit via \`expert_submit(type="phase_complete", content=...)\`.`,
+    suffix: `See skill \`${SKILLS.decision_levels}\`. Address each item and resubmit via \`expert_submit(type="phase_complete", content=...)\`. After the final Phase is accepted, use \`expert_vote(vote="pass", ...)\` to request the final verdict.`,
   },
 
   // Gate triggers → CEO
