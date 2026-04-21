@@ -1,6 +1,6 @@
 #!/usr/bin/env node
 // Hook script: Generate deterministic agent_name from session_id
-// Used by my-last-feedback MCP tool — no need for register_agent call.
+// Used by my-last-feedback MCP tool.
 // Also notifies MLRA Daemon of session info on SessionStart for alive detection.
 import { createHash } from "node:crypto";
 import { createConnection } from "node:net";
@@ -98,8 +98,7 @@ process.stdin.on("end", () => {
     const workspace = data.workspace_folder || data.workspaceFolder || "";
     const message =
       `[my-last-feedback] Your agent_name is "${agentName}". ` +
-      `Use agent_name="${agentName}" in ALL interactive_feedback calls. ` +
-      `Do NOT call register_agent — your identity is already assigned.`;
+      `Use agent_name="${agentName}" in ALL interactive_feedback calls.`;
 
     // On SessionStart, notify MLRA Daemon of session info (fire-and-forget)
     if (hookEvent === "SessionStart") {
