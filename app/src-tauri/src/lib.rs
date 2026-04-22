@@ -1,4 +1,5 @@
 mod ipc;
+mod remote;
 mod session;
 
 use std::sync::Mutex;
@@ -634,6 +635,17 @@ pub fn run() {
                         Err(e) => eprintln!("[App] Failed to start IPC server: {}", e),
                     }
                 });
+
+                // Start remote HTTP+WS server (Phase 0 skeleton; opt-in via env).
+                // See MLC_MLFB远程反馈_方案B_v0.2_*.md §3.1
+                if remote::is_enabled() {
+                    tauri::async_runtime::spawn(async move {
+                        match remote::start_remote_server().await {
+                            Ok(port) => eprintln!("[Remote] server listening on 0.0.0.0:{}", port),
+                            Err(e) => eprintln!("[Remote] failed to start: {}", e),
+                        }
+                    });
+                }
 
                 // In persistent mode, set up system tray
                 use tauri::tray::TrayIconBuilder;

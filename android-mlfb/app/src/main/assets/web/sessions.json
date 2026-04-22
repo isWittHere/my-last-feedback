@@ -1,0 +1,99 @@
+{
+  "meta": {
+    "source": "MLFB mock data",
+    "generatedAt": "2026-04-22T10:00:00Z"
+  },
+  "callers": [
+    { "id": "caller-vscode", "name": "VS Code", "alias": "前端 Copilot", "version": "1.99.0", "color": "#3b82f6", "clientName": "vscode" },
+    { "id": "caller-cursor", "name": "Cursor", "alias": "Cursor Agent", "version": "0.44.2", "color": "#8b5cf6", "clientName": "cursor" },
+    { "id": "caller-windsurf", "name": "Windsurf", "alias": "Cascade", "version": "1.2.3", "color": "#10b981", "clientName": "windsurf" }
+  ],
+  "sessions": [
+    {
+      "id": "sess-001",
+      "callerId": "caller-vscode",
+      "requestName": "确认 Android MLFB 骨架方案",
+      "summary": "## 方案核对\n\n已读 [feedbackStore.ts](app/src/store/feedbackStore.ts)，计划把 MLFB 桌面端的关键功能映射到安卓平台：\n\n- **tabbar** 三面板：Pending / History / Settings\n- **session 详情**：session-mode + 多张 question-card\n- **零新增 CSS**\n\n请确认映射方案是否 OK，以及从哪一步开始。",
+      "projectDirectory": "e:\\Dev\\my-last-feedback",
+      "status": "pending",
+      "createdAt": "2026-04-22T09:45:00Z",
+      "feedbackText": "",
+      "testLogText": "",
+      "images": [],
+      "commandLogs": "",
+      "questions": [
+        { "label": "映射方案是否 OK", "options": ["OK 开工", "部分需调整", "整体推翻"], "selectedOptions": [], "answer": "" },
+        { "label": "从 Step 几开始", "options": ["Step1", "Step1+2", "一次性做完"], "selectedOptions": [], "answer": "" },
+        { "label": "options 交互方式", "options": ["多选 checkbox", "单选 radio", "按 MLFB 桌面行为"], "selectedOptions": [], "answer": "" }
+      ],
+      "gitAction": null
+    },
+    {
+      "id": "sess-002",
+      "callerId": "caller-cursor",
+      "requestName": "重构 SummaryPanel 组件",
+      "summary": "## 需要你的决定\n\n`SummaryPanel.tsx` 当前 280 行，承担了：\n- Markdown 渲染\n- 图片缩略展示\n- Questions chips 交互\n- TestLog 折叠\n\n建议拆分为 4 个子组件。是否同意？如果同意我将：\n1. 新建 `SummaryMarkdown.tsx`\n2. 新建 `QuestionsChips.tsx`\n3. 新建 `TestLogBlock.tsx`\n4. 保留主壳 `SummaryPanel.tsx`",
+      "projectDirectory": "e:\\Dev\\my-last-feedback",
+      "status": "pending",
+      "createdAt": "2026-04-22T09:20:00Z",
+      "feedbackText": "",
+      "testLogText": "",
+      "images": [],
+      "commandLogs": "",
+      "questions": [
+        { "label": "是否同意拆分", "options": ["同意", "保持不变", "只拆 Questions"], "selectedOptions": [], "answer": "" },
+        { "label": "额外补充说明", "selectedOptions": [], "answer": "" }
+      ],
+      "gitAction": { "type": "create-branch", "branchName": "refactor/summary-panel-split" }
+    },
+    {
+      "id": "sess-003",
+      "callerId": "caller-windsurf",
+      "requestName": "测试日志异常需要排查",
+      "summary": "执行 `pnpm test` 时出现 3 个失败用例。日志已贴在下面，麻烦看一下是否是环境问题还是真 bug。\n\n```\nFAIL  app/src/store/feedbackStore.test.ts\n  ✕ should toggle option in selectedOptions (5ms)\n    expected [\"A\"] to equal [\"A\", \"B\"]\n```",
+      "projectDirectory": "e:\\Dev\\my-last-feedback",
+      "status": "pending",
+      "createdAt": "2026-04-22T08:10:00Z",
+      "feedbackText": "",
+      "testLogText": "FAIL  app/src/store/feedbackStore.test.ts\n  ✕ should toggle option (5ms)\n  ✕ should clear selectedOptions on submit (3ms)\n  ✕ should handle empty options (2ms)",
+      "images": [],
+      "commandLogs": "",
+      "questions": [
+        { "label": "这些失败是否已知", "options": ["已知-可忽略", "未知-需排查", "环境问题"], "selectedOptions": [], "answer": "" }
+      ],
+      "gitAction": null
+    },
+    {
+      "id": "sess-004",
+      "callerId": "caller-vscode",
+      "requestName": "Phase 1 完成度确认",
+      "summary": "Phase 1 的三项任务已经跑通：\n\n- [x] axum server 在 Tauri setup 启动\n- [x] /api/sessions 列表返回 3 条 mock\n- [x] /ws 广播 session.new/updated\n\n是否进入 Phase 2（鉴权与写路径）？",
+      "projectDirectory": "e:\\Dev\\my-last-feedback",
+      "status": "responded",
+      "createdAt": "2026-04-21T15:30:00Z",
+      "feedbackText": "通过，进入 Phase 2。pairing 用 6 位数字码即可。",
+      "testLogText": "",
+      "images": [],
+      "commandLogs": "",
+      "questions": [
+        { "label": "是否进入 Phase 2", "options": ["继续", "先优化 Phase 1", "暂停"], "selectedOptions": ["继续"], "answer": "pairing 用 6 位数字码即可" }
+      ],
+      "gitAction": { "type": "commit-push", "branchName": "" }
+    },
+    {
+      "id": "sess-005",
+      "callerId": "caller-cursor",
+      "requestName": "旧 session 已取消",
+      "summary": "你手动取消了这条 session。",
+      "projectDirectory": "e:\\Dev\\my-last-feedback",
+      "status": "cancelled",
+      "createdAt": "2026-04-20T11:00:00Z",
+      "feedbackText": "",
+      "testLogText": "",
+      "images": [],
+      "commandLogs": "",
+      "questions": [],
+      "gitAction": null
+    }
+  ]
+}
