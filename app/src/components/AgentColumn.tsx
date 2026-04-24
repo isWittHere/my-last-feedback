@@ -1,5 +1,5 @@
 import { useState, useCallback } from "react";
-import { useMLRAStore, type AgentSlot, type SessionPool, ROLE_COLORS, resolveRuntimeRoleSlotKey } from "../store/mlraStore";
+import { useMLRAStore, type AgentSlot, type SessionPool, ROLE_COLORS, resolveRuntimeAgentSlot, resolveRuntimeRoleSlotKey, resolveRuntimeSessionPool } from "../store/mlraStore";
 import { StandbyPlaceholder } from "./StandbyPlaceholder";
 import { IdenticonAvatar } from "./IdenticonAvatar";
 import { Icon } from "./Icons";
@@ -116,8 +116,8 @@ export function AgentColumn({ role }: AgentColumnProps) {
   const phaseView = useMLRAStore((s) => s.phaseView);
   const slotKey = resolveRuntimeRoleSlotKey(role, phaseView);
   const color = ROLE_COLORS[slotKey];
-  const slot: AgentSlot | null = activeLauncher?.agents[slotKey] ?? null;
-  const pool: SessionPool | undefined = activeLauncher?.sessionPools[slotKey];
+  const slot: AgentSlot | null = activeLauncher ? resolveRuntimeAgentSlot(activeLauncher.agents, role, phaseView) : null;
+  const pool: SessionPool | undefined = activeLauncher ? resolveRuntimeSessionPool(activeLauncher.sessionPools, role, phaseView) : undefined;
 
   const isStandby = !slot || slot.status === "standby";
   const isExpert = role === "expert";

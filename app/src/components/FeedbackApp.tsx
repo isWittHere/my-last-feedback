@@ -30,11 +30,13 @@ function formatDuration(ms: number): string {
 }
 
 const ROLE_LABEL_MAP: Record<string, string> = {
+  expert: "Expert",
+  inspector: "Inspector",
+  ceo: "CEO",
   "planning-expert": "规划专家",
   "planning-inspector": "规划监察",
   "execution-expert": "执行专家",
   "execution-inspector": "执行监察",
-  ceo: "CEO",
   worker: "Worker",
 };
 

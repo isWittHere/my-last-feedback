@@ -253,8 +253,8 @@ class OrchestratorDaemon {
         const taskContext = [
           `## 原始用户请求\n\n${this.orchestrator.userTask || "(未设置)"}`,
           `## 任务类型\n\n${this.orchestrator.taskType || "未指定"}`,
-          `## 当前阶段\n\n${this.orchestrator.phase}`,
-          `## 启动模式\n\n${this.orchestrator.startMode}`,
+          `## 当前协作模式\n\n${this.orchestrator.describeCollaborationMode()}`,
+          `## 当前进入策略\n\n${this.orchestrator.describeEntryStrategy()}`,
           `## 工作流蓝图\n\n${this.orchestrator.blueprint?.name || "未指定"}`,
           `## 当前阶段节点\n\n${this.orchestrator._getCurrentStage()?.name || "未指定"}`,
         ].join("\n\n");
@@ -428,7 +428,13 @@ class OrchestratorDaemon {
         this._handleStagnation(event);
         break;
       case "phase_transition":
-        this.ipcBridge.send({ type: MSG.MLRA_PHASE_CHANGE, from: event.from, to: event.to });
+        this.ipcBridge.send({
+          type: MSG.MLRA_PHASE_CHANGE,
+          from: event.from,
+          to: event.to,
+          collaborationModeFrom: event.from,
+          collaborationModeTo: event.to,
+        });
         break;
       case "ceo_gate_defensive":
       case "ceo_gate_consecutive":

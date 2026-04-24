@@ -1,5 +1,5 @@
 import { useRef, useState, useCallback } from "react";
-import { useMLRAStore, ROLE_COLORS, resolveRuntimeRoleSlotKey } from "../store/mlraStore";
+import { useMLRAStore, ROLE_COLORS, resolveRuntimeAgentSlot, resolveRuntimeRoleSlotKey } from "../store/mlraStore";
 import { IdenticonAvatar } from "./IdenticonAvatar";
 
 interface MLRACallerTabsProps {
@@ -35,8 +35,8 @@ export function MLRACallerTabs({ columnCount }: MLRACallerTabsProps = {}) {
   const pointerStartX = useRef(0);
 
   const phaseTabs: RoleTabDef[] = [
-    { id: "expert", label: "Expert", color: phaseView === "planning" ? ROLE_COLORS["planning-expert"] : ROLE_COLORS["execution-expert"] },
-    { id: "inspector", label: "Inspector", color: phaseView === "planning" ? ROLE_COLORS["planning-inspector"] : ROLE_COLORS["execution-inspector"] },
+    { id: "expert", label: "Expert", color: ROLE_COLORS[resolveRuntimeRoleSlotKey("expert", phaseView)] },
+    { id: "inspector", label: "Inspector", color: ROLE_COLORS[resolveRuntimeRoleSlotKey("inspector", phaseView)] },
     { id: "ceo", label: "CEO", color: ROLE_COLORS.ceo },
   ];
   const defaultOrder = phaseTabs.map((t) => t.id);
@@ -101,9 +101,8 @@ export function MLRACallerTabs({ columnCount }: MLRACallerTabsProps = {}) {
   // Determine status for each role
   const getSlotStatus = (roleId: string): string | null => {
     if (!activeLauncher) return null;
-    const slotKey = resolveRuntimeRoleSlotKey(roleId as "expert" | "inspector" | "ceo", phaseView);
-    const slot = activeLauncher.agents[slotKey as keyof typeof activeLauncher.agents];
-    if (!slot || Array.isArray(slot)) return null;
+    const slot = resolveRuntimeAgentSlot(activeLauncher.agents, roleId as "expert" | "inspector" | "ceo", phaseView);
+    if (!slot) return null;
     return slot.status ?? null;
   };
 

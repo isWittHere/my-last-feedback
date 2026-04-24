@@ -182,6 +182,21 @@ export const ROLE_COLORS: Record<string, string> = {
   workerPool: "#64748B",
 };
 
+const RUNTIME_ROLE_SLOT_KEYS: Record<RuntimeMainRole, Array<Exclude<AgentRole, "worker">>> = {
+  expert: ["planning-expert", "execution-expert"],
+  inspector: ["planning-inspector", "execution-inspector"],
+  ceo: ["ceo"],
+};
+
+const EMPTY_AGENTS = {
+  "planning-expert": null,
+  "planning-inspector": null,
+  "execution-expert": null,
+  "execution-inspector": null,
+  ceo: null,
+  workers: [],
+};
+
 export function resolveRuntimeRoleSlotKey(role: RuntimeMainRole, phaseView: PhaseView): Exclude<AgentRole, "worker"> {
   if (role === "ceo") return "ceo";
   if (phaseView === "planning") {
@@ -284,6 +299,24 @@ export interface Launcher {
 
   // Agent self-reported progress (display-only)
   lastProgress: string | null;
+}
+
+export function resolveRuntimeAgentSlot(
+  agents: Launcher["agents"],
+  role: RuntimeMainRole,
+  phaseView: PhaseView,
+): AgentSlot | null {
+  const slotKey = resolveRuntimeRoleSlotKey(role, phaseView);
+  return agents[slotKey] ?? null;
+}
+
+export function resolveRuntimeSessionPool(
+  sessionPools: Launcher["sessionPools"],
+  role: RuntimeMainRole,
+  phaseView: PhaseView,
+): SessionPool | undefined {
+  const slotKey = resolveRuntimeRoleSlotKey(role, phaseView);
+  return sessionPools[slotKey];
 }
 
 // ── Store ──
@@ -644,6 +677,36 @@ function createEmptyAgentSlot(role: Exclude<AgentRole, "worker">, agent: Registe
   };
 }
 
+function getRuntimeRoleSlots(role: RuntimeMainRole): Array<Exclude<AgentRole, "worker">> {
+  return RUNTIME_ROLE_SLOT_KEYS[role];
+}
+
+function findRegisteredAgentForRuntimeRole(registeredAgents: RegisteredAgent[], role: RuntimeMainRole): RegisteredAgent | undefined {
+  const slots = getRuntimeRoleSlots(role);
+  return registeredAgents.find((agent) => agent.assignedRole !== null && slots.includes(agent.assignedRole as Exclude<AgentRole, "worker">));
+}
+
+function updateAgentsForRuntimeRole(
+  agents: Launcher["agents"],
+  role: RuntimeMainRole,
+  getSlotValue: (slot: Exclude<AgentRole, "worker">) => AgentSlot | null,
+): Launcher["agents"] {
+  const next = { ...agents };
+  for (const slot of getRuntimeRoleSlots(role)) {
+    next[slot] = getSlotValue(slot);
+  }
+  return next;
+}
+
+function hydrateAgentsFromRegisteredRoles(registeredAgents: RegisteredAgent[], agents: Launcher["agents"]): Launcher["agents"] {
+  let next = { ...agents };
+  for (const role of Object.keys(RUNTIME_ROLE_SLOT_KEYS) as RuntimeMainRole[]) {
+    const registeredAgent = findRegisteredAgentForRuntimeRole(registeredAgents, role);
+    next = updateAgentsForRuntimeRole(next, role, (slot) => (registeredAgent ? createEmptyAgentSlot(slot, registeredAgent) : agents[slot]));
+  }
+  return next;
+}
+
 export const useMLRAStore = create<MLRAState>((set, get) => ({
   launchers: [],
   activeLauncherId: null,
@@ -670,7 +733,7 @@ export const useMLRAStore = create<MLRAState>((set, get) => ({
       pausedAt: null,
       pausedElapsed: 0,
       registeredAgents: [],
-      agents: { "planning-expert": null, "planning-inspector": null, "execution-expert": null, "execution-inspector": null, ceo: null, workers: [] },
+      agents: { ...EMPTY_AGENTS },
       planningSessionIds: [],
       implementationSessionIds: [],
       roundHistory: [],
@@ -986,11 +1049,6 @@ export const useMLRAStore = create<MLRAState>((set, get) => ({
       launchers: s.launchers.map((l) => {
         if (l.id !== launcherId) return l;
 
-        const planningExpert = l.registeredAgents.find((a) => a.assignedRole === "planning-expert");
-        const planningInspector = l.registeredAgents.find((a) => a.assignedRole === "planning-inspector");
-        const executionExpert = l.registeredAgents.find((a) => a.assignedRole === "execution-expert");
-        const executionInspector = l.registeredAgents.find((a) => a.assignedRole === "execution-inspector");
-        const ceoAgent = l.registeredAgents.find((a) => a.assignedRole === "ceo");
         const workerAgents = l.registeredAgents.filter((a) => a.assignedRole === "worker");
 
         return {
@@ -1007,11 +1065,7 @@ export const useMLRAStore = create<MLRAState>((set, get) => ({
           blueprintDirty: false,
           selectedStageId: startStage?.id ?? l.selectedStageId,
           agents: {
-            "planning-expert": planningExpert ? createEmptyAgentSlot("planning-expert", planningExpert) : l.agents["planning-expert"],
-            "planning-inspector": planningInspector ? createEmptyAgentSlot("planning-inspector", planningInspector) : l.agents["planning-inspector"],
-            "execution-expert": executionExpert ? createEmptyAgentSlot("execution-expert", executionExpert) : l.agents["execution-expert"],
-            "execution-inspector": executionInspector ? createEmptyAgentSlot("execution-inspector", executionInspector) : l.agents["execution-inspector"],
-            ceo: ceoAgent ? createEmptyAgentSlot("ceo", ceoAgent) : l.agents.ceo,
+            ...hydrateAgentsFromRegisteredRoles(l.registeredAgents, l.agents),
             workers: workerAgents.map((a) => ({
               id: a.id,
               role: a.workerRole || "Worker",
@@ -1123,9 +1177,9 @@ export const useMLRAStore = create<MLRAState>((set, get) => ({
               return {
                 ...l,
                 status: state.status || l.status,
-                currentPhase: state.blueprintRuntime?.currentStage?.phaseType || state.phase || l.currentPhase,
+                currentPhase: state.blueprintRuntime?.currentStage?.phaseType || state.collaborationMode || state.phase || l.currentPhase,
                 controlMode: state.controlMode || l.controlMode,
-                startMode: state.startMode || l.startMode,
+                startMode: state.entryStrategy || state.startMode || l.startMode,
                 ceoGate: state.ceoGate || l.ceoGate,
                 blueprintRuntime: fromRuntimeBlueprintRuntimeSummary(state.blueprintRuntime as RuntimeBlueprintRuntimeSummary | null | undefined) || l.blueprintRuntime,
                 selectedStageId: state.blueprintRuntime?.currentStageId || l.selectedStageId,
@@ -1134,7 +1188,7 @@ export const useMLRAStore = create<MLRAState>((set, get) => ({
               };
             }),
           }));
-          if (state.phase) set({ phaseView: state.phase });
+          if (state.collaborationMode || state.phase) set({ phaseView: (state.collaborationMode || state.phase) as PhaseView });
           break;
         }
         case "mlra_round_event": {
@@ -1260,25 +1314,25 @@ export const useMLRAStore = create<MLRAState>((set, get) => ({
         case "mlra_phase_change": {
           const launcher = get().getActiveLauncher();
           if (!launcher) break;
+          const nextPhase = (msg.collaborationModeTo || msg.to) as PhaseView;
           set((s) => ({
             launchers: s.launchers.map((l) => {
               if (l.id !== launcher.id) return l;
               return {
                 ...l,
-                currentPhase: msg.to as PhaseView,
+                currentPhase: nextPhase,
                 updatedAt: new Date().toISOString(),
               };
             }),
           }));
-          set({ phaseView: msg.to as PhaseView });
+          set({ phaseView: nextPhase });
           break;
         }
 
         // ── v2 events ──
         case "mlra_role_connected": {
-          // v2: role-keyed connections (ceo/expert/inspector).
-          // Bridge to v1 4-slot model: expert fills both planning-expert +
-          // execution-expert; inspector fills both; ceo fills ceo.
+          // v2 runtime roles are still bridged to the legacy slot structure,
+          // but that mapping now lives in store helpers instead of each event path.
           console.log(`[MLRA v2] Role connected: ${msg.role} (${msg.clientName})`);
           const launcher = get().getActiveLauncher();
           if (!launcher) break;
@@ -1299,19 +1353,10 @@ export const useMLRAStore = create<MLRAState>((set, get) => ({
             activeSessionId: null,
             sessionIds: [],
           });
-          const targets: Array<Exclude<AgentRole, "worker">> =
-            v2Role === "ceo"
-              ? ["ceo"]
-              : v2Role === "expert"
-              ? ["planning-expert", "execution-expert"]
-              : ["planning-inspector", "execution-inspector"];
           set((s) => ({
             launchers: s.launchers.map((l) => {
               if (l.id !== launcher.id) return l;
-              const next = { ...l.agents };
-              for (const t of targets) {
-                next[t] = makeSlot(t);
-              }
+              const next = updateAgentsForRuntimeRole(l.agents, v2Role, (slot) => makeSlot(slot));
               return { ...l, agents: next, updatedAt: new Date().toISOString() };
             }),
           }));
@@ -1322,17 +1367,10 @@ export const useMLRAStore = create<MLRAState>((set, get) => ({
           const launcher = get().getActiveLauncher();
           if (!launcher) break;
           const v2Role = msg.role as "ceo" | "expert" | "inspector";
-          const targets: Array<Exclude<AgentRole, "worker">> =
-            v2Role === "ceo"
-              ? ["ceo"]
-              : v2Role === "expert"
-              ? ["planning-expert", "execution-expert"]
-              : ["planning-inspector", "execution-inspector"];
           set((s) => ({
             launchers: s.launchers.map((l) => {
               if (l.id !== launcher.id) return l;
-              const next = { ...l.agents };
-              for (const t of targets) next[t] = null;
+              const next = updateAgentsForRuntimeRole(l.agents, v2Role, () => null);
               return { ...l, agents: next, updatedAt: new Date().toISOString() };
             }),
           }));

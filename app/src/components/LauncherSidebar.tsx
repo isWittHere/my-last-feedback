@@ -1,6 +1,6 @@
 import { useCallback, useState } from "react";
 import { useTranslation } from "react-i18next";
-import { useMLRAStore, type Launcher } from "../store/mlraStore";
+import { useMLRAStore, resolveRuntimeAgentSlot, type Launcher } from "../store/mlraStore";
 import { Icon } from "./Icons";
 import { timeAgo } from "./timeUtils";
 
@@ -227,8 +227,8 @@ function LauncherSidebarItem({
       </div>
       {launcher.status !== "configuring" && (
         <div className="launcher-sidebar-item-agents">
-          {(launcher.currentPhase === "planning" ? launcher.agents["planning-expert"] : launcher.agents["execution-expert"]) && <span style={{ color: "#3B82F6" }}>Expert</span>}
-          {(launcher.currentPhase === "planning" ? launcher.agents["planning-inspector"] : launcher.agents["execution-inspector"]) && <span style={{ color: "#F59E0B" }}>Inspector</span>}
+          {resolveRuntimeAgentSlot(launcher.agents, "expert", launcher.currentPhase) && <span style={{ color: "#3B82F6" }}>Expert</span>}
+          {resolveRuntimeAgentSlot(launcher.agents, "inspector", launcher.currentPhase) && <span style={{ color: "#F59E0B" }}>Inspector</span>}
           {launcher.agents.ceo && <span style={{ color: "#8B5CF6" }}>CEO:待命</span>}
         </div>
       )}
