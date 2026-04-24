@@ -16,6 +16,9 @@ export type AgentSlotStatus = "active" | "standby" | "idle";
 export type WorkerStatus = "ready" | "working" | "broken";
 export type PhaseView = "planning" | "execution";
 export type StartMode = "full" | "direct-execution";
+export type StageStrategy = "deliberation" | "delivery";
+export type LaunchStrategy = "from-start" | "delivery-first";
+export type RuntimeMainRole = "expert" | "inspector" | "ceo";
 
 export type BlueprintTemplateId = "standard" | "direct-execution" | "architecture" | "bugfix" | "audit";
 export type StageRoleTarget = "expert" | "inspector";
@@ -46,7 +49,7 @@ export interface StageBlueprint {
   enabled: boolean;
   icon: string;
   name: string;
-  phaseType: PhaseView;
+  stageStrategy: StageStrategy;
   objective: string;
   description: string;
   openerTarget: StageRoleTarget;
@@ -63,7 +66,7 @@ export interface WorkflowBlueprint {
   templateId: BlueprintTemplateId | null;
   name: string;
   description: string;
-  startMode: StartMode;
+  launchStrategy: LaunchStrategy;
   initialTask: string;
   globalPolicy: GlobalPolicy;
   stages: StageBlueprint[];
@@ -75,6 +78,24 @@ export interface BlueprintRuntimeSummary {
   currentStageId: string | null;
   currentStageIndex: number;
   totalStages: number;
+  currentStage: {
+    id: string;
+    name: string;
+    stageStrategy: StageStrategy;
+    openerTarget: StageRoleTarget;
+  } | null;
+}
+
+interface RuntimeStageBlueprint extends Omit<StageBlueprint, "stageStrategy"> {
+  phaseType: PhaseView;
+}
+
+interface RuntimeWorkflowBlueprint extends Omit<WorkflowBlueprint, "launchStrategy" | "stages"> {
+  startMode: StartMode;
+  stages: RuntimeStageBlueprint[];
+}
+
+interface RuntimeBlueprintRuntimeSummary extends Omit<BlueprintRuntimeSummary, "currentStage"> {
   currentStage: {
     id: string;
     name: string;
@@ -160,6 +181,14 @@ export const ROLE_COLORS: Record<string, string> = {
   worker: "#64748B",
   workerPool: "#64748B",
 };
+
+export function resolveRuntimeRoleSlotKey(role: RuntimeMainRole, phaseView: PhaseView): Exclude<AgentRole, "worker"> {
+  if (role === "ceo") return "ceo";
+  if (phaseView === "planning") {
+    return role === "expert" ? "planning-expert" : "planning-inspector";
+  }
+  return role === "expert" ? "execution-expert" : "execution-inspector";
+}
 
 // ── Registered Agent (before role assignment) ──
 
@@ -284,7 +313,7 @@ export interface MLRAState {
   setWorkerRole: (launcherId: string, agentId: string, workerRole: string) => void;
   setTaskType: (launcherId: string, taskType: string | null) => void;
   setUserTask: (launcherId: string, userTask: string) => void;
-  updateBlueprintMeta: (launcherId: string, patch: Partial<Pick<WorkflowBlueprint, "name" | "description" | "initialTask" | "startMode">>) => void;
+  updateBlueprintMeta: (launcherId: string, patch: Partial<Pick<WorkflowBlueprint, "name" | "description" | "initialTask" | "launchStrategy">>) => void;
   applyBlueprintTemplate: (launcherId: string, templateId: BlueprintTemplateId) => void;
   selectBlueprintStage: (launcherId: string, stageId: string | null) => void;
   addBlueprintStage: (launcherId: string) => void;
@@ -295,7 +324,7 @@ export interface MLRAState {
   validateBlueprint: (launcherId: string) => string[];
 
   // Actions — Start orchestration
-  startOrchestration: (launcherId: string, startMode: StartMode) => void;
+  startOrchestration: (launcherId: string, launchStrategy: LaunchStrategy) => void;
 
   // Actions — View
   setPhaseView: (phase: PhaseView) => void;
@@ -306,7 +335,7 @@ export interface MLRAState {
   // Actions — Daemon communication (sends to MLRA daemon via Tauri IPC)
   sendToDaemon: (msg: Record<string, unknown>) => Promise<void>;
   daemonAssignRole: (launcherId: string, agentId: string, role: AgentRole | null) => void;
-  daemonStartOrchestration: (launcherId: string, userTask: string, startMode: StartMode, taskType?: string, blueprint?: WorkflowBlueprint) => void;
+  daemonStartOrchestration: (launcherId: string, userTask: string, startMode: StartMode, taskType?: string, blueprint?: RuntimeWorkflowBlueprint) => void;
   daemonSetControlMode: (mode: ControlMode) => void;
   daemonReviewApproved: (content: string) => void;
   daemonReviewRejected: (reason: string) => void;
@@ -330,19 +359,61 @@ function normalizeStageOrder(stages: StageBlueprint[]): StageBlueprint[] {
   return stages.map((stage, index) => ({ ...stage, order: index }));
 }
 
-function getDefaultStageIcon(phaseType: PhaseView): string {
-  return phaseType === "planning" ? "git-branch" : "wrench";
+function stageStrategyToPhaseView(stageStrategy: StageStrategy): PhaseView {
+  return stageStrategy === "delivery" ? "execution" : "planning";
+}
+
+function phaseViewToStageStrategy(phaseView: PhaseView): StageStrategy {
+  return phaseView === "execution" ? "delivery" : "deliberation";
+}
+
+function launchStrategyToStartMode(launchStrategy: LaunchStrategy): StartMode {
+  return launchStrategy === "delivery-first" ? "direct-execution" : "full";
+}
+
+function getDefaultStageIcon(stageStrategy: StageStrategy): string {
+  return stageStrategy === "deliberation" ? "git-branch" : "wrench";
+}
+
+function toRuntimeStageBlueprint(stage: StageBlueprint): RuntimeStageBlueprint {
+  const { stageStrategy, ...rest } = stage;
+  return {
+    ...rest,
+    phaseType: stageStrategyToPhaseView(stageStrategy),
+  };
+}
+
+function toRuntimeWorkflowBlueprint(blueprint: WorkflowBlueprint): RuntimeWorkflowBlueprint {
+  const { launchStrategy, stages, ...rest } = blueprint;
+  return {
+    ...rest,
+    startMode: launchStrategyToStartMode(launchStrategy),
+    stages: stages.map(toRuntimeStageBlueprint),
+  };
+}
+
+function fromRuntimeBlueprintRuntimeSummary(summary: RuntimeBlueprintRuntimeSummary | null | undefined): BlueprintRuntimeSummary | null {
+  if (!summary) return null;
+  return {
+    ...summary,
+    currentStage: summary.currentStage
+      ? {
+          ...summary.currentStage,
+          stageStrategy: phaseViewToStageStrategy(summary.currentStage.phaseType),
+        }
+      : null,
+  };
 }
 
 function createStageBlueprint(templateSource: BlueprintTemplateId | null, partial: Partial<Omit<StageBlueprint, "id" | "order">> = {}): StageBlueprint {
-  const phaseType = partial.phaseType ?? "planning";
+  const stageStrategy = partial.stageStrategy ?? "deliberation";
   return {
     id: generateId(),
     order: 0,
     enabled: partial.enabled ?? true,
-    icon: partial.icon ?? getDefaultStageIcon(phaseType),
+    icon: partial.icon ?? getDefaultStageIcon(stageStrategy),
     name: partial.name ?? "新阶段",
-    phaseType,
+    stageStrategy,
     objective: partial.objective ?? "定义本阶段的核心目标",
     description: partial.description ?? "",
     openerTarget: partial.openerTarget ?? "expert",
@@ -367,12 +438,12 @@ export function createBlueprintFromTemplate(templateId: BlueprintTemplateId, lau
     standard: {
       templateId: "standard",
       description: "从任务理解、规划、实施到 CEO 终审的标准工作流。",
-      startMode: "full",
+      launchStrategy: "from-start",
       globalPolicy: basePolicy,
       stages: normalizeStageOrder([
         createStageBlueprint("standard", {
           name: "需求理解与边界澄清",
-          phaseType: "planning",
+          stageStrategy: "deliberation",
           objective: "先明确任务边界、约束、风险和信息缺口。",
           openerTarget: "expert",
           openerPrompt: "先读取 AGENTS.md 和关键实现，再产出问题边界、假设、风险与执行建议。",
@@ -383,7 +454,7 @@ export function createBlueprintFromTemplate(templateId: BlueprintTemplateId, lau
         }),
         createStageBlueprint("standard", {
           name: "规划草案",
-          phaseType: "planning",
+          stageStrategy: "deliberation",
           objective: "产出可执行的实施规划。",
           openerTarget: "expert",
           openerPrompt: "基于现状和任务目标产出一份可执行规划书，要求阶段明确、路径清晰、风险可追踪。",
@@ -394,7 +465,7 @@ export function createBlueprintFromTemplate(templateId: BlueprintTemplateId, lau
         }),
         createStageBlueprint("standard", {
           name: "实施执行",
-          phaseType: "execution",
+          stageStrategy: "delivery",
           objective: "按规划逐步实施并完成本地验证。",
           openerTarget: "expert",
           openerPrompt: "根据已批准规划分阶段落地，完成每一阶段后提交报告与验证结果。",
@@ -408,12 +479,12 @@ export function createBlueprintFromTemplate(templateId: BlueprintTemplateId, lau
     "direct-execution": {
       templateId: "direct-execution",
       description: "跳过完整规划对峙，先做快速分析后直接实施。",
-      startMode: "direct-execution",
+      launchStrategy: "delivery-first",
       globalPolicy: { ...basePolicy, allowDirectExecutionWithoutPlanning: true },
       stages: normalizeStageOrder([
         createStageBlueprint("direct-execution", {
           name: "执行前快速分析",
-          phaseType: "execution",
+          stageStrategy: "delivery",
           objective: "快速建立实现路径和风险清单。",
           openerTarget: "expert",
           openerPrompt: "先做最小必要分析，直接形成执行路径、关键风险和验证计划，然后开始实施。",
@@ -424,7 +495,7 @@ export function createBlueprintFromTemplate(templateId: BlueprintTemplateId, lau
         }),
         createStageBlueprint("direct-execution", {
           name: "分阶段实施与终审",
-          phaseType: "execution",
+          stageStrategy: "delivery",
           objective: "完成改动、验证和 CEO 最终决策。",
           openerTarget: "expert",
           openerPrompt: "按阶段完成实际改动和验证，并在结束时准备接受最终审查。",
@@ -438,12 +509,12 @@ export function createBlueprintFromTemplate(templateId: BlueprintTemplateId, lau
     architecture: {
       templateId: "architecture",
       description: "以调研、方案候选和 CEO 门控为主的架构设计流。",
-      startMode: "full",
+      launchStrategy: "from-start",
       globalPolicy: basePolicy,
       stages: normalizeStageOrder([
         createStageBlueprint("architecture", {
           name: "现状调研",
-          phaseType: "planning",
+          stageStrategy: "deliberation",
           objective: "建立架构现状、约束和改造边界。",
           openerTarget: "expert",
           openerPrompt: "先调研当前架构、模块边界、关键约束和历史包袱。",
@@ -454,7 +525,7 @@ export function createBlueprintFromTemplate(templateId: BlueprintTemplateId, lau
         }),
         createStageBlueprint("architecture", {
           name: "候选方案与门控",
-          phaseType: "planning",
+          stageStrategy: "deliberation",
           objective: "形成候选方案并完成门控评审。",
           openerTarget: "expert",
           openerPrompt: "产出候选架构方案、取舍理由和推荐路线。",
@@ -468,12 +539,12 @@ export function createBlueprintFromTemplate(templateId: BlueprintTemplateId, lau
     bugfix: {
       templateId: "bugfix",
       description: "聚焦缺陷定位、修复策略、回归验证和终审。",
-      startMode: "full",
+      launchStrategy: "from-start",
       globalPolicy: basePolicy,
       stages: normalizeStageOrder([
         createStageBlueprint("bugfix", {
           name: "缺陷定位",
-          phaseType: "planning",
+          stageStrategy: "deliberation",
           objective: "稳定复现并找出根因。",
           openerTarget: "expert",
           openerPrompt: "优先建立复现路径、根因假设和影响面。",
@@ -484,7 +555,7 @@ export function createBlueprintFromTemplate(templateId: BlueprintTemplateId, lau
         }),
         createStageBlueprint("bugfix", {
           name: "修复与回归",
-          phaseType: "execution",
+          stageStrategy: "delivery",
           objective: "完成修复并进行回归验证。",
           openerTarget: "expert",
           openerPrompt: "按最小影响面原则完成修复，并提供验证证据。",
@@ -498,12 +569,12 @@ export function createBlueprintFromTemplate(templateId: BlueprintTemplateId, lau
     audit: {
       templateId: "audit",
       description: "以审查、举证和 CEO 判定为主的审计型工作流。",
-      startMode: "full",
+      launchStrategy: "from-start",
       globalPolicy: basePolicy,
       stages: normalizeStageOrder([
         createStageBlueprint("audit", {
           name: "审计标准建立",
-          phaseType: "planning",
+          stageStrategy: "deliberation",
           objective: "先建立审计口径和证据要求。",
           openerTarget: "inspector",
           openerPrompt: "先从审查维度出发定义审计清单、判定标准和证据要求。",
@@ -514,7 +585,7 @@ export function createBlueprintFromTemplate(templateId: BlueprintTemplateId, lau
         }),
         createStageBlueprint("audit", {
           name: "举证与判定",
-          phaseType: "execution",
+          stageStrategy: "delivery",
           objective: "围绕既定标准进行举证、审查和判定。",
           openerTarget: "expert",
           openerPrompt: "根据审计标准收集证据并形成结论性材料。",
@@ -533,7 +604,7 @@ export function createBlueprintFromTemplate(templateId: BlueprintTemplateId, lau
     templateId,
     name: launcherName,
     description: template.description,
-    startMode: template.startMode,
+    launchStrategy: template.launchStrategy,
     initialTask: "",
     globalPolicy: { ...template.globalPolicy },
     stages: template.stages,
@@ -544,11 +615,11 @@ function getDefaultBlueprint(launcherName: string): WorkflowBlueprint {
   return createBlueprintFromTemplate("standard", launcherName);
 }
 
-function getBlueprintStartStage(blueprint: WorkflowBlueprint, startMode: StartMode): StageBlueprint | null {
+function getBlueprintStartStage(blueprint: WorkflowBlueprint, launchStrategy: LaunchStrategy): StageBlueprint | null {
   const enabledStages = blueprint.stages.filter((stage) => stage.enabled);
   if (enabledStages.length === 0) return null;
-  if (startMode === "direct-execution") {
-    return enabledStages.find((stage) => stage.phaseType === "execution") || enabledStages[0];
+  if (launchStrategy === "delivery-first") {
+    return enabledStages.find((stage) => stage.stageStrategy === "delivery") || enabledStages[0];
   }
   return enabledStages[0];
 }
@@ -579,7 +650,7 @@ export const useMLRAStore = create<MLRAState>((set, get) => ({
   launcherSidebarOpen: false,
 
   phaseView: "planning",
-  columnOrder: ["planning-expert", "planning-inspector", "execution-expert", "execution-inspector", "ceo", "workers"],
+  columnOrder: ["expert", "inspector", "ceo", "workers"],
   layoutMode: "auto",
 
   // ── Launcher CRUD ──
@@ -784,7 +855,7 @@ export const useMLRAStore = create<MLRAState>((set, get) => ({
         if (l.id !== launcherId) return l;
         const stage = createStageBlueprint(l.blueprint.templateId, {
           name: `阶段 ${l.blueprint.stages.length + 1}`,
-          phaseType: l.blueprint.startMode === "direct-execution" ? "execution" : "planning",
+          stageStrategy: l.blueprint.launchStrategy === "delivery-first" ? "delivery" : "deliberation",
         });
         const stages = normalizeStageOrder([...l.blueprint.stages, stage]);
         return {
@@ -891,20 +962,23 @@ export const useMLRAStore = create<MLRAState>((set, get) => ({
 
   // ── Start orchestration ──
 
-  startOrchestration: (launcherId, startMode) => {
+  startOrchestration: (launcherId, launchStrategy) => {
     const launcher = get().launchers.find((l) => l.id === launcherId);
     if (!launcher || (launcher.status !== "configuring" && launcher.status !== "ready")) return;
     const blueprintErrors = get().validateBlueprint(launcherId);
     if (blueprintErrors.length > 0) return;
     const blueprint = {
       ...launcher.blueprint,
-      startMode,
+      launchStrategy,
       initialTask: launcher.userTask || launcher.blueprint.initialTask || launcher.name,
     };
-    const startStage = getBlueprintStartStage(blueprint, startMode);
+    const runtimeBlueprint = toRuntimeWorkflowBlueprint(blueprint);
+    const runtimeStartMode = launchStrategyToStartMode(launchStrategy);
+    const startStage = getBlueprintStartStage(blueprint, launchStrategy);
+    const fallbackPhase: PhaseView = runtimeStartMode === "direct-execution" ? "execution" : "planning";
 
     // Notify daemon (v2 mlra_start IPC)
-    get().daemonStartOrchestration(launcherId, blueprint.initialTask, startMode, launcher.taskType || undefined, blueprint);
+    get().daemonStartOrchestration(launcherId, blueprint.initialTask, runtimeStartMode, launcher.taskType || undefined, runtimeBlueprint);
 
     // Update local state — v2 mode (no registeredAgents) starts with empty
     // agent slots that get auto-populated by mlra_role_connected events.
@@ -922,13 +996,13 @@ export const useMLRAStore = create<MLRAState>((set, get) => ({
         return {
           ...l,
           status: "running" as const,
-          startMode,
+          startMode: runtimeStartMode,
           updatedAt: new Date().toISOString(),
           startedAt: new Date().toISOString(),
           pausedAt: null,
           pausedElapsed: 0,
           roundHistory: [],
-          currentPhase: startStage?.phaseType || (startMode === "direct-execution" ? "execution" as const : "planning" as const),
+          currentPhase: startStage ? stageStrategyToPhaseView(startStage.stageStrategy) : fallbackPhase,
           blueprint,
           blueprintDirty: false,
           selectedStageId: startStage?.id ?? l.selectedStageId,
@@ -953,7 +1027,7 @@ export const useMLRAStore = create<MLRAState>((set, get) => ({
         };
       }),
     }));
-    set({ phaseView: startStage?.phaseType || (startMode === "direct-execution" ? "execution" : "planning") });
+    set({ phaseView: startStage ? stageStrategyToPhaseView(startStage.stageStrategy) : fallbackPhase });
   },
 
   // ── View ──
@@ -1053,7 +1127,7 @@ export const useMLRAStore = create<MLRAState>((set, get) => ({
                 controlMode: state.controlMode || l.controlMode,
                 startMode: state.startMode || l.startMode,
                 ceoGate: state.ceoGate || l.ceoGate,
-                blueprintRuntime: state.blueprintRuntime || l.blueprintRuntime,
+                blueprintRuntime: fromRuntimeBlueprintRuntimeSummary(state.blueprintRuntime as RuntimeBlueprintRuntimeSummary | null | undefined) || l.blueprintRuntime,
                 selectedStageId: state.blueprintRuntime?.currentStageId || l.selectedStageId,
                 lastProgress: state.lastProgress !== undefined ? state.lastProgress : l.lastProgress,
                 updatedAt: new Date().toISOString(),

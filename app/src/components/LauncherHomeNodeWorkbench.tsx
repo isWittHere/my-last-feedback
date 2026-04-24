@@ -28,6 +28,10 @@ const STAGE_ICON_OPTIONS = [
   { value: "file-text", label: "文本" },
 ] as const;
 
+function getStageStrategyLabel(stageStrategy: StageBlueprint["stageStrategy"]): string {
+  return stageStrategy === "delivery" ? "交付验证" : "论证评审";
+}
+
 function getStageIssues(stage: StageBlueprint | null): string[] {
   if (!stage) return [];
   const issues: string[] = [];
@@ -182,7 +186,7 @@ function BlueprintNode({
             <span className="mlra-stage-node-title">{stage.name || "未命名阶段"}</span>
           </div>
           <div className="mlra-stage-node-meta">
-            <span>{stage.phaseType === "planning" ? "规划" : "执行"}</span>
+            <span>{getStageStrategyLabel(stage.stageStrategy)}</span>
             <span>{stage.openerTarget === "expert" ? "Expert" : "Inspector"}</span>
             {!stage.enabled ? <span>停用</span> : null}
             {issueCount > 0 ? <span>缺 {issueCount}</span> : null}
@@ -300,8 +304,8 @@ export function LauncherHome({ launcher }: LauncherHomeProps) {
   const handleStart = useCallback(() => {
     const id = ensureLauncher();
     if (!id) return;
-    startOrchestration(id, workingBlueprint.startMode);
-  }, [ensureLauncher, startOrchestration, workingBlueprint.startMode]);
+    startOrchestration(id, workingBlueprint.launchStrategy);
+  }, [ensureLauncher, startOrchestration, workingBlueprint.launchStrategy]);
 
   const updateSelectedStage = useCallback((patch: Partial<Omit<StageBlueprint, "id" | "order">>) => {
     if (!selectedStage) return;
@@ -518,7 +522,7 @@ export function LauncherHome({ launcher }: LauncherHomeProps) {
     });
   }, [launcher, removeBlueprintStage, withMaterializedStage]);
 
-  const addStageInPhase = useCallback((phaseType: StageBlueprint["phaseType"]) => {
+  const addStage = useCallback(() => {
     const launcherId = launcher?.id || ensureLauncher();
     if (!launcherId) return;
     addBlueprintStage(launcherId);
@@ -528,34 +532,31 @@ export function LauncherHome({ launcher }: LauncherHomeProps) {
       return current.order > latest.order ? current : latest;
     }, null);
     if (!newestStage) return;
-    if (newestStage.phaseType !== phaseType) {
-      updateBlueprintStage(launcherId, newestStage.id, { phaseType });
-    }
     selectBlueprintStage(launcherId, newestStage.id);
     setInspectorTab("basics");
-  }, [launcher, ensureLauncher, addBlueprintStage, updateBlueprintStage, selectBlueprintStage]);
+  }, [launcher, ensureLauncher, addBlueprintStage, selectBlueprintStage]);
 
   const readiness = useMemo(() => {
     if (!launcher) {
       const missing: string[] = [];
       if (!draftUserTask.trim()) missing.push("请填写任务描述");
       return {
-        full: { ready: missing.length === 0, missing },
-        direct: { ready: missing.length === 0, missing },
+        fromStart: { ready: missing.length === 0, missing },
+        deliveryFirst: { ready: missing.length === 0, missing },
       };
     }
 
-    const fullMissing = validateBlueprint(launcher.id);
-    const directMissing = [...fullMissing];
-    const planningStages = launcher.blueprint.stages.filter((stage) => stage.enabled && stage.phaseType === "planning");
-    const executionStages = launcher.blueprint.stages.filter((stage) => stage.enabled && stage.phaseType === "execution");
+    const fromStartMissing = validateBlueprint(launcher.id);
+    const deliveryFirstMissing = [...fromStartMissing];
+    const deliberationStages = launcher.blueprint.stages.filter((stage) => stage.enabled && stage.stageStrategy === "deliberation");
+    const deliveryStages = launcher.blueprint.stages.filter((stage) => stage.enabled && stage.stageStrategy === "delivery");
 
-    if (planningStages.length === 0) fullMissing.push("全开局模式至少需要一个规划阶段");
-    if (executionStages.length === 0) directMissing.push("直接执行模式至少需要一个执行阶段");
+    if (deliberationStages.length === 0) fromStartMissing.push("从起点进入的流程至少需要一个论证阶段");
+    if (deliveryStages.length === 0) deliveryFirstMissing.push("交付优先入口至少需要一个交付阶段");
 
     return {
-      full: { ready: fullMissing.length === 0, missing: fullMissing },
-      direct: { ready: directMissing.length === 0, missing: directMissing },
+      fromStart: { ready: fromStartMissing.length === 0, missing: fromStartMissing },
+      deliveryFirst: { ready: deliveryFirstMissing.length === 0, missing: deliveryFirstMissing },
     };
   }, [launcher, draftUserTask, validateBlueprint]);
 
@@ -563,7 +564,7 @@ export function LauncherHome({ launcher }: LauncherHomeProps) {
     () => new Map(orderedStages.map((stage) => [stage.id, getStageIssues(stage)])),
     [orderedStages],
   );
-  const startReadiness = workingBlueprint.startMode === "direct-execution" ? readiness.direct : readiness.full;
+  const startReadiness = workingBlueprint.launchStrategy === "delivery-first" ? readiness.deliveryFirst : readiness.fromStart;
   const selectedStageIssues = getStageIssues(selectedStage);
   const runtimeStageId = launcher?.blueprintRuntime?.currentStageId || null;
   const runtimeStageIndex = launcher?.blueprintRuntime?.currentStageIndex ?? -1;
@@ -685,8 +686,7 @@ export function LauncherHome({ launcher }: LauncherHomeProps) {
               </div>
 
               <div className="mlra-flow-floating-actions">
-                <button className="mlra-lane-add-btn" onClick={() => addStageInPhase("planning")}>+ 规划</button>
-                <button className="mlra-lane-add-btn" onClick={() => addStageInPhase("execution")}>+ 执行</button>
+                <button className="mlra-lane-add-btn" onClick={addStage}>新增阶段</button>
               </div>
             </div>
           </div>
@@ -760,7 +760,7 @@ export function LauncherHome({ launcher }: LauncherHomeProps) {
                       </div>
                     </div>
                     <div className="mlra-selected-stage-meta-row">
-                      <span>{selectedStage.phaseType === "planning" ? "规划" : "执行"}</span>
+                      <span>{getStageStrategyLabel(selectedStage.stageStrategy)}</span>
                       <span>开场角色：{selectedStage.openerTarget === "expert" ? "Expert" : "Inspector"}</span>
                       {!selectedStage.enabled ? <span>停用</span> : null}
                       {selectedStageIssues.length > 0 ? <span>缺 {selectedStageIssues.length}</span> : null}
@@ -808,14 +808,14 @@ export function LauncherHome({ launcher }: LauncherHomeProps) {
                           </div>
 
                           <div className="mlra-task-desc-row">
-                            <label className="mlra-task-label">阶段类型</label>
+                            <label className="mlra-task-label">阶段协作策略</label>
                             <select
                               className="mlra-task-desc-input"
-                              value={selectedStage.phaseType}
-                              onChange={(event) => updateSelectedStage({ phaseType: event.target.value as StageBlueprint["phaseType"] })}
+                              value={selectedStage.stageStrategy}
+                              onChange={(event) => updateSelectedStage({ stageStrategy: event.target.value as StageBlueprint["stageStrategy"] })}
                             >
-                              <option value="planning">规划</option>
-                              <option value="execution">执行</option>
+                              <option value="deliberation">论证评审</option>
+                              <option value="delivery">交付验证</option>
                             </select>
                           </div>
                         </div>

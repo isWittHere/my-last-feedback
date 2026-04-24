@@ -3,7 +3,7 @@ import { LauncherHome } from "./LauncherHome";
 import { LauncherSidebar } from "./LauncherSidebar";
 import { AgentColumn } from "./AgentColumn";
 
-type MainAgentRole = "planning-expert" | "planning-inspector" | "execution-expert" | "execution-inspector" | "ceo";
+type MainAgentRole = "expert" | "inspector" | "ceo";
 
 /**
  * MLRA root view component.
@@ -15,12 +15,7 @@ export function MLRAView() {
   const activeLauncher = useMLRAStore((s) => s.getActiveLauncher());
   const launcherSidebarOpen = useMLRAStore((s) => s.launcherSidebarOpen);
   const toggleSidebar = useMLRAStore((s) => s.toggleLauncherSidebar);
-  const phaseView = useMLRAStore((s) => s.phaseView);
-
-  // Show phase-specific agent pair + CEO (3 columns while workers are dormant)
-  const phaseRoles: MainAgentRole[] = phaseView === "planning"
-    ? ["planning-expert", "planning-inspector", "ceo"]
-    : ["execution-expert", "execution-inspector", "ceo"];
+  const phaseRoles: MainAgentRole[] = ["expert", "inspector", "ceo"];
 
   const isActive = activeLauncher?.status === "running" || activeLauncher?.status === "paused";
 

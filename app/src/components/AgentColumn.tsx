@@ -1,37 +1,31 @@
 import { useState, useCallback } from "react";
-import { useMLRAStore, type AgentSlot, type SessionPool, ROLE_COLORS } from "../store/mlraStore";
+import { useMLRAStore, type AgentSlot, type SessionPool, ROLE_COLORS, resolveRuntimeRoleSlotKey } from "../store/mlraStore";
 import { StandbyPlaceholder } from "./StandbyPlaceholder";
 import { IdenticonAvatar } from "./IdenticonAvatar";
 import { Icon } from "./Icons";
 
 interface AgentColumnProps {
-  role: "planning-expert" | "planning-inspector" | "execution-expert" | "execution-inspector" | "ceo";
+  role: "expert" | "inspector" | "ceo";
 }
 
 const ROLE_LABELS: Record<string, string> = {
-  "planning-expert": "规划专家",
-  "planning-inspector": "规划监察",
-  "execution-expert": "执行专家",
-  "execution-inspector": "执行监察",
+  expert: "Expert",
+  inspector: "Inspector",
   ceo: "CEO",
 };
 
 const STANDBY_MESSAGES: Record<string, Record<string, string>> = {
-  "planning-expert": {
-    execution: "规划专家在执行阶段保持待命",
+  expert: {
+    planning: "当前论证流程中等待 Expert 接入",
+    execution: "当前交付流程中等待 Expert 接入",
   },
-  "planning-inspector": {
-    execution: "规划监察在执行阶段保持待命",
-  },
-  "execution-expert": {
-    planning: "执行专家在规划阶段保持待命",
-  },
-  "execution-inspector": {
-    planning: "执行监察在规划阶段保持待命",
+  inspector: {
+    planning: "当前论证流程中等待 Inspector 接入",
+    execution: "当前交付流程中等待 Inspector 接入",
   },
   ceo: {
     planning: "CEO 将在双方投票通过后介入门控审批",
-    execution: "CEO 将在所有 Phase 完成后进行终审",
+    execution: "CEO 将在所有交付完成后进行终审",
   },
 };
 
@@ -120,12 +114,13 @@ function ExpertMessageInput({ callerId }: { callerId: string }) {
 export function AgentColumn({ role }: AgentColumnProps) {
   const activeLauncher = useMLRAStore((s) => s.getActiveLauncher());
   const phaseView = useMLRAStore((s) => s.phaseView);
-  const color = ROLE_COLORS[role];
-  const slot: AgentSlot | null = activeLauncher?.agents[role] ?? null;
-  const pool: SessionPool | undefined = activeLauncher?.sessionPools[role];
+  const slotKey = resolveRuntimeRoleSlotKey(role, phaseView);
+  const color = ROLE_COLORS[slotKey];
+  const slot: AgentSlot | null = activeLauncher?.agents[slotKey] ?? null;
+  const pool: SessionPool | undefined = activeLauncher?.sessionPools[slotKey];
 
   const isStandby = !slot || slot.status === "standby";
-  const isExpert = role === "planning-expert" || role === "execution-expert";
+  const isExpert = role === "expert";
 
   return (
     <div

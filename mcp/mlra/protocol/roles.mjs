@@ -2,7 +2,10 @@
 // MLRA v2 roles — collapsed from the 5-role v1 system to 3 dedicated servers.
 //
 // Each role corresponds to a MCP server binary under mcp/mlra/servers/.
-// Phases (planning / execution) are tracked by the daemon, not by role identity.
+// Planning/execution remain internal protocol keys tracked by the daemon, not
+// by role identity. UI-facing layers should map them to higher-level
+// collaboration terminology instead of exposing them directly as authoring
+// concepts.
 
 export const ROLES = Object.freeze({
   CEO: "ceo",

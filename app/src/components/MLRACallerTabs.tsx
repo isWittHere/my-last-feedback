@@ -1,5 +1,5 @@
 import { useRef, useState, useCallback } from "react";
-import { useMLRAStore, ROLE_COLORS } from "../store/mlraStore";
+import { useMLRAStore, ROLE_COLORS, resolveRuntimeRoleSlotKey } from "../store/mlraStore";
 import { IdenticonAvatar } from "./IdenticonAvatar";
 
 interface MLRACallerTabsProps {
@@ -11,18 +11,6 @@ interface RoleTabDef {
   label: string;
   color: string;
 }
-
-const PLANNING_TABS: RoleTabDef[] = [
-  { id: "planning-expert", label: "Expert", color: ROLE_COLORS["planning-expert"] },
-  { id: "planning-inspector", label: "Inspector", color: ROLE_COLORS["planning-inspector"] },
-  { id: "ceo", label: "CEO", color: ROLE_COLORS.ceo },
-];
-
-const IMPLEMENTATION_TABS: RoleTabDef[] = [
-  { id: "execution-expert", label: "Expert", color: ROLE_COLORS["execution-expert"] },
-  { id: "execution-inspector", label: "Inspector", color: ROLE_COLORS["execution-inspector"] },
-  { id: "ceo", label: "CEO", color: ROLE_COLORS.ceo },
-];
 
 /**
  * MLRA role tabs — reuses CallerTabs drag-to-reorder pattern.
@@ -46,8 +34,11 @@ export function MLRACallerTabs({ columnCount }: MLRACallerTabsProps = {}) {
   const didDragRef = useRef(false);
   const pointerStartX = useRef(0);
 
-  // Phase-specific tabs
-  const phaseTabs = phaseView === "planning" ? PLANNING_TABS : IMPLEMENTATION_TABS;
+  const phaseTabs: RoleTabDef[] = [
+    { id: "expert", label: "Expert", color: phaseView === "planning" ? ROLE_COLORS["planning-expert"] : ROLE_COLORS["execution-expert"] },
+    { id: "inspector", label: "Inspector", color: phaseView === "planning" ? ROLE_COLORS["planning-inspector"] : ROLE_COLORS["execution-inspector"] },
+    { id: "ceo", label: "CEO", color: ROLE_COLORS.ceo },
+  ];
   const defaultOrder = phaseTabs.map((t) => t.id);
 
   // ── Drag handlers (all hooks must be before any early return) ──
@@ -84,7 +75,7 @@ export function MLRACallerTabs({ columnCount }: MLRACallerTabsProps = {}) {
 
     if (!srcId || !wasDrag || currentDropIndex == null) return;
 
-    const currentOrder = [...(columnOrder.length > 0 ? columnOrder : defaultOrder)];
+    const currentOrder = [...((columnOrder.length > 0 ? columnOrder : defaultOrder).filter((item) => defaultOrder.includes(item)))];
     const srcIdx = currentOrder.indexOf(srcId);
     if (srcIdx === -1) return;
 
@@ -110,7 +101,8 @@ export function MLRACallerTabs({ columnCount }: MLRACallerTabsProps = {}) {
   // Determine status for each role
   const getSlotStatus = (roleId: string): string | null => {
     if (!activeLauncher) return null;
-    const slot = activeLauncher.agents[roleId as keyof typeof activeLauncher.agents];
+    const slotKey = resolveRuntimeRoleSlotKey(roleId as "expert" | "inspector" | "ceo", phaseView);
+    const slot = activeLauncher.agents[slotKey as keyof typeof activeLauncher.agents];
     if (!slot || Array.isArray(slot)) return null;
     return slot.status ?? null;
   };
