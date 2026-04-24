@@ -18,10 +18,10 @@ const ROLE_LABELS: Record<string, string> = {
 
 const STANDBY_MESSAGES: Record<string, Record<string, string>> = {
   "planning-expert": {
-    implementation: "规划专家在执行阶段保持待命",
+    execution: "规划专家在执行阶段保持待命",
   },
   "planning-inspector": {
-    implementation: "规划监察在执行阶段保持待命",
+    execution: "规划监察在执行阶段保持待命",
   },
   "execution-expert": {
     planning: "执行专家在规划阶段保持待命",
@@ -31,7 +31,7 @@ const STANDBY_MESSAGES: Record<string, Record<string, string>> = {
   },
   ceo: {
     planning: "CEO 将在双方投票通过后介入门控审批",
-    implementation: "CEO 将在所有 Phase 完成后进行终审",
+    execution: "CEO 将在所有 Phase 完成后进行终审",
   },
 };
 

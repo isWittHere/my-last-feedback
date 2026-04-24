@@ -26,7 +26,7 @@ const STATUS_LABELS: Record<string, string> = {
 
 const PHASE_LABELS: Record<string, string> = {
   planning: "阶段1: 规划",
-  implementation: "阶段2: 实施",
+  execution: "阶段2: 执行",
 };
 
 /**
@@ -217,15 +217,18 @@ function LauncherSidebarItem({
           </>
         )}
       </div>
+      {launcher.blueprintRuntime?.currentStage && (
+        <div className="launcher-sidebar-item-time" style={{ color: "var(--color-text-secondary)" }}>
+          当前阶段: {launcher.blueprintRuntime.currentStage.name}
+        </div>
+      )}
       <div className="launcher-sidebar-item-time">
         {timeAgo(launcher.createdAt, t)}
       </div>
       {launcher.status !== "configuring" && (
         <div className="launcher-sidebar-item-agents">
-          {launcher.agents["planning-expert"] && <span style={{ color: "#3B82F6" }}>规划专家</span>}
-          {launcher.agents["planning-inspector"] && <span style={{ color: "#F59E0B" }}>规划监察</span>}
-          {launcher.agents["execution-expert"] && <span style={{ color: "#3B82F6" }}>执行专家</span>}
-          {launcher.agents["execution-inspector"] && <span style={{ color: "#F59E0B" }}>执行监察</span>}
+          {(launcher.currentPhase === "planning" ? launcher.agents["planning-expert"] : launcher.agents["execution-expert"]) && <span style={{ color: "#3B82F6" }}>Expert</span>}
+          {(launcher.currentPhase === "planning" ? launcher.agents["planning-inspector"] : launcher.agents["execution-inspector"]) && <span style={{ color: "#F59E0B" }}>Inspector</span>}
           {launcher.agents.ceo && <span style={{ color: "#8B5CF6" }}>CEO:待命</span>}
         </div>
       )}

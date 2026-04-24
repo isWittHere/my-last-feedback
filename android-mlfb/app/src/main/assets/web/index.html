@@ -199,14 +199,14 @@
 
   /* 悬浮底栏（仿 .tabbar 玻璃胶囊）—— 拆成左右两个 */
   .float-bar{position:fixed;bottom:calc(12px + var(--sab));z-index:40;display:flex;gap:8px;padding:5px;background:rgba(255,255,255,.55);-webkit-backdrop-filter:saturate(150%) blur(14px);backdrop-filter:saturate(150%) blur(14px);border:1px solid var(--border);border-radius:999px;box-shadow:0 4px 16px rgba(0,0,0,.08)}
-  .float-bar.fb-left{left:12px}
-  .float-bar.fb-right{right:12px}
+  .float-bar.fb-left{left:calc(20px + var(--sal, 0px))}
+  .float-bar.fb-right{right:calc(20px + var(--sar, 0px))}
   [data-theme="dark"] .float-bar{background:rgba(26,26,26,.55);box-shadow:0 4px 16px rgba(0,0,0,.35)}
   @media (prefers-color-scheme:dark){:root:not([data-theme="light"]) .float-bar{background:rgba(26,26,26,.55)}}
   .float-bar button{background:transparent;border:none;padding:8px 16px;color:var(--text);display:inline-flex;align-items:center;justify-content:center;gap:6px;font-size:var(--fs-md);font-weight:500;border-radius:999px;cursor:pointer;transition:all .15s;min-height:0;height:36px}
   .float-bar button .icon{font-size:var(--fs-3xl);line-height:1}
   .float-bar button:active{background:var(--card-2)}
-  .float-bar .fb-home{padding:4px 10px 4px 4px;width:auto;height:36px;border-radius:999px;overflow:hidden;gap:8px;max-width:calc(100vw - 220px)}
+  .float-bar .fb-home{padding:4px 10px 4px 4px;width:auto;height:36px;border-radius:999px;overflow:hidden;gap:8px;max-width:calc(100vw - 240px)}
   .float-bar .fb-home svg{width:28px;height:28px;border-radius:4px;flex-shrink:0}
   .float-bar .fb-home-info{display:flex;flex-direction:column;align-items:flex-start;justify-content:center;min-width:0;line-height:1.15}
   .float-bar .fb-home-name{font-size:var(--fs-md);font-weight:600;color:var(--text);white-space:nowrap;overflow:hidden;text-overflow:ellipsis;max-width:100%}
@@ -220,8 +220,8 @@
   .float-bar .fb-badge.cancelled{color:#ef4444}
 
   /* 展开的输入区（悬浮面板） */
-  .input-panel-backdrop{position:fixed;inset:0;z-index:16;background:rgba(0,0,0,.25);-webkit-backdrop-filter:blur(2px);backdrop-filter:blur(2px)}
-  .expanded-input{position:fixed;left:10px;right:10px;bottom:calc(66px + var(--sab));z-index:17;background:var(--card);border:1px solid var(--border);border-radius:12px;padding:0;max-height:60vh;overflow:hidden;display:flex;flex-direction:column;box-shadow:0 8px 32px rgba(0,0,0,.25)}
+  .input-panel-backdrop{position:fixed;inset:0;z-index:30;background:rgba(0,0,0,.35);-webkit-backdrop-filter:blur(4px);backdrop-filter:blur(4px)}
+  .expanded-input{position:fixed;left:10px;right:10px;bottom:calc(66px + var(--sab));z-index:31;background:var(--card);border:1px solid var(--border);border-radius:12px;padding:0;max-height:60vh;overflow:hidden;display:flex;flex-direction:column;box-shadow:0 8px 32px rgba(0,0,0,.25)}
   [data-theme="dark"] .expanded-input{box-shadow:0 8px 32px rgba(0,0,0,.45)}
   .expanded-input > .feedback-pane{margin:0;border:none;background:transparent;overflow-y:auto;-webkit-overflow-scrolling:touch;flex:1;min-height:0}
   .expanded-input > .prompt-row{padding:6px 12px 10px;background:transparent;flex-shrink:0;border-top:none}
@@ -266,13 +266,13 @@
   .prompt-row{display:flex;gap:6px;overflow-x:auto;overflow-y:hidden;padding:0;scrollbar-width:none;-ms-overflow-style:none}
   .prompt-row::-webkit-scrollbar{display:none}
   /* prompt-chip: 参考 PC app 的 btn-prompt 配色（accent-green） */
-  .prompt-chip{flex-shrink:0;display:inline-flex;align-items:center;gap:3px;padding:1px 8px;font-size:var(--fs-xs);font-weight:500;background:#2d5a4d;border:1px solid #3a6a4a;border-radius:6px;color:#fff;cursor:pointer;white-space:nowrap;min-height:26px;line-height:1;transition:background .15s}
-  [data-theme="light"] .prompt-chip{background:#d4f0e9;border-color:#a0d4c0;color:#1a1a1a}
-  @media (prefers-color-scheme:light){:root:not([data-theme="dark"]) .prompt-chip{background:#d4f0e9;border-color:#a0d4c0;color:#1a1a1a}}
-  .prompt-chip .icon{font-size:var(--fs-lg);line-height:1}
-  .prompt-chip:active{background:#3d7a5d;border-color:#4a8a5a}
-  [data-theme="light"] .prompt-chip:active{background:#b5e8dd}
-  @media (prefers-color-scheme:light){:root:not([data-theme="dark"]) .prompt-chip:active{background:#b5e8dd}}
+  .submit-menu .prompt-chip{flex-shrink:0;display:inline-flex;align-items:center;gap:3px;padding:3px 8px;font-size:var(--fs-xs);font-weight:500;background:#2d5a4d;border:1px solid #3a6a4a;border-radius:6px;color:#fff;cursor:pointer;white-space:nowrap;min-height:30px;line-height:1;transition:background .15s}
+  [data-theme="light"] .submit-menu .prompt-chip{background:#d4f0e9;border-color:#a0d4c0;color:#1a1a1a}
+  @media (prefers-color-scheme:light){:root:not([data-theme="dark"]) .submit-menu .prompt-chip{background:#d4f0e9;border-color:#a0d4c0;color:#1a1a1a}}
+  .submit-menu .prompt-chip .icon{font-size:var(--fs-lg);line-height:1}
+  .submit-menu .prompt-chip:active{background:#3d7a5d;border-color:#4a8a5a}
+  [data-theme="light"] .submit-menu .prompt-chip:active{background:#b5e8dd}
+  @media (prefers-color-scheme:light){:root:not([data-theme="dark"]) .submit-menu .prompt-chip:active{background:#b5e8dd}}
   .quick-actions{display:flex;gap:6px;flex-wrap:wrap}
   /* quick-btn: 参考 PC app 的 .btn 基础配色 */
   .quick-btn{display:inline-flex;align-items:center;justify-content:center;gap:4px;min-height:34px;padding:6px 12px;background:#2e2e2e;border:1px solid #3a3a3a;border-radius:4px;color:#d4d4d4;font-size:var(--fs-sm);cursor:pointer;transition:all .15s;white-space:nowrap}
@@ -361,6 +361,13 @@
 
   /* === 最近 Caller 行：复用 .mode-list/.mode-row，但头像用圆形 === */
   .mode-list .m-icon.avatar{border-radius:50%;font-size:var(--fs-md);font-weight:700;background:var(--card-2);color:var(--text)}
+  /* === 首页 Caller 头像列 === */
+  .home-caller-row{display:flex;align-items:flex-start;padding:4px 10px 8px;overflow-x:auto;scrollbar-width:none;-ms-overflow-style:none;gap:0}.home-caller-row::-webkit-scrollbar{display:none}
+  .home-caller-sticky{position:sticky;top:0;z-index:4;background:var(--bg);padding:14px 16px;border-bottom:1px solid var(--border)}
+  .home-caller-sticky + .section{border-top:none}
+  .hca-item{display:flex;flex-direction:column;align-items:center;gap:5px;min-width:52px;padding:4px 2px;border:none;background:transparent;border-radius:10px;cursor:pointer;-webkit-appearance:none;appearance:none;-webkit-tap-highlight-color:transparent}.hca-item:active{background:var(--card-2)}
+  .hca-item.active .hca-ring,.hca-item.active .hca-more-ring{outline:2.5px solid var(--primary);outline-offset:2px}.hca-ring{width:44px;height:44px;border-radius:8px;overflow:hidden;display:block;flex-shrink:0}
+  .hca-name{font-size:11px;color:var(--text);text-align:center;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;width:60px;padding:0 4px;line-height:1.2}.hca-more-ring{width:44px;height:44px;border-radius:8px;background:var(--card-2);display:flex;align-items:center;justify-content:center}
 
   /* === 详情页 topbar 改造（仿 PC 端） === */
   .detail-topbar{flex-direction:column!important;align-items:stretch!important;height:auto!important;gap:0!important;padding-top:calc(var(--sat) + 6px)!important;padding-bottom:0!important}
@@ -397,14 +404,31 @@
   .detail-drawer-list{flex:1;overflow-y:auto;-webkit-overflow-scrolling:touch;padding:6px 8px 6px}
   /* drawer 内的 session 分组（借鉴 PC 侧栏） */
   .d-group{margin:0}
-  .d-group-header{display:flex;align-items:center;gap:6px;width:100%;padding:2px 10px;border:none;background:color-mix(in srgb, var(--card) 92%, transparent);color:var(--muted);font-size:var(--fs-xs);font-weight:600;text-transform:uppercase;letter-spacing:.4px;cursor:pointer;position:sticky;top:0;z-index:1;backdrop-filter:blur(8px);-webkit-backdrop-filter:blur(8px);border-radius:6px;min-height:20px}
+  .detail-drawer-list .d-group + .d-group::before{content:'';display:block;height:1px;background:var(--border)}
+  .d-group-header{display:flex;align-items:center;gap:6px;width:100%;padding:8px 10px 3px;border:none;background:var(--card);color:var(--muted);font-size:var(--fs-xs);font-weight:600;letter-spacing:.2px;cursor:pointer;position:sticky;top:0;z-index:1;backdrop-filter:blur(8px);-webkit-backdrop-filter:blur(8px);min-height:20px}
+  /* drawer 内 d-item 补回横向 padding */
+  .detail-drawer-list .d-item{padding-left:10px;padding-right:10px}
   .d-group-chevron{width:10px;height:10px;transition:transform .15s;flex-shrink:0;color:var(--muted)}
   .d-group-header.collapsed .d-group-chevron{transform:rotate(-90deg)}
   .d-group-count{margin-left:auto;font-size:var(--fs-xs);font-weight:500;color:var(--muted);opacity:.75}
+  /* 首页 session 列表时间分组标题（顶部贯穿分隔线 + 标签左 + 数量右） */
+  .sl-group-header{padding:12px 10px 3px;position:relative}
+  .d-group:first-child .sl-group-header{padding-top:4px}
+  .sl-group-header::before{content:'';position:absolute;top:0;left:0;right:0;height:1px;background:var(--border)}
+  .d-group:first-child .sl-group-header::before{display:none}
+  .session-list .sl-group-header{position:sticky;top:var(--home-caller-sticky-h, 0px);z-index:3;background:var(--bg)}
+  .caller-sessions-list .sl-group-header{position:sticky;top:calc(6px + var(--caller-row-sticky-h, 0px));z-index:4;background:var(--bg)}
+  .sl-group-row{display:flex;align-items:center;justify-content:space-between}
+  .sl-group-label{font-size:var(--fs-xs);font-weight:500;color:var(--muted)}
+  .sl-group-count{font-size:var(--fs-xs);font-weight:400;color:var(--muted);opacity:.75}
+  /* Caller 页折叠列表 */
+  .caller-row-wrap{display:flex;flex-direction:column}
+  .caller-row-wrap + .caller-row-wrap{margin-top:6px}
+  .caller-sessions-list{padding:0 0 2px 0;margin-left:26px;border-left:1px solid var(--border)}
   /* item 两行布局：作为圆角矩形卡片 */
-  .d-item{display:flex;flex-direction:column;gap:1px;width:100%;padding:4px 10px;border:none;background:transparent;color:var(--text);cursor:pointer;text-align:left;font:inherit;-webkit-appearance:none;appearance:none;border-radius:8px;margin:0}
+  .d-item{display:flex;flex-direction:column;gap:2px;width:100%;padding:7px 10px;border:none;background:transparent;color:var(--text);cursor:pointer;text-align:left;font:inherit;-webkit-appearance:none;appearance:none;border-radius:8px;margin:0}
   .d-item:active{background:rgba(127,127,127,.1)}
-  .d-item.active{background:rgba(var(--caller-rgb,78,201,176),.14);box-shadow:inset 0 0 0 1px rgba(var(--caller-rgb,78,201,176),.35)}
+  .d-item.active{background:rgba(var(--caller-rgb,78,201,176),.14)}
   .d-item-r1{display:flex;align-items:center;gap:8px;min-width:0}
   .d-item-icon{flex-shrink:0;width:20px;height:20px;display:flex;align-items:center;justify-content:center;font-size:var(--fs-xl)}
   .d-item-icon.pending{color:#f59e0b}
@@ -516,13 +540,11 @@
   .tile-list{display:flex;flex-direction:column;gap:2px}
 
   /* 设置页 -- 列表式 */
-  .list-group{margin-bottom:0;border-top:1px solid var(--border)}
-  .list-group:first-child{border-top:none}
-  .list-group + .list-group{margin-top:16px;border-top:1px solid var(--border)}
-  .list-item{display:flex;align-items:center;padding:13px 16px;gap:12px;border-top:1px solid var(--border);min-height:44px}
-  .list-group .list-item:first-child{border-top:none}
+  .list-group{margin-bottom:0}
+  .list-group + .list-group{margin-top:10px;padding-top:8px;border-top:1px solid var(--border)}
+  .list-item{display:flex;align-items:center;padding:10px 16px;gap:10px;min-height:40px}
   .list-item .l-label{flex:1;font-size:var(--fs-body);color:var(--text)}
-  .list-item .l-sub{font-size:var(--fs-sm);color:var(--muted);margin-top:2px}
+  .list-item .l-sub{font-size:var(--fs-sm);color:var(--muted);margin-top:1px;line-height:1.25}
   .list-item .l-right{color:var(--muted);font-size:var(--fs-base);display:inline-flex;align-items:center;gap:4px}
   .list-item .l-right .icon{font-size:var(--fs-base);line-height:1}
   .seg{display:inline-flex;background:#1a1a1a;border-radius:4px;padding:2px;gap:0}
@@ -541,7 +563,7 @@
   .question-card{background:transparent;border-radius:0;padding:0;margin-bottom:12px}
   .q-path{display:inline-flex;align-items:center;gap:6px;margin:8px 0 12px;padding:5px 10px;background:var(--card-2);border:1px solid var(--border);border-radius:999px;font-size:var(--fs-sm);line-height:1;color:var(--muted);max-width:100%;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
   .q-path .icon{font-size:var(--fs-lg);line-height:1;flex-shrink:0}
-  .qh-tag{display:inline-flex;align-items:center;gap:6px;padding:5px 10px;border-radius:999px;font-size:var(--fs-sm);font-weight:500;border:1px solid var(--border);background:var(--card-2);white-space:nowrap;line-height:1}
+  .qh-tag{display:inline-flex;align-items:center;gap:6px;padding:5px 12px 5px 5px;border-radius:999px;font-size:var(--fs-sm);font-weight:500;border:1px solid var(--border);background:var(--card-2);white-space:nowrap;line-height:1}
   .qh-tag i.ph{font-size:var(--fs-lg);line-height:1}
   .qh-tag.pending{color:var(--warn);background:var(--warn-bg);border-color:var(--warn-bg)}
   .qh-tag.responded{color:var(--success);background:var(--ok-bg);border-color:var(--ok-bg)}
@@ -742,6 +764,7 @@ const State = {
   current: null,        // 当前查看的 session（进入 session-mode 时设置）
   storage: null,
   currentPage: "home",  // home | callers | settings | detail
+  _detailReturnPage: "home",
   _navIdx: 0,
   _navTab: "home",
   _homeFilter: { remote: "all", workspace: "all", caller: "all" },
@@ -906,10 +929,10 @@ function renderMarkdown(md){
       out.push(`<h1>${m[1]}</h1>`);
     } else if(m = line.match(/^- \[x\]\s+(.+)$/)){
       flushPara();
-      out.push(`<div style="padding:2px 0"><i class="ph ph-check-square icon" style="color:var(--success)"></i> ${m[1]}</div>`);
+      out.push(`<div style="padding:2px 0;display:flex;align-items:center;gap:6px"><i class="ph ph-check-square icon" style="color:var(--success);font-size:1.4em;flex-shrink:0"></i><span>${m[1]}</span></div>`);
     } else if(m = line.match(/^- \[ \]\s+(.+)$/)){
       flushPara();
-      out.push(`<div style="padding:2px 0"><i class="ph ph-square icon" style="color:var(--muted)"></i> ${m[1]}</div>`);
+      out.push(`<div style="padding:2px 0;display:flex;align-items:center;gap:6px"><i class="ph ph-square icon" style="color:var(--muted);font-size:1.4em;flex-shrink:0"></i><span>${m[1]}</span></div>`);
     } else if(m = line.match(/^- (.+)$/)){
       flushPara();
       out.push(`<div style="padding:2px 0;padding-left:12px;position:relative">•&nbsp;${m[1]}</div>`);
@@ -923,8 +946,22 @@ function renderMarkdown(md){
   // 4. 恢复 code block
   let html = out.join('');
   html = html.replace(/\u0000CODE(\d+)\u0000/g, (_, i) => {
-    const code = escapeHtml(codes[parseInt(i,10)]);
-    return `<pre style="background:var(--card-2);padding:10px;border-radius:6px;overflow-x:auto;font-size:var(--fs-md);line-height:1.5;margin:8px 0"><code>${code}</code></pre>`;
+    const raw = codes[parseInt(i,10)];
+    const nlIdx = raw.indexOf('\n');
+    let lang = '';
+    let codeContent = raw;
+    if(nlIdx !== -1){
+      const firstLine = raw.slice(0, nlIdx).trim();
+      if(firstLine && /^[a-zA-Z0-9_+#.-]+$/.test(firstLine)){
+        lang = firstLine;
+        codeContent = raw.slice(nlIdx + 1);
+      }
+    }
+    const code = escapeHtml(codeContent);
+    const langHeader = lang
+      ? `<div style="padding:4px 10px 3px;font-size:var(--fs-xs);color:var(--muted);font-family:var(--font-mono,ui-monospace,monospace);letter-spacing:.02em">${escapeHtml(lang)}</div>`
+      : '';
+    return `<div style="background:var(--card-2);border-radius:6px;overflow:hidden;margin:8px 0;max-width:100%">${langHeader}<pre style="padding:10px;overflow-x:auto;font-size:var(--fs-md);line-height:1.5;margin:0;white-space:pre;word-break:normal;overflow-wrap:normal"><code>${code}</code></pre></div>`;
   });
   return html;
 }
@@ -1141,13 +1178,34 @@ const app = {
       })
     ].join("");
 
-    const callerChips = [
-      chip(f.caller === 'all', '全部', State.sessions.length, `app.setHomeFilter('caller','all')`),
-      ...State.callers.map(c => {
-        const cnt = State.sessions.filter(s => s.callerId === c.id).length;
-        return chip(f.caller === c.id, c.alias || c.name, cnt, `app.setHomeFilter('caller','${c.id}')`, c.color);
-      })
-    ].join("");
+    // —— Caller 头像列（最近 3 个 + 更多） ——
+    const callersSorted = State.callers.slice().sort((a, b) => {
+      const latestOf = id => State.sessions.filter(s => s.callerId === id)
+        .reduce((m, s) => !m || new Date(s.createdAt) > new Date(m.createdAt) ? s : m, null);
+      return new Date((latestOf(b.id)||{createdAt:0}).createdAt) - new Date((latestOf(a.id)||{createdAt:0}).createdAt);
+    });
+    const topCallers = callersSorted.slice(0, 3);
+    const allBtn = `<button class="hca-item${f.caller==='all'?' active':''}" onclick="app.setHomeFilter('caller','all')">
+      <span class="hca-more-ring" style="background:var(--sel-bg)"><i class="ph ph-list icon" style="font-size:18px;color:var(--${f.caller==='all'?'primary':'muted'})"></i></span>
+      <span class="hca-name" style="color:var(--${f.caller==='all'?'text':'muted'})">全部</span>
+    </button>`;
+    const callerAvatarHtml = [allBtn].concat(topCallers.map(c => {
+      const isActive = f.caller === c.id;
+      const pendingCount = State.sessions.filter(s => s.callerId === c.id && s.status === 'pending').length;
+      const dot = pendingCount > 0 ? `<span class="cs-dot" style="position:absolute;top:1px;right:1px;border-color:var(--card);width:10px;height:10px;border-width:2px"></span>` : '';
+      return `<button class="hca-item${isActive?' active':''}" onclick="app.setHomeFilter('caller','${c.id}')">
+        <span style="position:relative;display:inline-block">
+          <span class="hca-ring">${identiconSvg(c.alias||c.id, c.color, 44)}</span>${dot}
+        </span>
+        <span class="hca-name">${escapeHtml(c.alias||c.name)}</span>
+      </button>`;
+    })).join('');
+    const callerMoreBtn = callersSorted.length > 3
+      ? `<button class="hca-item" onclick="app.navTab('callers')">
+          <span class="hca-more-ring"><i class="ph ph-users-three icon" style="font-size:20px;color:var(--muted)"></i></span>
+          <span class="hca-name" style="color:var(--muted)">更多</span>
+        </button>`
+      : '';
 
     // —— 应用筛选 ——
     let list = State.sessions.slice();
@@ -1164,15 +1222,17 @@ const app = {
         <div class="section-title">工作区</div>
         <div class="category-list">${wsChips}</div>
       </div>
-      <div class="section">
+      <div class="home-caller-sticky">
         <div class="section-title">Caller</div>
-        <div class="category-list">${callerChips}</div>
+        <div class="home-caller-row" style="margin:0 -10px;padding-left:6px;padding-right:6px">${callerAvatarHtml}${callerMoreBtn}</div>
       </div>
       <div class="section" style="padding:0">
-        <div class="section-title" style="padding:8px 16px 6px">Session 列表 <span style="color:var(--muted);font-weight:400">${list.length}</span></div>
-        <div class="session-list">${this._renderSessionList(list)}</div>
+        <div class="section-title" style="padding:8px 16px 6px;display:flex;align-items:center;gap:5px">${f.caller !== 'all' ? `<span style="width:16px;height:16px;border-radius:3px;overflow:hidden;flex-shrink:0;display:inline-block">${identiconSvg(callerOf(f.caller).alias||callerOf(f.caller).id, callerOf(f.caller).color, 16)}</span><span style="flex:1">${escapeHtml(callerOf(f.caller).alias||callerOf(f.caller).name)} 的 Sessions</span>` : '<span style="flex:1">Session 列表</span>'} <span style="color:var(--muted);font-weight:400;margin-left:auto">${list.length}</span></div>
+        <div class="session-list" style="padding:0 6px 8px">${this._renderSessionList(list, f.caller === 'all')}</div>
       </div>
     `;
+    const homeCallerSticky = document.querySelector('#panel-home .home-caller-sticky');
+    if(homeCallerSticky) document.documentElement.style.setProperty('--home-caller-sticky-h', homeCallerSticky.offsetHeight + 'px');
   },
 
   /** 筛选器统一入口 */
@@ -1183,29 +1243,61 @@ const app = {
     }
   },
 
-  /** 复用：PC 侧栏风格的紧凑 session 列表 */
-  _renderSessionList(list){
+  /** 复用：PC 侧栏风格的紧凑 session 列表（d-item 样式，无分割线，按时间分组） */
+  _renderSessionList(list, showCaller = true){
     if(!list.length){
       return `<div class="empty"><i class="ph ph-smiley icon"></i> 没有匹配的 session</div>`;
     }
-    return list.map(s => {
+    const now = new Date();
+    const todayStart = new Date(now.getFullYear(), now.getMonth(), now.getDate()).getTime();
+    const yesterdayStart = todayStart - 86400000;
+    const weekAgoStart = todayStart - 7 * 86400000;
+    const bucketOf = iso => {
+      const t = new Date(iso).getTime();
+      if(t >= todayStart) return 'today';
+      if(t >= yesterdayStart) return 'yesterday';
+      if(t >= weekAgoStart) return 'lastWeek';
+      return 'earlier';
+    };
+    const groups = {
+      today:     { label:'今天',     items: [] },
+      yesterday: { label:'昨天',     items: [] },
+      lastWeek:  { label:'最近一周', items: [] },
+      earlier:   { label:'更早',     items: [] },
+    };
+    list.forEach(s => groups[bucketOf(s.createdAt)].items.push(s));
+    const renderItem = s => {
       const c = callerOf(s.callerId);
-      const statusBadge = s.status === 'pending'
-        ? `<span class="s-badge s-badge-warn">待处理</span>`
-        : s.status === 'responded'
-          ? `<span class="s-badge s-badge-ok">已响应</span>`
-          : `<span class="s-badge s-badge-err">已取消</span>`;
-      return `<button class="session-row" onclick="app.openSession('${s.id}')">
-        <span class="s-dot" style="background:${c.color}"></span>
-        <div class="s-body">
-          <div class="s-title">${escapeHtml(s.requestName || 'Untitled')}</div>
-          <div class="s-meta">${escapeHtml(c.alias||c.name)} · ${relativeTime(s.createdAt)} ${statusBadge}</div>
+      const iconName = s.status === 'pending' ? 'ph-circle-dashed'
+        : s.status === 'responded' ? 'ph-check-circle'
+        : 'ph-x-circle';
+      return `<button class="d-item" onclick="app.openSession('${s.id}')">
+        <div class="d-item-r1">
+          <span class="d-item-icon ${s.status}"><i class="ph ${iconName}"></i></span>
+          <span class="d-item-title${s.status==='responded'?' responded':''}">${escapeHtml(s.requestName || 'Untitled')}</span>
+        </div>
+        <div class="d-item-r2">
+          ${showCaller ? `<span style="display:inline-flex;align-items:center;gap:4px"><span style="width:14px;height:14px;border-radius:2px;overflow:hidden;flex-shrink:0;display:inline-block">${identiconSvg(c.alias||c.id, c.color, 14)}</span>${escapeHtml(c.alias||c.name)}</span>` : ''}
+          <span class="d-item-time">${relativeTime(s.createdAt)}</span>
         </div>
       </button>`;
-    }).join("");
+    };
+    return ['today','yesterday','lastWeek','earlier'].map(k => {
+      const g = groups[k];
+      if(!g.items.length) return '';
+      return `<div class="d-group">
+        <div class="sl-group-header">
+          <div class="sl-group-row">
+            <span class="sl-group-label">${g.label}</span>
+            <span class="sl-group-count">${g.items.length}</span>
+          </div>
+        </div>
+        ${g.items.map(renderItem).join('')}
+      </div>`;
+    }).join('');
   },
 
-  /* ========= 最近 Caller 面板 ========= */
+  /* ========= Caller 面板 ========= */
   showRecentCallers(){
     State.current = null;
     State.currentPage = "callers";
@@ -1213,15 +1305,16 @@ const app = {
     this.enterNavMode();
     if(!this._animateNav) this._setNavPage(1, false);
     this._updateTabbar("callers");
-    this._syncNativeToolbar("最近 Caller", false);
-    this.setTitle("最近 Caller");
+    this._syncNativeToolbar("Caller", false);
+    this.setTitle("Caller");
 
-    // 按 caller 聚合；展示：头像 + 名称 + 最新 session 标题 + 计数 + 时间
+    if(!State._expandedCallers) State._expandedCallers = new Set();
+
     const groups = State.callers.map(c => {
-      const items = State.sessions.filter(s => s.callerId === c.id)
+      const sessions = State.sessions.filter(s => s.callerId === c.id)
         .sort((a,b) => new Date(b.createdAt) - new Date(a.createdAt));
-      return { caller: c, latest: items[0], pending: items.filter(s=>s.status==='pending').length, total: items.length };
-    }).filter(g => g.total > 0)
+      return { caller: c, sessions, latest: sessions[0], pending: sessions.filter(s=>s.status==='pending').length };
+    }).filter(g => g.sessions.length > 0)
       .sort((a,b) => {
         const ta = a.latest ? new Date(a.latest.createdAt).getTime() : 0;
         const tb = b.latest ? new Date(b.latest.createdAt).getTime() : 0;
@@ -1232,26 +1325,65 @@ const app = {
       ? `<div class="empty"><i class="ph ph-smiley icon"></i> 还没有任何 Caller</div>`
       : groups.map(g => {
           const c = g.caller;
-          const sub = g.latest
-            ? `${escapeHtml(g.latest.requestName || 'Untitled')} · ${relativeTime(g.latest.createdAt)}`
-            : '（无 session）';
-          const pendingBadge = g.pending > 0
-            ? ` <span class="s-badge s-badge-warn">${g.pending} 待</span>`
+          const isExpanded = State._expandedCallers.has(c.id);
+          const pendingDot = g.pending > 0
+            ? `<span class="cs-dot" style="position:absolute;top:-2px;right:-2px;width:10px;height:10px;border-width:2px;border-color:var(--card)"></span>`
             : '';
-          return `<div class="mode-row" onclick="app.filterByCaller('${c.id}')">
-            <span class="m-icon avatar" style="background:transparent;padding:2px">${identiconSvg(c.alias||c.id, c.color, 32)}</span>
-            <div class="m-text">
-              <div class="m-title">${escapeHtml(c.alias||c.name)} <span style="color:var(--muted);font-weight:400;font-size:var(--fs-sm)">(${g.total})</span>${pendingBadge}</div>
-              <div class="m-desc">${sub}</div>
-            </div>
-            <i class="ph ph-caret-right icon m-arrow"></i>
+          const sessionsHtml = isExpanded
+            ? `<div class="caller-sessions-list">${this._renderSessionList(g.sessions, false)}</div>`
+            : '';
+          return `<div class="caller-row-wrap">
+            <button class="d-item${isExpanded ? ' caller-row-sticky' : ''}" onclick="app.toggleCallerExpand('${c.id}')" style="${isExpanded ? 'position:sticky;top:6px;z-index:5;background:var(--card);border:1px solid var(--border);border-radius:10px;box-shadow:0 -6px 0 var(--bg)' : 'border:1px solid transparent;border-radius:10px'}">
+              <div style="display:flex;align-items:center;gap:10px">
+                <span style="position:relative;flex-shrink:0">
+                  <span style="border-radius:5px;overflow:hidden;display:block;width:36px;height:36px">${identiconSvg(c.alias||c.id, c.color, 36)}</span>
+                  ${pendingDot}
+                </span>
+                <div style="flex:1;min-width:0;display:flex;flex-direction:column;gap:2px">
+                  <div style="display:flex;align-items:center;gap:6px;min-width:0">
+                    <span style="font-weight:500;font-size:var(--fs-base);color:var(--text);white-space:nowrap;overflow:hidden;text-overflow:ellipsis">${escapeHtml(c.alias||c.name)}</span>
+                    <span style="display:inline-flex;align-items:center;gap:4px;flex-shrink:0">
+                      <span class="s-badge" style="font-size:10px;padding:1px 5px;background:var(--sel-bg);color:var(--muted)"><i class="ph ph-chat-dots" style="font-size:9px"></i> ${g.sessions.length}</span>
+                      ${g.pending > 0 ? `<span class="s-badge s-badge-warn" style="font-size:10px;padding:1px 5px"><i class="ph ph-circle-dashed" style="font-size:9px"></i> ${g.pending}</span>` : ''}
+                    </span>
+                  </div>
+                  <div class="d-item-r2" style="padding-left:0;flex-wrap:wrap">
+                    <span class="d-item-time">${relativeTime(g.latest.createdAt)}</span>
+                    ${g.latest.projectDirectory ? `<span class="s-badge" style="font-size:10px;padding:1px 5px;background:var(--sel-bg);color:var(--muted);word-break:break-all;white-space:normal;vertical-align:middle"><i class="ph ph-file" style="font-size:9px"></i> ${escapeHtml(g.latest.projectDirectory)}</span>` : ''}
+                  </div>
+                </div>
+                <i class="ph ph-caret-${isExpanded?'up':'down'} icon" style="color:var(--muted);font-size:14px;flex-shrink:0"></i>
+              </div>
+            </button>
+            ${sessionsHtml}
           </div>`;
-        }).join("");
+        }).join('');
 
-    document.getElementById("panel-callers").innerHTML = groups.length === 0
-      ? `<div class="section">${rowsHtml}</div>`
-      : `<div class="mode-list">${rowsHtml}</div>`;
+    document.getElementById("panel-callers").innerHTML =
+      `<div style="padding:6px 6px 100px">${rowsHtml}</div>`;
+    const callersPanel = document.getElementById('panel-callers');
+    const stickyCallerRow = callersPanel.querySelector('.caller-row-sticky');
+    if(stickyCallerRow){
+      callersPanel.style.setProperty('--caller-row-sticky-h', `${stickyCallerRow.offsetHeight}px`);
+    } else {
+      callersPanel.style.removeProperty('--caller-row-sticky-h');
+    }
+    if(this._callersPanelScrollListener){
+      callersPanel.removeEventListener('scroll', this._callersPanelScrollListener);
+      this._callersPanelScrollListener = null;
+    }
   },
+
+  toggleCallerExpand(id){
+    if(!State._expandedCallers) State._expandedCallers = new Set();
+    if(State._expandedCallers.has(id)){
+      State._expandedCallers.delete(id);
+    } else {
+      State._expandedCallers.add(id);
+    }
+    this.showRecentCallers();
+  },
+
 
   /** 点 caller 行 → 跳首页并按该 caller 过滤 */
   filterByCaller(id){
@@ -1281,7 +1413,7 @@ const app = {
 
     document.getElementById("panel-settings").innerHTML = `
       <div class="list-group">
-        <div class="section-title" style="padding:12px 16px 6px;margin:0">远程连接</div>
+        <div class="section-title" style="padding:6px 16px 4px;margin:0">远程连接</div>
         <div class="list-item">
           <div style="flex:1"><div class="l-label">配对设备</div><div class="l-sub">绑定到 PC 上的 MLFB 桌面端</div></div>
           <span class="l-right">未配对 <i class="ph ph-caret-right icon"></i></span>
@@ -1297,7 +1429,7 @@ const app = {
       </div>
 
       <div class="list-group">
-        <div class="section-title" style="padding:12px 16px 6px;margin:0">外观</div>
+        <div class="section-title" style="padding:6px 16px 4px;margin:0">外观</div>
         <div class="list-item">
           <div style="flex:1"><div class="l-label">主题</div></div>
           <div class="seg seg-sm">${themeSeg('auto','跟随系统')}${themeSeg('light','亮')}${themeSeg('dark','暗')}</div>
@@ -1309,7 +1441,7 @@ const app = {
       </div>
 
       <div class="list-group">
-        <div class="section-title" style="padding:12px 16px 6px;margin:0">关于</div>
+        <div class="section-title" style="padding:6px 16px 4px;margin:0">关于</div>
         <div class="list-item"><div style="flex:1"><div class="l-label">MLFB 远程 Mobile</div><div class="l-sub">v0.1 · 预览版</div></div></div>
         <div class="list-item"><div style="flex:1"><div class="l-label">已加载 Sessions</div></div><span class="l-right">${State.sessions.length}</span></div>
         <div class="list-item"><div style="flex:1"><div class="l-label">已知 Callers</div></div><span class="l-right">${State.callers.length}</span></div>
@@ -1321,6 +1453,9 @@ const app = {
   openSession(id){
     const s = State.sessions.find(x=>x.id===id);
     if(!s) return;
+    if(State.currentPage !== "detail"){
+      State._detailReturnPage = State.currentPage || State._navTab || "home";
+    }
     State.current = JSON.parse(JSON.stringify(s));  // 深拷贝，支持本地编辑而不影响 mock
     State.currentPage = "detail";
     // 根据已有内容预展开对应附件面板，之后 toggle 完全由用户控制
@@ -1342,9 +1477,12 @@ const app = {
     State.submitMenuOpen = false;
     State.callerMenuOpen = false;
     document.body.classList.remove("session-mode");
+    if(this._scrollListener){ window.removeEventListener('scroll', this._scrollListener); this._scrollListener = null; }
     if(this._bbRO){ this._bbRO.disconnect(); this._bbRO = null; }
     document.body.style.removeProperty('--bottombar-h');
-    this.goHome();
+    if(State._detailReturnPage === "callers") this.showRecentCallers();
+    else if(State._detailReturnPage === "settings") this.showSettings();
+    else this.goHome();
   },
 
   renderDetail(){
@@ -1456,8 +1594,7 @@ Ctrl+Enter 提交，Ctrl+V 粘贴图片" oninput="app.setFeedback(this.value); a
     const callerMenuOpen = !!State.callerMenuOpen;
 
     const expandedPane = inputExpanded ? `
-      <div class="input-panel-backdrop" onclick="app.toggleInputExpanded()"></div>
-      <div class="expanded-input" onclick="event.stopPropagation()">
+      <div class="expanded-input">
         ${feedbackPane}
       </div>` : '';
 
@@ -1489,17 +1626,19 @@ Ctrl+Enter 提交，Ctrl+V 粘贴图片" oninput="app.setFeedback(this.value); a
         ${pending?`<span class="cm-badge">${pending}</span>`:''}
       </button>`;
     };
+    const backEntryLabel = State._detailReturnPage === 'callers' ? '返回 Caller 页' : (State._detailReturnPage === 'settings' ? '返回设置' : '返回主页');
+    const homeBtnTitle = State._detailReturnPage === 'callers' ? '切换 caller / 返回 Caller 页' : (State._detailReturnPage === 'settings' ? '切换 caller / 返回设置' : '切换 caller / 返回主页');
     const callerMenu = callerMenuOpen ? `
       <div class="caller-menu-backdrop" onclick="app.closeCallerMenu()"></div>
       <div class="caller-menu" onclick="event.stopPropagation()">
-        <button class="cm-home" onclick="app.closeSession()"><i class="ph ph-house icon"></i>返回主页</button>
+        <button class="cm-home" onclick="app.closeSession()"><i class="ph ph-house icon"></i>${backEntryLabel}</button>
         <div class="cm-list">${State.callers.map(callerMenuItem).join('')}</div>
       </div>` : '';
 
     const bottomBar = readonly
       ? `${expandedPane}
         <div class="float-bar fb-left">
-          <button class="fb-home" onclick="app.openCallerMenu()" title="切换 caller / 返回主页">
+          <button class="fb-home" onclick="app.openCallerMenu()" title="${homeBtnTitle}">
             ${identiconSvg(c.alias||c.id, c.color, 28)}
             <div class="fb-home-info">
               <div class="fb-home-name">${escapeHtml(c.alias||c.name)}</div>
@@ -1513,7 +1652,7 @@ Ctrl+Enter 提交，Ctrl+V 粘贴图片" oninput="app.setFeedback(this.value); a
         ${callerMenu}`
       : `${expandedPane}
         <div class="float-bar fb-left">
-          <button class="fb-home" onclick="app.openCallerMenu()" title="切换 caller / 返回主页">
+          <button class="fb-home" onclick="app.openCallerMenu()" title="${homeBtnTitle}">
             ${identiconSvg(c.alias||c.id, c.color, 28)}
             <div class="fb-home-info">
               <div class="fb-home-name">${escapeHtml(c.alias||c.name)}</div>
@@ -1574,6 +1713,36 @@ Ctrl+Enter 提交，Ctrl+V 粘贴图片" oninput="app.setFeedback(this.value); a
       el.style.height = 'auto';
       el.style.height = Math.max(el.scrollHeight, 28) + 'px';
     });
+    // 滚动到底部自动展开输入面板；离开底部自动折叠
+    if(this._scrollListener){ window.removeEventListener('scroll', this._scrollListener); this._scrollListener = null; }
+    if(State.current && State.current.status === 'pending'){
+      this._scrollListener = () => {
+        const dist = document.documentElement.scrollHeight - window.scrollY - window.innerHeight;
+        if(!State.inputExpanded && dist < 10){
+          State.inputExpanded = true;
+          app._justAutoOpened = true;
+          app._minDistSinceOpen = dist;
+          setTimeout(() => { app._justAutoOpened = false; }, 600);
+          app.renderDetail();
+          // 等布局稳定后滚到底，使内容顶到面板上方而不遮挡
+          requestAnimationFrame(() => {
+            window.scrollTo({ top: document.documentElement.scrollHeight, behavior: 'smooth' });
+          });
+        } else if(State.inputExpanded){
+          // 追踪最接近底部的位置（含平滑滚动期间）
+          if(app._minDistSinceOpen != null && dist < app._minDistSinceOpen){
+            app._minDistSinceOpen = dist;
+          }
+          // 仅自动打开的面板才做自动折叠，且保护期过后才生效
+          if(!app._justAutoOpened && app._minDistSinceOpen != null && dist > app._minDistSinceOpen + 200){
+            app._minDistSinceOpen = null;
+            State.inputExpanded = false;
+            app.renderDetail();
+          }
+        }
+      };
+      window.addEventListener('scroll', this._scrollListener, { passive: true });
+    }
   },
 
   /** textarea 自适应高度（max 由 CSS 的 max-height 约束） */
@@ -1612,6 +1781,7 @@ Ctrl+Enter 提交，Ctrl+V 粘贴图片" oninput="app.setFeedback(this.value); a
 
   toggleInputExpanded(){
     State.inputExpanded = !State.inputExpanded;
+    app._minDistSinceOpen = null; // 手动操作不触发自动折叠
     this.renderDetail();
   },
   openSubmitMenu(){
@@ -1697,15 +1867,12 @@ Ctrl+Enter 提交，Ctrl+V 粘贴图片" oninput="app.setFeedback(this.value); a
     };
     const renderGroup = (key, g) => {
       if(g.items.length === 0) return '';
-      const collapsed = !!State._drawerCollapsed[key];
-      const body = collapsed ? '' : g.items.map(renderItem).join('');
       return `<div class="d-group">
-        <button class="d-group-header${collapsed?' collapsed':''}" onclick="app.toggleDrawerGroup('${key}')">
-          <i class="ph ph-caret-down icon d-group-chevron"></i>
+        <div class="d-group-header">
           <span>${g.label}</span>
           <span class="d-group-count">${g.items.length}</span>
-        </button>
-        ${body}
+        </div>
+        ${g.items.map(renderItem).join('')}
       </div>`;
     };
     const listHtml = all.length === 0

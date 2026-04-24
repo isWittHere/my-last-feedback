@@ -2,7 +2,7 @@ import { useMLRAStore, type PhaseView } from "../store/mlraStore";
 import { Icon } from "./Icons";
 
 /**
- * Vertical pill toggle for switching between planning and implementation phases.
+ * Vertical pill toggle for switching between planning and execution phases.
  * Only interactive when a launcher is in "running" state.
  */
 export function PhaseToggle() {
@@ -23,12 +23,12 @@ export function PhaseToggle() {
         onClick={() => setPhaseView("planning")}
       />
       <PhaseButton
-        phase="implementation"
-        label="阶段2:实施"
+        phase="execution"
+        label="阶段2:执行"
         icon="wrench"
-        active={phaseView === "implementation"}
+        active={phaseView === "execution"}
         disabled={!isRunning}
-        onClick={() => setPhaseView("implementation")}
+        onClick={() => setPhaseView("execution")}
       />
     </div>
   );
@@ -49,9 +49,10 @@ function PhaseButton({
   disabled: boolean;
   onClick: () => void;
 }) {
+  const phaseClass = phase === "execution" ? "implementation" : phase;
   return (
     <button
-      className={`phase-toggle-btn${active ? ` phase-toggle-active phase-toggle-${phase}` : ""}`}
+      className={`phase-toggle-btn${active ? ` phase-toggle-active phase-toggle-${phaseClass}` : ""}`}
       onClick={onClick}
       disabled={disabled}
       title={label}

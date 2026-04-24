@@ -13,22 +13,20 @@ interface RoleTabDef {
 }
 
 const PLANNING_TABS: RoleTabDef[] = [
-  { id: "planning-expert", label: "规划专家", color: ROLE_COLORS["planning-expert"] },
-  { id: "planning-inspector", label: "规划监察", color: ROLE_COLORS["planning-inspector"] },
+  { id: "planning-expert", label: "Expert", color: ROLE_COLORS["planning-expert"] },
+  { id: "planning-inspector", label: "Inspector", color: ROLE_COLORS["planning-inspector"] },
   { id: "ceo", label: "CEO", color: ROLE_COLORS.ceo },
-  { id: "workers", label: "Worker Pool", color: ROLE_COLORS.worker },
 ];
 
 const IMPLEMENTATION_TABS: RoleTabDef[] = [
-  { id: "execution-expert", label: "执行专家", color: ROLE_COLORS["execution-expert"] },
-  { id: "execution-inspector", label: "执行监察", color: ROLE_COLORS["execution-inspector"] },
+  { id: "execution-expert", label: "Expert", color: ROLE_COLORS["execution-expert"] },
+  { id: "execution-inspector", label: "Inspector", color: ROLE_COLORS["execution-inspector"] },
   { id: "ceo", label: "CEO", color: ROLE_COLORS.ceo },
-  { id: "workers", label: "Worker Pool", color: ROLE_COLORS.worker },
 ];
 
 /**
  * MLRA role tabs — reuses CallerTabs drag-to-reorder pattern.
- * Shows 4 fixed role tabs for expert/inspector/ceo/workers.
+ * Shows 3 runtime role tabs for expert / inspector / ceo.
  */
 export function MLRACallerTabs({ columnCount }: MLRACallerTabsProps = {}) {
   const columnOrder = useMLRAStore((s) => s.columnOrder);
@@ -112,12 +110,7 @@ export function MLRACallerTabs({ columnCount }: MLRACallerTabsProps = {}) {
   // Determine status for each role
   const getSlotStatus = (roleId: string): string | null => {
     if (!activeLauncher) return null;
-    if (roleId === "workers") {
-      if (phaseView === "planning") return "standby";
-      return activeLauncher.agents.workers.length > 0 ? "active" : "idle";
-    }
     const slot = activeLauncher.agents[roleId as keyof typeof activeLauncher.agents];
-    // Narrow out the workers[] union branch — only AgentSlot has .status
     if (!slot || Array.isArray(slot)) return null;
     return slot.status ?? null;
   };

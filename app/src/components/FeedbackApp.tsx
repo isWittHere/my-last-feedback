@@ -326,11 +326,11 @@ function RunningTimer() {
 function MLRARow2() {
   const launcher = useMLRAStore((s) => s.getActiveLauncher());
   const isActive = launcher?.status === "running" || launcher?.status === "paused";
+  const currentStageName = launcher?.blueprintRuntime?.currentStage?.name;
 
   const controlModes: Array<{ mode: import("../store/mlraStore").ControlMode; label: string }> = [
     { mode: "autopilot", label: "全自动" },
     { mode: "ceo-override", label: "接管CEO" },
-    { mode: "full-override", label: "全接管" },
   ];
 
   return (
@@ -361,6 +361,20 @@ function MLRARow2() {
             </button>
           ))}
         </div>
+      )}
+      {isActive && currentStageName && (
+        <span
+          style={{
+            fontSize: 11,
+            color: "var(--color-text-secondary)",
+            border: "1px solid var(--color-border)",
+            borderRadius: 999,
+            padding: "2px 8px",
+            background: "var(--color-surface-2)",
+          }}
+        >
+          阶段: {currentStageName}
+        </span>
       )}
       <div style={{ flex: 1 }} />
       {isActive && <RunningTimer />}

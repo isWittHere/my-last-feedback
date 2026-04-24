@@ -47,6 +47,19 @@ function renderSkillRefs(keys) {
   return `\n\n## Suggested skills\n${lines.join("\n")}`;
 }
 
+function renderStageContext(stage) {
+  if (!stage) return "";
+  const blocks = [`## Current Stage\n${stage.name}`];
+  if (stage.objective) blocks.push(`## Stage Objective\n${stage.objective}`);
+  if (stage.description) blocks.push(`## Stage Notes\n${stage.description}`);
+  return `\n\n${blocks.join("\n\n")}`;
+}
+
+function renderStageDirective(title, text) {
+  if (!text) return "";
+  return `\n\n## ${title}\n${text}`;
+}
+
 /**
  * Short routing hint appended to every relayed message.
  *
@@ -101,9 +114,12 @@ export function buildRoutingHint(role, phase) {
  * @returns {string}
  */
 export function buildInitialPrompt(role, userTask, phase, options = {}) {
+  const { stage } = options;
   const phaseBlock = `## Current Phase\n${phase}`;
   const taskBlock = `\n\n## Task\n\n${userTask}`;
   const preparation = `\n\n## Preparation\nBefore starting, read \`AGENTS.md\` at the project root to understand architecture and conventions.`;
+  const stageBlock = renderStageContext(stage);
+  const stageSkills = stage?.recommendedSkills?.length ? renderSkillRefs(stage.recommendedSkills) : "";
 
   if (role === ROLES.EXPERT) {
     if (phase === PHASES.PLANNING) {
@@ -115,7 +131,10 @@ export function buildInitialPrompt(role, userTask, phase, options = {}) {
         "hallucination_check",
         "vote_discipline",
       ]);
-      return `${phaseBlock}${taskBlock}${preparation}${skills}\n\n## Action\nAnalyze the task and submit a plan via \`expert_submit(type="plan_draft", content=...)\`. You will then receive review feedback — iterate accordingly. When the plan is mature enough to warrant CEO review, use \`expert_vote(vote="pass", reason=...)\`. Only when both sides vote \`pass\` is the plan gate triggered; a single \`reject\` resets voting and iteration continues.`;
+      const opening = stage?.openerTarget === "expert"
+        ? renderStageDirective("Stage Opening Directive", stage.openerPrompt)
+        : "";
+      return `${phaseBlock}${taskBlock}${stageBlock}${preparation}${skills}${stageSkills}${opening}\n\n## Action\nAnalyze the task and submit a plan via \`expert_submit(type="plan_draft", content=...)\`. You will then receive review feedback — iterate accordingly. When the plan is mature enough to warrant CEO review, use \`expert_vote(vote="pass", reason=...)\`. Only when both sides vote \`pass\` is the plan gate triggered; a single \`reject\` resets voting and iteration continues.`;
     }
     const skills = renderSkillRefs([
       "submit_phase_report",
@@ -125,22 +144,30 @@ export function buildInitialPrompt(role, userTask, phase, options = {}) {
       "hallucination_check",
       "vote_discipline",
     ]);
+    const opening = stage?.openerTarget === "expert"
+      ? renderStageDirective("Stage Opening Directive", stage.openerPrompt)
+      : "";
     if (options.isDirectExecution) {
-      return `${phaseBlock} (direct execution mode)${taskBlock}${preparation}${skills}\n\n## Action\n\n1. Analyze the task and form an execution plan\n2. Implement all code changes and local verification yourself\n3. After each Phase, submit \`expert_submit(type="phase_complete", content=..., progress="Phase N/M")\` and continue to the next Phase when the reviewer accepts it\n4. Walk the re-verify flow before every submission\n5. After the final Phase is accepted, use \`expert_vote(vote="pass", reason=...)\` to request final review`;
+      return `${phaseBlock} (direct execution mode)${taskBlock}${stageBlock}${preparation}${skills}${stageSkills}${opening}\n\n## Action\n\n1. Analyze the task and form an execution plan\n2. Implement all code changes and local verification yourself\n3. After each Phase, submit \`expert_submit(type="phase_complete", content=..., progress="Phase N/M")\` and continue to the next Phase when the reviewer accepts it\n4. Walk the re-verify flow before every submission\n5. After the final Phase is accepted, use \`expert_vote(vote="pass", reason=...)\` to request final review`;
     }
-    return `${phaseBlock}${taskBlock}${preparation}${skills}\n\n## Action\nStanding by. When work arrives, handle it per the referenced skills. Submit each completed Phase via \`expert_submit(type="phase_complete", ...)\`. After the final Phase is accepted, use \`expert_vote(vote="pass", ...)\` to request the final verdict.`;
+    return `${phaseBlock}${taskBlock}${stageBlock}${preparation}${skills}${stageSkills}${opening}\n\n## Action\nStanding by. When work arrives, handle it per the referenced skills. Submit each completed Phase via \`expert_submit(type="phase_complete", ...)\`. After the final Phase is accepted, use \`expert_vote(vote="pass", ...)\` to request the final verdict.`;
   }
 
   if (role === ROLES.INSPECTOR) {
     const skills = phase === PHASES.PLANNING
       ? renderSkillRefs(["review_plan", "decision_levels", "hallucination_check", "vote_discipline"])
       : renderSkillRefs(["review_phase", "decision_levels", "hallucination_check", "vote_discipline"]);
-    return `${phaseBlock}${taskBlock}${preparation}${skills}\n\n## Action\nStanding by. When material arrives for review, produce a structured report per the relevant skill and submit via \`inspector_submit({ passed, content })\`. During planning, iterate through this loop until the plan is mature; during execution, \`passed: true\` advances the work to the next Phase. When the overall work is ready for CEO review, use \`inspector_vote(vote="pass", reason=...)\`.`;
+    const opening = stage?.openerTarget === "inspector"
+      ? renderStageDirective("Stage Opening Directive", stage.openerPrompt)
+      : "";
+    const reviewFocus = renderStageDirective("Review Focus", stage?.reviewerPrompt);
+    return `${phaseBlock}${taskBlock}${stageBlock}${preparation}${skills}${stageSkills}${opening}${reviewFocus}\n\n## Action\nStanding by. When material arrives for review, produce a structured report per the relevant skill and submit via \`inspector_submit({ passed, content })\`. During planning, iterate through this loop until the plan is mature; during execution, \`passed: true\` advances the work to the next Phase. When the overall work is ready for CEO review, use \`inspector_vote(vote="pass", reason=...)\`.`;
   }
 
   if (role === ROLES.CEO) {
     const skills = renderSkillRefs(["ceo_verdict", "hallucination_check"]);
-    return `${phaseBlock}${taskBlock}${preparation}${skills}\n\n## Action\nStanding by. You will be consulted at key gates (plan gate, final verification, arbitration). Issue a ruling via \`ceo_verdict({ verdict, reason, targets? })\`. Note: any \`approved\` verdict first passes through defensive-lock (two mandatory re-reviews + two consecutive confirms) before taking effect, so your first approval will be sent back for deeper scrutiny.`;
+    const gateFocus = renderStageDirective("Approval Criteria", stage?.ceoGatePrompt);
+    return `${phaseBlock}${taskBlock}${stageBlock}${preparation}${skills}${stageSkills}${gateFocus}\n\n## Action\nStanding by. You will be consulted at key gates (plan gate, final verification, arbitration). Issue a ruling via \`ceo_verdict({ verdict, reason, targets? })\`. Note: any \`approved\` verdict first passes through defensive-lock (two mandatory re-reviews + two consecutive confirms) before taking effect, so your first approval will be sent back for deeper scrutiny.`;
   }
 
   return `${phaseBlock}${taskBlock}${preparation}`;
@@ -246,24 +273,41 @@ const ROUTING_TEMPLATES = Object.freeze({
  * @returns {{ prefix: string, suffix: string }}
  */
 export function buildRoutingPrompt(sourceRole, targetRole, phase, context = {}) {
-  const { routingReason } = context;
+  const { routingReason, stage } = context;
+
+  let prompt = null;
 
   if (routingReason) {
     const specialKey = `${sourceRole}→${targetRole}:${routingReason}`;
-    if (ROUTING_TEMPLATES[specialKey]) return { ...ROUTING_TEMPLATES[specialKey] };
+    if (ROUTING_TEMPLATES[specialKey]) prompt = { ...ROUTING_TEMPLATES[specialKey] };
     const sourceSpecial = `${sourceRole}:${routingReason}`;
-    if (ROUTING_TEMPLATES[sourceSpecial]) return { ...ROUTING_TEMPLATES[sourceSpecial] };
+    if (!prompt && ROUTING_TEMPLATES[sourceSpecial]) prompt = { ...ROUTING_TEMPLATES[sourceSpecial] };
   }
 
-  const phaseKey = `${sourceRole}→${targetRole}:${phase}`;
-  if (ROUTING_TEMPLATES[phaseKey]) return { ...ROUTING_TEMPLATES[phaseKey] };
+  if (!prompt) {
+    const phaseKey = `${sourceRole}→${targetRole}:${phase}`;
+    if (ROUTING_TEMPLATES[phaseKey]) prompt = { ...ROUTING_TEMPLATES[phaseKey] };
+  }
 
-  const standardKey = `${sourceRole}→${targetRole}`;
-  if (ROUTING_TEMPLATES[standardKey]) return { ...ROUTING_TEMPLATES[standardKey] };
+  if (!prompt) {
+    const standardKey = `${sourceRole}→${targetRole}`;
+    if (ROUTING_TEMPLATES[standardKey]) prompt = { ...ROUTING_TEMPLATES[standardKey] };
+  }
 
-  // Generic fallback — avoid naming other roles; frame as content from the user.
+  if (!prompt) {
+    prompt = {
+      prefix: `Here is material for you (Phase: ${phase}):`,
+      suffix: "Handle it per the relevant skill and submit via the corresponding tool.",
+    };
+  }
+
+  const stagePrefix = renderStageContext(stage);
+  const stageSkills = stage?.recommendedSkills?.length ? renderSkillRefs(stage.recommendedSkills) : "";
+  const reviewFocus = targetRole === ROLES.INSPECTOR ? renderStageDirective("Review Focus", stage?.reviewerPrompt) : "";
+  const gateFocus = targetRole === ROLES.CEO ? renderStageDirective("Approval Criteria", stage?.ceoGatePrompt) : "";
+
   return {
-    prefix: `Here is material for you (Phase: ${phase}):`,
-    suffix: "Handle it per the relevant skill and submit via the corresponding tool.",
+    prefix: `${prompt.prefix}${stagePrefix}${reviewFocus}${gateFocus}`,
+    suffix: `${prompt.suffix}${stageSkills}`,
   };
 }

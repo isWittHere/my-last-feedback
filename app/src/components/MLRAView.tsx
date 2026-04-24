@@ -2,7 +2,6 @@ import { useMLRAStore } from "../store/mlraStore";
 import { LauncherHome } from "./LauncherHome";
 import { LauncherSidebar } from "./LauncherSidebar";
 import { AgentColumn } from "./AgentColumn";
-// import { WorkerPoolColumn } from "./WorkerPoolColumn"; // Dormant: hidden while WORKER_ENABLED=false on backend
 
 type MainAgentRole = "planning-expert" | "planning-inspector" | "execution-expert" | "execution-inspector" | "ceo";
 
@@ -11,7 +10,6 @@ type MainAgentRole = "planning-expert" | "planning-inspector" | "execution-exper
  * - When launcher is not running: renders the unified LauncherHome page
  *   (it handles both the "create" and "configure" states internally).
  * - When launcher is running/paused: renders the multi-column workspace.
- * (Worker Pool column is dormant; see mcp/mlra/daemon/feature-flags.mjs)
  */
 export function MLRAView() {
   const activeLauncher = useMLRAStore((s) => s.getActiveLauncher());

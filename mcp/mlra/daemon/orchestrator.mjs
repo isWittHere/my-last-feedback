@@ -32,6 +32,11 @@ export class Orchestrator {
     /** @type {string|null} */
     this.taskType = null;
 
+    /** @type {object|null} */
+    this.blueprint = null;
+    this.currentStageIndex = -1;
+    this.currentStageId = null;
+
     /**
      * Registered roles. Key = role (ceo/expert/inspector).
      * At most ONE entry per role at any time.
@@ -81,6 +86,96 @@ export class Orchestrator {
       materials: null,
       history: [],
     };
+  }
+
+  _getEnabledStages() {
+    const stages = Array.isArray(this.blueprint?.stages) ? this.blueprint.stages : [];
+    return stages.filter((stage) => stage && stage.enabled !== false);
+  }
+
+  _getCurrentStage() {
+    const stages = this._getEnabledStages();
+    if (this.currentStageId) {
+      const byId = stages.find((stage) => stage.id === this.currentStageId);
+      if (byId) return byId;
+    }
+    if (this.currentStageIndex >= 0 && stages[this.currentStageIndex]) {
+      return stages[this.currentStageIndex];
+    }
+    return null;
+  }
+
+  _selectStageForStart(startMode) {
+    const stages = this._getEnabledStages();
+    if (stages.length === 0) return null;
+    const nextStage = startMode === START_MODES.DIRECT_EXECUTION
+      ? stages.find((stage) => stage.phaseType === PHASES.EXECUTION) || stages[0]
+      : stages[0];
+    this.currentStageId = nextStage.id;
+    this.currentStageIndex = stages.findIndex((stage) => stage.id === nextStage.id);
+    return nextStage;
+  }
+
+  _selectFirstExecutionStage() {
+    const stages = this._getEnabledStages();
+    const nextStage = stages.find((stage) => stage.phaseType === PHASES.EXECUTION) || null;
+    if (!nextStage) return null;
+    this.currentStageId = nextStage.id;
+    this.currentStageIndex = stages.findIndex((stage) => stage.id === nextStage.id);
+    return nextStage;
+  }
+
+  _selectNextExecutionStage() {
+    const stages = this._getEnabledStages().filter((stage) => stage.phaseType === PHASES.EXECUTION);
+    if (stages.length === 0) return null;
+    const currentIndex = stages.findIndex((stage) => stage.id === this.currentStageId);
+    if (currentIndex === -1 || currentIndex + 1 >= stages.length) return null;
+    const nextStage = stages[currentIndex + 1];
+    this.currentStageId = nextStage.id;
+    const enabledStages = this._getEnabledStages();
+    this.currentStageIndex = enabledStages.findIndex((stage) => stage.id === nextStage.id);
+    return nextStage;
+  }
+
+  _selectNextStage() {
+    const stages = this._getEnabledStages();
+    if (stages.length === 0) return null;
+    const currentIndex = stages.findIndex((stage) => stage.id === this.currentStageId);
+    if (currentIndex === -1 || currentIndex + 1 >= stages.length) return null;
+    const nextStage = stages[currentIndex + 1];
+    this.currentStageId = nextStage.id;
+    this.currentStageIndex = currentIndex + 1;
+    return nextStage;
+  }
+
+  _buildStageEntryInstruction(stage, carriedContent = "") {
+    const openerRole = stage?.openerTarget === "inspector" ? ROLES.INSPECTOR : ROLES.EXPERT;
+    const intro = buildInitialPrompt(openerRole, this.userTask, stage.phaseType, {
+      isDirectExecution: this.startMode === START_MODES.DIRECT_EXECUTION,
+      stage,
+    });
+    const carried = carriedContent ? `\n\n## Previous Stage Output\n\n${carriedContent}` : "";
+    return {
+      role: openerRole,
+      instruction: `${intro}${carried}`,
+    };
+  }
+
+  transitionToStage(stage, carriedContent = "") {
+    const previousPhase = this.phase;
+    this.phase = stage.phaseType;
+    if (previousPhase !== this.phase) {
+      this._emit({ type: "phase_transition", from: previousPhase, to: this.phase });
+    }
+
+    const entryInstruction = this._buildStageEntryInstruction(stage, carriedContent);
+    for (const role of [ROLES.EXPERT, ROLES.INSPECTOR]) {
+      if (!this.roles.has(role)) continue;
+      const entry = this.roles.get(role);
+      entry.status = role === entryInstruction.role ? "idle" : "blocked";
+    }
+
+    return { instructions: [entryInstruction] };
   }
 
   // ── Role Registration ──
@@ -144,7 +239,7 @@ export class Orchestrator {
    * @param {string|null} [taskType]
    * @returns {{ instructions: {role: Role, instruction: string}[] } | { error: string }}
    */
-  startOrchestration(userTask, startMode = START_MODES.FULL, taskType = null) {
+  startOrchestration(userTask, startMode = START_MODES.FULL, taskType = null, blueprint = null) {
     const readiness = this.checkStartReady(startMode);
     if (!readiness.ready) {
       return { error: `Cannot start: missing roles ${readiness.missing.join(", ")}` };
@@ -154,18 +249,28 @@ export class Orchestrator {
     this.status = "running";
     this.userTask = userTask;
     this.taskType = taskType;
-    this.phase = startMode === START_MODES.DIRECT_EXECUTION ? PHASES.EXECUTION : PHASES.PLANNING;
+    this.blueprint = blueprint || null;
+    const activeStage = this._selectStageForStart(startMode);
+    this.phase = activeStage?.phaseType || (startMode === START_MODES.DIRECT_EXECUTION ? PHASES.EXECUTION : PHASES.PLANNING);
 
     this._emit({ type: "status_change", status: "running", phase: this.phase });
 
     const instructions = [];
     for (const [role, entry] of this.roles) {
       if (role === ROLES.CEO) continue; // CEO stays blocked
+      if (activeStage) {
+        const openerRole = activeStage.openerTarget === "inspector" ? ROLES.INSPECTOR : ROLES.EXPERT;
+        if (role !== openerRole) {
+          entry.status = "blocked";
+          continue;
+        }
+      }
       entry.status = "idle";
       instructions.push({
         role,
         instruction: buildInitialPrompt(role, userTask, this.phase, {
           isDirectExecution: startMode === START_MODES.DIRECT_EXECUTION,
+          stage: activeStage,
         }),
       });
     }
@@ -283,7 +388,9 @@ export class Orchestrator {
     if (!this.roles.has(ROLES.INSPECTOR)) {
       return { error: "Inspector role not connected" };
     }
-    const { prefix, suffix } = buildRoutingPrompt(ROLES.EXPERT, ROLES.INSPECTOR, this.phase);
+    const { prefix, suffix } = buildRoutingPrompt(ROLES.EXPERT, ROLES.INSPECTOR, this.phase, {
+      stage: this._getCurrentStage(),
+    });
     return {
       action: "route",
       targetRole: ROLES.INSPECTOR,
@@ -295,7 +402,9 @@ export class Orchestrator {
     if (!this.roles.has(ROLES.EXPERT)) {
       return { error: "Expert role not connected" };
     }
-    const { prefix, suffix } = buildRoutingPrompt(ROLES.INSPECTOR, ROLES.EXPERT, this.phase);
+    const { prefix, suffix } = buildRoutingPrompt(ROLES.INSPECTOR, ROLES.EXPERT, this.phase, {
+      stage: this._getCurrentStage(),
+    });
     return {
       action: "route",
       targetRole: ROLES.EXPERT,
@@ -339,8 +448,18 @@ export class Orchestrator {
   _advancePhase(reviewContent) {
     this._emit({ type: "phase_advance", phase: this.phase });
     if (!this.roles.has(ROLES.EXPERT)) return { error: "Expert role not connected" };
+    const nextStage = this.phase === PHASES.EXECUTION ? this._selectNextStage() : null;
+    if (nextStage && nextStage.phaseType === PHASES.EXECUTION) {
+      const entryInstruction = this._buildStageEntryInstruction(nextStage, reviewContent);
+      return {
+        action: "route",
+        targetRole: entryInstruction.role,
+        content: entryInstruction.instruction,
+      };
+    }
     const { prefix, suffix } = buildRoutingPrompt("orchestrator", ROLES.EXPERT, this.phase, {
       routingReason: "phase_advance",
+      stage: this._getCurrentStage(),
     });
     return {
       action: "route",
@@ -367,6 +486,7 @@ export class Orchestrator {
     };
     const { prefix, suffix } = buildRoutingPrompt("orchestrator", ROLES.CEO, this.phase, {
       routingReason: "final_review",
+      stage: this._getCurrentStage(),
     });
     return {
       action: "wake_ceo",
@@ -376,6 +496,10 @@ export class Orchestrator {
 
   triggerPlanningGate(materials) {
     if (!this.roles.has(ROLES.CEO)) {
+      const nextStage = this._selectNextStage();
+      if (nextStage && nextStage.phaseType === PHASES.PLANNING) {
+        return { action: "auto_transition_stage", stage: nextStage, materials };
+      }
       return { action: "auto_transition", materials };
     }
     this.ceoGate = {
@@ -390,6 +514,7 @@ export class Orchestrator {
     };
     const { prefix, suffix } = buildRoutingPrompt("orchestrator", ROLES.CEO, PHASES.PLANNING, {
       routingReason: "planning_gate",
+      stage: this._getCurrentStage(),
     });
     return {
       action: "wake_ceo",
@@ -425,6 +550,7 @@ export class Orchestrator {
       });
       const { prefix, suffix } = buildRoutingPrompt("orchestrator", ROLES.CEO, this.phase, {
         routingReason: "defensive_review",
+        stage: this._getCurrentStage(),
       });
       return {
         action: "wake_ceo",
@@ -444,6 +570,7 @@ export class Orchestrator {
       });
       const { prefix, suffix } = buildRoutingPrompt("orchestrator", ROLES.CEO, this.phase, {
         routingReason: "consecutive_confirm",
+        stage: this._getCurrentStage(),
       });
       return {
         action: "wake_ceo",
@@ -457,6 +584,10 @@ export class Orchestrator {
 
     if (gateType === "planning_gate") {
       this._emit({ type: "ceo_gate_resolved", gateType, verdict: "approved" });
+      const nextStage = this._selectNextStage();
+      if (nextStage && nextStage.phaseType === PHASES.PLANNING) {
+        return { action: "transition_to_stage", stage: nextStage, materials: gate.materials };
+      }
       return { action: "transition_to_execution", materials: gate.materials };
     }
     if (gateType === "final_review") {
@@ -487,7 +618,10 @@ export class Orchestrator {
 
       for (const role of [ROLES.EXPERT, ROLES.INSPECTOR]) {
         if (!this.roles.has(role)) continue;
-        const { prefix, suffix } = buildRoutingPrompt(ROLES.CEO, role, this.phase, { routingReason: "rejection" });
+        const { prefix, suffix } = buildRoutingPrompt(ROLES.CEO, role, this.phase, {
+          routingReason: "rejection",
+          stage: this._getCurrentStage(),
+        });
         routeTargets.push({
           targetRole: role,
           content: `${prefix}\n\n${reason}\n\n${suffix}`,
@@ -514,7 +648,10 @@ export class Orchestrator {
     const routeTargets = [];
     for (const role of targets) {
       if (!this.roles.has(role)) continue;
-      const { prefix, suffix } = buildRoutingPrompt(ROLES.CEO, role, this.phase, { routingReason: "arbitration" });
+      const { prefix, suffix } = buildRoutingPrompt(ROLES.CEO, role, this.phase, {
+        routingReason: "arbitration",
+        stage: this._getCurrentStage(),
+      });
       routeTargets.push({
         targetRole: role,
         content: `${prefix}\n\n${reason}\n\n${suffix}`,
@@ -528,20 +665,33 @@ export class Orchestrator {
    * Returns instructions for the Expert (and Inspector if connected).
    */
   transitionToExecution(planDocument) {
-    this.phase = PHASES.EXECUTION;
-    this._emit({ type: "phase_transition", from: PHASES.PLANNING, to: PHASES.EXECUTION });
+    const nextStage = this._selectFirstExecutionStage();
+    if (nextStage) {
+      return this.transitionToStage(nextStage, planDocument);
+    }
+    const previousPhase = this.phase;
+    this.phase = nextStage?.phaseType || PHASES.EXECUTION;
+    if (previousPhase !== this.phase) {
+      this._emit({ type: "phase_transition", from: previousPhase, to: this.phase });
+    }
 
     const instructions = [];
+    const openerRole = nextStage?.openerTarget === "inspector" ? ROLES.INSPECTOR : ROLES.EXPERT;
     for (const role of [ROLES.EXPERT, ROLES.INSPECTOR]) {
       if (!this.roles.has(role)) continue;
+      if (nextStage && role !== openerRole) continue;
       const { prefix, suffix } = buildRoutingPrompt("orchestrator", role, PHASES.EXECUTION, {
         routingReason: "transition",
+        stage: nextStage,
       });
       const entry = this.roles.get(role);
       entry.status = "idle";
+      const stageDirective = nextStage?.openerPrompt
+        ? `\n\n## Stage Opening Directive\n${nextStage.openerPrompt}`
+        : "";
       instructions.push({
         role,
-        instruction: `${prefix}\n\n${planDocument}\n\n${suffix}`,
+        instruction: `${prefix}${stageDirective}\n\n${planDocument}\n\n${suffix}`,
       });
     }
     return { instructions };
@@ -607,6 +757,7 @@ export class Orchestrator {
 
     const { prefix, suffix } = buildRoutingPrompt("orchestrator", ROLES.CEO, this.phase, {
       routingReason: "stagnation_arbitration",
+      stage: this._getCurrentStage(),
     });
 
     const stalledRolesStr = stagnationData.stalledRoles.join("、");
@@ -658,12 +809,30 @@ export class Orchestrator {
   // ── Serialization ──
 
   toJSON() {
+    const currentStage = this._getCurrentStage();
     return {
       status: this.status,
       phase: this.phase,
       startMode: this.startMode,
       taskType: this.taskType,
       controlMode: this.controlMode,
+      blueprintRuntime: this.blueprint
+        ? {
+            name: this.blueprint.name || null,
+            templateId: this.blueprint.templateId || null,
+            currentStageId: this.currentStageId,
+            currentStageIndex: this.currentStageIndex,
+            totalStages: this._getEnabledStages().length,
+            currentStage: currentStage
+              ? {
+                  id: currentStage.id,
+                  name: currentStage.name,
+                  phaseType: currentStage.phaseType,
+                  openerTarget: currentStage.openerTarget,
+                }
+              : null,
+          }
+        : null,
       roles: Object.fromEntries([...this.roles].map(([k, v]) => [k, { ...v }])),
       votes: this.votes,
       ceoGate: {

@@ -20,6 +20,11 @@ solved_lists:
     - 前后端事件集成（Tauri 事件监听、daemon 消息处理、store 同步）
     - Mock 清理与后端接驳（removeGenerateMockRounds、removeAddMockAgent、wiring assignments）
     - Agent 活性检测与重试机制规划（Alive 状态详解、阶段 A/B 区分、超时监控策略）
+    - MLRA v2 阶段编排器蓝图模型接入（WorkflowBlueprint、StageBlueprint、BlueprintRuntimeSummary）
+    - LauncherHome 改造成阶段编排器（模板、拖拽排序、阶段 Prompt Stack、CEO 准入规则）
+    - 后端编排器接入 blueprint（prompt 构造、阶段推进、GET_TASK_CONTEXT 扩展）
+    - Worker Pool / RegisteredAgentCard 等旧 UI 冗余清理
+    - LauncherHome 样式块重建与 UI 降噪收口（移除外层卡片、英文眉标、重复信息）
 ---
 
 # MLRA 前后端完整实现会话记录
@@ -549,3 +554,265 @@ async function planningPhase(launcher) {
 **文档完成日期**: 2026-04-10  
 **累计代码行数**: ~6500 行（前端 ~3200 + 后端 ~2300 + CSS ~1200）  
 **测试状态**: ✅ 前端编译通过，🔄 后端集成测试待完成
+
+---
+
+## 2026-04-23 增量更新（时间戳）
+
+### 1. Previous Conversation
+
+这轮对话是在旧版 MLRA 前后端实现基础上继续推进，主题已经从“做出一个 MLRA 页面”演进为“让 LauncherHome 真正成为 MLRA v2 的阶段编排器，并让前后端运行语义保持一致”。
+
+用户在本轮中的明确需求演进如下：
+
+1. 起点是“现在我想要让你改进MLRA的UI界面，使其适配V2版本的实际变化。请你先分析代码仓库现状”。
+2. 随后需求落到 LauncherHome：“在LauncherHome改造出一个允许用户编排的阶段编排器”。
+3. 用户继续补充阶段级需求：
+  - 每个阶段允许定义阶段开场提示词
+  - 允许定义起始消息进入的 agent（专家或监察）
+  - 允许定义阶段准入审核提示词，用于告诉 CEO 什么情况下审批通过
+  - 需要预设模板，也允许用户开始前自行编排
+4. 用户要求先形成“新的完整详细的规划书”，之后要求“git备份后进行计划执行”。
+5. 实现后，用户又要求“完整检查，确保新功能完整，没有严重 bug 和严重风险，老旧冗余代码清理干净”。
+6. 再后面用户不再接受增量修补，而是明确要求：“好好重构你这稀烂的UI。彻底重新设计，无视现有实现！改进布局、改进交互逻辑，通过拖动、workflow流程化操作等直观操作改善交互体验！”。
+7. 最近一轮则进入 UI 收口和视觉减法，用户连续给出以下反馈：
+  - “界面依然是坏的，看起来缺失了某些样式。而且信息严重冗余，条条框框严重过度设计”
+  - “移除外围三个区域最外层的圆角卡片边框”
+  - “移除多余的大写英文小字”
+
+因此，本会话后半段的重点已经从“让功能跑起来”切换成“修正 LauncherHome 的视觉层级、样式完整性和信息密度”。
+
+### 2. Current Work
+
+在用户要求创建本摘要之前，最近正在做的是 LauncherHome 的最终 UI 收口。
+
+#### 2.1 最近的工作焦点
+
+- 将 LauncherHome 从过度装饰、样式缺失的状态，收敛为一个更克制的工作台式界面。
+- 核心判断是：这已经不是 JSX 语法或构建错误问题，而是两个并行问题：
+  - 样式块不完整，导致当前 JSX 所依赖的类没有在正确的 CSS 区域定义。
+  - JSX 信息层过厚，hero、状态卡、重复检查块和重复计数让页面显得破碎且冗余。
+
+#### 2.2 最近完成的具体动作
+
+1. 读取并定位了 LauncherHome 对应样式区段：
+  - [app/src/index.css](app/src/index.css) 中 LauncherHome 样式块起于注释“LauncherHome: Config mode”，结束于 “LauncherSidebar” 之前。
+2. 读取了 [app/src/components/LauncherHome.tsx](app/src/components/LauncherHome.tsx) 当前 JSX，确认以下冗余点：
+  - hero 区包含英文眉标、状态胶囊、阶段序列条、三张统计卡
+  - 启动区包含两段重复语义的 readiness 检查块
+  - workflow 轨道头部存在重复计数
+3. 针对 JSX 做了减法：
+  - 移除了 `WorkflowStat` 统计卡的使用
+  - 移除了 hero 中的阶段序列条
+  - 将启动区双列检查块改为一条简洁的摘要文案
+  - 去掉了 workflow 面板头部的重复计数
+4. 针对 CSS 做了结构性修复：
+  - 用一整套新的 LauncherHome 样式替换了 [app/src/index.css](app/src/index.css) 中原本残缺的样式块
+  - 新样式覆盖了 hero、双列布局、workflow panel、stage card、editor section、launch dock、legend、responsive 行为等当前 JSX 真实使用的类
+5. 按用户追加反馈继续做减法：
+  - 去掉了三个主区域最外层 section 的圆角卡片边框，仅保留内部真正承担编辑与排序职责的卡片
+  - 去掉了顶部英文眉标与编辑区英文 eyebrow
+  - 将卡片 footer 中的英文小字改成中文
+
+#### 2.3 当前验证状态
+
+- [app/src/components/LauncherHome.tsx](app/src/components/LauncherHome.tsx) 最近一次静态校验通过
+- [app/src/index.css](app/src/index.css) 最近一次静态校验通过
+- 构建级验证原本计划继续执行，但由于交互反馈机制要求在运行终端命令前征得确认，而用户在确认窗口中继续给出了新的 UI 修改指令，因此构建验证尚未在这一轮完成
+
+### 3. Key Technical Concepts
+
+- MLRA v2 三主角色语义：`expert`、`inspector`、`ceo`
+- 阶段式编排模型：规划阶段与执行阶段不再只是视图切换，而是 blueprint 中可配置的阶段序列
+- `WorkflowBlueprint`：一次 Launcher 启动前的工作流蓝图，包含模板、描述、初始任务、全局策略和阶段列表
+- `StageBlueprint`：单个阶段的配置项，包含：
+  - `phaseType`
+  - `openerTarget`
+  - `openerPrompt`
+  - `reviewerPrompt`
+  - `ceoGatePrompt`
+  - `completionRule`
+  - `recommendedSkills`
+- `BlueprintRuntimeSummary`：daemon 返回的当前运行态摘要，用于前端展示当前阶段
+- 预览蓝图模式：没有真实 launcher 时，LauncherHome 也能通过 `previewBlueprint` / `workingBlueprint` 提供可操作界面
+- 自动实体化策略：在无 launcher 的情况下，一旦用户对阶段做真实修改，使用 `withMaterializedStage` 落地到真实 launcher
+- 阶段拖拽排序：通过 `draggingStageId`、`dragOverStageId` 和 `moveStageToIndex` 维护顺序
+- Prompt Stack 结构：同一阶段中显式区分开场提示词、审阅提示词、CEO 准入提示词、完成标准
+- 样式修复策略：不在残缺块上继续堆补丁，而是整体替换对应 CSS 区段，确保 JSX 与 CSS 同步
+
+### 4. Relevant Files and Code
+
+### [app/src/store/mlraStore.ts](app/src/store/mlraStore.ts)
+
+- 这是当前 MLRA v2 阶段编排能力的中心数据模型文件。
+- 已加入 `WorkflowBlueprint`、`StageBlueprint`、`BlueprintRuntimeSummary` 等类型。
+- 已支持模板派生、阶段校验、blueprint runtime 存储与 daemon 消息接入。
+- `BLUEPRINT_TEMPLATE_OPTIONS` 和 `STAGE_SKILL_OPTIONS` 提供了编排器的预设模板与推荐技能字典。
+
+关键片段：
+
+```ts
+export interface StageBlueprint {
+  id: string;
+  order: number;
+  enabled: boolean;
+  name: string;
+  phaseType: PhaseView;
+  objective: string;
+  description: string;
+  openerTarget: StageRoleTarget;
+  openerPrompt: string;
+  reviewerPrompt: string;
+  ceoGatePrompt: string;
+  recommendedSkills: StageSkillKey[];
+  completionRule: string;
+  templateSource: BlueprintTemplateId | null;
+}
+```
+
+### [app/src/components/LauncherHome.tsx](app/src/components/LauncherHome.tsx)
+
+- 这是本轮修改最密集的前端文件。
+- 当前职责已经不是旧版“配置 agent 分配表”，而是 Launcher 启动前的 workflow blueprint 编辑器。
+- 当前重要结构：
+  - 顶部简化后的 hero
+  - 左侧启动与 workflow 轨道
+  - 右侧阶段编辑器
+  - `BlueprintStageCard`
+  - `DetailSection`
+- 最近的 UI 收口主要发生在这里：
+  - 移除了 hero 中多余的视觉统计和英文眉标
+  - 把启动面板的重复检查块压缩为一段摘要
+  - 把编辑区英文 eyebrow 去掉，标题改成中文
+
+关键片段：
+
+```tsx
+<div className="mlra-orchestrator-meta-row">
+  <span className="mlra-orchestrator-meta-pill">模板: {blueprintLabel}</span>
+  <span className="mlra-orchestrator-meta-pill">阶段: {stageStats.enabled}/{stageStats.total}</span>
+  <span className="mlra-orchestrator-meta-pill">规划 / 执行: {stageStats.planning} / {stageStats.execution}</span>
+</div>
+```
+
+```tsx
+<div className="mlra-launch-dock-summary">
+  {readiness.full.ready && readiness.direct.ready
+   ? "蓝图已可启动。全开局会从第一个启用阶段推进，直接执行会跳到第一个执行阶段。"
+   : `当前缺口: ${Array.from(new Set([...readiness.full.missing, ...readiness.direct.missing])).join("，")}`}
+</div>
+```
+
+### [app/src/index.css](app/src/index.css)
+
+- 这是最近 UI 根因修复的关键文件。
+- 之前的问题并非“某几个样式没调好”，而是 LauncherHome 对应的 CSS 区段只剩部分残片，导致多个 JSX 类没有定义。
+- 当前已将整个 LauncherHome 样式块完整重写，覆盖：
+  - hero
+  - 双列布局
+  - workflow panel
+  - launch dock
+  - stage card
+  - editor section
+  - 空状态
+  - legend
+  - responsive 规则
+- 最近进一步去掉了 `.mlra-workflow-panel` 的外卡片边框与圆角，响应用户对“外围三个区域”的减法要求。
+
+关键片段：
+
+```css
+.mlra-workflow-panel {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  padding: 0;
+  border-radius: 0;
+  border: none;
+  background: transparent;
+}
+```
+
+### [mcp/mlra/protocol/prompts.mjs](mcp/mlra/protocol/prompts.mjs)
+
+- 已扩展阶段上下文注入逻辑。
+- prompt 构造已能带入阶段目标、开场 agent、审阅关注点和 CEO gate 判定条件。
+
+### [mcp/mlra/daemon/orchestrator.mjs](mcp/mlra/daemon/orchestrator.mjs)
+
+- 已接入 blueprint 驱动的阶段推进。
+- `startOrchestration` 接受 blueprint。
+- CEO 判定后可以决定进入下一个已启用阶段。
+
+### [mcp/mlra/daemon/index.mjs](mcp/mlra/daemon/index.mjs)
+
+- `MLRA_START` 现已将 blueprint 透传给 daemon。
+- `GET_TASK_CONTEXT` 已包含 blueprint 与当前阶段摘要。
+
+### [app/src/components/MLRACallerTabs.tsx](app/src/components/MLRACallerTabs.tsx)
+
+- 已移除 Worker Pool tab，缩减为 Expert / Inspector / CEO。
+- 这是 MLRA v2 语义收敛的一部分。
+
+### [app/src/components/LauncherSidebar.tsx](app/src/components/LauncherSidebar.tsx)
+
+- 已从旧的 slot 视角切向当前阶段视角。
+- 侧栏可展示 blueprintRuntime 中的当前阶段信息。
+
+### 5. Problem Solving
+
+#### 已解决的问题
+
+1. 旧版 MLRA UI 与 v2 真实编排语义不匹配
+  - 通过引入 blueprint/stage 模型与后端透传，LauncherHome 不再只是角色分配面板，而是启动前工作流编排器。
+
+2. 前端仍残留 v1 / v1.5 时代的 Worker Pool 和注册卡片语义
+  - 删除了未再需要的 `RegisteredAgentCard.tsx` 与 `WorkerPoolColumn.tsx`，并把 caller tabs 压缩到 v2 真实角色。
+
+3. LauncherHome 在无 launcher 时表现为空壳
+  - 加入 `previewBlueprint` / `workingBlueprint` 和自动实体化逻辑，使预览态也能操作。
+
+4. LauncherHome 的 CSS 曾被错误补丁破坏，后续又处于“构建已恢复但样式残缺”的状态
+  - 通过重新定位 CSS 区段并整体替换样式块，解决了“类名存在但无样式定义”的根因。
+
+5. UI 信息层严重冗余
+  - hero 中的统计卡、阶段序列条、重复启动检查块、重复计数已被删除或压缩。
+
+6. 页面盒子层级过多
+  - 按用户最新指令，三个主区域的外层圆角卡片壳已移除。
+
+7. 装饰性英文眉标破坏整体简洁性
+  - 已移除顶部眉标与编辑区英文小字，并将阶段卡片 footer 中的英文改为中文。
+
+#### 仍在进行中的排查与收口
+
+- 目前尚未执行本轮改动后的构建级验证，因为这一步需要在终端中运行命令，而用户在确认前继续提出了新的 UI 指令。
+- 也尚未做最终的人工视觉验收，因此页面是否还需要继续压缩状态胶囊、footer 或右侧说明文字，取决于下一轮用户反馈。
+
+### 6. Pending Tasks and Next Steps
+
+#### 当前明确待办
+
+- 继续做 LauncherHome 的视觉减法，直到用户认为页面不再“坏”和“不再过度设计”。
+- 在获得确认后执行前端构建验证，确保本轮 JSX 与 CSS 收口没有引入打包问题。
+- 如果构建通过，再视用户反馈决定是否继续压缩以下元素：
+  - 顶部状态胶囊
+  - 阶段卡片 footer
+  - 右侧编辑器顶部说明文本
+- 后续还需要继续检查 MLRA 运行态主工作区是否完全收敛到 v2 语义，而不仅仅是 LauncherHome。
+
+#### 直接承接下一轮工作的用户原话
+
+- “界面依然是坏的，看起来缺失了某些样式。而且信息严重冗余，条条框框严重过度设计”
+- “移除外围三个区域最外层的圆角卡片边框”
+- “移除多余的大写英文小字”
+
+#### 下一步执行顺序
+
+1. 若用户继续给出 UI 指令，优先继续局部删减，不先扩展新功能。
+2. 若用户允许终端验证，则进入 app 目录执行构建，确认打包无回归。
+3. 构建通过后，再决定是否需要进一步缩减文案和状态元素。
+
+#### 当前停靠点
+
+在创建本摘要之前，工作停留在“LauncherHome 已完成一轮结构性减法与样式完整性修复，静态校验通过，构建级验证待用户确认”这一状态。

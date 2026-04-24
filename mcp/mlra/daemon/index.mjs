@@ -255,6 +255,8 @@ class OrchestratorDaemon {
           `## 任务类型\n\n${this.orchestrator.taskType || "未指定"}`,
           `## 当前阶段\n\n${this.orchestrator.phase}`,
           `## 启动模式\n\n${this.orchestrator.startMode}`,
+          `## 工作流蓝图\n\n${this.orchestrator.blueprint?.name || "未指定"}`,
+          `## 当前阶段节点\n\n${this.orchestrator._getCurrentStage()?.name || "未指定"}`,
         ].join("\n\n");
         return { type: MSG.RESOLVE, content: taskContext };
       }
@@ -343,11 +345,12 @@ class OrchestratorDaemon {
 
     switch (msg.type) {
       case MSG.MLRA_START: {
-        const { userTask, startMode, taskType } = msg.config || msg;
+        const { userTask, startMode, taskType, blueprint } = msg.config || msg;
         const result = this.orchestrator.startOrchestration(
           userTask || "",
           startMode || START_MODES.FULL,
           taskType || null,
+          blueprint || null,
         );
         if (result.error) {
           console.error("[MLRA-Daemon] Start error:", result.error);
@@ -481,9 +484,29 @@ class OrchestratorDaemon {
         break;
       }
 
+      case "auto_transition_stage": {
+        console.error("[MLRA-Daemon] No CEO → auto-transition to next configured stage");
+        const result = this.orchestrator.transitionToStage(decision.stage, decision.materials);
+        for (const { role, instruction } of result.instructions || []) {
+          this.router.release(role, instruction);
+        }
+        this._pushStatus();
+        break;
+      }
+
       case "transition_to_execution": {
         console.error("[MLRA-Daemon] CEO approved → transition to execution");
         const result = this.orchestrator.transitionToExecution(decision.materials);
+        for (const { role, instruction } of result.instructions || []) {
+          this.router.release(role, instruction);
+        }
+        this._pushStatus();
+        break;
+      }
+
+      case "transition_to_stage": {
+        console.error("[MLRA-Daemon] CEO approved → transition to next configured stage");
+        const result = this.orchestrator.transitionToStage(decision.stage, decision.materials);
         for (const { role, instruction } of result.instructions || []) {
           this.router.release(role, instruction);
         }
