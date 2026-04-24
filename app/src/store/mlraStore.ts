@@ -44,6 +44,7 @@ export interface StageBlueprint {
   id: string;
   order: number;
   enabled: boolean;
+  icon: string;
   name: string;
   phaseType: PhaseView;
   objective: string;
@@ -329,13 +330,19 @@ function normalizeStageOrder(stages: StageBlueprint[]): StageBlueprint[] {
   return stages.map((stage, index) => ({ ...stage, order: index }));
 }
 
+function getDefaultStageIcon(phaseType: PhaseView): string {
+  return phaseType === "planning" ? "git-branch" : "wrench";
+}
+
 function createStageBlueprint(templateSource: BlueprintTemplateId | null, partial: Partial<Omit<StageBlueprint, "id" | "order">> = {}): StageBlueprint {
+  const phaseType = partial.phaseType ?? "planning";
   return {
     id: generateId(),
     order: 0,
     enabled: partial.enabled ?? true,
+    icon: partial.icon ?? getDefaultStageIcon(phaseType),
     name: partial.name ?? "新阶段",
-    phaseType: partial.phaseType ?? "planning",
+    phaseType,
     objective: partial.objective ?? "定义本阶段的核心目标",
     description: partial.description ?? "",
     openerTarget: partial.openerTarget ?? "expert",
