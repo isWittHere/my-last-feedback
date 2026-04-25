@@ -334,8 +334,8 @@ const STAGE_TEMPLATE_PRESETS: Record<BuiltinStageTemplateId, {
     icon: "git-branch",
     defaultExitGateEnabled: true,
     isClosing: false,
-    promptExpert: "## Stage Mode\ndeliberation\n\n## What to do\nAnalyze the user's task and produce a draft proposal for the user. Submit via `expert_submit({ content })`. Treat routed feedback as user feedback. Address it thoroughly before resubmitting. When the work is genuinely ready for final stage-exit review, use `expert_vote(vote=\"pass\", reason=...)`.",
-    promptInspector: "## Stage Mode\ndeliberation\n\n## What to do\nReview the provided draft as if the user asked you to audit it. Produce a structured review for the user and submit via `inspector_submit({ content })`. Do not mention backend routing. When the material is genuinely ready for final stage-exit review, use `inspector_vote(vote=\"pass\", reason=...)`.",
+    promptExpert: "## Stage Mode\ndeliberation\n\n## What to do\nAnalyze the user's task and produce a draft proposal for the user. Use `expert_submit({ content })` for normal drafts, revisions, reports, and risk notes. Treat routed feedback as user feedback and address it thoroughly before resubmitting.\n\n## Stage Exit Certification Rule\nDo not use `expert_vote` as a completion marker for your latest response. Use `expert_vote(vote=\"pass\", ...)` only after a full self-audit confirms the entire stage objective is satisfied, all known feedback is resolved, direct verification evidence exists, and no blocking risk, missing check, open question, or unverified claim remains. If any item is uncertain, continue with `expert_submit({ content })` instead.",
+    promptInspector: "## Stage Mode\ndeliberation\n\n## What to do\nReview the provided draft as if the user asked you to audit it. Use `inspector_submit({ content })` for normal reviews, verification notes, and risk reports. Do not mention backend routing.\n\n## Stage Exit Certification Rule\nDo not use `inspector_vote` merely because a review was written. Use `inspector_vote(vote=\"pass\", ...)` only when the reviewed material is complete, directly verified, all known feedback is resolved, and no blocking issue, missing check, unresolved uncertainty, or open user concern remains. If any item is uncertain, continue with `inspector_submit({ content })` instead.",
     skillRefs: ["submit_plan_draft", "review_plan", "re_verify", "decision_levels", "hallucination_check", "vote_discipline"],
   },
   delivery: {
@@ -344,8 +344,8 @@ const STAGE_TEMPLATE_PRESETS: Record<BuiltinStageTemplateId, {
     icon: "wrench",
     defaultExitGateEnabled: true,
     isClosing: false,
-    promptExpert: "## Stage Mode\ndelivery\n\n## What to do\nExecute real code or asset changes for the user and verify them locally. Before claiming completion, walk the re-verify flow. Submit the user-facing delivery report via `expert_submit({ content })`. When the delivery is genuinely ready for final stage-exit review, use `expert_vote(vote=\"pass\", reason=...)`.",
-    promptInspector: "## Stage Mode\ndelivery\n\n## What to do\nReview the delivered material for the user. Do not trust the narrative alone: open cited files and verify against actual code or output. Submit the review via `inspector_submit({ content })`. When the delivery is genuinely ready for final stage-exit review, use `inspector_vote(vote=\"pass\", reason=...)`.",
+    promptExpert: "## Stage Mode\ndelivery\n\n## What to do\nExecute real code or asset changes for the user and verify them locally. Before claiming completion, walk the re-verify flow. Use `expert_submit({ content })` for normal deliverables, revisions, reports, and risk notes.\n\n## Stage Exit Certification Rule\nDo not use `expert_vote` as a completion marker for your latest response. Use `expert_vote(vote=\"pass\", ...)` only after a full self-audit confirms the entire delivery objective is satisfied, all known feedback is resolved, direct verification evidence exists, and no blocking risk, missing check, open question, or unverified claim remains. If any item is uncertain, continue with `expert_submit({ content })` instead.",
+    promptInspector: "## Stage Mode\ndelivery\n\n## What to do\nReview the delivered material for the user. Do not trust the narrative alone: open cited files and verify against actual code or output. Use `inspector_submit({ content })` for normal reviews, verification notes, and risk reports.\n\n## Stage Exit Certification Rule\nDo not use `inspector_vote` merely because a review was written. Use `inspector_vote(vote=\"pass\", ...)` only when the reviewed delivery is complete, directly verified, all known feedback is resolved, and no blocking issue, missing check, unresolved uncertainty, or open user concern remains. If any item is uncertain, continue with `inspector_submit({ content })` instead.",
     skillRefs: ["submit_phase_report", "review_phase", "re_verify", "decision_levels", "hallucination_check", "failure_recovery", "vote_discipline"],
   },
   closing: {
@@ -811,7 +811,7 @@ export const useMLRAStore = create<MLRAState>((set, get) => ({
     if (!launcher) return ["Launcher 不存在"];
     const errors: string[] = [];
     const nonClosing = launcher.blueprint.stages.filter((stage) => !isClosingStage(stage));
-    if (!launcher.blueprint.initialTask.trim() && !launcher.userTask.trim() && !launcher.name.trim()) {
+    if (!launcher.blueprint.initialTask.trim() && !launcher.userTask.trim()) {
       errors.push("请填写任务描述");
     }
     if (nonClosing.length === 0) {

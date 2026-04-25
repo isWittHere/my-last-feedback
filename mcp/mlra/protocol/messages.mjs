@@ -9,10 +9,10 @@ export const MSG = Object.freeze({
   ROLE_BYE: "role_bye",
 
   EXPERT_SUBMIT: "expert_submit",       // { content }
-  EXPERT_VOTE: "expert_vote",           // { vote: "pass" | "reject", reason }
+  EXPERT_VOTE: "expert_vote",           // { vote: "pass" | "reject", reason, certification? }
 
   INSPECTOR_SUBMIT: "inspector_submit", // { content }
-  INSPECTOR_VOTE: "inspector_vote",     // { vote: "pass" | "reject", reason }
+  INSPECTOR_VOTE: "inspector_vote",     // { vote: "pass" | "reject", reason, certification? }
 
   CEO_VERDICT: "ceo_verdict",           // { verdict, reason, targets? }
 

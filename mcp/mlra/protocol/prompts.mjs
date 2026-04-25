@@ -76,7 +76,7 @@ export function buildRoutingHint(role, stage) {
       "[Context]",
       `Stage: ${stageName}`,
       `Next action: expert_submit({ content })`,
-      `Vote when the user-facing work is ready: expert_vote({ vote, reason })`,
+      "Stage-exit certification is not a completion marker; use it only after the entire stage satisfies the certification rule.",
     ].join("\n");
   }
   if (role === ROLES.INSPECTOR) {
@@ -84,7 +84,7 @@ export function buildRoutingHint(role, stage) {
       "[Context]",
       `Stage: ${stageName}`,
       `Next action: inspector_submit({ content })`,
-      `Vote when the user-facing material is ready: inspector_vote({ vote, reason })`,
+      "Stage-exit certification is not a completion marker; use it only when no blocking issue or unresolved uncertainty remains.",
     ].join("\n");
   }
   if (role === ROLES.CEO) {
@@ -131,7 +131,7 @@ export function buildInitialPrompt(role, userTask, stage, options = {}) {
     const override = stage?.promptExpert || stage?.promptOverride;
     const directive = override
       ? renderStageDirective("Stage Directive", override)
-      : `\n\n## Action\nAnalyze the user's task and produce a user-facing deliverable. Submit via \`expert_submit({ content })\`. Treat routed feedback as user feedback. When the work is genuinely ready for final stage-exit review, use \`expert_vote(vote="pass", reason=...)\`.`;
+      : `\n\n## Action\nAnalyze the user's task and produce a user-facing deliverable. Use \`expert_submit({ content })\` for normal drafts, revisions, reports, and risk notes. Treat routed feedback as user feedback. Do not use stage-exit certification as a completion marker; use \`expert_vote(vote="pass", ...)\` only after the entire stage objective is satisfied, all known feedback is resolved, direct verification evidence exists, and no blocking concern remains.`;
     return `${stageBlock}${taskBlock}${preparation}${stageSkills}${directive}${carried}`;
   }
 
@@ -139,7 +139,7 @@ export function buildInitialPrompt(role, userTask, stage, options = {}) {
     const override = stage?.promptInspector || stage?.promptOverride;
     const directive = override
       ? renderStageDirective("Stage Directive", override)
-      : `\n\n## Action\nWhen material arrives for review, evaluate it for the user. Produce a structured review and submit via \`inspector_submit({ content })\`. When the material is genuinely ready for final stage-exit review, use \`inspector_vote(vote="pass", reason=...)\`.`;
+      : `\n\n## Action\nWhen material arrives for review, evaluate it for the user. Use \`inspector_submit({ content })\` for normal reviews, verification notes, and risk reports. Do not use stage-exit certification merely because a review was written; use \`inspector_vote(vote="pass", ...)\` only when the material is complete, directly verified, and has no blocking issue or unresolved uncertainty.`;
     return `${stageBlock}${taskBlock}${preparation}${stageSkills}${directive}${carried}`;
   }
 
@@ -179,11 +179,11 @@ const ROUTING_TEMPLATES = Object.freeze({
   // Generic relay between the two working roles
   "expert→inspector": {
     prefix: "Please review the following user-facing material independently. Do not trust the narrative alone — open the cited files and verify against actual code.",
-    suffix: `See the stage directive. Submit your review via \`inspector_submit({ content })\`. When the material is genuinely ready for final stage-exit review, use \`inspector_vote(vote="pass", reason=...)\`.`,
+    suffix: "See the stage directive. Submit your review via `inspector_submit({ content })`. Do not request stage-exit certification if any blocking issue, missing verification, unresolved uncertainty, or open user concern remains.",
   },
   "inspector→expert": {
     prefix: "The user-facing submission received the following review feedback.",
-    suffix: `See skill \`${SKILLS.decision_levels}\`. Address each item and resubmit via \`expert_submit({ content })\`. When the work is genuinely ready for final stage-exit review, use \`expert_vote(vote="pass", reason=...)\`.`,
+    suffix: `See skill \`${SKILLS.decision_levels}\`. Address each item and resubmit via \`expert_submit({ content })\`. Do not request stage-exit certification unless the entire stage satisfies the certification rule.`,
   },
 
   // Gate triggers → CEO (unified — no phase variants)

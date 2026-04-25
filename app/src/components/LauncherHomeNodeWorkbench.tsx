@@ -10,6 +10,7 @@ import {
   type Launcher,
   type StageBlueprint,
   type StageTemplateId,
+  type WorkflowBlueprint,
 } from "../store/mlraStore";
 import { Icon } from "./Icons";
 
@@ -18,6 +19,12 @@ interface LauncherHomeProps {
 }
 
 type InspectorTab = "basics" | "prompts" | "rules" | "skills";
+
+type StartCondition = {
+  id: string;
+  label: string;
+  passed: boolean;
+};
 
 const STAGE_ICON_OPTIONS = [
   { value: "git-branch", label: "分支" },
@@ -55,6 +62,41 @@ function getStageIssues(stage: StageBlueprint | null): string[] {
   const issues: string[] = [];
   if (!stage.name.trim()) issues.push("缺少阶段名称");
   return issues;
+}
+
+function getStartConditions(blueprint: WorkflowBlueprint, taskText: string): StartCondition[] {
+  const stages = [...blueprint.stages].sort((left, right) => left.order - right.order);
+  const nonClosingStages = stages.filter((stage) => !isClosingStage(stage));
+  const lastNonClosingStage = nonClosingStages[nonClosingStages.length - 1] || null;
+  const lastStage = stages[stages.length - 1] || null;
+
+  return [
+    {
+      id: "task",
+      label: "任务描述已填写",
+      passed: taskText.trim().length > 0,
+    },
+    {
+      id: "stage-count",
+      label: "至少包含一个普通阶段",
+      passed: nonClosingStages.length > 0,
+    },
+    {
+      id: "stage-names",
+      label: "所有阶段已有名称",
+      passed: stages.length > 0 && stages.every((stage) => stage.name.trim().length > 0),
+    },
+    {
+      id: "final-gate",
+      label: "最后一个普通阶段开启出口门控",
+      passed: !!lastNonClosingStage?.exitGateEnabled,
+    },
+    {
+      id: "closing",
+      label: "蓝图末尾是结束汇总阶段",
+      passed: !!lastStage && isClosingStage(lastStage),
+    },
+  ];
 }
 
 function getStagePromptDefaults(stage: StageBlueprint): Pick<StageBlueprint, "promptExpert" | "promptInspector" | "promptCeo"> {
@@ -318,7 +360,6 @@ export function LauncherHome({ launcher }: LauncherHomeProps) {
   const removeBlueprintStage = useMLRAStore((state) => state.removeBlueprintStage);
   const moveBlueprintStage = useMLRAStore((state) => state.moveBlueprintStage);
   const duplicateBlueprintStage = useMLRAStore((state) => state.duplicateBlueprintStage);
-  const validateBlueprint = useMLRAStore((state) => state.validateBlueprint);
 
   const [draftName, setDraftName] = useState("");
   const [draftUserTask, setDraftUserTask] = useState("");
@@ -576,19 +617,7 @@ export function LauncherHome({ launcher }: LauncherHomeProps) {
     action(id, stage.id);
   }, [ensureLauncher]);
 
-  const setStageIcon = useCallback((stage: StageBlueprint, icon: string) => {
-    if (launcher) {
-      updateBlueprintStage(launcher.id, stage.id, { icon });
-      return;
-    }
-
-    withMaterializedStage(stage.order, (launcherId, stageId) => {
-      updateBlueprintStage(launcherId, stageId, { icon });
-    });
-  }, [launcher, updateBlueprintStage, withMaterializedStage]);
-
   const selectStage = useCallback((stage: StageBlueprint) => {
-    setInspectorTab("basics");
     if (launcher) {
       selectBlueprintStage(launcher.id, stage.id);
       return;
@@ -628,22 +657,23 @@ export function LauncherHome({ launcher }: LauncherHomeProps) {
     });
   }, [launcher, addBlueprintStage, withMaterializedStage]);
 
-  const readiness = useMemo(() => {
-    if (!launcher) {
-      const missing: string[] = [];
-      if (!draftUserTask.trim()) missing.push("请填写任务描述");
-      return { ready: missing.length === 0, missing };
-    }
-    const missing = validateBlueprint(launcher.id);
+  const startConditions = useMemo(
+    () => getStartConditions(
+      workingBlueprint,
+      launcher ? launcher.userTask || launcher.blueprint.initialTask : draftUserTask,
+    ),
+    [workingBlueprint, launcher, draftUserTask],
+  );
+  const startReadiness = useMemo(() => {
+    const missing = startConditions.filter((condition) => !condition.passed).map((condition) => condition.label);
     return { ready: missing.length === 0, missing };
-  }, [launcher, draftUserTask, validateBlueprint]);
+  }, [startConditions]);
+  const passedStartConditionCount = startConditions.filter((condition) => condition.passed).length;
 
   const stageIssuesById = useMemo(
     () => new Map(orderedStages.map((stage) => [stage.id, getStageIssues(stage)])),
     [orderedStages],
   );
-  const startReadiness = readiness;
-  const selectedStageIssues = getStageIssues(selectedStage);
   const runtimeStageId = launcher?.blueprintRuntime?.currentStageId || null;
   const runtimeStageIndex = launcher?.blueprintRuntime?.currentStageIndex ?? -1;
   const launcherDisplayName = hasLauncher ? launcher.name : draftName.trim() || "未命名 Workflow";
@@ -734,7 +764,31 @@ export function LauncherHome({ launcher }: LauncherHomeProps) {
                       </button>
                     )}
                   </div>
-                  <button className="mlra-lane-add-btn" disabled={!startReadiness.ready} onClick={handleStart}>开始</button>
+                  <div className={`mlra-start-control${startReadiness.ready ? " ready" : " blocked"}`}>
+                    <button
+                      className="mlra-lane-add-btn mlra-start-btn"
+                      disabled={!startReadiness.ready}
+                      onClick={handleStart}
+                      aria-describedby="mlra-start-readiness-popover"
+                    >
+                      <Icon name={startReadiness.ready ? "play" : "info"} size={13} />
+                      <span>开始</span>
+                      <span className="mlra-start-count">{passedStartConditionCount}/{startConditions.length}</span>
+                    </button>
+                    <div className="mlra-start-readiness-popover" id="mlra-start-readiness-popover" role="tooltip">
+                      <div className="mlra-start-readiness-title">
+                        {startReadiness.ready ? "启动条件已满足" : "启动前还需处理"}
+                      </div>
+                      <ul className="mlra-start-readiness-list">
+                        {startConditions.map((condition) => (
+                          <li key={condition.id} className={condition.passed ? "passed" : "missing"}>
+                            <Icon name={condition.passed ? "circle-check" : "circle-x"} size={13} />
+                            <span>{condition.label}</span>
+                          </li>
+                        ))}
+                      </ul>
+                    </div>
+                  </div>
                 </div>
               </div>
 
@@ -1004,7 +1058,7 @@ export function LauncherHome({ launcher }: LauncherHomeProps) {
                           <div className="mlra-gate-switch-row">
                             <div className="mlra-gate-switch-copy">
                               <span>CEO 防御性锁门控</span>
-                              <small>{selectedStage.exitGateEnabled ? "启用后阶段出口需要 CEO 审批" : "关闭后阶段投票通过即直进下一阶段"}</small>
+                              <small>{selectedStage.exitGateEnabled ? "启用后阶段出口需要 CEO 审批" : "关闭后出口认证满足即直进下一阶段"}</small>
                             </div>
                             <button
                               type="button"

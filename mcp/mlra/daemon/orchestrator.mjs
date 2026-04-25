@@ -46,6 +46,8 @@ export class Orchestrator {
     // Votes for stage exit (reset on each gate trigger / rejection / advance)
     this.votes = { expert: null, inspector: null };
 
+    this.stageExitReadiness = this._emptyStageExitReadiness();
+
     this.lastSubmitContent = null;
 
     // CEO Gate — defensive rejection state machine
@@ -83,6 +85,26 @@ export class Orchestrator {
     };
   }
 
+  _emptyStageExitReadiness() {
+    return {
+      deliverableVersion: 0,
+      reviewedDeliverableVersion: 0,
+      hasDeliverable: false,
+      hasReview: false,
+      certifications: { expert: null, inspector: null },
+    };
+  }
+
+  _resetStageExitReadiness() {
+    this.votes = { expert: null, inspector: null };
+    this.stageExitReadiness = this._emptyStageExitReadiness();
+  }
+
+  _clearStageExitCertifications() {
+    this.votes = { expert: null, inspector: null };
+    this.stageExitReadiness.certifications = { expert: null, inspector: null };
+  }
+
   _getStages() {
     const stages = Array.isArray(this.blueprint?.stages) ? this.blueprint.stages : [];
     return stages.filter(Boolean);
@@ -112,6 +134,7 @@ export class Orchestrator {
     this.currentStageId = nextStage.id;
     this.currentStageIndex = stages.findIndex((stage) => stage.id === nextStage.id);
     this.submitCount = 0;
+    this._resetStageExitReadiness();
     return nextStage;
   }
 
@@ -124,6 +147,7 @@ export class Orchestrator {
     this.currentStageId = nextStage.id;
     this.currentStageIndex = currentIndex + 1;
     this.submitCount = 0;
+    this._resetStageExitReadiness();
     return nextStage;
   }
 
@@ -165,6 +189,7 @@ export class Orchestrator {
       this.currentStageId = stage.id;
       this.currentStageIndex = idx;
       this.submitCount = 0;
+      if (!prevStage || prevStage.id !== stage.id) this._resetStageExitReadiness();
     }
     this._applyRoleStatusesForStage(stage);
     if (prevStage && prevStage.id !== stage.id) {
@@ -312,6 +337,17 @@ export class Orchestrator {
     if (entry) entry.status = "blocked";
     this.lastSubmitContent = content;
     this.submitCount += 1;
+    if (role === ROLES.EXPERT) {
+      this.stageExitReadiness.hasDeliverable = true;
+      this.stageExitReadiness.deliverableVersion += 1;
+      this._clearStageExitCertifications();
+    } else if (role === ROLES.INSPECTOR) {
+      if (this.stageExitReadiness.hasDeliverable) {
+        this.stageExitReadiness.hasReview = true;
+        this.stageExitReadiness.reviewedDeliverableVersion = this.stageExitReadiness.deliverableVersion;
+      }
+      this._clearStageExitCertifications();
+    }
     this._endCurrentRound();
     this._startRound(role);
     this._checkStagnation(content);
@@ -372,35 +408,123 @@ export class Orchestrator {
 
   // ── Voting ──
 
-  handleExpertVote(vote, reason) {
-    if (!this.roles.has(ROLES.EXPERT)) return { error: "Expert role not connected" };
-    const stage = this._getCurrentStage();
-    if (this._isClosingStage(stage)) return { error: "Voting is not available during the closing stage" };
-    this.votes.expert = { vote, reason };
+  _hasSubstantiveText(value, minLength = 16) {
+    return typeof value === "string" && value.trim().length >= minLength;
+  }
+
+  _hasNoKnownConcerns(value) {
+    if (typeof value !== "string") return false;
+    const text = value.trim().toLowerCase();
+    return /^(none|no known|no unresolved|no blocking|nothing known|无|无已知|没有|暂无|无阻塞)/i.test(text);
+  }
+
+  _isVagueCertificationReason(reason) {
+    if (typeof reason !== "string") return true;
+    const text = reason.trim().toLowerCase();
+    if (text.length < 12) return true;
+    return /^(ok|okay|done|complete|completed|looks good|lgtm|ready|pass|已完成|完成|可以|通过)$/.test(text);
+  }
+
+  _validateStageExitCertification(vote, reason, certification) {
+    if (vote !== "pass") return { ok: true };
+
+    const failures = [];
+    const readiness = this.stageExitReadiness;
+
+    if (!readiness.hasDeliverable) {
+      failures.push("no stage deliverable has been submitted yet");
+    }
+    if (!readiness.hasReview) {
+      failures.push("the current stage material has not completed review yet");
+    }
+    if (readiness.hasDeliverable && readiness.hasReview && readiness.reviewedDeliverableVersion !== readiness.deliverableVersion) {
+      failures.push("the latest stage material has changed since the last review");
+    }
+    if (!certification) {
+      failures.push("a structured certification checklist is required");
+    } else {
+      if (certification.originalRequestSatisfied !== true) failures.push("originalRequestSatisfied must be true");
+      if (certification.stageDirectiveSatisfied !== true) failures.push("stageDirectiveSatisfied must be true");
+      if (certification.feedbackResolved !== true) failures.push("feedbackResolved must be true");
+      if (!this._hasSubstantiveText(certification.directVerificationEvidence, 20)) {
+        failures.push("directVerificationEvidence must describe concrete evidence checked directly");
+      }
+      if (!this._hasNoKnownConcerns(certification.unresolvedConcerns)) {
+        failures.push("unresolvedConcerns must explicitly state that no known blocker remains");
+      }
+      if (!this._hasSubstantiveText(certification.exitRationale, 20)) {
+        failures.push("exitRationale must explain why the whole stage can exit");
+      }
+    }
+    if (this._isVagueCertificationReason(reason)) {
+      failures.push("reason must be a stage-level rationale, not a vague completion phrase");
+    }
+
+    return failures.length > 0
+      ? { ok: false, reason: failures.join("; ") }
+      : { ok: true };
+  }
+
+  _recordStageExitCertification(role, reason, certification) {
+    this.stageExitReadiness.certifications[role] = {
+      reason,
+      certification,
+      deliverableVersion: this.stageExitReadiness.deliverableVersion,
+    };
+  }
+
+  _handleStageExitCertification(role, vote, reason, certification) {
+    if (vote === "reject") {
+      this._clearStageExitCertifications();
+      return {
+        status: "not_ready",
+        message: `Stage remains active: ${reason || "blocking work remains"}. Continue the stage work and submit the missing material first.`,
+      };
+    }
+
+    const validation = this._validateStageExitCertification(vote, reason, certification);
+    if (!validation.ok) {
+      return {
+        status: "rejected",
+        message: `Stage-exit certification was not accepted: ${validation.reason}. Continue the stage work and submit the missing material first.`,
+      };
+    }
+
+    this.votes[role] = { vote, reason, certification };
+    this._recordStageExitCertification(role, reason, certification);
     return this._resolveVotes();
   }
 
-  handleInspectorVote(vote, reason) {
+  handleExpertVote(vote, reason, certification = null) {
+    if (!this.roles.has(ROLES.EXPERT)) return { error: "Expert role not connected" };
+    const stage = this._getCurrentStage();
+    if (this._isClosingStage(stage)) return { error: "Voting is not available during the closing stage" };
+    return this._handleStageExitCertification(ROLES.EXPERT, vote, reason, certification);
+  }
+
+  handleInspectorVote(vote, reason, certification = null) {
     if (!this.roles.has(ROLES.INSPECTOR)) return { error: "Inspector role not connected" };
     const stage = this._getCurrentStage();
     if (this._isClosingStage(stage)) return { error: "Voting is not available during the closing stage" };
-    this.votes.inspector = { vote, reason };
-    return this._resolveVotes();
+    return this._handleStageExitCertification(ROLES.INSPECTOR, vote, reason, certification);
   }
 
   _resolveVotes() {
     if (!this.votes.expert || !this.votes.inspector) {
-      return { status: "recorded", message: "投票已记录，等待对方投票" };
+      return {
+        status: "recorded",
+        message: "Stage-exit certification recorded. The stage remains active until all exit conditions are satisfied.",
+      };
     }
     if (this.votes.expert.vote === "pass" && this.votes.inspector.vote === "pass") {
       this._emit({ type: "votes_passed" });
-      return { status: "passed", message: "投票通过，进入阶段出口审批" };
+      return { status: "passed", message: "Stage-exit certifications accepted. Preparing stage-exit review." };
     }
-    const rejectReason = this.votes.expert.vote === "reject"
-      ? this.votes.expert.reason
-      : this.votes.inspector.reason;
-    this.votes = { expert: null, inspector: null };
-    return { status: "rejected", message: `投票未通过: ${rejectReason}` };
+    this._clearStageExitCertifications();
+    return {
+      status: "not_ready",
+      message: "Stage remains active because a stage-exit certification was not accepted. Continue the stage work and submit the missing material first.",
+    };
   }
 
   // ── Stage advancement & gate ──
@@ -438,7 +562,7 @@ export class Orchestrator {
   }
 
   _advanceStage(carriedContent) {
-    this.votes = { expert: null, inspector: null };
+    this._clearStageExitCertifications();
     this._emit({ type: "stage_advance", stageId: this.currentStageId });
 
     const nextStage = this._selectNextStage();
@@ -529,7 +653,7 @@ export class Orchestrator {
     this.ceoGate = this._emptyGate();
 
     if (gateType === "stage_gate") {
-      this.votes = { expert: null, inspector: null };
+      this._clearStageExitCertifications();
       this._emit({ type: "ceo_gate_resolved", gateType, verdict: "rejected", reason });
 
       for (const role of [ROLES.EXPERT, ROLES.INSPECTOR]) {

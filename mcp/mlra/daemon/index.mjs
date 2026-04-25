@@ -200,15 +200,15 @@ class OrchestratorDaemon {
 
       // ── EXPERT_VOTE ──
       case MSG.EXPERT_VOTE: {
-        const { vote, reason } = msg;
-        const result = this.orchestrator.handleExpertVote(vote, reason);
+        const { vote, reason, certification } = msg;
+        const result = this.orchestrator.handleExpertVote(vote, reason, certification);
         return { type: MSG.RESOLVE, content: JSON.stringify(result) };
       }
 
       // ── INSPECTOR_VOTE ──
       case MSG.INSPECTOR_VOTE: {
-        const { vote, reason } = msg;
-        const result = this.orchestrator.handleInspectorVote(vote, reason);
+        const { vote, reason, certification } = msg;
+        const result = this.orchestrator.handleInspectorVote(vote, reason, certification);
         return { type: MSG.RESOLVE, content: JSON.stringify(result) };
       }
 
