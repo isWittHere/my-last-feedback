@@ -21,4 +21,4 @@ export const WORKER_ENABLED = false;
  * Explicitly forbids hallucinating delegation.
  */
 export const NO_WORKER_NOTICE =
-  "You must complete all execution work personally. No sub-agents or delegation are available in this session. Do not claim to have delegated tasks, dispatched workers, or assigned sub-work — any such statement is hallucination and will be rejected by reviewers.";
+  "Complete the requested work directly for the user. Only report actions, files, tests, and verification steps that you actually performed or directly verified.";

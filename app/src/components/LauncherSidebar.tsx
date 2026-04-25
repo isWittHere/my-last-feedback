@@ -1,6 +1,6 @@
 import { useCallback, useState } from "react";
 import { useTranslation } from "react-i18next";
-import { useMLRAStore, resolveRuntimeAgentSlot, type Launcher } from "../store/mlraStore";
+import { useMLRAStore, type Launcher } from "../store/mlraStore";
 import { Icon } from "./Icons";
 import { timeAgo } from "./timeUtils";
 
@@ -22,11 +22,7 @@ const STATUS_LABELS: Record<string, string> = {
   paused: "已暂停",
   completed: "已完成",
   cancelled: "已取消",
-};
-
-const PHASE_LABELS: Record<string, string> = {
-  planning: "阶段1: 规划",
-  execution: "阶段2: 执行",
+  "awaiting-user": "等待响应",
 };
 
 /**
@@ -210,10 +206,10 @@ function LauncherSidebarItem({
         <span className="launcher-sidebar-item-status">
           <Icon name={STATUS_ICON_NAMES[launcher.status]} size={10} /> {STATUS_LABELS[launcher.status]}
         </span>
-        {launcher.status !== "configuring" && (
+        {launcher.status !== "configuring" && launcher.blueprintRuntime?.currentStage && (
           <>
             <span className="launcher-sidebar-item-sep">|</span>
-            <span>{PHASE_LABELS[launcher.currentPhase]}</span>
+            <span>{launcher.blueprintRuntime.currentStage.name}</span>
           </>
         )}
       </div>
@@ -227,9 +223,9 @@ function LauncherSidebarItem({
       </div>
       {launcher.status !== "configuring" && (
         <div className="launcher-sidebar-item-agents">
-          {resolveRuntimeAgentSlot(launcher.agents, "expert", launcher.currentPhase) && <span style={{ color: "#3B82F6" }}>Expert</span>}
-          {resolveRuntimeAgentSlot(launcher.agents, "inspector", launcher.currentPhase) && <span style={{ color: "#F59E0B" }}>Inspector</span>}
-          {launcher.agents.ceo && <span style={{ color: "#8B5CF6" }}>CEO:待命</span>}
+          {launcher.agents.expert && <span style={{ color: "#3B82F6" }}>Expert</span>}
+          {launcher.agents.inspector && <span style={{ color: "#F59E0B" }}>Inspector</span>}
+          {launcher.agents.ceo && <span style={{ color: "#8B5CF6" }}>CEO</span>}
         </div>
       )}
 

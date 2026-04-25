@@ -12,7 +12,6 @@ import { CallerPanel } from "./CallerPanel";
 import { SettingsDialog } from "./SettingsDialog";
 import { WelcomeHome } from "./WelcomeHome";
 import { MLRAView } from "./MLRAView";
-import { PhaseToggle } from "./PhaseToggle";
 import { MLRACallerTabs } from "./MLRACallerTabs";
 import { Icon } from "./Icons";
 import React from "react";
@@ -33,10 +32,6 @@ const ROLE_LABEL_MAP: Record<string, string> = {
   expert: "Expert",
   inspector: "Inspector",
   ceo: "CEO",
-  "planning-expert": "规划专家",
-  "planning-inspector": "规划监察",
-  "execution-expert": "执行专家",
-  "execution-inspector": "执行监察",
   worker: "Worker",
 };
 
@@ -344,9 +339,6 @@ function MLRARow2() {
       >
         <Icon name="menu" size={14} />
       </button>
-      {isActive && (
-        <MLRAErrorBoundary><PhaseToggle /></MLRAErrorBoundary>
-      )}
       {isActive && launcher && (
         <div className="mlra-control-mode-switcher">
           {controlModes.map(({ mode, label }) => (
@@ -674,7 +666,7 @@ export function FeedbackApp() {
         </div>
         {/* Row 1 end */}
 
-        {/* Row 2: MLRA second bar — ☰ launcher + PhaseToggle + Pause/Resume + Timer */}
+        {/* Row 2: MLRA second bar — ☰ launcher + Control Mode + Pause/Resume + Timer */}
         {appView === "MLRA" && isPersistent && (
           <MLRARow2 />
         )}

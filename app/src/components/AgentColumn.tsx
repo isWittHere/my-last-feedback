@@ -1,5 +1,5 @@
 import { useState, useCallback } from "react";
-import { useMLRAStore, type AgentSlot, type SessionPool, ROLE_COLORS, resolveRuntimeAgentSlot, resolveRuntimeRoleSlotKey, resolveRuntimeSessionPool } from "../store/mlraStore";
+import { useMLRAStore, type AgentSlot, type SessionPool, ROLE_COLORS } from "../store/mlraStore";
 import { StandbyPlaceholder } from "./StandbyPlaceholder";
 import { IdenticonAvatar } from "./IdenticonAvatar";
 import { Icon } from "./Icons";
@@ -14,19 +14,10 @@ const ROLE_LABELS: Record<string, string> = {
   ceo: "CEO",
 };
 
-const STANDBY_MESSAGES: Record<string, Record<string, string>> = {
-  expert: {
-    planning: "当前论证流程中等待 Expert 接入",
-    execution: "当前交付流程中等待 Expert 接入",
-  },
-  inspector: {
-    planning: "当前论证流程中等待 Inspector 接入",
-    execution: "当前交付流程中等待 Inspector 接入",
-  },
-  ceo: {
-    planning: "CEO 将在双方投票通过后介入门控审批",
-    execution: "CEO 将在所有交付完成后进行终审",
-  },
+const STANDBY_MESSAGES: Record<string, string> = {
+  expert: "等待 Expert 接入当前阶段",
+  inspector: "等待 Inspector 接入当前阶段",
+  ceo: "CEO 将在阶段门控或结束阶段介入",
 };
 
 const STATUS_LABELS: Record<string, string> = {
@@ -113,11 +104,9 @@ function ExpertMessageInput({ callerId }: { callerId: string }) {
  */
 export function AgentColumn({ role }: AgentColumnProps) {
   const activeLauncher = useMLRAStore((s) => s.getActiveLauncher());
-  const phaseView = useMLRAStore((s) => s.phaseView);
-  const slotKey = resolveRuntimeRoleSlotKey(role, phaseView);
-  const color = ROLE_COLORS[slotKey];
-  const slot: AgentSlot | null = activeLauncher ? resolveRuntimeAgentSlot(activeLauncher.agents, role, phaseView) : null;
-  const pool: SessionPool | undefined = activeLauncher ? resolveRuntimeSessionPool(activeLauncher.sessionPools, role, phaseView) : undefined;
+  const color = ROLE_COLORS[role];
+  const slot: AgentSlot | null = activeLauncher ? activeLauncher.agents[role] : null;
+  const pool: SessionPool | undefined = activeLauncher ? activeLauncher.sessionPools[role] : undefined;
 
   const isStandby = !slot || slot.status === "standby";
   const isExpert = role === "expert";
@@ -146,7 +135,7 @@ export function AgentColumn({ role }: AgentColumnProps) {
       {isStandby ? (
         <StandbyPlaceholder
           role={ROLE_LABELS[role]}
-          message={STANDBY_MESSAGES[role]?.[phaseView] || "当前阶段暂不参与"}
+          message={STANDBY_MESSAGES[role] || "当前阶段暂不参与"}
         />
       ) : (
         <div className="agent-column-content">

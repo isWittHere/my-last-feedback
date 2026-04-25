@@ -1,41 +1,27 @@
-// ── MLRA Orchestrator State Machine (v2) ──
+// ── MLRA Orchestrator State Machine ──
 // Pure logic module — no I/O, no network, fully testable.
 //
-// v2 topology: 3 dedicated roles (ceo / expert / inspector) + phase state.
-// Phases (planning / execution) are internal state, NOT role identity.
-// No worker, no launcher, no callerId/alias bookkeeping. Each role has at
-// most one connection at any time.
+// Topology: 3 fixed roles (ceo / expert / inspector) + user-authored stage
+// pipeline. Stages are generic collaboration units; the only special stage is
+// the "closing" stage at the end of every blueprint (CEO solo wrap-up).
+//
+// No phase, no startMode. The stage object itself carries all variation:
+//   stage.exitGateEnabled → whether CEO defensive-lock gate is consulted
+//   stage.isClosing       → closing stage (CEO solo, no expert/inspector)
+//   stage.promptOverride  → user-edited stage prompt (falls back to
+//                           stage.promptExpert / promptInspector / promptCeo)
+//   stage.skillRefs       → suggested skills rendered into every message
 
-import { ROLES, PHASES, START_MODES, REQUIRED_ROLES_BY_START_MODE } from "../protocol/roles.mjs";
+import { ROLES, REQUIRED_ROLES } from "../protocol/roles.mjs";
 import { buildRoutingPrompt, buildInitialPrompt } from "../protocol/prompts.mjs";
 import { createHash } from "node:crypto";
 
-const COLLABORATION_MODES = Object.freeze({
-  DELIBERATION: PHASES.PLANNING,
-  DELIVERY: PHASES.EXECUTION,
-});
-
-const ENTRY_STRATEGIES = Object.freeze({
-  FROM_START: START_MODES.FULL,
-  DELIVERY_FIRST: START_MODES.DIRECT_EXECUTION,
-});
-
-// ── Submit types from Expert ──
-const EXPERT_SUBMIT_TYPES = Object.freeze(["plan_draft", "phase_complete"]);
-
 /** @typedef {"ceo"|"expert"|"inspector"} Role */
-/** @typedef {"planning"|"execution"} Phase */
 
 export class Orchestrator {
   constructor() {
-    /** @type {"configuring"|"ready"|"running"|"paused"|"completed"|"cancelled"} */
+    /** @type {"configuring"|"ready"|"running"|"paused"|"completed"|"cancelled"|"awaiting-user"} */
     this.status = "configuring";
-
-    /** @type {Phase} */
-    this.phase = COLLABORATION_MODES.DELIBERATION;
-
-    /** @type {"full"|"direct-execution"} */
-    this.startMode = ENTRY_STRATEGIES.FROM_START;
 
     /** @type {string} */
     this.userTask = "";
@@ -47,18 +33,20 @@ export class Orchestrator {
     this.currentStageIndex = -1;
     this.currentStageId = null;
 
+    /** Submissions accumulated in the current stage. Reset on stage change. */
+    this.submitCount = 0;
+
     /**
      * Registered roles. Key = role (ceo/expert/inspector).
      * At most ONE entry per role at any time.
-     * @type {Map<Role, RoleEntry>}
+     * @type {Map<Role, any>}
      */
     this.roles = new Map();
 
-    // Votes for planning / execution consensus (reset on each gate)
+    // Votes for stage exit (reset on each gate trigger / rejection / advance)
     this.votes = { expert: null, inspector: null };
 
     this.lastSubmitContent = null;
-    this.lastProgress = null;
 
     // CEO Gate — defensive rejection state machine
     this.ceoGate = this._emptyGate();
@@ -69,70 +57,22 @@ export class Orchestrator {
     this.maxSameFeedback = 5;
 
     // Round tracking
-    /** @type {RoundRecord[]} */
     this.rounds = [];
-    /** @type {RoundRecord|null} */
     this.currentRound = null;
 
-    // Control mode: "autopilot" = no human review; "ceo-override" = pause on CEO verdicts
+    // Control mode
     this.controlMode = "ceo-override";
 
-    /** @type {HumanReview|null} */
     this.humanReviewPending = null;
 
     /** Event callback set by daemon */
     this.onEvent = null;
   }
 
-  get collaborationMode() {
-    return this.phase;
-  }
-
-  set collaborationMode(mode) {
-    this.phase = mode;
-  }
-
-  get entryStrategy() {
-    return this.startMode;
-  }
-
-  set entryStrategy(strategy) {
-    this.startMode = strategy;
-  }
-
-  _isDeliveryMode(mode = this.collaborationMode) {
-    return mode === COLLABORATION_MODES.DELIVERY;
-  }
-
-  _isDeliveryFirstEntry(strategy = this.entryStrategy) {
-    return strategy === ENTRY_STRATEGIES.DELIVERY_FIRST;
-  }
-
-  _isDeliveryStage(stage) {
-    return stage?.phaseType === COLLABORATION_MODES.DELIVERY;
-  }
-
-  _setCollaborationMode(nextMode) {
-    const previousMode = this.collaborationMode;
-    this.collaborationMode = nextMode;
-    if (previousMode !== this.collaborationMode) {
-      this._emit({ type: "phase_transition", from: previousMode, to: this.collaborationMode });
-    }
-    return this.collaborationMode;
-  }
-
-  describeCollaborationMode(mode = this.collaborationMode) {
-    return mode === COLLABORATION_MODES.DELIBERATION ? "deliberation" : "delivery";
-  }
-
-  describeEntryStrategy(strategy = this.entryStrategy) {
-    return strategy === ENTRY_STRATEGIES.DELIVERY_FIRST ? "delivery-first" : "from-start";
-  }
-
   _emptyGate() {
     return {
       active: false,
-      /** @type {"planning_gate"|"final_review"|"arbitration"|"stagnation_arbitration"|null} */
+      /** @type {"stage_gate"|"arbitration"|"stagnation_arbitration"|null} */
       type: null,
       round: 0,
       minDefensiveRounds: 2,
@@ -143,13 +83,13 @@ export class Orchestrator {
     };
   }
 
-  _getEnabledStages() {
+  _getStages() {
     const stages = Array.isArray(this.blueprint?.stages) ? this.blueprint.stages : [];
-    return stages.filter((stage) => stage && stage.enabled !== false);
+    return stages.filter(Boolean);
   }
 
   _getCurrentStage() {
-    const stages = this._getEnabledStages();
+    const stages = this._getStages();
     if (this.currentStageId) {
       const byId = stages.find((stage) => stage.id === this.currentStageId);
       if (byId) return byId;
@@ -160,85 +100,85 @@ export class Orchestrator {
     return null;
   }
 
-  _selectStageForStart(startMode) {
-    const stages = this._getEnabledStages();
-    if (stages.length === 0) return null;
-    const nextStage = this._isDeliveryFirstEntry(startMode)
-      ? stages.find((stage) => this._isDeliveryStage(stage)) || stages[0]
-      : stages[0];
-    this.currentStageId = nextStage.id;
-    this.currentStageIndex = stages.findIndex((stage) => stage.id === nextStage.id);
-    return nextStage;
+  _isClosingStage(stage) {
+    return Boolean(stage && stage.isClosing === true);
   }
 
-  _selectFirstExecutionStage() {
-    const stages = this._getEnabledStages();
-    const nextStage = stages.find((stage) => this._isDeliveryStage(stage)) || null;
+  _selectStartStage() {
+    // Always the first non-closing stage.
+    const stages = this._getStages();
+    const nextStage = stages.find((stage) => !this._isClosingStage(stage)) || stages[0] || null;
     if (!nextStage) return null;
     this.currentStageId = nextStage.id;
     this.currentStageIndex = stages.findIndex((stage) => stage.id === nextStage.id);
-    return nextStage;
-  }
-
-  _selectNextExecutionStage() {
-    const stages = this._getEnabledStages().filter((stage) => this._isDeliveryStage(stage));
-    if (stages.length === 0) return null;
-    const currentIndex = stages.findIndex((stage) => stage.id === this.currentStageId);
-    if (currentIndex === -1 || currentIndex + 1 >= stages.length) return null;
-    const nextStage = stages[currentIndex + 1];
-    this.currentStageId = nextStage.id;
-    const enabledStages = this._getEnabledStages();
-    this.currentStageIndex = enabledStages.findIndex((stage) => stage.id === nextStage.id);
+    this.submitCount = 0;
     return nextStage;
   }
 
   _selectNextStage() {
-    const stages = this._getEnabledStages();
+    const stages = this._getStages();
     if (stages.length === 0) return null;
     const currentIndex = stages.findIndex((stage) => stage.id === this.currentStageId);
     if (currentIndex === -1 || currentIndex + 1 >= stages.length) return null;
     const nextStage = stages[currentIndex + 1];
     this.currentStageId = nextStage.id;
     this.currentStageIndex = currentIndex + 1;
+    this.submitCount = 0;
     return nextStage;
   }
 
-  _buildStageEntryInstruction(stage, carriedContent = "") {
-    const openerRole = stage?.openerTarget === "inspector" ? ROLES.INSPECTOR : ROLES.EXPERT;
-    const intro = buildInitialPrompt(openerRole, this.userTask, stage.phaseType, {
-      isDirectExecution: this._isDeliveryFirstEntry(),
-      stage,
-    });
-    const carried = carriedContent ? `\n\n## Previous Stage Output\n\n${carriedContent}` : "";
-    return {
-      role: openerRole,
-      instruction: `${intro}${carried}`,
-    };
+  _buildStageEntryInstructions(stage, carriedContent = "") {
+    if (this._isClosingStage(stage)) {
+      // Closing stage: CEO solo. Expert/Inspector receive nothing.
+      const instruction = buildInitialPrompt(ROLES.CEO, this.userTask, stage, { carriedContent });
+      return [{ role: ROLES.CEO, instruction }];
+    }
+    const instructions = [];
+    for (const role of [ROLES.EXPERT, ROLES.INSPECTOR]) {
+      if (!this.roles.has(role)) continue;
+      const instruction = buildInitialPrompt(role, this.userTask, stage, { carriedContent });
+      instructions.push({ role, instruction });
+    }
+    return instructions;
+  }
+
+  _applyRoleStatusesForStage(stage) {
+    if (this._isClosingStage(stage)) {
+      for (const role of [ROLES.EXPERT, ROLES.INSPECTOR]) {
+        if (this.roles.has(role)) this.roles.get(role).status = "blocked";
+      }
+      if (this.roles.has(ROLES.CEO)) this.roles.get(ROLES.CEO).status = "idle";
+    } else {
+      for (const role of [ROLES.EXPERT, ROLES.INSPECTOR]) {
+        if (this.roles.has(role)) this.roles.get(role).status = "idle";
+      }
+      if (this.roles.has(ROLES.CEO)) this.roles.get(ROLES.CEO).status = "blocked";
+    }
   }
 
   transitionToStage(stage, carriedContent = "") {
-    this._setCollaborationMode(stage.phaseType);
-
-    const entryInstruction = this._buildStageEntryInstruction(stage, carriedContent);
-    for (const role of [ROLES.EXPERT, ROLES.INSPECTOR]) {
-      if (!this.roles.has(role)) continue;
-      const entry = this.roles.get(role);
-      entry.status = role === entryInstruction.role ? "idle" : "blocked";
+    const prevStage = this._getCurrentStage();
+    // If stage is different from current, update currentStageId/Index.
+    const stages = this._getStages();
+    const idx = stages.findIndex((s) => s.id === stage.id);
+    if (idx >= 0) {
+      this.currentStageId = stage.id;
+      this.currentStageIndex = idx;
+      this.submitCount = 0;
     }
-
-    return { instructions: [entryInstruction] };
+    this._applyRoleStatusesForStage(stage);
+    if (prevStage && prevStage.id !== stage.id) {
+      this._emit({
+        type: "stage_transition",
+        from: { id: prevStage.id, name: prevStage.name, isClosing: this._isClosingStage(prevStage) },
+        to:   { id: stage.id,     name: stage.name,     isClosing: this._isClosingStage(stage) },
+      });
+    }
+    return { instructions: this._buildStageEntryInstructions(stage, carriedContent) };
   }
 
   // ── Role Registration ──
 
-  /**
-   * Register a role connection. v2: role is declared at connect time — no
-   * separate assignRole step. Rejects duplicates for the same role.
-   *
-   * @param {Role} role
-   * @param {{ workspace?: string, model?: string, clientName?: string }} [meta]
-   * @returns {{ ok: true } | { error: string }}
-   */
   registerRole(role, meta = {}) {
     if (!Object.values(ROLES).includes(role)) {
       return { error: `Unknown role: ${role}` };
@@ -257,10 +197,6 @@ export class Orchestrator {
     return { ok: true };
   }
 
-  /**
-   * Unregister a role (connection lost).
-   * @param {Role} role
-   */
   unregisterRole(role) {
     if (!this.roles.has(role)) return { ok: true };
     this.roles.delete(role);
@@ -270,139 +206,118 @@ export class Orchestrator {
 
   // ── Orchestration Lifecycle ──
 
-  /**
-   * @param {"full"|"direct-execution"} startMode
-   * @returns {{ ready: boolean, missing: Role[] }}
-   */
-  checkStartReady(startMode) {
-    const required = REQUIRED_ROLES_BY_START_MODE[startMode];
-    if (!required) return { ready: false, missing: [] };
-    const missing = required.filter((r) => !this.roles.has(r));
+  /** @returns {{ ready: boolean, missing: Role[] }} */
+  checkStartReady() {
+    const missing = REQUIRED_ROLES.filter((r) => !this.roles.has(r));
     return { ready: missing.length === 0, missing };
   }
 
   /**
-   * Start orchestration. Returns initial prompts for active-phase roles
-   * (CEO is NOT released — it stays blocked until a gate trigger).
+   * Start orchestration. Requires all 3 roles connected and a blueprint
+   * with at least one non-closing stage.
    *
    * @param {string} userTask
-   * @param {"full"|"direct-execution"} [startMode]
+   * @param {object} blueprint
    * @param {string|null} [taskType]
-   * @returns {{ instructions: {role: Role, instruction: string}[] } | { error: string }}
    */
-  startOrchestration(userTask, startMode = START_MODES.FULL, taskType = null, blueprint = null) {
-    const readiness = this.checkStartReady(startMode);
+  startOrchestration(userTask, blueprint, taskType = null) {
+    const readiness = this.checkStartReady();
     if (!readiness.ready) {
       return { error: `Cannot start: missing roles ${readiness.missing.join(", ")}` };
     }
 
-    this.entryStrategy = startMode;
     this.status = "running";
     this.userTask = userTask;
     this.taskType = taskType;
     this.blueprint = blueprint || null;
-    const activeStage = this._selectStageForStart(startMode);
-    this._setCollaborationMode(
-      activeStage?.phaseType || (this._isDeliveryFirstEntry(startMode) ? COLLABORATION_MODES.DELIVERY : COLLABORATION_MODES.DELIBERATION),
-    );
-
-    this._emit({ type: "status_change", status: "running", phase: this.collaborationMode });
-
-    const instructions = [];
-    for (const [role, entry] of this.roles) {
-      if (role === ROLES.CEO) continue; // CEO stays blocked
-      if (activeStage) {
-        const openerRole = activeStage.openerTarget === "inspector" ? ROLES.INSPECTOR : ROLES.EXPERT;
-        if (role !== openerRole) {
-          entry.status = "blocked";
-          continue;
-        }
-      }
-      entry.status = "idle";
-      instructions.push({
-        role,
-        instruction: buildInitialPrompt(role, userTask, this.collaborationMode, {
-          isDirectExecution: this._isDeliveryFirstEntry(startMode),
-          stage: activeStage,
-        }),
-      });
+    const activeStage = this._selectStartStage();
+    if (!activeStage) {
+      return { error: "Blueprint has no enabled non-closing stage" };
     }
+
+    this._emit({ type: "status_change", status: "running" });
+    this._applyRoleStatusesForStage(activeStage);
+    this._emit({
+      type: "stage_transition",
+      from: null,
+      to: { id: activeStage.id, name: activeStage.name, isClosing: this._isClosingStage(activeStage) },
+    });
+
+    const instructions = this._buildStageEntryInstructions(activeStage);
     return { instructions };
   }
 
   // ── Submit Handling ──
 
   /**
-   * @param {"plan_draft"|"phase_complete"} submitType
+   * Expert submit. In non-closing stages routes to Inspector. In closing
+   * stages it is rejected.
+   *
    * @param {string} content
-   * @param {{ progress?: string }} [metadata]
-   * @returns {RoutingDecision}
    */
-  handleExpertSubmit(submitType, content, metadata = {}) {
-    if (!EXPERT_SUBMIT_TYPES.includes(submitType)) {
-      return { error: `Invalid expert submit type: ${submitType}` };
-    }
+  handleExpertSubmit(content) {
     const entry = this.roles.get(ROLES.EXPERT);
     if (!entry) return { error: "Expert role not connected" };
     if (this.status !== "running") return { error: `Orchestration not running (status: ${this.status})` };
 
-    this._trackSubmit(ROLES.EXPERT, content, metadata);
+    const stage = this._getCurrentStage();
+    if (this._isClosingStage(stage)) {
+      return { error: "Expert submissions are not accepted during the closing stage" };
+    }
 
-    if (this._needsHumanReview(ROLES.EXPERT, submitType)) {
+    this._trackSubmit(ROLES.EXPERT, content);
+
+    if (this._needsHumanReview(ROLES.EXPERT)) {
       this.humanReviewPending = {
         role: ROLES.EXPERT,
-        submitType,
         originalContent: content,
         targetRole: ROLES.INSPECTOR,
       };
-      return { action: "human_review", role: ROLES.EXPERT, submitType, content };
+      return { action: "human_review", role: ROLES.EXPERT, content };
     }
 
-    return this._routeExpertSubmit(submitType, content, metadata);
+    return this._routeExpertSubmit(content);
   }
 
   /**
-   * @param {{ passed: boolean }} meta
-   * @param {string} content
-   * @returns {RoutingDecision}
+   * Inspector submit. In non-closing stages always routes back to Expert.
+   * In closing stages it is rejected.
    */
-  handleInspectorSubmit(content, metadata = {}) {
+  handleInspectorSubmit(content) {
     const entry = this.roles.get(ROLES.INSPECTOR);
     if (!entry) return { error: "Inspector role not connected" };
     if (this.status !== "running") return { error: `Orchestration not running (status: ${this.status})` };
 
-    this._trackSubmit(ROLES.INSPECTOR, content, metadata);
+    const stage = this._getCurrentStage();
+    if (this._isClosingStage(stage)) {
+      return { error: "Inspector submissions are not accepted during the closing stage" };
+    }
 
-    if (this._needsHumanReview(ROLES.INSPECTOR, "inspector_submit")) {
+    this._trackSubmit(ROLES.INSPECTOR, content);
+
+    if (this._needsHumanReview(ROLES.INSPECTOR)) {
       this.humanReviewPending = {
         role: ROLES.INSPECTOR,
-        submitType: "inspector_submit",
         originalContent: content,
         targetRole: ROLES.EXPERT,
       };
-      return { action: "human_review", role: ROLES.INSPECTOR, submitType: "inspector_submit", content };
+      return { action: "human_review", role: ROLES.INSPECTOR, content };
     }
 
-    const passed = metadata.passed === true;
-
-    // During execution phase: if Inspector passes → advance Phase; if rejects → send back to Expert
-    if (this._isDeliveryMode()) {
-      if (passed) return this._advancePhase(content);
-    }
     return this._routeToExpert(content);
   }
 
-  _trackSubmit(role, content, metadata) {
+  _trackSubmit(role, content) {
     const entry = this.roles.get(role);
     if (entry) entry.status = "blocked";
     this.lastSubmitContent = content;
-    if (metadata.progress) this.lastProgress = metadata.progress;
+    this.submitCount += 1;
     this._endCurrentRound();
     this._startRound(role);
     this._checkStagnation(content);
   }
 
-  _needsHumanReview(role, _submitType) {
+  _needsHumanReview(role) {
     switch (this.controlMode) {
       case "autopilot": return false;
       case "ceo-override": return role === ROLES.CEO;
@@ -412,16 +327,11 @@ export class Orchestrator {
 
   approveHumanReview(modifiedContent) {
     if (!this.humanReviewPending) return { error: "No pending review" };
-    const { role, submitType, originalContent } = this.humanReviewPending;
+    const { role, originalContent } = this.humanReviewPending;
     const content = modifiedContent || originalContent;
     this.humanReviewPending = null;
-    if (role === ROLES.EXPERT) return this._routeExpertSubmit(submitType, content, {});
-    if (role === ROLES.INSPECTOR) {
-      if (this._isDeliveryMode()) {
-        return this._routeToExpert(content);
-      }
-      return this._routeToExpert(content);
-    }
+    if (role === ROLES.EXPERT) return this._routeExpertSubmit(content);
+    if (role === ROLES.INSPECTOR) return this._routeToExpert(content);
     return { action: "noop" };
   }
 
@@ -436,14 +346,11 @@ export class Orchestrator {
     };
   }
 
-  _routeExpertSubmit(submitType, content, metadata) {
-    // Always routes Expert → Inspector regardless of submit type / phase
+  _routeExpertSubmit(content) {
     if (!this.roles.has(ROLES.INSPECTOR)) {
       return { error: "Inspector role not connected" };
     }
-    const { prefix, suffix } = buildRoutingPrompt(ROLES.EXPERT, ROLES.INSPECTOR, this.collaborationMode, {
-      stage: this._getCurrentStage(),
-    });
+    const { prefix, suffix } = buildRoutingPrompt(ROLES.EXPERT, ROLES.INSPECTOR, this._getCurrentStage());
     return {
       action: "route",
       targetRole: ROLES.INSPECTOR,
@@ -455,9 +362,7 @@ export class Orchestrator {
     if (!this.roles.has(ROLES.EXPERT)) {
       return { error: "Expert role not connected" };
     }
-    const { prefix, suffix } = buildRoutingPrompt(ROLES.INSPECTOR, ROLES.EXPERT, this.collaborationMode, {
-      stage: this._getCurrentStage(),
-    });
+    const { prefix, suffix } = buildRoutingPrompt(ROLES.INSPECTOR, ROLES.EXPERT, this._getCurrentStage());
     return {
       action: "route",
       targetRole: ROLES.EXPERT,
@@ -469,12 +374,16 @@ export class Orchestrator {
 
   handleExpertVote(vote, reason) {
     if (!this.roles.has(ROLES.EXPERT)) return { error: "Expert role not connected" };
+    const stage = this._getCurrentStage();
+    if (this._isClosingStage(stage)) return { error: "Voting is not available during the closing stage" };
     this.votes.expert = { vote, reason };
     return this._resolveVotes();
   }
 
   handleInspectorVote(vote, reason) {
     if (!this.roles.has(ROLES.INSPECTOR)) return { error: "Inspector role not connected" };
+    const stage = this._getCurrentStage();
+    if (this._isClosingStage(stage)) return { error: "Voting is not available during the closing stage" };
     this.votes.inspector = { vote, reason };
     return this._resolveVotes();
   }
@@ -484,10 +393,8 @@ export class Orchestrator {
       return { status: "recorded", message: "投票已记录，等待对方投票" };
     }
     if (this.votes.expert.vote === "pass" && this.votes.inspector.vote === "pass") {
-      const gateType = this._isDeliveryMode() ? "execution_votes_passed" : "votes_passed";
-      this._emit({ type: gateType });
-      const gateLabel = this._isDeliveryMode() ? "CEO 终审" : "CEO 门控审批";
-      return { status: "passed", message: `投票通过，进入${gateLabel}` };
+      this._emit({ type: "votes_passed" });
+      return { status: "passed", message: "投票通过，进入阶段出口审批" };
     }
     const rejectReason = this.votes.expert.vote === "reject"
       ? this.votes.expert.reason
@@ -496,85 +403,52 @@ export class Orchestrator {
     return { status: "rejected", message: `投票未通过: ${rejectReason}` };
   }
 
-  // ── Phase transitions ──
+  // ── Stage advancement & gate ──
 
-  _advancePhase(reviewContent) {
-    this._emit({ type: "phase_advance", phase: this.collaborationMode });
-    if (!this.roles.has(ROLES.EXPERT)) return { error: "Expert role not connected" };
-    const nextStage = this._isDeliveryMode() ? this._selectNextStage() : null;
-    if (nextStage && this._isDeliveryStage(nextStage)) {
-      const entryInstruction = this._buildStageEntryInstruction(nextStage, reviewContent);
+  /**
+   * Called by daemon when votes_passed event fires. Depending on the current
+   * stage's exitGateEnabled, either trigger the CEO gate or advance directly.
+   */
+  triggerStageExit(materials) {
+    const stage = this._getCurrentStage();
+    if (!stage) return { action: "noop" };
+
+    if (stage.exitGateEnabled !== false && this.roles.has(ROLES.CEO)) {
+      // Gate enabled AND CEO connected — trigger defensive-lock gate.
+      this.ceoGate = {
+        active: true,
+        type: "stage_gate",
+        round: 0,
+        minDefensiveRounds: 2,
+        requiredConsecutive: 2,
+        consecutiveApprovals: 0,
+        materials,
+        history: [],
+      };
+      const { prefix, suffix } = buildRoutingPrompt("orchestrator", ROLES.CEO, stage, {
+        routingReason: "stage_gate",
+      });
       return {
-        action: "route",
-        targetRole: entryInstruction.role,
-        content: entryInstruction.instruction,
+        action: "wake_ceo",
+        content: `${prefix}\n\n## 原始任务\n\n${this.userTask}\n\n## 阶段产出\n\n${materials}\n\n${suffix}`,
       };
     }
-    const { prefix, suffix } = buildRoutingPrompt("orchestrator", ROLES.EXPERT, this.collaborationMode, {
-      routingReason: "phase_advance",
-      stage: this._getCurrentStage(),
-    });
-    return {
-      action: "route",
-      targetRole: ROLES.EXPERT,
-      content: `${prefix}\n\n${reviewContent}\n\n${suffix}`,
-    };
+    // Gate disabled or no CEO — advance directly.
+    return this._advanceStage(materials);
   }
 
-  _triggerCeoFinalReview(content) {
-    if (!this.roles.has(ROLES.CEO)) {
+  _advanceStage(carriedContent) {
+    this.votes = { expert: null, inspector: null };
+    this._emit({ type: "stage_advance", stageId: this.currentStageId });
+
+    const nextStage = this._selectNextStage();
+    if (!nextStage) {
+      // No next stage — workflow complete.
       this.status = "completed";
       this._emit({ type: "status_change", status: "completed" });
       return { action: "complete" };
     }
-    this.ceoGate = {
-      active: true,
-      type: "final_review",
-      round: 0,
-      minDefensiveRounds: 2,
-      requiredConsecutive: 2,
-      consecutiveApprovals: 0,
-      materials: content,
-      history: [],
-    };
-    const { prefix, suffix } = buildRoutingPrompt("orchestrator", ROLES.CEO, this.phase, {
-    const { prefix, suffix } = buildRoutingPrompt("orchestrator", ROLES.CEO, this.collaborationMode, {
-      routingReason: "final_review",
-      stage: this._getCurrentStage(),
-    });
-    return {
-      action: "wake_ceo",
-      content: `${prefix}\n\n## 原始任务\n\n${this.userTask}\n\n## 实施报告\n\n${content}\n\n${suffix}`,
-    };
-  }
-
-  triggerPlanningGate(materials) {
-    if (!this.roles.has(ROLES.CEO)) {
-      const nextStage = this._selectNextStage();
-      if (nextStage && !this._isDeliveryStage(nextStage)) {
-        return { action: "auto_transition_stage", stage: nextStage, materials };
-      }
-      return { action: "auto_transition", materials };
-    }
-    this.ceoGate = {
-      active: true,
-      type: "planning_gate",
-      round: 0,
-      minDefensiveRounds: 2,
-      requiredConsecutive: 2,
-      consecutiveApprovals: 0,
-      materials,
-      history: [],
-    };
-    const { prefix, suffix } = buildRoutingPrompt("orchestrator", ROLES.CEO, PHASES.PLANNING, {
-    const { prefix, suffix } = buildRoutingPrompt("orchestrator", ROLES.CEO, COLLABORATION_MODES.DELIBERATION, {
-      routingReason: "planning_gate",
-      stage: this._getCurrentStage(),
-    });
-    return {
-      action: "wake_ceo",
-      content: `${prefix}\n\n## 原始任务\n\n${this.userTask}\n\n## 投票理由\n\n${materials}\n\n${suffix}`,
-    };
+    return { action: "transition_to_stage", stage: nextStage, materials: carriedContent };
   }
 
   // ── CEO Verdict Handling ──
@@ -595,7 +469,7 @@ export class Orchestrator {
     const gate = this.ceoGate;
     gate.round++;
 
-    // Phase 1: defensive rounds — force downgrade
+    // Defensive gate step 1 — mandatory re-review rounds
     if (gate.round <= gate.minDefensiveRounds) {
       this._emit({
         type: "ceo_gate_defensive",
@@ -603,17 +477,16 @@ export class Orchestrator {
         round: gate.round,
         minDefensiveRounds: gate.minDefensiveRounds,
       });
-      const { prefix, suffix } = buildRoutingPrompt("orchestrator", ROLES.CEO, this.collaborationMode, {
+      const { prefix, suffix } = buildRoutingPrompt("orchestrator", ROLES.CEO, this._getCurrentStage(), {
         routingReason: "defensive_review",
-        stage: this._getCurrentStage(),
       });
       return {
         action: "wake_ceo",
-        content: `${prefix}\n\n[驳斥锁 — 第 ${gate.round}/${gate.minDefensiveRounds} 轮防御审查]\n\n## 审查材料\n\n${gate.materials}\n\n${suffix}`,
+        content: `${prefix}\n\n[需要进一步验证]\n\n## 审查材料\n\n${gate.materials}\n\n${suffix}`,
       };
     }
 
-    // Phase 2: consecutive approvals
+    // Defensive gate step 2 — consecutive confirmations
     gate.consecutiveApprovals++;
     if (gate.consecutiveApprovals < gate.requiredConsecutive) {
       this._emit({
@@ -623,33 +496,23 @@ export class Orchestrator {
         consecutiveApprovals: gate.consecutiveApprovals,
         requiredConsecutive: gate.requiredConsecutive,
       });
-      const { prefix, suffix } = buildRoutingPrompt("orchestrator", ROLES.CEO, this.collaborationMode, {
+      const { prefix, suffix } = buildRoutingPrompt("orchestrator", ROLES.CEO, this._getCurrentStage(), {
         routingReason: "consecutive_confirm",
-        stage: this._getCurrentStage(),
       });
       return {
         action: "wake_ceo",
-        content: `${prefix}\n\n[连续确认 — 第 ${gate.consecutiveApprovals}/${gate.requiredConsecutive} 次]\n\n## 审查材料\n\n${gate.materials}\n\n${suffix}`,
+        content: `${prefix}\n\n[最终通过前确认]\n\n## 审查材料\n\n${gate.materials}\n\n${suffix}`,
       };
     }
 
-    // Phase 3: fully passed
+    // Defensive gate step 3 — gate fully passed
     const gateType = gate.type;
+    const materials = gate.materials;
     this.ceoGate = this._emptyGate();
 
-    if (gateType === "planning_gate") {
+    if (gateType === "stage_gate") {
       this._emit({ type: "ceo_gate_resolved", gateType, verdict: "approved" });
-      const nextStage = this._selectNextStage();
-      if (nextStage && !this._isDeliveryStage(nextStage)) {
-        return { action: "transition_to_stage", stage: nextStage, materials: gate.materials };
-      }
-      return { action: "transition_to_execution", materials: gate.materials };
-    }
-    if (gateType === "final_review") {
-      this.status = "completed";
-      this._emit({ type: "status_change", status: "completed" });
-      this._emit({ type: "ceo_gate_resolved", gateType, verdict: "approved" });
-      return { action: "complete" };
+      return this._advanceStage(materials);
     }
     if (gateType === "arbitration" || gateType === "stagnation_arbitration") {
       this._emit({ type: "ceo_gate_resolved", gateType, verdict: "approved" });
@@ -662,20 +525,17 @@ export class Orchestrator {
     const gateType = this.ceoGate.type;
     const routeTargets = [];
 
-    // Reset consecutive counter on rejection
     this.ceoGate.consecutiveApprovals = 0;
     this.ceoGate = this._emptyGate();
 
-    if (gateType === "planning_gate" || gateType === "final_review") {
-      // Reset votes (planning gate only)
-      if (gateType === "planning_gate") this.votes = { expert: null, inspector: null };
+    if (gateType === "stage_gate") {
+      this.votes = { expert: null, inspector: null };
       this._emit({ type: "ceo_gate_resolved", gateType, verdict: "rejected", reason });
 
       for (const role of [ROLES.EXPERT, ROLES.INSPECTOR]) {
         if (!this.roles.has(role)) continue;
-        const { prefix, suffix } = buildRoutingPrompt(ROLES.CEO, role, this.collaborationMode, {
+        const { prefix, suffix } = buildRoutingPrompt(ROLES.CEO, role, this._getCurrentStage(), {
           routingReason: "rejection",
-          stage: this._getCurrentStage(),
         });
         routeTargets.push({
           targetRole: role,
@@ -703,9 +563,8 @@ export class Orchestrator {
     const routeTargets = [];
     for (const role of targets) {
       if (!this.roles.has(role)) continue;
-      const { prefix, suffix } = buildRoutingPrompt(ROLES.CEO, role, this.collaborationMode, {
+      const { prefix, suffix } = buildRoutingPrompt(ROLES.CEO, role, this._getCurrentStage(), {
         routingReason: "arbitration",
-        stage: this._getCurrentStage(),
       });
       routeTargets.push({
         targetRole: role,
@@ -713,39 +572,6 @@ export class Orchestrator {
       });
     }
     return { action: "route_multiple", targets: routeTargets };
-  }
-
-  /**
-   * Transition from planning to execution phase.
-   * Returns instructions for the Expert (and Inspector if connected).
-   */
-  transitionToExecution(planDocument) {
-    const nextStage = this._selectFirstExecutionStage();
-    if (nextStage) {
-      return this.transitionToStage(nextStage, planDocument);
-    }
-    this._setCollaborationMode(nextStage?.phaseType || COLLABORATION_MODES.DELIVERY);
-
-    const instructions = [];
-    const openerRole = nextStage?.openerTarget === "inspector" ? ROLES.INSPECTOR : ROLES.EXPERT;
-    for (const role of [ROLES.EXPERT, ROLES.INSPECTOR]) {
-      if (!this.roles.has(role)) continue;
-      if (nextStage && role !== openerRole) continue;
-      const { prefix, suffix } = buildRoutingPrompt("orchestrator", role, COLLABORATION_MODES.DELIVERY, {
-        routingReason: "transition",
-        stage: nextStage,
-      });
-      const entry = this.roles.get(role);
-      entry.status = "idle";
-      const stageDirective = nextStage?.openerPrompt
-        ? `\n\n## Stage Opening Directive\n${nextStage.openerPrompt}`
-        : "";
-      instructions.push({
-        role,
-        instruction: `${prefix}${stageDirective}\n\n${planDocument}\n\n${suffix}`,
-      });
-    }
-    return { instructions };
   }
 
   // ── Control mode ──
@@ -767,13 +593,14 @@ export class Orchestrator {
       this.sameFeedbackCount++;
       if (this.sameFeedbackCount >= this.maxSameFeedback) {
         const stalledRoles = [...new Set(
-          this.rounds.slice(-this.maxSameFeedback).map(r => r.role).filter(Boolean)
+          this.rounds.slice(-this.maxSameFeedback).map((r) => r.role).filter(Boolean)
         )];
         this._emit({
           type: "stagnation_detected",
           count: this.sameFeedbackCount,
           stalledRoles,
-          phase: this.collaborationMode,
+          stageId: this.currentStageId,
+          submitCount: this.submitCount,
           totalRounds: this.rounds.length,
         });
       }
@@ -783,10 +610,6 @@ export class Orchestrator {
     }
   }
 
-  /**
-   * Called by daemon when stagnation_detected event fires.
-   * @param {{ count: number, stalledRoles: Role[], phase: Phase, totalRounds: number }} stagnationData
-   */
   triggerStagnationArbitration(stagnationData) {
     if (!this.roles.has(ROLES.CEO)) {
       return { action: "noop", reason: "no_ceo_for_arbitration", stagnationData };
@@ -806,16 +629,13 @@ export class Orchestrator {
       history: [],
     };
 
-    const { prefix, suffix } = buildRoutingPrompt("orchestrator", ROLES.CEO, this.collaborationMode, {
+    const { prefix, suffix } = buildRoutingPrompt("orchestrator", ROLES.CEO, this._getCurrentStage(), {
       routingReason: "stagnation_arbitration",
-      stage: this._getCurrentStage(),
     });
-
-    const stalledRolesStr = stagnationData.stalledRoles.join("、");
 
     return {
       action: "wake_ceo",
-      content: `${prefix}\n\n## 停滞信息\n- **协作模式**: ${this.describeCollaborationMode()}\n- **连续相同提交**: ${stagnationData.count} 次\n- **停滞角色**: ${stalledRolesStr}\n- **已完成轮次**: ${stagnationData.totalRounds}\n\n## 原始任务\n\n${this.userTask}\n\n## 最近提交内容\n\n${this.lastSubmitContent || "(无)"}\n\n${suffix}`,
+      content: `${prefix}\n\n## 停滞信息\n- **当前阶段**: ${this._getCurrentStage()?.name || "(未知)"}\n- **状态**: 最近提交缺少实质进展，需要裁定下一步。\n\n## 原始任务\n\n${this.userTask}\n\n## 最近提交内容\n\n${this.lastSubmitContent || "(无)"}\n\n${suffix}`,
     };
   }
 
@@ -825,7 +645,7 @@ export class Orchestrator {
     this.currentRound = {
       id: `round_${Date.now()}`,
       role,
-      phase: this.collaborationMode,
+      stageId: this.currentStageId,
       startedAt: new Date().toISOString(),
       endedAt: null,
     };
@@ -863,10 +683,6 @@ export class Orchestrator {
     const currentStage = this._getCurrentStage();
     return {
       status: this.status,
-      phase: this.phase,
-      collaborationMode: this.collaborationMode,
-      startMode: this.startMode,
-      entryStrategy: this.entryStrategy,
       taskType: this.taskType,
       controlMode: this.controlMode,
       blueprintRuntime: this.blueprint
@@ -875,13 +691,14 @@ export class Orchestrator {
             templateId: this.blueprint.templateId || null,
             currentStageId: this.currentStageId,
             currentStageIndex: this.currentStageIndex,
-            totalStages: this._getEnabledStages().length,
+            totalStages: this._getStages().length,
+            submitCount: this.submitCount,
             currentStage: currentStage
               ? {
                   id: currentStage.id,
                   name: currentStage.name,
-                  phaseType: currentStage.phaseType,
-                  openerTarget: currentStage.openerTarget,
+                  isClosing: this._isClosingStage(currentStage),
+                  exitGateEnabled: currentStage.exitGateEnabled !== false,
                 }
               : null,
           }
@@ -899,7 +716,6 @@ export class Orchestrator {
       },
       rounds: this.rounds,
       humanReviewPending: this.humanReviewPending,
-      lastProgress: this.lastProgress,
     };
   }
 }

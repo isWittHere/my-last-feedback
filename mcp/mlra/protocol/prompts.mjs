@@ -1,5 +1,5 @@
 // mcp/mlra/protocol/prompts.mjs
-// v2 routing / initial-prompt templates for the 3-role MLRA topology.
+// Routing / initial-prompt templates for the 3-role MLRA topology.
 //
 // Design philosophy:
 // - Agent identity lives in the user's Copilot chatmode files
@@ -7,14 +7,13 @@
 // - Skills are action-oriented tutorials living in ~/.copilot/skills/mlra/.
 //   The orchestrator references them by short logical name; the agent loads
 //   the file on demand.
-// - Orchestrator-delivered messages provide:
-//     1. Task / phase context
-//     2. Short list of relevant skill references
-//     3. Expected next tool call
+// - Collaboration rhythm is driven by the user-authored stage pipeline; this
+//   module is stage-agnostic — stage-specific guidance arrives via the stage
+//   object passed in (stage.promptOverride / stage.skillRefs / stage.name ...).
 // - Every agent should feel as if the USER is speaking to it. Other agents
 //   remain invisible; relayed content is framed as input from the user.
 
-import { ROLES, PHASES } from "./roles.mjs";
+import { ROLES } from "./roles.mjs";
 
 // Skill library — keys are short logical names, values are paths relative to
 // the agent's skill root (~/.copilot/skills/mlra/).
@@ -49,8 +48,7 @@ function renderSkillRefs(keys) {
 
 function renderStageContext(stage) {
   if (!stage) return "";
-  const blocks = [`## Current Stage\n${stage.name}`];
-  if (stage.objective) blocks.push(`## Stage Objective\n${stage.objective}`);
+  const blocks = [`## Current Stage\n${stage.name || stage.id || "(unnamed)"}`];
   if (stage.description) blocks.push(`## Stage Notes\n${stage.description}`);
   return `\n\n${blocks.join("\n\n")}`;
 }
@@ -60,48 +58,39 @@ function renderStageDirective(title, text) {
   return `\n\n## ${title}\n${text}`;
 }
 
-function describeCollaborationMode(phase) {
-  return phase === PHASES.PLANNING ? "deliberation" : "delivery";
+function isClosingStage(stage) {
+  return Boolean(stage && stage.isClosing === true);
 }
 
 /**
  * Short routing hint appended to every relayed message.
  *
  * @param {"ceo"|"expert"|"inspector"} role
- * @param {"planning"|"execution"} phase
+ * @param {object} stage
  * @returns {string}
  */
-export function buildRoutingHint(role, phase) {
-  const collaborationMode = describeCollaborationMode(phase);
+export function buildRoutingHint(role, stage) {
+  const stageName = stage?.name || "(stage)";
   if (role === ROLES.EXPERT) {
-    const skills = phase === PHASES.PLANNING
-      ? ["submit_plan_draft", "decision_levels", "hallucination_check"]
-      : ["submit_phase_report", "re_verify", "decision_levels", "hallucination_check"];
-    const action = phase === PHASES.PLANNING
-      ? 'expert_submit(type="plan_draft", ...)'
-      : 'expert_submit(type="phase_complete", ...)';
     return [
       "[Context]",
-      `Collaboration mode: ${collaborationMode}`,
-      `Next action: ${action}`,
-      `Relevant skills: ${skills.map((k) => SKILLS[k]).join(", ")}`,
+      `Stage: ${stageName}`,
+      `Next action: expert_submit({ content })`,
+      `Vote when the user-facing work is ready: expert_vote({ vote, reason })`,
     ].join("\n");
   }
   if (role === ROLES.INSPECTOR) {
-    const skills = phase === PHASES.PLANNING
-      ? ["review_plan", "decision_levels", "hallucination_check"]
-      : ["review_phase", "decision_levels", "hallucination_check"];
     return [
       "[Context]",
-      `Collaboration mode: ${collaborationMode}`,
-      `Next action: inspector_submit({ passed, content })`,
-      `Relevant skills: ${skills.map((k) => SKILLS[k]).join(", ")}`,
+      `Stage: ${stageName}`,
+      `Next action: inspector_submit({ content })`,
+      `Vote when the user-facing material is ready: inspector_vote({ vote, reason })`,
     ].join("\n");
   }
   if (role === ROLES.CEO) {
     return [
       "[Context]",
-      `Collaboration mode: ${collaborationMode}`,
+      `Stage: ${stageName}`,
       `Next action: ceo_verdict({ verdict, reason, targets? })`,
       `Relevant skills: ${SKILLS.ceo_verdict}, ${SKILLS.hallucination_check}`,
     ].join("\n");
@@ -110,82 +99,76 @@ export function buildRoutingHint(role, phase) {
 }
 
 /**
- * Initial message delivered to a role at workflow start.
+ * Initial message delivered to a role when a stage becomes active.
  *
  * @param {"ceo"|"expert"|"inspector"} role
  * @param {string} userTask
- * @param {"planning"|"execution"} phase
- * @param {{ isDirectExecution?: boolean }} [options]
+ * @param {object} stage — the stage blueprint (StageBlueprint)
+ * @param {{ carriedContent?: string }} [options]
  * @returns {string}
  */
-export function buildInitialPrompt(role, userTask, phase, options = {}) {
-  const { stage } = options;
-  const phaseBlock = `## Current Collaboration Mode\n${describeCollaborationMode(phase)}`;
+export function buildInitialPrompt(role, userTask, stage, options = {}) {
+  const stageBlock = renderStageContext(stage);
   const taskBlock = `\n\n## Task\n\n${userTask}`;
   const preparation = `\n\n## Preparation\nBefore starting, read \`AGENTS.md\` at the project root to understand architecture and conventions.`;
-  const stageBlock = renderStageContext(stage);
-  const stageSkills = stage?.recommendedSkills?.length ? renderSkillRefs(stage.recommendedSkills) : "";
+  const stageSkills = stage?.skillRefs?.length ? renderSkillRefs(stage.skillRefs) : "";
+  const carried = options.carriedContent
+    ? `\n\n## Carried-over material\n\n${options.carriedContent}`
+    : "";
 
+  if (isClosingStage(stage)) {
+    // Closing stage: CEO solo performance.
+    if (role !== ROLES.CEO) {
+      // Should never be dispatched to expert/inspector — but return a safe noop.
+      return `## Closing Stage\nThis launcher has entered its closing stage. You are off-duty. No further submissions are expected.`;
+    }
+    const closingPrompt = stage?.promptCeo || stage?.promptOverride || DEFAULT_CLOSING_CEO_PROMPT;
+    return `${stageBlock}${taskBlock}${preparation}${stageSkills}\n\n## Closing Directive\n${closingPrompt}${carried}`;
+  }
+
+  // Non-closing stage:
   if (role === ROLES.EXPERT) {
-    if (phase === PHASES.PLANNING) {
-      const skills = renderSkillRefs([
-        "intent_classification",
-        "codebase_assessment",
-        "submit_plan_draft",
-        "decision_levels",
-        "hallucination_check",
-        "vote_discipline",
-      ]);
-      const opening = stage?.openerTarget === "expert"
-        ? renderStageDirective("Stage Opening Directive", stage.openerPrompt)
-        : "";
-      return `${phaseBlock}${taskBlock}${stageBlock}${preparation}${skills}${stageSkills}${opening}\n\n## Action\nAnalyze the task and submit a deliberation draft via \`expert_submit(type="plan_draft", content=...)\`. You will then receive review feedback and iterate accordingly. When the material is mature enough to warrant CEO review, use \`expert_vote(vote="pass", reason=...)\`. Only when both sides vote \`pass\` is the gate triggered; a single \`reject\` resets voting and iteration continues.`;
-    }
-    const skills = renderSkillRefs([
-      "submit_phase_report",
-      "re_verify",
-      "failure_recovery",
-      "decision_levels",
-      "hallucination_check",
-      "vote_discipline",
-    ]);
-    const opening = stage?.openerTarget === "expert"
-      ? renderStageDirective("Stage Opening Directive", stage.openerPrompt)
-      : "";
-    if (options.isDirectExecution) {
-      return `${phaseBlock} (delivery-first entry)${taskBlock}${stageBlock}${preparation}${skills}${stageSkills}${opening}\n\n## Action\n\n1. Analyze the task and form a delivery plan\n2. Implement all code changes and local verification yourself\n3. After each delivery cycle, submit \`expert_submit(type="phase_complete", content=..., progress="Cycle N/M")\` and continue when the reviewer accepts it\n4. Walk the re-verify flow before every submission\n5. After the final delivery cycle is accepted, use \`expert_vote(vote="pass", reason=...)\` to request final review`;
-    }
-    return `${phaseBlock}${taskBlock}${stageBlock}${preparation}${skills}${stageSkills}${opening}\n\n## Action\nStanding by. When work arrives, handle it per the referenced skills. Submit each completed delivery cycle via \`expert_submit(type="phase_complete", ...)\`. After the final delivery cycle is accepted, use \`expert_vote(vote="pass", ...)\` to request the final verdict.`;
+    const override = stage?.promptExpert || stage?.promptOverride;
+    const directive = override
+      ? renderStageDirective("Stage Directive", override)
+      : `\n\n## Action\nAnalyze the user's task and produce a user-facing deliverable. Submit via \`expert_submit({ content })\`. Treat routed feedback as user feedback. When the work is genuinely ready for final stage-exit review, use \`expert_vote(vote="pass", reason=...)\`.`;
+    return `${stageBlock}${taskBlock}${preparation}${stageSkills}${directive}${carried}`;
   }
 
   if (role === ROLES.INSPECTOR) {
-    const skills = phase === PHASES.PLANNING
-      ? renderSkillRefs(["review_plan", "decision_levels", "hallucination_check", "vote_discipline"])
-      : renderSkillRefs(["review_phase", "decision_levels", "hallucination_check", "vote_discipline"]);
-    const opening = stage?.openerTarget === "inspector"
-      ? renderStageDirective("Stage Opening Directive", stage.openerPrompt)
-      : "";
-    const reviewFocus = renderStageDirective("Review Focus", stage?.reviewerPrompt);
-    return `${phaseBlock}${taskBlock}${stageBlock}${preparation}${skills}${stageSkills}${opening}${reviewFocus}\n\n## Action\nStanding by. When material arrives for review, produce a structured report per the relevant skill and submit via \`inspector_submit({ passed, content })\`. During deliberation, iterate through this loop until the material is mature; during delivery, \`passed: true\` advances the work to the next cycle. When the overall work is ready for CEO review, use \`inspector_vote(vote="pass", reason=...)\`.`;
+    const override = stage?.promptInspector || stage?.promptOverride;
+    const directive = override
+      ? renderStageDirective("Stage Directive", override)
+      : `\n\n## Action\nWhen material arrives for review, evaluate it for the user. Produce a structured review and submit via \`inspector_submit({ content })\`. When the material is genuinely ready for final stage-exit review, use \`inspector_vote(vote="pass", reason=...)\`.`;
+    return `${stageBlock}${taskBlock}${preparation}${stageSkills}${directive}${carried}`;
   }
 
   if (role === ROLES.CEO) {
+    // CEO is usually standby during non-closing stages; only woken up at gates.
+    // This branch is here for completeness only.
     const skills = renderSkillRefs(["ceo_verdict", "hallucination_check"]);
-    const gateFocus = renderStageDirective("Approval Criteria", stage?.ceoGatePrompt);
-    return `${phaseBlock}${taskBlock}${stageBlock}${preparation}${skills}${stageSkills}${gateFocus}\n\n## Action\nStanding by. You will be consulted at key gates (plan gate, final verification, arbitration). Issue a ruling via \`ceo_verdict({ verdict, reason, targets? })\`. Note: any \`approved\` verdict first passes through defensive-lock (two mandatory re-reviews + two consecutive confirms) before taking effect, so your first approval will be sent back for deeper scrutiny.`;
+    return `${stageBlock}${taskBlock}${preparation}${skills}\n\n## Action\nYou may be consulted at the stage exit gate. Issue a ruling via \`ceo_verdict({ verdict, reason, targets? })\`. Any approval may require additional verification before taking effect.${carried}`;
   }
 
-  return `${phaseBlock}${taskBlock}${preparation}`;
+  return `${stageBlock}${taskBlock}${preparation}`;
 }
 
-// ── Routing prompt templates (v2, user-voice, English) ──
+const DEFAULT_CLOSING_CEO_PROMPT = `The workflow has reached its closing stage. Produce the final wrap-up for the user.
+
+Produce a wrap-up document covering:
+1. Task summary — the user's goal, important decisions, and final outcome.
+2. Repository snapshot — files touched, notable changes, any remaining open ends.
+3. Deliverables checklist — concrete artifacts, test evidence, how to verify.
+
+After writing the document, call the blocking feedback tool (\`interactive_feedback\`) to stand by for the user's response.`;
+
+// ── Routing prompt templates (user-voice, English) ──
 // Templates keep prefixes/suffixes short: they bridge context and reference
-// the relevant skill. Operational details (review dimensions, report format)
-// live in the skill files, not here.
+// the relevant action. Stage-specific details (directives, skills) are
+// rendered from the stage object by buildRoutingPrompt.
 //
 // Key formats:
 //   "<source>→<target>"                standard relay
-//   "<source>→<target>:<phase>"        phase-specific variant
 //   "<source>→<target>:<reason>"       special reason (rejection/transition/...)
 //   "<source>:<reason>"                source-only special trigger
 //
@@ -193,72 +176,52 @@ export function buildInitialPrompt(role, userTask, phase, options = {}) {
 // to the recipient for action.
 
 const ROUTING_TEMPLATES = Object.freeze({
-  // Planning: plan ↔ review
-  "expert→inspector:planning": {
-    prefix: "The following is a deliberation draft awaiting your independent review.",
-    suffix: `See skill \`${SKILLS.review_plan}\`. Submit your review via \`inspector_submit({ passed, content })\`. When the plan is mature enough to request the CEO plan gate, use \`inspector_vote(vote="pass", ...)\` — the gate only opens when both sides vote pass.`,
+  // Generic relay between the two working roles
+  "expert→inspector": {
+    prefix: "Please review the following user-facing material independently. Do not trust the narrative alone — open the cited files and verify against actual code.",
+    suffix: `See the stage directive. Submit your review via \`inspector_submit({ content })\`. When the material is genuinely ready for final stage-exit review, use \`inspector_vote(vote="pass", reason=...)\`.`,
   },
-  "inspector→expert:planning": {
-    prefix: "The following is review feedback on your previous deliberation draft.",
-    suffix: `See skill \`${SKILLS.decision_levels}\`. Address each item, then resubmit via \`expert_submit(type="plan_draft", content=...)\`. When you believe the plan is mature, use \`expert_vote(vote="pass", ...)\` — the gate only opens when both sides vote pass.`,
-  },
-
-  // Execution: phase report ↔ review
-  "expert→inspector:execution": {
-    prefix: "The following is a delivery report awaiting your review. Do not trust the report narrative alone — open the cited files and verify against actual code.",
-    suffix: `See skill \`${SKILLS.review_phase}\`. Submit via \`inspector_submit({ passed, content })\` — \`passed: true\` advances to the next delivery cycle; \`passed: false\` sends it back for rework. After the final delivery cycle is accepted, use \`inspector_vote(vote="pass", ...)\` to request the final verdict.`,
-  },
-  "inspector→expert:execution": {
-    prefix: "The following is review feedback on your previous delivery report.",
-    suffix: `See skill \`${SKILLS.decision_levels}\`. Address each item and resubmit via \`expert_submit(type="phase_complete", content=...)\`. After the final delivery cycle is accepted, use \`expert_vote(vote="pass", ...)\` to request the final verdict.`,
+  "inspector→expert": {
+    prefix: "The user-facing submission received the following review feedback.",
+    suffix: `See skill \`${SKILLS.decision_levels}\`. Address each item and resubmit via \`expert_submit({ content })\`. When the work is genuinely ready for final stage-exit review, use \`expert_vote(vote="pass", reason=...)\`.`,
   },
 
-  // Gate triggers → CEO
-  "orchestrator→ceo:planning_gate": {
-    prefix: "The following is a plan that has reached consensus and awaits your approval. Before ruling, survey the project state (AGENTS.md + core code).",
+  // Gate triggers → CEO (unified — no phase variants)
+  "orchestrator→ceo:stage_gate": {
+    prefix: "The following user-facing material awaits stage-exit approval. Before ruling, survey the project state (AGENTS.md + core code).",
     suffix: `See skill \`${SKILLS.ceo_verdict}\`. Submit via \`ceo_verdict({verdict, reason})\`.`,
   },
-  "orchestrator→ceo:final_review": {
-    prefix: "The following is the final output of all execution work. Verify thoroughly by opening the code — do not rely on report self-descriptions.",
-    suffix: `See skills \`${SKILLS.ceo_verdict}\` and \`${SKILLS.hallucination_check}\`. Submit final verdict via \`ceo_verdict({verdict, reason})\`.`,
-  },
   "orchestrator→ceo:stagnation_arbitration": {
-    prefix: "Progress has stalled — repeated submissions without substantive movement. Please step in as arbitrator: diagnose the root cause and issue clear directives to break the deadlock.",
-    suffix: "Submit via `ceo_verdict({verdict, reason, targets?})`. `targets` may scope the ruling to specific roles.",
+    prefix: "The workflow appears blocked without substantive movement. Diagnose the root cause and issue clear directives to unblock the user's task.",
+    suffix: "Submit via `ceo_verdict({verdict, reason, targets?})`. `targets` may scope the ruling if needed.",
   },
   "orchestrator→ceo:defensive_review": {
-    prefix: `Your \`approved\` verdict has been defensively downgraded to "further review". See the defensive-lock section of \`${SKILLS.ceo_verdict}\`.`,
-    suffix: "Use this round to dig deeper — look for issues and risks that may have been missed. Then submit via `ceo_verdict` again.",
+    prefix: `Further verification is required before this approval can take effect. See the defensive-lock section of \`${SKILLS.ceo_verdict}\`.`,
+    suffix: "Review carefully for issues and risks that may have been missed. Then submit via `ceo_verdict` again.",
   },
   "orchestrator→ceo:consecutive_confirm": {
-    prefix: "Your `approved` verdict has been recorded. The system requires consecutive confirmations before final passage.",
-    suffix: 'Confirm once more carefully, then submit via `ceo_verdict({verdict: "approved", reason})` again.',
+    prefix: "Additional confirmation is required before final passage.",
+    suffix: 'Confirm carefully, then submit via `ceo_verdict({verdict: "approved", reason})` again.',
   },
 
   // CEO rejection → expert / inspector (source identity hidden)
   "ceo→expert:rejection": {
-    prefix: "Your previous submission was sent back with the following feedback.",
-    suffix: "Address the feedback and resubmit via `expert_submit(...)`.",
+    prefix: "Your previous user-facing submission was sent back with the following feedback.",
+    suffix: "Address the feedback and resubmit via `expert_submit({ content })`.",
   },
   "ceo→inspector:rejection": {
     prefix: "The material you reviewed was sent back with the following feedback. A revised version will arrive shortly.",
-    suffix: "Wait for the revised version and continue the review cycle.",
+    suffix: "Wait for the revised version and review it per the stage directive.",
   },
 
-  // Planning → execution transition
-  "orchestrator→expert:transition": {
-    prefix: "The deliberation cycle has been approved. Below is the final plan — enter delivery.",
-    suffix: `See skills \`${SKILLS.submit_phase_report}\` and \`${SKILLS.re_verify}\`. Execute cycle-by-cycle and after each delivery cycle submit via \`expert_submit(type="phase_complete", content=...)\`.`,
+  // Stage advance (gate passed / gate disabled)
+  "orchestrator→expert:stage_advance": {
+    prefix: "The previous stage has been accepted. Below is the carried-over material — continue in the new stage context.",
+    suffix: "Execute per the stage directive; submit via `expert_submit({ content })`.",
   },
-  "orchestrator→inspector:transition": {
-    prefix: "The deliberation cycle has been approved. Below is the final plan for your future review reference.",
-    suffix: `Delivery reports will arrive shortly. Review each per skill \`${SKILLS.review_phase}\`.`,
-  },
-
-  // Phase advance (passed)
-  "orchestrator→expert:phase_advance": {
-    prefix: "The current delivery cycle passed review. Below is the approved review report — proceed to the next cycle.",
-    suffix: 'Continue executing per the plan; submit the next delivery cycle via `expert_submit(type="phase_complete", content=...)`.',
+  "orchestrator→inspector:stage_advance": {
+    prefix: "The previous stage has been accepted. Below is the carried-over material for your awareness.",
+    suffix: "Subsequent submissions from the working side will arrive shortly. Review per the stage directive.",
   },
 
   // CEO arbitration delivery (source identity hidden)
@@ -273,12 +236,12 @@ const ROUTING_TEMPLATES = Object.freeze({
  *
  * @param {"ceo"|"expert"|"inspector"|"orchestrator"} sourceRole
  * @param {"ceo"|"expert"|"inspector"|"orchestrator"} targetRole
- * @param {"planning"|"execution"} phase
+ * @param {object|null} stage — current stage blueprint (or null)
  * @param {{ routingReason?: string }} [context]
  * @returns {{ prefix: string, suffix: string }}
  */
-export function buildRoutingPrompt(sourceRole, targetRole, phase, context = {}) {
-  const { routingReason, stage } = context;
+export function buildRoutingPrompt(sourceRole, targetRole, stage, context = {}) {
+  const { routingReason } = context;
 
   let prompt = null;
 
@@ -290,29 +253,33 @@ export function buildRoutingPrompt(sourceRole, targetRole, phase, context = {}) 
   }
 
   if (!prompt) {
-    const phaseKey = `${sourceRole}→${targetRole}:${phase}`;
-    if (ROUTING_TEMPLATES[phaseKey]) prompt = { ...ROUTING_TEMPLATES[phaseKey] };
-  }
-
-  if (!prompt) {
     const standardKey = `${sourceRole}→${targetRole}`;
     if (ROUTING_TEMPLATES[standardKey]) prompt = { ...ROUTING_TEMPLATES[standardKey] };
   }
 
   if (!prompt) {
     prompt = {
-      prefix: `Here is material for you (Phase: ${phase}):`,
-      suffix: "Handle it per the relevant skill and submit via the corresponding tool.",
+      prefix: `Here is material for you${stage?.name ? ` (stage: ${stage.name})` : ""}:`,
+      suffix: "Handle it per the stage directive and submit via the corresponding tool.",
     };
   }
 
   const stagePrefix = renderStageContext(stage);
-  const stageSkills = stage?.recommendedSkills?.length ? renderSkillRefs(stage.recommendedSkills) : "";
-  const reviewFocus = targetRole === ROLES.INSPECTOR ? renderStageDirective("Review Focus", stage?.reviewerPrompt) : "";
-  const gateFocus = targetRole === ROLES.CEO ? renderStageDirective("Approval Criteria", stage?.ceoGatePrompt) : "";
+  const stageSkills = stage?.skillRefs?.length ? renderSkillRefs(stage.skillRefs) : "";
+  const stageDirective = (() => {
+    if (!stage) return "";
+    const text = (targetRole === ROLES.EXPERT ? stage.promptExpert : null)
+      || (targetRole === ROLES.INSPECTOR ? stage.promptInspector : null)
+      || (targetRole === ROLES.CEO ? stage.promptCeo : null)
+      || stage.promptOverride;
+    return renderStageDirective("Stage Directive", text);
+  })();
+  const exitGateDirective = routingReason === "stage_gate" && stage?.exitGatePrompt
+    ? renderStageDirective("Exit Gate Rule Prompt", stage.exitGatePrompt)
+    : "";
 
   return {
-    prefix: `${prompt.prefix}${stagePrefix}${reviewFocus}${gateFocus}`,
+    prefix: `${prompt.prefix}${stagePrefix}${stageDirective}${exitGateDirective}`,
     suffix: `${prompt.suffix}${stageSkills}`,
   };
 }

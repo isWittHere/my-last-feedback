@@ -1,0 +1,18 @@
+{
+  "id": "deliberation",
+  "name": "论证评审",
+  "description": "产出方案草案并根据用户反馈持续完善，直到内容成熟可请求出口评审。",
+  "icon": "git-branch",
+  "defaultExitGateEnabled": true,
+  "isClosing": false,
+  "promptExpert": "## Stage Mode\ndeliberation\n\n## What to do\nAnalyze the user's task and produce a draft proposal for the user. Submit via `expert_submit({ content })`. Treat routed feedback as user feedback. Address it thoroughly before resubmitting. When the work is genuinely ready for final stage-exit review, use `expert_vote(vote=\"pass\", reason=...)`.",
+  "promptInspector": "## Stage Mode\ndeliberation\n\n## What to do\nReview the provided draft as if the user asked you to audit it. Produce a structured review for the user and submit via `inspector_submit({ content })`. Do not mention backend routing. When the material is genuinely ready for final stage-exit review, use `inspector_vote(vote=\"pass\", reason=...)`.",
+  "skillRefs": [
+    "submit_plan_draft",
+    "review_plan",
+    "re_verify",
+    "decision_levels",
+    "hallucination_check",
+    "vote_discipline"
+  ]
+}

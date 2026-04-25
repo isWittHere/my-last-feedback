@@ -1,10 +1,10 @@
 // mcp/mlra/servers/mcp-ceo.mjs
-// MLRA v2 CEO MCP server.
+// MLRA CEO MCP server.
 // Exposes: ceo_verdict, get_task_context
 //
 // The agent on the other end plays the CEO role. The daemon routes relevant
-// events (planning gate / final review / arbitration) to this server, and the
-// agent's decisions flow back via the tools below.
+// events (stage exit gate / arbitration) to this server, and the agent's
+// decisions flow back via the tools below.
 
 import { z } from "zod";
 import { bootstrapMcpServer, installGlobalErrorHandlers } from "../../common/mcp-bootstrap.mjs";
@@ -27,13 +27,11 @@ until the user returns with the next gate.
 This tool will BLOCK until the user sends their next message.
 
 Verdict semantics:
-- \`approved\`: the material passes. NOTE: a defensive-lock applies — your first
-  two approvals for any given gate will be downgraded and sent back for another
-  pass, and two consecutive approvals are required before final passage.
-- \`rejected\`: send the material back for rework with a reason. All iteration
-  state and vote counters reset.
-- \`arbitration\`: issue directives to break a deadlock or correct a stalled
-  cycle. Optionally scope directives to specific parties via \`targets\`.`,
+- \`approved\`: the material passes. Additional verification may be required
+  before final passage.
+- \`rejected\`: send the material back with a reason.
+- \`arbitration\`: issue directives to unblock the user's task. Optionally
+  scope directives via \`targets\`.",
       {
         verdict: z.enum(["approved", "rejected", "arbitration"]).describe(
           "approved / rejected / arbitration (see tool description for semantics)"
@@ -42,7 +40,7 @@ Verdict semantics:
           "Rationale or directives (required for rejected / arbitration)"
         ),
         targets: z.array(z.string()).optional().describe(
-          "Optional scope for arbitration — names the parties your directives apply to"
+          "Optional scope for arbitration directives"
         ),
       },
       async ({ verdict, reason, targets }) => {

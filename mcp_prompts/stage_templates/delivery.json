@@ -1,0 +1,19 @@
+{
+  "id": "delivery",
+  "name": "交付验证",
+  "description": "完成实际改动、验证结果并整理面向用户的交付说明。",
+  "icon": "wrench",
+  "defaultExitGateEnabled": true,
+  "isClosing": false,
+  "promptExpert": "## Stage Mode\ndelivery\n\n## What to do\nExecute real code or asset changes for the user and verify them locally. Before claiming completion, walk the re-verify flow. Submit the user-facing delivery report via `expert_submit({ content })`. When the delivery is genuinely ready for final stage-exit review, use `expert_vote(vote=\"pass\", reason=...)`.",
+  "promptInspector": "## Stage Mode\ndelivery\n\n## What to do\nReview the delivered material for the user. Do not trust the narrative alone: open cited files and verify against actual code or output. Submit the review via `inspector_submit({ content })`. When the delivery is genuinely ready for final stage-exit review, use `inspector_vote(vote=\"pass\", reason=...)`.",
+  "skillRefs": [
+    "submit_phase_report",
+    "review_phase",
+    "re_verify",
+    "decision_levels",
+    "hallucination_check",
+    "failure_recovery",
+    "vote_discipline"
+  ]
+}

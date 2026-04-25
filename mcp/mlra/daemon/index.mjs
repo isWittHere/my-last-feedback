@@ -1,20 +1,16 @@
-// ── MLRA Orchestrator Daemon (v2) ──
-// Central process that manages all orchestration state for v2 topology.
+// ── MLRA Orchestrator Daemon ──
+// Central process that manages all orchestration state.
 //
-// v2 protocol (see ../protocol/messages.mjs):
+// Protocol (see ../protocol/messages.mjs):
 //   - MCP server → daemon: ROLE_HELLO / ROLE_BYE / EXPERT_SUBMIT / EXPERT_VOTE
 //                          / INSPECTOR_SUBMIT / INSPECTOR_VOTE / CEO_VERDICT
 //                          / GET_TASK_CONTEXT
 //   - App UI → daemon:     MLRA_START / MLRA_CANCEL / MLRA_STATUS
 //   - Daemon → MCP server: RESOLVE / ERROR
-//   - Daemon → App UI:     MLRA_ROLE_CONNECTED / MLRA_PHASE_CHANGE / ...
+//   - Daemon → App UI:     MLRA_ROLE_CONNECTED / MLRA_STAGE_CHANGE / ...
 //
 // Connections are keyed by ROLE (ceo/expert/inspector). At most 1 connection
-// per role at any time. No launcherId / alias / worker bookkeeping.
-//
-// NOTE (Phase 4.2c): SessionManager / BudgetTracker integration is deferred
-// to Phase 4.2d — transcript monitoring and failover are temporarily disabled
-// while the v2 logic stabilises.
+// per role at any time.
 
 import { createServer } from "node:net";
 import { createInterface } from "node:readline";
@@ -25,7 +21,7 @@ import { Orchestrator } from "./orchestrator.mjs";
 import { MessageRouter } from "./router.mjs";
 import { IpcBridge } from "./ipc-bridge.mjs";
 import { MSG } from "../protocol/messages.mjs";
-import { ROLES, START_MODES } from "../protocol/roles.mjs";
+import { ROLES } from "../protocol/roles.mjs";
 
 // ── Port config (ports 19871-19880 prod / 19881-19890 dev) ──
 
@@ -188,18 +184,17 @@ class OrchestratorDaemon {
 
       // ── EXPERT_SUBMIT ──
       case MSG.EXPERT_SUBMIT: {
-        const { submitType, content, metadata } = msg;
-        console.error(`[MLRA-Daemon] expert_submit (type=${submitType})`);
-        const decision = this.orchestrator.handleExpertSubmit(submitType, content, metadata || {});
+        const { content } = msg;
+        console.error(`[MLRA-Daemon] expert_submit`);
+        const decision = this.orchestrator.handleExpertSubmit(content);
         return await this._followDecision(decision, ROLES.EXPERT);
       }
 
       // ── INSPECTOR_SUBMIT ──
       case MSG.INSPECTOR_SUBMIT: {
-        const { content, passed, metadata } = msg;
-        const meta = { ...(metadata || {}), passed: passed ?? metadata?.passed };
-        console.error(`[MLRA-Daemon] inspector_submit (passed=${meta.passed})`);
-        const decision = this.orchestrator.handleInspectorSubmit(content, meta);
+        const { content } = msg;
+        console.error(`[MLRA-Daemon] inspector_submit`);
+        const decision = this.orchestrator.handleInspectorSubmit(content, {});
         return await this._followDecision(decision, ROLES.INSPECTOR);
       }
 
@@ -250,13 +245,13 @@ class OrchestratorDaemon {
         if (!connRole || !this.orchestrator.roles.has(connRole)) {
           return { type: MSG.ERROR, message: "Role not connected" };
         }
+        const stage = this.orchestrator._getCurrentStage();
         const taskContext = [
           `## 原始用户请求\n\n${this.orchestrator.userTask || "(未设置)"}`,
           `## 任务类型\n\n${this.orchestrator.taskType || "未指定"}`,
-          `## 当前协作模式\n\n${this.orchestrator.describeCollaborationMode()}`,
-          `## 当前进入策略\n\n${this.orchestrator.describeEntryStrategy()}`,
+          `## 当前阶段\n\n${stage?.name || "未指定"}${stage?.isClosing ? " (closing)" : ""}`,
+          `## 本阶段提交次数\n\n${this.orchestrator.submitCount}`,
           `## 工作流蓝图\n\n${this.orchestrator.blueprint?.name || "未指定"}`,
-          `## 当前阶段节点\n\n${this.orchestrator._getCurrentStage()?.name || "未指定"}`,
         ].join("\n\n");
         return { type: MSG.RESOLVE, content: taskContext };
       }
@@ -286,7 +281,6 @@ class OrchestratorDaemon {
         type: MSG.MLRA_WORKFLOW_PAUSED,
         reason: "human_review",
         role: decision.role,
-        submitType: decision.submitType,
         content: decision.content,
       });
       try {
@@ -345,19 +339,17 @@ class OrchestratorDaemon {
 
     switch (msg.type) {
       case MSG.MLRA_START: {
-        const { userTask, startMode, taskType, blueprint } = msg.config || msg;
+        const { userTask, taskType, blueprint } = msg.config || msg;
         const result = this.orchestrator.startOrchestration(
           userTask || "",
-          startMode || START_MODES.FULL,
-          taskType || null,
           blueprint || null,
+          taskType || null,
         );
         if (result.error) {
           console.error("[MLRA-Daemon] Start error:", result.error);
           this.ipcBridge.send({ type: MSG.ERROR, message: result.error });
           break;
         }
-        // Release the blocked ROLE_HELLO for each active-phase role with its initial instruction
         for (const { role, instruction } of result.instructions) {
           this.router.release(role, instruction);
         }
@@ -421,19 +413,14 @@ class OrchestratorDaemon {
       case "votes_passed":
         this._handleVotesPassed();
         break;
-      case "execution_votes_passed":
-        this._handleExecutionVotesPassed();
-        break;
       case "stagnation_detected":
         this._handleStagnation(event);
         break;
-      case "phase_transition":
+      case "stage_transition":
         this.ipcBridge.send({
-          type: MSG.MLRA_PHASE_CHANGE,
-          from: event.from,
-          to: event.to,
-          collaborationModeFrom: event.from,
-          collaborationModeTo: event.to,
+          type: MSG.MLRA_STAGE_CHANGE,
+          stageFrom: event.from,
+          stageTo: event.to,
         });
         break;
       case "ceo_gate_defensive":
@@ -445,16 +432,9 @@ class OrchestratorDaemon {
   }
 
   _handleVotesPassed() {
-    const materials = this.orchestrator.lastSubmitContent || "(规划投票通过)";
-    const decision = this.orchestrator.triggerPlanningGate(materials);
-    console.error(`[MLRA-Daemon] Planning votes passed → ${decision.action}`);
-    this._executeCeoDecision(decision);
-  }
-
-  _handleExecutionVotesPassed() {
-    const materials = this.orchestrator.lastSubmitContent || "(执行投票通过)";
-    const decision = this.orchestrator._triggerCeoFinalReview(materials);
-    console.error(`[MLRA-Daemon] Execution votes passed → ${decision.action}`);
+    const materials = this.orchestrator.lastSubmitContent || "(阶段提交)";
+    const decision = this.orchestrator.triggerStageExit(materials);
+    console.error(`[MLRA-Daemon] Votes passed → ${decision.action}`);
     this._executeCeoDecision(decision);
   }
 
@@ -480,38 +460,8 @@ class OrchestratorDaemon {
         this._routeTo(ROLES.CEO, decision.content);
         break;
 
-      case "auto_transition": {
-        console.error("[MLRA-Daemon] No CEO → auto-transition to execution");
-        const result = this.orchestrator.transitionToExecution(decision.materials);
-        for (const { role, instruction } of result.instructions || []) {
-          this.router.release(role, instruction);
-        }
-        this._pushStatus();
-        break;
-      }
-
-      case "auto_transition_stage": {
-        console.error("[MLRA-Daemon] No CEO → auto-transition to next configured stage");
-        const result = this.orchestrator.transitionToStage(decision.stage, decision.materials);
-        for (const { role, instruction } of result.instructions || []) {
-          this.router.release(role, instruction);
-        }
-        this._pushStatus();
-        break;
-      }
-
-      case "transition_to_execution": {
-        console.error("[MLRA-Daemon] CEO approved → transition to execution");
-        const result = this.orchestrator.transitionToExecution(decision.materials);
-        for (const { role, instruction } of result.instructions || []) {
-          this.router.release(role, instruction);
-        }
-        this._pushStatus();
-        break;
-      }
-
       case "transition_to_stage": {
-        console.error("[MLRA-Daemon] CEO approved → transition to next configured stage");
+        console.error("[MLRA-Daemon] Advancing to next stage");
         const result = this.orchestrator.transitionToStage(decision.stage, decision.materials);
         for (const { role, instruction } of result.instructions || []) {
           this.router.release(role, instruction);

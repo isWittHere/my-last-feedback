@@ -1,9 +1,10 @@
 // mcp/mlra/servers/mcp-inspector.mjs
-// MLRA v2 Inspector MCP server.
+// MLRA Inspector MCP server.
 // Exposes: inspector_submit, inspector_vote, get_task_context
 //
-// The agent on the other end plays the Inspector role (planning or execution —
-// the phase is tracked by the daemon).
+// The agent on the other end plays the Inspector role. Stage context
+// (current stage name, directive, skills) is delivered by the daemon via
+// every routed message — role identity itself is fixed.
 
 import { z } from "zod";
 import { bootstrapMcpServer, installGlobalErrorHandlers } from "../../common/mcp-bootstrap.mjs";
@@ -24,26 +25,16 @@ await bootstrapMcpServer({
       `Return your review to the user.
 This tool will BLOCK until the user sends their next message.
 
-During planning: \`passed\` is informational — iteration continues via this tool
-until both sides vote to request the plan gate.
-During execution: \`passed: true\` means the Phase under review is acceptable
-and work moves to the next Phase; \`passed: false\` sends it back for rework.
-
-Format the content per the skill named in the most recent user message
-(review_plan.md or review_phase.md).`,
+Format the content per the stage directive and referenced skills in the most
       {
-        passed: z.boolean().describe(
-          "true = material is acceptable; false = needs rework. In execution phase, true advances to the next Phase."
-        ),
         content: z.string().describe(
-          "Review content, formatted per the relevant review skill"
+          "Review content, formatted per the stage directive"
         ),
       },
-      async ({ passed, content }) => {
+      async ({ content }) => {
         if (!client) throw new Error("Daemon client not initialised");
         return forwardBlocking(client, {
           type: MSG.INSPECTOR_SUBMIT,
-          passed,
           content,
         });
       }
@@ -51,14 +42,12 @@ Format the content per the skill named in the most recent user message
 
     server.tool(
       "inspector_vote",
-      `Declare that the current work is mature enough to request CEO review.
-Applies in both phases: during planning this requests the plan gate; during
-execution (after the final Phase) this requests the final verdict. Only when
-BOTH sides (this role and the expert) vote \`pass\` does the CEO wake up.
-Voting \`reject\` signals you are not yet ready — the cycle continues.
+      `Declare that the current user-facing material is ready for stage-exit review.
+    Use \`pass\` only when the material is complete, verified, and ready for the
+    user's final stage decision. Use \`reject\` when the material still needs changes.
 Non-blocking — returns immediately.`,
       {
-        vote: z.enum(["pass", "reject"]).describe("pass = request CEO review; reject = keep iterating"),
+        vote: z.enum(["pass", "reject"]).describe("pass = request stage-exit review; reject = not ready"),
         reason: z.string().describe("Why you are (or are not) ready"),
       },
       async ({ vote, reason }) => {

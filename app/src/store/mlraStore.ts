@@ -1,64 +1,59 @@
 import { create } from "zustand";
 import { invoke } from "@tauri-apps/api/core";
 
-// ── Agent Role Types ──
+// ── Role types (3 fixed roles + dynamic worker) ──
 
-export type AgentRole =
-  | "planning-expert"
-  | "planning-inspector"
-  | "execution-expert"
-  | "execution-inspector"
-  | "ceo"
-  | "worker";
+export type RuntimeMainRole = "expert" | "inspector" | "ceo";
+export type AgentRole = RuntimeMainRole | "worker";
 export type ControlMode = "autopilot" | "ceo-override";
-export type LauncherStatus = "configuring" | "ready" | "running" | "paused" | "completed" | "cancelled";
+export type LauncherStatus =
+  | "configuring"
+  | "ready"
+  | "running"
+  | "paused"
+  | "completed"
+  | "cancelled"
+  | "awaiting-user";
 export type AgentSlotStatus = "active" | "standby" | "idle";
 export type WorkerStatus = "ready" | "working" | "broken";
-export type PhaseView = "planning" | "execution";
-export type StartMode = "full" | "direct-execution";
-export type StageStrategy = "deliberation" | "delivery";
-export type LaunchStrategy = "from-start" | "delivery-first";
-export type RuntimeMainRole = "expert" | "inspector" | "ceo";
+
+// ── Blueprint types (stage-flow system) ──
 
 export type BlueprintTemplateId = "standard" | "direct-execution" | "architecture" | "bugfix" | "audit";
-export type StageRoleTarget = "expert" | "inspector";
-export type StageSkillKey =
-  | "intent_classification"
-  | "codebase_assessment"
-  | "submit_plan_draft"
-  | "review_plan"
-  | "submit_phase_report"
-  | "review_phase"
-  | "re_verify"
-  | "decision_levels"
-  | "ceo_verdict"
-  | "hallucination_check"
-  | "vote_discipline"
-  | "failure_recovery";
+export type StageTemplateId = "deliberation" | "delivery" | "closing" | string;
 
 export interface GlobalPolicy {
   defaultSkillMode: "template" | "manual" | "merged";
   ceoStrictness: "strict" | "balanced" | "custom";
   requireProjectSurvey: boolean;
-  allowDirectExecutionWithoutPlanning: boolean;
 }
 
+/** A single stage in the user-authored pipeline. Generic — no hard-coded
+ *  phase/strategy classification. Behaviour driven by isClosing +
+ *  exitGateEnabled. */
 export interface StageBlueprint {
   id: string;
   order: number;
-  enabled: boolean;
   icon: string;
   name: string;
-  stageStrategy: StageStrategy;
-  objective: string;
   description: string;
-  openerTarget: StageRoleTarget;
-  openerPrompt: string;
-  reviewerPrompt: string;
-  ceoGatePrompt: string;
-  recommendedSkills: StageSkillKey[];
-  completionRule: string;
-  templateSource: BlueprintTemplateId | null;
+  /** Source template (deliberation / delivery / closing / blank). Informational only. */
+  templateId: StageTemplateId | null;
+  /** If true, final wrap-up stage (CEO solo). Shown greyed + flag icon in UI. */
+  isClosing: boolean;
+  /** If true, CEO defensive-lock gate runs at stage exit. Ignored on closing. */
+  exitGateEnabled: boolean;
+  /** Optional user-edited prompt appended to CEO stage-exit gate reviews. */
+  exitGatePrompt: string;
+  /** Template default role prompts mirrored for UI editing and runtime routing. */
+  promptExpert?: string;
+  promptInspector?: string;
+  promptCeo?: string;
+  /** User-edited stage prompt. If empty, orchestrator falls back to the
+   *  template's default prompt. */
+  promptOverride: string;
+  /** Skills suggested to roles while inside this stage. */
+  skillRefs: string[];
 }
 
 export interface WorkflowBlueprint {
@@ -66,9 +61,9 @@ export interface WorkflowBlueprint {
   templateId: BlueprintTemplateId | null;
   name: string;
   description: string;
-  launchStrategy: LaunchStrategy;
   initialTask: string;
   globalPolicy: GlobalPolicy;
+  /** Stages in strict order. Last entry MUST have isClosing=true. */
   stages: StageBlueprint[];
 }
 
@@ -78,56 +73,16 @@ export interface BlueprintRuntimeSummary {
   currentStageId: string | null;
   currentStageIndex: number;
   totalStages: number;
+  submitCount: number;
   currentStage: {
     id: string;
     name: string;
-    stageStrategy: StageStrategy;
-    openerTarget: StageRoleTarget;
+    isClosing: boolean;
+    exitGateEnabled: boolean;
   } | null;
 }
 
-interface RuntimeStageBlueprint extends Omit<StageBlueprint, "stageStrategy"> {
-  phaseType: PhaseView;
-}
-
-interface RuntimeWorkflowBlueprint extends Omit<WorkflowBlueprint, "launchStrategy" | "stages"> {
-  startMode: StartMode;
-  stages: RuntimeStageBlueprint[];
-}
-
-interface RuntimeBlueprintRuntimeSummary extends Omit<BlueprintRuntimeSummary, "currentStage"> {
-  currentStage: {
-    id: string;
-    name: string;
-    phaseType: PhaseView;
-    openerTarget: StageRoleTarget;
-  } | null;
-}
-
-export const BLUEPRINT_TEMPLATE_OPTIONS: Array<{ id: BlueprintTemplateId; label: string; description: string }> = [
-  { id: "standard", label: "标准全链路", description: "需求澄清 → 规划 → 实施 → 终审" },
-  { id: "direct-execution", label: "直接执行", description: "跳过完整规划，先分析后实施" },
-  { id: "architecture", label: "架构设计", description: "以方案构思和门控评审为主" },
-  { id: "bugfix", label: "缺陷修复", description: "定位问题 → 修复 → 回归 → 终审" },
-  { id: "audit", label: "审计复核", description: "以审查、举证和判定为主" },
-];
-
-export const STAGE_SKILL_OPTIONS: Array<{ key: StageSkillKey; label: string }> = [
-  { key: "intent_classification", label: "需求分类" },
-  { key: "codebase_assessment", label: "代码库勘察" },
-  { key: "submit_plan_draft", label: "规划提交" },
-  { key: "review_plan", label: "规划审查" },
-  { key: "submit_phase_report", label: "阶段报告" },
-  { key: "review_phase", label: "阶段审查" },
-  { key: "re_verify", label: "再验证" },
-  { key: "decision_levels", label: "决策分级" },
-  { key: "ceo_verdict", label: "CEO 裁决" },
-  { key: "hallucination_check", label: "幻觉检查" },
-  { key: "vote_discipline", label: "投票纪律" },
-  { key: "failure_recovery", label: "失败恢复" },
-];
-
-// ── Session Pool Types ──
+// ── Session pool / budget / gate (unchanged from previous) ──
 
 export interface SessionPoolEntry {
   callerId: string;
@@ -162,7 +117,7 @@ export interface BudgetStatus {
 
 export interface CeoGateStatus {
   active: boolean;
-  type: "planning_gate" | "final_review" | "arbitration" | null;
+  type: "stage_gate" | "arbitration" | "stagnation_arbitration" | null;
   round: number;
   minDefensiveRounds: number;
   consecutiveApprovals: number;
@@ -170,59 +125,50 @@ export interface CeoGateStatus {
   history: Array<{ round: number; verdict: string; reason: string }>;
 }
 
-// ── Role Colors ──
+// ── Role colors (3 keys only) ──
 
-export const ROLE_COLORS: Record<string, string> = {
-  "planning-expert": "#06B6D4",
-  "planning-inspector": "#06B6D4",
-  "execution-expert": "#818CF8",
-  "execution-inspector": "#818CF8",
+export const ROLE_COLORS: Record<AgentRole | "workerPool", string> = {
+  expert: "#06B6D4",
+  inspector: "#818CF8",
   ceo: "#F59E0B",
   worker: "#64748B",
   workerPool: "#64748B",
 };
 
-const RUNTIME_ROLE_SLOT_KEYS: Record<RuntimeMainRole, Array<Exclude<AgentRole, "worker">>> = {
-  expert: ["planning-expert", "execution-expert"],
-  inspector: ["planning-inspector", "execution-inspector"],
-  ceo: ["ceo"],
-};
+// ── Stage template catalog (for UI dropdown) ──
 
-const EMPTY_AGENTS = {
-  "planning-expert": null,
-  "planning-inspector": null,
-  "execution-expert": null,
-  "execution-inspector": null,
-  ceo: null,
-  workers: [],
-};
+export const STAGE_TEMPLATE_OPTIONS: Array<{ id: StageTemplateId; label: string; description: string; isClosing?: boolean }> = [
+  { id: "deliberation", label: "论证评审", description: "草案审阅，适用方案打磨" },
+  { id: "delivery", label: "交付验证", description: "实施交付与审查，适用落地验证" },
+  { id: "closing", label: "结束汇总", description: "面向用户的最终汇总，蓝图末尾不可删", isClosing: true },
+];
 
-export function resolveRuntimeRoleSlotKey(role: RuntimeMainRole, phaseView: PhaseView): Exclude<AgentRole, "worker"> {
-  if (role === "ceo") return "ceo";
-  if (phaseView === "planning") {
-    return role === "expert" ? "planning-expert" : "planning-inspector";
-  }
-  return role === "expert" ? "execution-expert" : "execution-inspector";
-}
+export const BLUEPRINT_TEMPLATE_OPTIONS: Array<{ id: BlueprintTemplateId; label: string; description: string }> = [
+  { id: "standard", label: "标准全链路", description: "论证 → 交付 → 结束" },
+  { id: "direct-execution", label: "直接交付", description: "省略论证，直接进入交付" },
+  { id: "architecture", label: "架构设计", description: "方案论证 + 门控评审" },
+  { id: "bugfix", label: "缺陷修复", description: "定位 → 修复 → 验证" },
+  { id: "audit", label: "审计复核", description: "标准建立 + 举证判定" },
+];
 
-// ── Registered Agent (before role assignment) ──
+// ── Registered agent (before start) ──
 
 export interface RegisteredAgent {
-  id: string;          // caller ID from MLFB
-  alias: string;       // 4-char alias
-  clientName: string;  // MCP client name
-  model: string;       // detected model name
-  workspace: string;   // project directory
+  id: string;
+  alias: string;
+  clientName: string;
+  model: string;
+  workspace: string;
   assignedRole: AgentRole | null;
-  workerRole: string;  // custom routing role when assignedRole === "worker"
+  workerRole: string;
   registeredAt: string;
 }
 
-// ── Agent Slots (after orchestration starts) ──
+// ── Agent slots (after orchestration starts) ──
 
 export interface AgentSlot {
   id: string;
-  role: string;          // AgentRole excluding "worker"
+  role: RuntimeMainRole;
   displayName: string;
   model: string;
   status: AgentSlotStatus;
@@ -233,7 +179,7 @@ export interface AgentSlot {
 
 export interface WorkerSlot {
   id: string;
-  role: string;          // e.g. "前端外包" / "后端外包"
+  role: string;
   displayName: string;
   model: string;
   status: WorkerStatus;
@@ -256,40 +202,27 @@ export interface Launcher {
   id: string;
   name: string;
   status: LauncherStatus;
-  currentPhase: PhaseView;
   controlMode: ControlMode;
   createdAt: string;
   updatedAt: string;
   startedAt: string | null;
   pausedAt: string | null;
-  pausedElapsed: number; // total ms spent in paused state
+  pausedElapsed: number;
 
-  // Registered agents (configuring phase)
   registeredAgents: RegisteredAgent[];
 
-  // Agent slots (after orchestration starts)
   agents: {
-    "planning-expert": AgentSlot | null;
-    "planning-inspector": AgentSlot | null;
-    "execution-expert": AgentSlot | null;
-    "execution-inspector": AgentSlot | null;
+    expert: AgentSlot | null;
+    inspector: AgentSlot | null;
     ceo: AgentSlot | null;
     workers: WorkerSlot[];
   };
 
-  planningSessionIds: string[];
-  implementationSessionIds: string[];
   roundHistory: RoundRecord[];
-
-  // Session pools & budget
   sessionPools: Record<string, SessionPool>;
   budget: BudgetStatus | null;
-
-  // Start mode & CEO gate
-  startMode: StartMode | null;
   ceoGate: CeoGateStatus | null;
 
-  // Task description & type
   taskType: string | null;
   userTask: string;
   blueprint: WorkflowBlueprint;
@@ -297,78 +230,56 @@ export interface Launcher {
   blueprintDirty: boolean;
   selectedStageId: string | null;
 
-  // Agent self-reported progress (display-only)
-  lastProgress: string | null;
 }
 
-export function resolveRuntimeAgentSlot(
-  agents: Launcher["agents"],
-  role: RuntimeMainRole,
-  phaseView: PhaseView,
-): AgentSlot | null {
-  const slotKey = resolveRuntimeRoleSlotKey(role, phaseView);
-  return agents[slotKey] ?? null;
-}
-
-export function resolveRuntimeSessionPool(
-  sessionPools: Launcher["sessionPools"],
-  role: RuntimeMainRole,
-  phaseView: PhaseView,
-): SessionPool | undefined {
-  const slotKey = resolveRuntimeRoleSlotKey(role, phaseView);
-  return sessionPools[slotKey];
-}
-
-// ── Store ──
+// ── Store interface ──
 
 export interface MLRAState {
-  // Launcher management
   launchers: Launcher[];
   activeLauncherId: string | null;
   launcherSidebarOpen: boolean;
 
-  // View state
-  phaseView: PhaseView;
   columnOrder: string[];
   layoutMode: "auto" | 1 | 2 | 3 | 4;
 
-  // Actions — Launcher CRUD
+  // Launcher CRUD
   createLauncher: (name: string) => string;
   switchLauncher: (id: string) => void;
   setControlMode: (id: string, mode: ControlMode) => void;
   deleteLauncher: (id: string) => void;
   renameLauncher: (id: string, name: string) => void;
 
-  // Actions — Agent registration & role assignment
+  // Agent registration & role assignment
   addRegisteredAgent: (launcherId: string, agent: RegisteredAgent) => void;
   assignRole: (launcherId: string, agentId: string, role: AgentRole | null, workerRole?: string) => void;
   removeRegisteredAgent: (launcherId: string, agentId: string) => void;
   setWorkerRole: (launcherId: string, agentId: string, workerRole: string) => void;
   setTaskType: (launcherId: string, taskType: string | null) => void;
   setUserTask: (launcherId: string, userTask: string) => void;
-  updateBlueprintMeta: (launcherId: string, patch: Partial<Pick<WorkflowBlueprint, "name" | "description" | "initialTask" | "launchStrategy">>) => void;
+
+  // Blueprint actions
+  updateBlueprintMeta: (launcherId: string, patch: Partial<Pick<WorkflowBlueprint, "name" | "description" | "initialTask">>) => void;
   applyBlueprintTemplate: (launcherId: string, templateId: BlueprintTemplateId) => void;
   selectBlueprintStage: (launcherId: string, stageId: string | null) => void;
-  addBlueprintStage: (launcherId: string) => void;
-  updateBlueprintStage: (launcherId: string, stageId: string, patch: Partial<Omit<StageBlueprint, "id" | "order">>) => void;
+  addBlueprintStage: (launcherId: string, templateId?: StageTemplateId | null, afterStageId?: string | null) => void;
+  updateBlueprintStage: (launcherId: string, stageId: string, patch: Partial<Omit<StageBlueprint, "id" | "order" | "isClosing">>) => void;
   removeBlueprintStage: (launcherId: string, stageId: string) => void;
   moveBlueprintStage: (launcherId: string, stageId: string, direction: -1 | 1) => void;
   duplicateBlueprintStage: (launcherId: string, stageId: string) => void;
+  toggleStageExitGate: (launcherId: string, stageId: string) => void;
   validateBlueprint: (launcherId: string) => string[];
 
-  // Actions — Start orchestration
-  startOrchestration: (launcherId: string, launchStrategy: LaunchStrategy) => void;
+  // Start orchestration
+  startOrchestration: (launcherId: string) => void;
 
-  // Actions — View
-  setPhaseView: (phase: PhaseView) => void;
+  // View
   setColumnOrder: (order: string[]) => void;
   setLayoutMode: (mode: "auto" | 1 | 2 | 3 | 4) => void;
   toggleLauncherSidebar: () => void;
 
-  // Actions — Daemon communication (sends to MLRA daemon via Tauri IPC)
+  // Daemon communication
   sendToDaemon: (msg: Record<string, unknown>) => Promise<void>;
-  daemonAssignRole: (launcherId: string, agentId: string, role: AgentRole | null) => void;
-  daemonStartOrchestration: (launcherId: string, userTask: string, startMode: StartMode, taskType?: string, blueprint?: RuntimeWorkflowBlueprint) => void;
+  daemonStartOrchestration: (launcherId: string, userTask: string, taskType: string | null, blueprint: WorkflowBlueprint) => void;
   daemonSetControlMode: (mode: ControlMode) => void;
   daemonReviewApproved: (content: string) => void;
   daemonReviewRejected: (reason: string) => void;
@@ -377,12 +288,12 @@ export interface MLRAState {
   daemonIncreaseBudget: (amount: number) => void;
   daemonInjectMessage: (callerId: string, content: string) => void;
 
-  // Actions — Handle incoming MLRA daemon messages
   handleDaemonMessage: (raw: string) => void;
 
-  // Getters
   getActiveLauncher: () => Launcher | null;
 }
+
+// ── Helpers ──
 
 function generateId(): string {
   return Math.random().toString(36).slice(2, 10) + Date.now().toString(36);
@@ -392,71 +303,103 @@ function normalizeStageOrder(stages: StageBlueprint[]): StageBlueprint[] {
   return stages.map((stage, index) => ({ ...stage, order: index }));
 }
 
-function stageStrategyToPhaseView(stageStrategy: StageStrategy): PhaseView {
-  return stageStrategy === "delivery" ? "execution" : "planning";
+export function isClosingStage(stage: StageBlueprint | null | undefined): boolean {
+  return Boolean(stage && stage.isClosing);
 }
 
-function phaseViewToStageStrategy(phaseView: PhaseView): StageStrategy {
-  return phaseView === "execution" ? "delivery" : "deliberation";
+function emptyAgents(): Launcher["agents"] {
+  return { expert: null, inspector: null, ceo: null, workers: [] };
 }
 
-function launchStrategyToStartMode(launchStrategy: LaunchStrategy): StartMode {
-  return launchStrategy === "delivery-first" ? "direct-execution" : "full";
+// Stage template "presets" — mirror mcp_prompts/stage_templates/*.json.
+// In production the MCP daemon is the source of truth; this table is used
+// for UI-side blueprint authoring only (prompts will be re-loaded at run
+// time from the JSON files).
+type BuiltinStageTemplateId = "deliberation" | "delivery" | "closing";
+
+const STAGE_TEMPLATE_PRESETS: Record<BuiltinStageTemplateId, {
+  name: string;
+  description: string;
+  icon: string;
+  defaultExitGateEnabled: boolean;
+  isClosing: boolean;
+  promptExpert?: string;
+  promptInspector?: string;
+  promptCeo?: string;
+  skillRefs: string[];
+}> = {
+  deliberation: {
+    name: "论证评审",
+    description: "产出方案草案并根据用户反馈持续完善，直到内容成熟可请求出口评审。",
+    icon: "git-branch",
+    defaultExitGateEnabled: true,
+    isClosing: false,
+    promptExpert: "## Stage Mode\ndeliberation\n\n## What to do\nAnalyze the user's task and produce a draft proposal for the user. Submit via `expert_submit({ content })`. Treat routed feedback as user feedback. Address it thoroughly before resubmitting. When the work is genuinely ready for final stage-exit review, use `expert_vote(vote=\"pass\", reason=...)`.",
+    promptInspector: "## Stage Mode\ndeliberation\n\n## What to do\nReview the provided draft as if the user asked you to audit it. Produce a structured review for the user and submit via `inspector_submit({ content })`. Do not mention backend routing. When the material is genuinely ready for final stage-exit review, use `inspector_vote(vote=\"pass\", reason=...)`.",
+    skillRefs: ["submit_plan_draft", "review_plan", "re_verify", "decision_levels", "hallucination_check", "vote_discipline"],
+  },
+  delivery: {
+    name: "交付验证",
+    description: "完成实际改动、验证结果并整理面向用户的交付说明。",
+    icon: "wrench",
+    defaultExitGateEnabled: true,
+    isClosing: false,
+    promptExpert: "## Stage Mode\ndelivery\n\n## What to do\nExecute real code or asset changes for the user and verify them locally. Before claiming completion, walk the re-verify flow. Submit the user-facing delivery report via `expert_submit({ content })`. When the delivery is genuinely ready for final stage-exit review, use `expert_vote(vote=\"pass\", reason=...)`.",
+    promptInspector: "## Stage Mode\ndelivery\n\n## What to do\nReview the delivered material for the user. Do not trust the narrative alone: open cited files and verify against actual code or output. Submit the review via `inspector_submit({ content })`. When the delivery is genuinely ready for final stage-exit review, use `inspector_vote(vote=\"pass\", reason=...)`.",
+    skillRefs: ["submit_phase_report", "review_phase", "re_verify", "decision_levels", "hallucination_check", "failure_recovery", "vote_discipline"],
+  },
+  closing: {
+    name: "结束汇总",
+    description: "结束阶段：向用户汇总全流程、仓库现状、交付物和验证方式，并等待用户响应。",
+    icon: "flag",
+    defaultExitGateEnabled: false,
+    isClosing: true,
+    promptCeo: "## Stage Mode\nclosing\n\n## What to do\nThe workflow has reached its closing stage. Produce the final wrap-up for the user.\n\nCover:\n1. **Task summary** — the user's goal, important decisions, and final outcome.\n2. **Repository snapshot** — files touched, notable changes, and any remaining open ends.\n3. **Deliverables checklist** — concrete artifacts, test evidence, and how the user can verify them.\n\nAfter writing the document, call the blocking feedback tool (`interactive_feedback`) to stand by for the user's response.",
+    skillRefs: ["ceo_verdict", "hallucination_check"],
+  },
+};
+
+function getStagePreset(templateId: StageTemplateId | null): (typeof STAGE_TEMPLATE_PRESETS)[BuiltinStageTemplateId] | null {
+  if (!templateId) return null;
+  const entry = STAGE_TEMPLATE_PRESETS[templateId as BuiltinStageTemplateId];
+  return entry ?? null;
 }
 
-function getDefaultStageIcon(stageStrategy: StageStrategy): string {
-  return stageStrategy === "deliberation" ? "git-branch" : "wrench";
-}
-
-function toRuntimeStageBlueprint(stage: StageBlueprint): RuntimeStageBlueprint {
-  const { stageStrategy, ...rest } = stage;
+export function getStageTemplatePromptDefaults(templateId: StageTemplateId | null): Pick<StageBlueprint, "promptExpert" | "promptInspector" | "promptCeo"> {
+  const preset = getStagePreset(templateId);
   return {
-    ...rest,
-    phaseType: stageStrategyToPhaseView(stageStrategy),
+    promptExpert: preset?.promptExpert,
+    promptInspector: preset?.promptInspector,
+    promptCeo: preset?.promptCeo,
   };
 }
 
-function toRuntimeWorkflowBlueprint(blueprint: WorkflowBlueprint): RuntimeWorkflowBlueprint {
-  const { launchStrategy, stages, ...rest } = blueprint;
-  return {
-    ...rest,
-    startMode: launchStrategyToStartMode(launchStrategy),
-    stages: stages.map(toRuntimeStageBlueprint),
-  };
-}
-
-function fromRuntimeBlueprintRuntimeSummary(summary: RuntimeBlueprintRuntimeSummary | null | undefined): BlueprintRuntimeSummary | null {
-  if (!summary) return null;
-  return {
-    ...summary,
-    currentStage: summary.currentStage
-      ? {
-          ...summary.currentStage,
-          stageStrategy: phaseViewToStageStrategy(summary.currentStage.phaseType),
-        }
-      : null,
-  };
-}
-
-function createStageBlueprint(templateSource: BlueprintTemplateId | null, partial: Partial<Omit<StageBlueprint, "id" | "order">> = {}): StageBlueprint {
-  const stageStrategy = partial.stageStrategy ?? "deliberation";
+function createStageBlueprint(templateId: StageTemplateId | null, partial: Partial<Omit<StageBlueprint, "id" | "order">> = {}): StageBlueprint {
+  const preset = getStagePreset(templateId);
   return {
     id: generateId(),
     order: 0,
-    enabled: partial.enabled ?? true,
-    icon: partial.icon ?? getDefaultStageIcon(stageStrategy),
-    name: partial.name ?? "新阶段",
-    stageStrategy,
-    objective: partial.objective ?? "定义本阶段的核心目标",
-    description: partial.description ?? "",
-    openerTarget: partial.openerTarget ?? "expert",
-    openerPrompt: partial.openerPrompt ?? "请先根据当前阶段目标建立工作框架，再开始提交。",
-    reviewerPrompt: partial.reviewerPrompt ?? "请根据本阶段目标和完成标准进行独立审查。",
-    ceoGatePrompt: partial.ceoGatePrompt ?? "仅在该阶段产物满足目标、证据充分且风险被充分揭示时批准通过。",
-    recommendedSkills: partial.recommendedSkills ?? [],
-    completionRule: partial.completionRule ?? "当当前阶段目标已完成、关键风险已暴露且产出可进入下一阶段时视为完成。",
-    templateSource,
+    icon: partial.icon ?? preset?.icon ?? "square",
+    name: partial.name ?? preset?.name ?? "新阶段",
+    description: partial.description ?? preset?.description ?? "",
+    templateId: partial.templateId ?? templateId ?? null,
+    isClosing: partial.isClosing ?? preset?.isClosing ?? false,
+    exitGateEnabled: partial.exitGateEnabled ?? preset?.defaultExitGateEnabled ?? true,
+    exitGatePrompt: partial.exitGatePrompt ?? "",
+    promptExpert: partial.promptExpert ?? preset?.promptExpert,
+    promptInspector: partial.promptInspector ?? preset?.promptInspector,
+    promptCeo: partial.promptCeo ?? preset?.promptCeo,
+    promptOverride: partial.promptOverride ?? "",
+    skillRefs: partial.skillRefs ?? preset?.skillRefs ?? [],
   };
+}
+
+/** Append a closing stage if one doesn't already exist at the end. */
+export function appendClosingStage(stages: StageBlueprint[]): StageBlueprint[] {
+  const last = stages[stages.length - 1];
+  if (last && isClosingStage(last)) return stages;
+  const closing = createStageBlueprint("closing", { name: "结束汇总" });
+  return normalizeStageOrder([...stages, closing]);
 }
 
 export function createBlueprintFromTemplate(templateId: BlueprintTemplateId, launcherName: string): WorkflowBlueprint {
@@ -464,183 +407,60 @@ export function createBlueprintFromTemplate(templateId: BlueprintTemplateId, lau
     defaultSkillMode: "merged",
     ceoStrictness: "strict",
     requireProjectSurvey: true,
-    allowDirectExecutionWithoutPlanning: templateId === "direct-execution",
   };
 
-  const templates: Record<BlueprintTemplateId, Omit<WorkflowBlueprint, "version" | "name" | "initialTask">> = {
+  type TemplateDef = {
+    description: string;
+    stages: Array<Partial<Omit<StageBlueprint, "id" | "order">> & { templateId: StageTemplateId }>;
+  };
+  const templates: Record<BlueprintTemplateId, TemplateDef> = {
     standard: {
-      templateId: "standard",
-      description: "从任务理解、规划、实施到 CEO 终审的标准工作流。",
-      launchStrategy: "from-start",
-      globalPolicy: basePolicy,
-      stages: normalizeStageOrder([
-        createStageBlueprint("standard", {
-          name: "需求理解与边界澄清",
-          stageStrategy: "deliberation",
-          objective: "先明确任务边界、约束、风险和信息缺口。",
-          openerTarget: "expert",
-          openerPrompt: "先读取 AGENTS.md 和关键实现，再产出问题边界、假设、风险与执行建议。",
-          reviewerPrompt: "检查边界定义是否遗漏关键上下文、风险和依赖。",
-          ceoGatePrompt: "只有当问题边界清晰、风险和关键假设已明确时，才允许进入正式规划。",
-          recommendedSkills: ["intent_classification", "codebase_assessment", "decision_levels"],
-          completionRule: "边界、假设、风险和目标已形成可审查文本。",
-        }),
-        createStageBlueprint("standard", {
-          name: "规划草案",
-          stageStrategy: "deliberation",
-          objective: "产出可执行的实施规划。",
-          openerTarget: "expert",
-          openerPrompt: "基于现状和任务目标产出一份可执行规划书，要求阶段明确、路径清晰、风险可追踪。",
-          reviewerPrompt: "重点审查方案结构、遗漏项、依赖关系和失败路径。",
-          ceoGatePrompt: "只有当方案具备明确阶段划分、验收标准和风险控制时才可批准。",
-          recommendedSkills: ["submit_plan_draft", "review_plan", "vote_discipline"],
-          completionRule: "规划书已达到双方可投票的成熟度。",
-        }),
-        createStageBlueprint("standard", {
-          name: "实施执行",
-          stageStrategy: "delivery",
-          objective: "按规划逐步实施并完成本地验证。",
-          openerTarget: "expert",
-          openerPrompt: "根据已批准规划分阶段落地，完成每一阶段后提交报告与验证结果。",
-          reviewerPrompt: "不要相信报告自述，必须回到真实代码和输出验证。",
-          ceoGatePrompt: "只有当代码改动、验证证据和风险披露均充分时，才允许终审通过。",
-          recommendedSkills: ["submit_phase_report", "review_phase", "re_verify", "failure_recovery"],
-          completionRule: "所有实现阶段完成并通过审查，具备最终 CEO 终审条件。",
-        }),
-      ]),
+      description: "从论证到交付的标准工作流。",
+      stages: [
+        { templateId: "deliberation", name: "需求论证", description: "先澄清边界、假设、风险，再形成共识。" },
+        { templateId: "deliberation", name: "方案论证", description: "产出可执行规划并打磨到可交付状态。" },
+        { templateId: "delivery", name: "落地实施", description: "按规划逐步交付并本地验证。" },
+      ],
     },
     "direct-execution": {
-      templateId: "direct-execution",
-      description: "跳过完整规划对峙，先做快速分析后直接实施。",
-      launchStrategy: "delivery-first",
-      globalPolicy: { ...basePolicy, allowDirectExecutionWithoutPlanning: true },
-      stages: normalizeStageOrder([
-        createStageBlueprint("direct-execution", {
-          name: "执行前快速分析",
-          stageStrategy: "delivery",
-          objective: "快速建立实现路径和风险清单。",
-          openerTarget: "expert",
-          openerPrompt: "先做最小必要分析，直接形成执行路径、关键风险和验证计划，然后开始实施。",
-          reviewerPrompt: "确认快速分析没有遗漏高风险依赖或回滚问题。",
-          ceoGatePrompt: "仅在直接执行带来的风险仍可控时批准继续。",
-          recommendedSkills: ["codebase_assessment", "submit_phase_report", "re_verify"],
-          completionRule: "执行路径明确且已准备开始实施。",
-        }),
-        createStageBlueprint("direct-execution", {
-          name: "分阶段实施与终审",
-          stageStrategy: "delivery",
-          objective: "完成改动、验证和 CEO 最终决策。",
-          openerTarget: "expert",
-          openerPrompt: "按阶段完成实际改动和验证，并在结束时准备接受最终审查。",
-          reviewerPrompt: "逐阶段核对实际实现、测试结果和风险说明。",
-          ceoGatePrompt: "只有当最终产出与验证足够扎实时才可通过。",
-          recommendedSkills: ["submit_phase_report", "review_phase", "ceo_verdict"],
-          completionRule: "所有改动完成、验证完成，并通过 CEO 终审。",
-        }),
-      ]),
+      description: "跳过论证，直接进入交付验证。",
+      stages: [
+        { templateId: "delivery", name: "快速分析与实施", description: "最小必要分析后直接开始实施。" },
+      ],
     },
     architecture: {
-      templateId: "architecture",
-      description: "以调研、方案候选和 CEO 门控为主的架构设计流。",
-      launchStrategy: "from-start",
-      globalPolicy: basePolicy,
-      stages: normalizeStageOrder([
-        createStageBlueprint("architecture", {
-          name: "现状调研",
-          stageStrategy: "deliberation",
-          objective: "建立架构现状、约束和改造边界。",
-          openerTarget: "expert",
-          openerPrompt: "先调研当前架构、模块边界、关键约束和历史包袱。",
-          reviewerPrompt: "检查调研是否覆盖关键模块、约束和未决风险。",
-          ceoGatePrompt: "只有当现状调研足够支持架构决策时才批准进入候选方案。",
-          recommendedSkills: ["intent_classification", "codebase_assessment"],
-          completionRule: "现状、约束和风险具备可对照基础。",
-        }),
-        createStageBlueprint("architecture", {
-          name: "候选方案与门控",
-          stageStrategy: "deliberation",
-          objective: "形成候选方案并完成门控评审。",
-          openerTarget: "expert",
-          openerPrompt: "产出候选架构方案、取舍理由和推荐路线。",
-          reviewerPrompt: "审查方案取舍、演进成本和落地可行性。",
-          ceoGatePrompt: "仅在方案权衡充分、风险透明且推荐路线合理时批准。",
-          recommendedSkills: ["submit_plan_draft", "review_plan", "ceo_verdict"],
-          completionRule: "候选方案完成并通过 CEO 门控。",
-        }),
-      ]),
+      description: "聚焦架构候选方案与门控评审。",
+      stages: [
+        { templateId: "deliberation", name: "现状调研", description: "建立架构现状与改造边界。" },
+        { templateId: "deliberation", name: "候选方案", description: "产出候选方案与推荐路线。" },
+      ],
     },
     bugfix: {
-      templateId: "bugfix",
-      description: "聚焦缺陷定位、修复策略、回归验证和终审。",
-      launchStrategy: "from-start",
-      globalPolicy: basePolicy,
-      stages: normalizeStageOrder([
-        createStageBlueprint("bugfix", {
-          name: "缺陷定位",
-          stageStrategy: "deliberation",
-          objective: "稳定复现并找出根因。",
-          openerTarget: "expert",
-          openerPrompt: "优先建立复现路径、根因假设和影响面。",
-          reviewerPrompt: "核查根因是否真实、影响面是否完整。",
-          ceoGatePrompt: "只有当根因明确且误判风险可控时才允许进入修复。",
-          recommendedSkills: ["codebase_assessment", "decision_levels", "review_plan"],
-          completionRule: "复现路径、根因和影响面已经明确。",
-        }),
-        createStageBlueprint("bugfix", {
-          name: "修复与回归",
-          stageStrategy: "delivery",
-          objective: "完成修复并进行回归验证。",
-          openerTarget: "expert",
-          openerPrompt: "按最小影响面原则完成修复，并提供验证证据。",
-          reviewerPrompt: "核查修复有效性、回归影响和测试覆盖。",
-          ceoGatePrompt: "只有当修复证据充分且无明显回归风险时批准通过。",
-          recommendedSkills: ["submit_phase_report", "review_phase", "re_verify"],
-          completionRule: "缺陷修复完成并通过终审。",
-        }),
-      ]),
+      description: "缺陷定位、修复与回归验证。",
+      stages: [
+        { templateId: "deliberation", name: "缺陷定位", description: "稳定复现并找根因。" },
+        { templateId: "delivery", name: "修复与回归", description: "最小影响面修复并回归验证。" },
+      ],
     },
     audit: {
-      templateId: "audit",
-      description: "以审查、举证和 CEO 判定为主的审计型工作流。",
-      launchStrategy: "from-start",
-      globalPolicy: basePolicy,
-      stages: normalizeStageOrder([
-        createStageBlueprint("audit", {
-          name: "审计标准建立",
-          stageStrategy: "deliberation",
-          objective: "先建立审计口径和证据要求。",
-          openerTarget: "inspector",
-          openerPrompt: "先从审查维度出发定义审计清单、判定标准和证据要求。",
-          reviewerPrompt: "确认审计标准没有遗漏关键风险与误判源。",
-          ceoGatePrompt: "只有当审计标准可执行、可验证且足够严格时才批准。",
-          recommendedSkills: ["review_plan", "decision_levels", "hallucination_check"],
-          completionRule: "审计标准和证据框架已经明确。",
-        }),
-        createStageBlueprint("audit", {
-          name: "举证与判定",
-          stageStrategy: "delivery",
-          objective: "围绕既定标准进行举证、审查和判定。",
-          openerTarget: "expert",
-          openerPrompt: "根据审计标准收集证据并形成结论性材料。",
-          reviewerPrompt: "围绕证据充分性、结论严谨性和遗漏风险做独立复核。",
-          ceoGatePrompt: "仅在证据充分、结论严谨且主要风险已揭示时批准。",
-          recommendedSkills: ["submit_phase_report", "review_phase", "ceo_verdict"],
-          completionRule: "证据链完整且具备 CEO 最终判定条件。",
-        }),
-      ]),
+      description: "审计标准建立与举证判定。",
+      stages: [
+        { templateId: "deliberation", name: "审计标准建立", description: "明确审计清单与判定标准。" },
+        { templateId: "delivery", name: "举证与判定", description: "围绕标准收集证据形成结论。" },
+      ],
     },
   };
 
   const template = templates[templateId];
+  const stages = template.stages.map((spec) => createStageBlueprint(spec.templateId, spec));
   return {
     version: 1,
     templateId,
     name: launcherName,
     description: template.description,
-    launchStrategy: template.launchStrategy,
     initialTask: "",
-    globalPolicy: { ...template.globalPolicy },
-    stages: template.stages,
+    globalPolicy: { ...basePolicy },
+    stages: appendClosingStage(normalizeStageOrder(stages)),
   };
 }
 
@@ -648,71 +468,45 @@ function getDefaultBlueprint(launcherName: string): WorkflowBlueprint {
   return createBlueprintFromTemplate("standard", launcherName);
 }
 
-function getBlueprintStartStage(blueprint: WorkflowBlueprint, launchStrategy: LaunchStrategy): StageBlueprint | null {
-  const enabledStages = blueprint.stages.filter((stage) => stage.enabled);
-  if (enabledStages.length === 0) return null;
-  if (launchStrategy === "delivery-first") {
-    return enabledStages.find((stage) => stage.stageStrategy === "delivery") || enabledStages[0];
-  }
-  return enabledStages[0];
+function getBlueprintStartStage(blueprint: WorkflowBlueprint): StageBlueprint | null {
+  return blueprint.stages.find((stage) => !isClosingStage(stage)) || blueprint.stages[0] || null;
 }
 
-function createEmptyAgentSlot(role: Exclude<AgentRole, "worker">, agent: RegisteredAgent): AgentSlot {
-  const roleNames: Record<string, string> = {
-    "planning-expert": "规划专家",
-    "planning-inspector": "规划监察",
-    "execution-expert": "实施专家",
-    "execution-inspector": "实施监察",
-    ceo: "CEO",
-  };
+const ROLE_DISPLAY_NAMES: Record<RuntimeMainRole, string> = {
+  expert: "Expert",
+  inspector: "Inspector",
+  ceo: "CEO",
+};
+
+function createAgentSlotFromRegistered(role: RuntimeMainRole, agent: RegisteredAgent): AgentSlot {
   return {
     id: agent.id,
-    role: role as AgentSlot["role"],
-    displayName: roleNames[role] || role,
+    role,
+    displayName: ROLE_DISPLAY_NAMES[role],
     model: agent.model,
     status: role === "ceo" ? "standby" : "active",
-    color: ROLE_COLORS[role] || "#64748B",
+    color: ROLE_COLORS[role],
     activeSessionId: null,
     sessionIds: [],
   };
 }
 
-function getRuntimeRoleSlots(role: RuntimeMainRole): Array<Exclude<AgentRole, "worker">> {
-  return RUNTIME_ROLE_SLOT_KEYS[role];
-}
-
-function findRegisteredAgentForRuntimeRole(registeredAgents: RegisteredAgent[], role: RuntimeMainRole): RegisteredAgent | undefined {
-  const slots = getRuntimeRoleSlots(role);
-  return registeredAgents.find((agent) => agent.assignedRole !== null && slots.includes(agent.assignedRole as Exclude<AgentRole, "worker">));
-}
-
-function updateAgentsForRuntimeRole(
-  agents: Launcher["agents"],
-  role: RuntimeMainRole,
-  getSlotValue: (slot: Exclude<AgentRole, "worker">) => AgentSlot | null,
-): Launcher["agents"] {
+function hydrateAgentsFromRegistered(registeredAgents: RegisteredAgent[], agents: Launcher["agents"]): Launcher["agents"] {
   const next = { ...agents };
-  for (const slot of getRuntimeRoleSlots(role)) {
-    next[slot] = getSlotValue(slot);
+  for (const role of ["expert", "inspector", "ceo"] as RuntimeMainRole[]) {
+    const found = registeredAgents.find((a) => a.assignedRole === role);
+    next[role] = found ? createAgentSlotFromRegistered(role, found) : agents[role] ?? null;
   }
   return next;
 }
 
-function hydrateAgentsFromRegisteredRoles(registeredAgents: RegisteredAgent[], agents: Launcher["agents"]): Launcher["agents"] {
-  let next = { ...agents };
-  for (const role of Object.keys(RUNTIME_ROLE_SLOT_KEYS) as RuntimeMainRole[]) {
-    const registeredAgent = findRegisteredAgentForRuntimeRole(registeredAgents, role);
-    next = updateAgentsForRuntimeRole(next, role, (slot) => (registeredAgent ? createEmptyAgentSlot(slot, registeredAgent) : agents[slot]));
-  }
-  return next;
-}
+// ── Store ──
 
 export const useMLRAStore = create<MLRAState>((set, get) => ({
   launchers: [],
   activeLauncherId: null,
   launcherSidebarOpen: false,
 
-  phaseView: "planning",
   columnOrder: ["expert", "inspector", "ceo", "workers"],
   layoutMode: "auto",
 
@@ -725,7 +519,6 @@ export const useMLRAStore = create<MLRAState>((set, get) => ({
       id,
       name,
       status: "configuring",
-      currentPhase: "planning",
       controlMode: "ceo-override",
       createdAt: new Date().toISOString(),
       updatedAt: new Date().toISOString(),
@@ -733,13 +526,10 @@ export const useMLRAStore = create<MLRAState>((set, get) => ({
       pausedAt: null,
       pausedElapsed: 0,
       registeredAgents: [],
-      agents: { ...EMPTY_AGENTS },
-      planningSessionIds: [],
-      implementationSessionIds: [],
+      agents: emptyAgents(),
       roundHistory: [],
       sessionPools: {},
       budget: null,
-      startMode: null,
       ceoGate: null,
       taskType: null,
       userTask: "",
@@ -747,7 +537,6 @@ export const useMLRAStore = create<MLRAState>((set, get) => ({
       blueprintRuntime: null,
       blueprintDirty: false,
       selectedStageId: blueprint.stages[0]?.id ?? null,
-      lastProgress: null,
     };
     set((s) => ({
       launchers: [...s.launchers, launcher],
@@ -761,9 +550,7 @@ export const useMLRAStore = create<MLRAState>((set, get) => ({
   setControlMode: (id, mode) =>
     set((s) => ({
       launchers: s.launchers.map((l) =>
-        l.id === id
-          ? { ...l, controlMode: mode, updatedAt: new Date().toISOString() }
-          : l
+        l.id === id ? { ...l, controlMode: mode, updatedAt: new Date().toISOString() } : l
       ),
     })),
 
@@ -786,11 +573,7 @@ export const useMLRAStore = create<MLRAState>((set, get) => ({
     set((s) => ({
       launchers: s.launchers.map((l) =>
         l.id === launcherId
-          ? {
-              ...l,
-              registeredAgents: [...l.registeredAgents, agent],
-              updatedAt: new Date().toISOString(),
-            }
+          ? { ...l, registeredAgents: [...l.registeredAgents, agent], updatedAt: new Date().toISOString() }
           : l
       ),
     })),
@@ -799,9 +582,11 @@ export const useMLRAStore = create<MLRAState>((set, get) => ({
     set((s) => ({
       launchers: s.launchers.map((l) => {
         if (l.id !== launcherId) return l;
-        // If role is already assigned to another agent, unassign it first
         const updatedAgents = l.registeredAgents.map((a) => {
-          if (a.id === agentId) return { ...a, assignedRole: role, workerRole: role === "worker" ? (workerRole ?? a.workerRole) : "" };
+          if (a.id === agentId) {
+            return { ...a, assignedRole: role, workerRole: role === "worker" ? (workerRole ?? a.workerRole) : "" };
+          }
+          // If role is exclusive (not worker) and already assigned to another agent, unassign it.
           if (role && a.assignedRole === role && role !== "worker") {
             return { ...a, assignedRole: null };
           }
@@ -815,11 +600,7 @@ export const useMLRAStore = create<MLRAState>((set, get) => ({
     set((s) => ({
       launchers: s.launchers.map((l) =>
         l.id === launcherId
-          ? {
-              ...l,
-              registeredAgents: l.registeredAgents.filter((a) => a.id !== agentId),
-              updatedAt: new Date().toISOString(),
-            }
+          ? { ...l, registeredAgents: l.registeredAgents.filter((a) => a.id !== agentId), updatedAt: new Date().toISOString() }
           : l
       ),
     })),
@@ -830,9 +611,7 @@ export const useMLRAStore = create<MLRAState>((set, get) => ({
         l.id === launcherId
           ? {
               ...l,
-              registeredAgents: l.registeredAgents.map((a) =>
-                a.id === agentId ? { ...a, workerRole } : a
-              ),
+              registeredAgents: l.registeredAgents.map((a) => (a.id === agentId ? { ...a, workerRole } : a)),
               updatedAt: new Date().toISOString(),
             }
           : l
@@ -842,14 +621,7 @@ export const useMLRAStore = create<MLRAState>((set, get) => ({
   setTaskType: (launcherId, taskType) =>
     set((s) => ({
       launchers: s.launchers.map((l) =>
-        l.id === launcherId
-          ? {
-              ...l,
-              taskType,
-              blueprintDirty: true,
-              updatedAt: new Date().toISOString(),
-            }
-          : l
+        l.id === launcherId ? { ...l, taskType, blueprintDirty: true, updatedAt: new Date().toISOString() } : l
       ),
     })),
 
@@ -867,6 +639,8 @@ export const useMLRAStore = create<MLRAState>((set, get) => ({
           : l
       ),
     })),
+
+  // ── Blueprint actions ──
 
   updateBlueprintMeta: (launcherId, patch) =>
     set((s) => ({
@@ -907,23 +681,30 @@ export const useMLRAStore = create<MLRAState>((set, get) => ({
 
   selectBlueprintStage: (launcherId, stageId) =>
     set((s) => ({
-      launchers: s.launchers.map((l) =>
-        l.id === launcherId ? { ...l, selectedStageId: stageId } : l
-      ),
+      launchers: s.launchers.map((l) => (l.id === launcherId ? { ...l, selectedStageId: stageId } : l)),
     })),
 
-  addBlueprintStage: (launcherId) =>
+  addBlueprintStage: (launcherId, templateId = null, afterStageId = null) =>
     set((s) => ({
       launchers: s.launchers.map((l) => {
         if (l.id !== launcherId) return l;
-        const stage = createStageBlueprint(l.blueprint.templateId, {
-          name: `阶段 ${l.blueprint.stages.length + 1}`,
-          stageStrategy: l.blueprint.launchStrategy === "delivery-first" ? "delivery" : "deliberation",
+        const presetForAdd = getStagePreset(templateId);
+        const stage = createStageBlueprint(templateId, {
+          name: presetForAdd?.name || `阶段 ${l.blueprint.stages.length}`,
+          isClosing: false, // never create closing via add
         });
-        const stages = normalizeStageOrder([...l.blueprint.stages, stage]);
+        // Insert after the requested stage, or before the closing stage by default.
+        const withoutClosing = l.blueprint.stages.filter((x) => !isClosingStage(x));
+        const closing = l.blueprint.stages.find((x) => isClosingStage(x));
+        const insertIndex = afterStageId
+          ? withoutClosing.findIndex((item) => item.id === afterStageId) + 1
+          : withoutClosing.length;
+        const nextNonClosingStages = [...withoutClosing];
+        nextNonClosingStages.splice(insertIndex > 0 ? insertIndex : withoutClosing.length, 0, stage);
+        const newStages = normalizeStageOrder([...nextNonClosingStages, ...(closing ? [closing] : [])]);
         return {
           ...l,
-          blueprint: { ...l.blueprint, stages },
+          blueprint: { ...l.blueprint, stages: closing ? newStages : appendClosingStage(newStages) },
           selectedStageId: stage.id,
           blueprintDirty: true,
           updatedAt: new Date().toISOString(),
@@ -935,15 +716,24 @@ export const useMLRAStore = create<MLRAState>((set, get) => ({
     set((s) => ({
       launchers: s.launchers.map((l) => {
         if (l.id !== launcherId) return l;
-        const stages = l.blueprint.stages.map((stage) =>
-          stage.id === stageId ? { ...stage, ...patch } : stage
-        );
-        return {
-          ...l,
-          blueprint: { ...l.blueprint, stages },
-          blueprintDirty: true,
-          updatedAt: new Date().toISOString(),
-        };
+        const stages = l.blueprint.stages.map((stage) => {
+          if (stage.id !== stageId) return stage;
+          // Closing stages allow identity/description/prompt edits only;
+          // other structural fields must not change for closing.
+          if (isClosingStage(stage)) {
+            return {
+              ...stage,
+              ...("icon" in patch ? { icon: patch.icon ?? stage.icon } : {}),
+              ...("name" in patch ? { name: patch.name ?? stage.name } : {}),
+              ...("description" in patch ? { description: patch.description ?? stage.description } : {}),
+              ...("exitGatePrompt" in patch ? { exitGatePrompt: patch.exitGatePrompt ?? stage.exitGatePrompt } : {}),
+              ...("promptCeo" in patch ? { promptCeo: patch.promptCeo ?? stage.promptCeo } : {}),
+              ...("promptOverride" in patch ? { promptOverride: patch.promptOverride ?? stage.promptOverride } : {}),
+            };
+          }
+          return { ...stage, ...patch };
+        });
+        return { ...l, blueprint: { ...l.blueprint, stages }, blueprintDirty: true, updatedAt: new Date().toISOString() };
       }),
     })),
 
@@ -951,10 +741,12 @@ export const useMLRAStore = create<MLRAState>((set, get) => ({
     set((s) => ({
       launchers: s.launchers.map((l) => {
         if (l.id !== launcherId) return l;
+        const target = l.blueprint.stages.find((x) => x.id === stageId);
+        if (!target || isClosingStage(target)) return l; // cannot remove closing
         const stages = normalizeStageOrder(l.blueprint.stages.filter((stage) => stage.id !== stageId));
         return {
           ...l,
-          blueprint: { ...l.blueprint, stages },
+          blueprint: { ...l.blueprint, stages: appendClosingStage(stages) },
           selectedStageId: l.selectedStageId === stageId ? stages[0]?.id ?? null : l.selectedStageId,
           blueprintDirty: true,
           updatedAt: new Date().toISOString(),
@@ -966,18 +758,17 @@ export const useMLRAStore = create<MLRAState>((set, get) => ({
     set((s) => ({
       launchers: s.launchers.map((l) => {
         if (l.id !== launcherId) return l;
-        const stages = [...l.blueprint.stages];
-        const index = stages.findIndex((stage) => stage.id === stageId);
+        const target = l.blueprint.stages.find((x) => x.id === stageId);
+        if (!target || isClosingStage(target)) return l; // closing is pinned to end
+        const withoutClosing = l.blueprint.stages.filter((x) => !isClosingStage(x));
+        const closing = l.blueprint.stages.find((x) => isClosingStage(x));
+        const index = withoutClosing.findIndex((stage) => stage.id === stageId);
         const targetIndex = index + direction;
-        if (index === -1 || targetIndex < 0 || targetIndex >= stages.length) return l;
-        const [stage] = stages.splice(index, 1);
-        stages.splice(targetIndex, 0, stage);
-        return {
-          ...l,
-          blueprint: { ...l.blueprint, stages: normalizeStageOrder(stages) },
-          blueprintDirty: true,
-          updatedAt: new Date().toISOString(),
-        };
+        if (index === -1 || targetIndex < 0 || targetIndex >= withoutClosing.length) return l;
+        const [stage] = withoutClosing.splice(index, 1);
+        withoutClosing.splice(targetIndex, 0, stage);
+        const stages = normalizeStageOrder([...withoutClosing, ...(closing ? [closing] : [])]);
+        return { ...l, blueprint: { ...l.blueprint, stages }, blueprintDirty: true, updatedAt: new Date().toISOString() };
       }),
     })),
 
@@ -988,10 +779,8 @@ export const useMLRAStore = create<MLRAState>((set, get) => ({
         const index = l.blueprint.stages.findIndex((stage) => stage.id === stageId);
         if (index === -1) return l;
         const source = l.blueprint.stages[index];
-        const clone = createStageBlueprint(l.blueprint.templateId, {
-          ...source,
-          name: `${source.name}（副本）`,
-        });
+        if (isClosingStage(source)) return l; // cannot duplicate closing
+        const clone = createStageBlueprint(source.templateId, { ...source, name: `${source.name}（副本）` });
         const stages = [...l.blueprint.stages];
         stages.splice(index + 1, 0, clone);
         return {
@@ -1004,47 +793,61 @@ export const useMLRAStore = create<MLRAState>((set, get) => ({
       }),
     })),
 
+  toggleStageExitGate: (launcherId, stageId) =>
+    set((s) => ({
+      launchers: s.launchers.map((l) => {
+        if (l.id !== launcherId) return l;
+        const stages = l.blueprint.stages.map((stage) => {
+          if (stage.id !== stageId) return stage;
+          if (isClosingStage(stage)) return stage;
+          return { ...stage, exitGateEnabled: !stage.exitGateEnabled };
+        });
+        return { ...l, blueprint: { ...l.blueprint, stages }, blueprintDirty: true, updatedAt: new Date().toISOString() };
+      }),
+    })),
+
   validateBlueprint: (launcherId) => {
     const launcher = get().launchers.find((item) => item.id === launcherId);
     if (!launcher) return ["Launcher 不存在"];
     const errors: string[] = [];
-    const enabledStages = launcher.blueprint.stages.filter((stage) => stage.enabled);
+    const nonClosing = launcher.blueprint.stages.filter((stage) => !isClosingStage(stage));
     if (!launcher.blueprint.initialTask.trim() && !launcher.userTask.trim() && !launcher.name.trim()) {
       errors.push("请填写任务描述");
     }
-    if (enabledStages.length === 0) {
-      errors.push("至少启用一个阶段");
+    if (nonClosing.length === 0) {
+      errors.push("至少需要一个非结束阶段");
     }
-    enabledStages.forEach((stage, index) => {
+    // Last non-closing stage must have exit gate enabled (decision #9)
+    const lastNonClosing = nonClosing[nonClosing.length - 1];
+    if (lastNonClosing && !lastNonClosing.exitGateEnabled) {
+      errors.push(`最后一个普通阶段「${lastNonClosing.name}」必须开启出口 gate`);
+    }
+    launcher.blueprint.stages.forEach((stage, index) => {
       if (!stage.name.trim()) errors.push(`阶段 ${index + 1} 缺少名称`);
-      if (!stage.openerPrompt.trim()) errors.push(`阶段 ${stage.name || index + 1} 缺少开场提示词`);
-      if (!stage.ceoGatePrompt.trim()) errors.push(`阶段 ${stage.name || index + 1} 缺少 CEO 审批提示词`);
     });
+    // Blueprint must end with a closing stage (invariant, but be defensive)
+    const last = launcher.blueprint.stages[launcher.blueprint.stages.length - 1];
+    if (!last || !isClosingStage(last)) {
+      errors.push("蓝图末尾必须为结束阶段");
+    }
     return errors;
   },
 
   // ── Start orchestration ──
 
-  startOrchestration: (launcherId, launchStrategy) => {
+  startOrchestration: (launcherId) => {
     const launcher = get().launchers.find((l) => l.id === launcherId);
     if (!launcher || (launcher.status !== "configuring" && launcher.status !== "ready")) return;
     const blueprintErrors = get().validateBlueprint(launcherId);
     if (blueprintErrors.length > 0) return;
-    const blueprint = {
+    const blueprint: WorkflowBlueprint = {
       ...launcher.blueprint,
-      launchStrategy,
       initialTask: launcher.userTask || launcher.blueprint.initialTask || launcher.name,
     };
-    const runtimeBlueprint = toRuntimeWorkflowBlueprint(blueprint);
-    const runtimeStartMode = launchStrategyToStartMode(launchStrategy);
-    const startStage = getBlueprintStartStage(blueprint, launchStrategy);
-    const fallbackPhase: PhaseView = runtimeStartMode === "direct-execution" ? "execution" : "planning";
+    const startStage = getBlueprintStartStage(blueprint);
 
-    // Notify daemon (v2 mlra_start IPC)
-    get().daemonStartOrchestration(launcherId, blueprint.initialTask, runtimeStartMode, launcher.taskType || undefined, runtimeBlueprint);
+    get().daemonStartOrchestration(launcherId, blueprint.initialTask, launcher.taskType, blueprint);
 
-    // Update local state — v2 mode (no registeredAgents) starts with empty
-    // agent slots that get auto-populated by mlra_role_connected events.
     set((s) => ({
       launchers: s.launchers.map((l) => {
         if (l.id !== launcherId) return l;
@@ -1053,19 +856,17 @@ export const useMLRAStore = create<MLRAState>((set, get) => ({
 
         return {
           ...l,
-          status: "running" as const,
-          startMode: runtimeStartMode,
+          status: "running",
           updatedAt: new Date().toISOString(),
           startedAt: new Date().toISOString(),
           pausedAt: null,
           pausedElapsed: 0,
           roundHistory: [],
-          currentPhase: startStage ? stageStrategyToPhaseView(startStage.stageStrategy) : fallbackPhase,
           blueprint,
           blueprintDirty: false,
           selectedStageId: startStage?.id ?? l.selectedStageId,
           agents: {
-            ...hydrateAgentsFromRegisteredRoles(l.registeredAgents, l.agents),
+            ...hydrateAgentsFromRegistered(l.registeredAgents, l.agents),
             workers: workerAgents.map((a) => ({
               id: a.id,
               role: a.workerRole || "Worker",
@@ -1081,12 +882,10 @@ export const useMLRAStore = create<MLRAState>((set, get) => ({
         };
       }),
     }));
-    set({ phaseView: startStage ? stageStrategyToPhaseView(startStage.stageStrategy) : fallbackPhase });
   },
 
   // ── View ──
 
-  setPhaseView: (phase) => set({ phaseView: phase }),
   setColumnOrder: (order) => set({ columnOrder: order }),
   setLayoutMode: (mode) => set({ layoutMode: mode }),
   toggleLauncherSidebar: () => set((s) => ({ launcherSidebarOpen: !s.launcherSidebarOpen })),
@@ -1101,46 +900,20 @@ export const useMLRAStore = create<MLRAState>((set, get) => ({
     }
   },
 
-  daemonAssignRole: (launcherId, agentId, role) => {
-    // v1 shim — v2 no longer supports pre-assignment; kept for UI compatibility
-    get().sendToDaemon({ type: "mlra_assign_role", launcherId, agentId, role });
-  },
-
-  daemonStartOrchestration: (launcherId, userTask, startMode, taskType, blueprint) => {
-    // v2 MLRA_START — launcherId/agent assignment dropped (roles are fixed at MCP spawn)
+  daemonStartOrchestration: (launcherId, userTask, taskType, blueprint) => {
     get().sendToDaemon({
       type: "mlra_start",
-      config: { userTask, startMode, taskType: taskType || null, launcherId, blueprint },
+      config: { launcherId, userTask, taskType: taskType || null, blueprint },
     });
   },
 
-  daemonSetControlMode: (mode) => {
-    get().sendToDaemon({ type: "mlra_set_control_mode", mode });
-  },
-
-  daemonReviewApproved: (content) => {
-    get().sendToDaemon({ type: "mlra_review_approved", content });
-  },
-
-  daemonReviewRejected: (reason) => {
-    get().sendToDaemon({ type: "mlra_review_rejected", reason });
-  },
-
-  daemonTerminate: () => {
-    get().sendToDaemon({ type: "mlra_terminate" });
-  },
-
-  daemonSetBudget: (limit) => {
-    get().sendToDaemon({ type: "mlra_set_budget", limit });
-  },
-
-  daemonIncreaseBudget: (amount) => {
-    get().sendToDaemon({ type: "mlra_increase_budget", amount });
-  },
-
-  daemonInjectMessage: (callerId, content) => {
-    get().sendToDaemon({ type: "mlra_inject_message", callerId, content });
-  },
+  daemonSetControlMode: (mode) => { get().sendToDaemon({ type: "mlra_set_control_mode", mode }); },
+  daemonReviewApproved: (content) => { get().sendToDaemon({ type: "mlra_review_approved", content }); },
+  daemonReviewRejected: (reason) => { get().sendToDaemon({ type: "mlra_review_rejected", reason }); },
+  daemonTerminate: () => { get().sendToDaemon({ type: "mlra_terminate" }); },
+  daemonSetBudget: (limit) => { get().sendToDaemon({ type: "mlra_set_budget", limit }); },
+  daemonIncreaseBudget: (amount) => { get().sendToDaemon({ type: "mlra_increase_budget", amount }); },
+  daemonInjectMessage: (callerId, content) => { get().sendToDaemon({ type: "mlra_inject_message", callerId, content }); },
 
   // ── Handle incoming daemon messages ──
 
@@ -1149,7 +922,6 @@ export const useMLRAStore = create<MLRAState>((set, get) => ({
       const msg = JSON.parse(raw);
       switch (msg.type) {
         case "mlra_agent_registered": {
-          // A new agent registered on the daemon — update registeredAgents
           const launcher = get().getActiveLauncher();
           if (!launcher) break;
           const existing = launcher.registeredAgents.find((a) => a.id === msg.callerId);
@@ -1166,33 +938,29 @@ export const useMLRAStore = create<MLRAState>((set, get) => ({
           });
           break;
         }
+
         case "mlra_orchestration_status": {
-          // Full state sync from daemon — data is nested under msg.state
           const launcher = get().getActiveLauncher();
           if (!launcher) break;
-          const state = msg.state || msg; // Support both nested and flat
+          const state = msg.state || msg;
           set((s) => ({
             launchers: s.launchers.map((l) => {
               if (l.id !== launcher.id) return l;
               return {
                 ...l,
                 status: state.status || l.status,
-                currentPhase: state.blueprintRuntime?.currentStage?.phaseType || state.collaborationMode || state.phase || l.currentPhase,
                 controlMode: state.controlMode || l.controlMode,
-                startMode: state.entryStrategy || state.startMode || l.startMode,
                 ceoGate: state.ceoGate || l.ceoGate,
-                blueprintRuntime: fromRuntimeBlueprintRuntimeSummary(state.blueprintRuntime as RuntimeBlueprintRuntimeSummary | null | undefined) || l.blueprintRuntime,
+                blueprintRuntime: state.blueprintRuntime || l.blueprintRuntime,
                 selectedStageId: state.blueprintRuntime?.currentStageId || l.selectedStageId,
-                lastProgress: state.lastProgress !== undefined ? state.lastProgress : l.lastProgress,
                 updatedAt: new Date().toISOString(),
               };
             }),
           }));
-          if (state.collaborationMode || state.phase) set({ phaseView: (state.collaborationMode || state.phase) as PhaseView });
           break;
         }
+
         case "mlra_round_event": {
-          // Round start/end events — update roundHistory for timer stats
           const launcher = get().getActiveLauncher();
           if (!launcher || !msg.round) break;
           const round = msg.round as { id: string; role: string; startedAt: string; endedAt: string | null };
@@ -1200,13 +968,9 @@ export const useMLRAStore = create<MLRAState>((set, get) => ({
             set((s) => ({
               launchers: s.launchers.map((l) => {
                 if (l.id !== launcher.id) return l;
-                // Add new round (avoid duplicates)
                 const exists = l.roundHistory.some((r) => r.id === round.id);
                 if (exists) return l;
-                return {
-                  ...l,
-                  roundHistory: [...l.roundHistory, { id: round.id, role: round.role, startedAt: round.startedAt, endedAt: null }],
-                };
+                return { ...l, roundHistory: [...l.roundHistory, { id: round.id, role: round.role, startedAt: round.startedAt, endedAt: null }] };
               }),
             }));
           } else if (msg.event === "end") {
@@ -1215,39 +979,19 @@ export const useMLRAStore = create<MLRAState>((set, get) => ({
                 if (l.id !== launcher.id) return l;
                 return {
                   ...l,
-                  roundHistory: l.roundHistory.map((r) =>
-                    r.id === round.id ? { ...r, endedAt: round.endedAt || new Date().toISOString() } : r
-                  ),
+                  roundHistory: l.roundHistory.map((r) => (r.id === round.id ? { ...r, endedAt: round.endedAt || new Date().toISOString() } : r)),
                 };
               }),
             }));
           }
           break;
         }
+
         case "mlra_human_review": {
-          // Daemon requests human review — could trigger UI notification
           console.log("[MLRA] Human review requested:", msg.content);
           break;
         }
-        case "mlra_session_derailed": {
-          const launcher = get().getActiveLauncher();
-          if (!launcher) break;
-          console.warn(`[MLRA] Session derailed: ${msg.callerId} (${msg.role}), reason=${msg.reason}, retry=${msg.retryCount}/${msg.maxRetries}`);
-          // Agent slot status update is handled via orchestration_status sync
-          break;
-        }
-        case "mlra_session_recovered": {
-          console.log(`[MLRA] Session recovered: ${msg.callerId} (${msg.role})`);
-          break;
-        }
-        case "mlra_session_failover": {
-          console.warn(`[MLRA] Failover: ${msg.role} ${msg.oldCallerId} → ${msg.newCallerId}`);
-          break;
-        }
-        case "mlra_session_broken": {
-          console.error(`[MLRA] Session broken (no standbys): ${msg.callerId} (${msg.role})`);
-          break;
-        }
+
         case "mlra_session_pool_update": {
           const launcher = get().getActiveLauncher();
           if (!launcher) break;
@@ -1255,143 +999,110 @@ export const useMLRAStore = create<MLRAState>((set, get) => ({
           set((s) => ({
             launchers: s.launchers.map((l) => {
               if (l.id !== launcher.id) return l;
-              return {
-                ...l,
-                sessionPools: { ...l.sessionPools, [pool.role]: pool },
-                updatedAt: new Date().toISOString(),
-              };
+              return { ...l, sessionPools: { ...l.sessionPools, [pool.role]: pool }, updatedAt: new Date().toISOString() };
             }),
           }));
           break;
         }
+
         case "mlra_budget_update": {
           const launcher = get().getActiveLauncher();
           if (!launcher) break;
           set((s) => ({
-            launchers: s.launchers.map((l) => {
-              if (l.id !== launcher.id) return l;
-              return {
-                ...l,
-                budget: msg.budget as BudgetStatus,
-                updatedAt: new Date().toISOString(),
-              };
-            }),
+            launchers: s.launchers.map((l) =>
+              l.id === launcher.id ? { ...l, budget: msg.budget as BudgetStatus, updatedAt: new Date().toISOString() } : l
+            ),
           }));
           break;
         }
+
         case "mlra_budget_pause": {
           const launcher = get().getActiveLauncher();
           if (!launcher) break;
           set((s) => ({
-            launchers: s.launchers.map((l) => {
-              if (l.id !== launcher.id) return l;
-              return {
-                ...l,
-                status: "paused" as const,
-                budget: msg.budget as BudgetStatus,
-                pausedAt: new Date().toISOString(),
-                updatedAt: new Date().toISOString(),
-              };
-            }),
+            launchers: s.launchers.map((l) =>
+              l.id === launcher.id
+                ? { ...l, status: "paused", budget: msg.budget as BudgetStatus, pausedAt: new Date().toISOString(), updatedAt: new Date().toISOString() }
+                : l
+            ),
           }));
-          break;
-        }
-        case "mlra_ceo_gate_status": {
-          const launcher = get().getActiveLauncher();
-          if (!launcher) break;
-          set((s) => ({
-            launchers: s.launchers.map((l) => {
-              if (l.id !== launcher.id) return l;
-              return {
-                ...l,
-                ceoGate: msg.ceoGate as CeoGateStatus,
-                updatedAt: new Date().toISOString(),
-              };
-            }),
-          }));
-          break;
-        }
-        case "mlra_phase_change": {
-          const launcher = get().getActiveLauncher();
-          if (!launcher) break;
-          const nextPhase = (msg.collaborationModeTo || msg.to) as PhaseView;
-          set((s) => ({
-            launchers: s.launchers.map((l) => {
-              if (l.id !== launcher.id) return l;
-              return {
-                ...l,
-                currentPhase: nextPhase,
-                updatedAt: new Date().toISOString(),
-              };
-            }),
-          }));
-          set({ phaseView: nextPhase });
           break;
         }
 
-        // ── v2 events ──
-        case "mlra_role_connected": {
-          // v2 runtime roles are still bridged to the legacy slot structure,
-          // but that mapping now lives in store helpers instead of each event path.
-          console.log(`[MLRA v2] Role connected: ${msg.role} (${msg.clientName})`);
-          const launcher = get().getActiveLauncher();
-          if (!launcher) break;
-          const v2Role = msg.role as "ceo" | "expert" | "inspector";
-          const makeSlot = (v1role: Exclude<AgentRole, "worker">): AgentSlot => ({
-            id: `v2-${v2Role}`,
-            role: v1role,
-            displayName: ({
-              "planning-expert": "规划专家",
-              "planning-inspector": "规划监察",
-              "execution-expert": "执行专家",
-              "execution-inspector": "执行监察",
-              ceo: "CEO",
-            } as Record<string, string>)[v1role] || v1role,
-            model: msg.model || "",
-            status: v1role === "ceo" ? "standby" : "active",
-            color: ROLE_COLORS[v1role] || "#64748B",
-            activeSessionId: null,
-            sessionIds: [],
-          });
-          set((s) => ({
-            launchers: s.launchers.map((l) => {
-              if (l.id !== launcher.id) return l;
-              const next = updateAgentsForRuntimeRole(l.agents, v2Role, (slot) => makeSlot(slot));
-              return { ...l, agents: next, updatedAt: new Date().toISOString() };
-            }),
-          }));
-          break;
-        }
-        case "mlra_role_disconnected": {
-          console.log(`[MLRA v2] Role disconnected: ${msg.role}`);
-          const launcher = get().getActiveLauncher();
-          if (!launcher) break;
-          const v2Role = msg.role as "ceo" | "expert" | "inspector";
-          set((s) => ({
-            launchers: s.launchers.map((l) => {
-              if (l.id !== launcher.id) return l;
-              const next = updateAgentsForRuntimeRole(l.agents, v2Role, () => null);
-              return { ...l, agents: next, updatedAt: new Date().toISOString() };
-            }),
-          }));
-          break;
-        }
+        case "mlra_ceo_gate_status":
         case "mlra_gate_status": {
           const launcher = get().getActiveLauncher();
           if (!launcher) break;
           if (msg.ceoGate) {
             set((s) => ({
               launchers: s.launchers.map((l) =>
-                l.id === launcher.id
-                  ? { ...l, ceoGate: msg.ceoGate as CeoGateStatus, updatedAt: new Date().toISOString() }
-                  : l
+                l.id === launcher.id ? { ...l, ceoGate: msg.ceoGate as CeoGateStatus, updatedAt: new Date().toISOString() } : l
               ),
             }));
           }
           break;
         }
+
+        case "mlra_stage_change": {
+          const launcher = get().getActiveLauncher();
+          if (!launcher) break;
+          const stageTo = msg.stageTo as { id: string; name: string; isClosing: boolean } | null;
+          if (!stageTo) break;
+          set((s) => ({
+            launchers: s.launchers.map((l) => {
+              if (l.id !== launcher.id) return l;
+              const isClosing = Boolean(stageTo.isClosing);
+              return {
+                ...l,
+                selectedStageId: stageTo.id,
+                status: isClosing ? "awaiting-user" : l.status,
+                updatedAt: new Date().toISOString(),
+              };
+            }),
+          }));
+          break;
+        }
+
+        case "mlra_role_connected": {
+          console.log(`[MLRA] Role connected: ${msg.role} (${msg.clientName})`);
+          const launcher = get().getActiveLauncher();
+          if (!launcher) break;
+          const role = msg.role as RuntimeMainRole;
+          if (!["expert", "inspector", "ceo"].includes(role)) break;
+          const slot: AgentSlot = {
+            id: `mlra-${role}`,
+            role,
+            displayName: ROLE_DISPLAY_NAMES[role],
+            model: msg.model || "",
+            status: role === "ceo" ? "standby" : "active",
+            color: ROLE_COLORS[role],
+            activeSessionId: null,
+            sessionIds: [],
+          };
+          set((s) => ({
+            launchers: s.launchers.map((l) =>
+              l.id === launcher.id ? { ...l, agents: { ...l.agents, [role]: slot }, updatedAt: new Date().toISOString() } : l
+            ),
+          }));
+          break;
+        }
+
+        case "mlra_role_disconnected": {
+          console.log(`[MLRA] Role disconnected: ${msg.role}`);
+          const launcher = get().getActiveLauncher();
+          if (!launcher) break;
+          const role = msg.role as RuntimeMainRole;
+          if (!["expert", "inspector", "ceo"].includes(role)) break;
+          set((s) => ({
+            launchers: s.launchers.map((l) =>
+              l.id === launcher.id ? { ...l, agents: { ...l.agents, [role]: null }, updatedAt: new Date().toISOString() } : l
+            ),
+          }));
+          break;
+        }
+
         case "mlra_workflow_paused": {
-          console.log(`[MLRA v2] Workflow paused: ${msg.reason}`);
+          console.log(`[MLRA] Workflow paused: ${msg.reason}`);
           const launcher = get().getActiveLauncher();
           if (!launcher) break;
           set((s) => ({
@@ -1401,8 +1112,9 @@ export const useMLRAStore = create<MLRAState>((set, get) => ({
           }));
           break;
         }
+
         case "mlra_workflow_complete": {
-          console.log("[MLRA v2] Workflow complete");
+          console.log("[MLRA] Workflow complete");
           const launcher = get().getActiveLauncher();
           if (!launcher) break;
           set((s) => ({
