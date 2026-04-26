@@ -2710,7 +2710,7 @@ body,
   font-variant-numeric: tabular-nums;
   color: var(--color-text-muted);
   flex-shrink: 0;
-  letter-spacing: 0.5px;
+  letter-spacing: 0;
   cursor: default;
 }
 
@@ -2724,8 +2724,8 @@ body,
   border-radius: 6px;
   box-shadow: 0 4px 12px rgba(0, 0, 0, 0.3);
   z-index: 100;
-  min-width: 220px;
-  max-width: 320px;
+  min-width: 300px;
+  max-width: 360px;
   overflow: hidden;
 }
 
@@ -2882,33 +2882,6 @@ body,
   white-space: nowrap;
 }
 
-.mlra-stop-btn {
-  height: 21px;
-  display: inline-flex;
-  align-items: center;
-  justify-content: center;
-  gap: 4px;
-  padding: 0 7px;
-  border: 1px solid transparent;
-  border-radius: 5px;
-  background: transparent;
-  color: var(--color-text-muted);
-  font-size: 11px;
-  line-height: 1;
-  cursor: pointer;
-  white-space: nowrap;
-  transition: background 0.12s ease, border-color 0.12s ease, color 0.12s ease;
-}
-.mlra-stop-btn:hover {
-  background: rgba(239, 68, 68, 0.1);
-  border-color: rgba(239, 68, 68, 0.18);
-  color: #EF4444;
-}
-.mlra-stop-btn.confirming {
-  background: rgba(239, 68, 68, 0.14);
-  border-color: rgba(239, 68, 68, 0.38);
-  color: #EF4444;
-}
 .timer-stats-time {
   color: var(--color-text-secondary);
   font-variant-numeric: tabular-nums;
@@ -2921,6 +2894,94 @@ body,
   color: var(--color-text-muted);
   text-align: center;
   padding: 8px 0;
+}
+
+.timer-stats-danger-zone {
+  padding: 8px 10px 10px;
+  border-top: 1px solid var(--color-border-subtle);
+  background: transparent;
+}
+.timer-stop-entry {
+  width: 100%;
+  height: 32px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 6px;
+  border: none;
+  border-radius: 4px;
+  background: #ff2d2d;
+  color: #fff;
+  font-size: 11px;
+  font-weight: 700;
+  cursor: pointer;
+  transition: background 0.12s ease;
+}
+.timer-stop-entry:hover {
+  background: #ff4545;
+}
+.timer-stop-overlay {
+  position: fixed;
+  inset: 0;
+  z-index: 1100;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: rgba(0, 0, 0, 0.45);
+  backdrop-filter: blur(6px);
+  -webkit-backdrop-filter: blur(6px);
+}
+.timer-stop-dialog {
+  width: 360px;
+  max-width: calc(100vw - 40px);
+  border: 1px solid var(--color-border);
+  border-radius: 8px;
+  background: var(--color-bg-surface);
+  box-shadow: 0 8px 32px rgba(0, 0, 0, 0.35);
+  overflow: hidden;
+}
+.timer-stop-dialog-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 10px 14px;
+  border-bottom: 1px solid var(--color-border-subtle);
+  font-size: 13px;
+  font-weight: 600;
+  color: var(--color-text-primary);
+}
+.timer-stop-dialog-body {
+  padding: 14px;
+  font-size: 12px;
+  line-height: 1.5;
+  color: var(--color-text-muted);
+}
+.timer-stop-dialog-actions {
+  display: flex;
+  justify-content: flex-end;
+  gap: 8px;
+  padding: 10px 14px 14px;
+}
+.timer-stop-secondary {
+  height: 28px;
+  padding: 0 10px;
+  border: 1px solid var(--color-border);
+  border-radius: 4px;
+  background: var(--color-bg-surface);
+  color: var(--color-text-secondary);
+  font-size: 11px;
+  font-weight: 700;
+  cursor: pointer;
+}
+.timer-stop-secondary:hover {
+  color: var(--color-text-primary);
+  background: var(--color-bg-surface-hover);
+}
+.timer-stop-confirm-button {
+  width: auto;
+  min-width: 88px;
+  height: 28px;
+  padding: 0 10px;
 }
 [data-theme="light"] .timer-stats-popover {
   box-shadow: 0 4px 12px rgba(0, 0, 0, 0.1);
@@ -4845,6 +4906,48 @@ button.mlra-inspector-gate-pill {
   background: color-mix(in srgb, var(--color-primary) 26%, var(--color-bg-elevated));
   border-color: transparent;
   color: color-mix(in srgb, var(--color-primary) 82%, var(--color-text-primary));
+}
+
+[data-theme="light"] .mlra-node-workbench .mlra-task-type-chip,
+[data-theme="light"] .mlra-node-workbench .mlra-skill-tag {
+  border-color: #d7e1ea;
+  background: transparent;
+  color: #2f4154;
+}
+
+[data-theme="light"] .mlra-node-workbench .mlra-task-type-chip:hover,
+[data-theme="light"] .mlra-node-workbench .mlra-skill-tag:hover {
+  border-color: #b8cadb;
+  background: #e8f0f7;
+  color: #203246;
+}
+
+[data-theme="light"] .mlra-node-workbench .mlra-task-type-chip.active,
+[data-theme="light"] .mlra-node-workbench .mlra-skill-tag.active {
+  border-color: #c7e3de;
+  background: #e6f5f2;
+  color: #007a70;
+}
+
+[data-theme="light"] .mlra-node-workbench .mlra-policy-control-options {
+  border-color: #cbd8e3;
+  background: transparent;
+}
+
+[data-theme="light"] .mlra-node-workbench .mlra-policy-option {
+  border-right-color: #cbd8e3;
+  background: transparent;
+  color: #34465a;
+}
+
+[data-theme="light"] .mlra-node-workbench .mlra-policy-option:hover {
+  background: #e9f1f8;
+  color: #1f3044;
+}
+
+[data-theme="light"] .mlra-node-workbench .mlra-policy-option.active {
+  background: #e6f5f2;
+  color: #006f67;
 }
 
 @media (max-width: 980px) {

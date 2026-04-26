@@ -401,11 +401,8 @@ class OrchestratorDaemon {
       }
 
       case MSG.MLRA_CANCEL: {
-        this.orchestrator.status = "cancelled";
-        this.orchestrator.humanGate = null;
-        this.orchestrator.stageExitPending = this.orchestrator._emptyStageExitPending();
+        this.orchestrator.cancelOrchestration("Orchestration cancelled by user");
         this.router.cancelAll("Orchestration cancelled by user");
-        this.ipcBridge.send({ type: MSG.MLRA_HUMAN_GATE_UPDATE, humanGate: null });
         this._pushStatus();
         break;
       }

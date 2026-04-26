@@ -82,7 +82,7 @@ function StageFlowPopover({ stages, currentStageId }: { stages: StageBlueprint[]
 }
 
 /** Stats popover shown on timer hover */
-function TimerStatsPopover({ rounds, stages }: { rounds: RoundRecord[]; stages: StageBlueprint[] }) {
+function TimerStatsPopover({ rounds, stages, onRequestStop }: { rounds: RoundRecord[]; stages: StageBlueprint[]; onRequestStop: () => void }) {
   const [stageFilter, setStageFilter] = useState<string>("all");
   const roundDuration = (round: RoundRecord) => {
     const end = round.endedAt ? new Date(round.endedAt).getTime() : Date.now();
@@ -342,6 +342,12 @@ function TimerStatsPopover({ rounds, stages }: { rounds: RoundRecord[]; stages: 
           )}
         </div>
       </div>
+      <div className="timer-stats-danger-zone">
+        <button type="button" className="timer-stop-entry" onClick={onRequestStop}>
+          <Icon name="close" size={12} />
+          停止当前 MLRA
+        </button>
+      </div>
     </div>
   );
 }
@@ -383,6 +389,8 @@ const IS_MACOS = navigator.userAgent.includes('Macintosh');
 /** Running timer — counts up from startedAt, subtracting paused time */
 function RunningTimer() {
   const launcher = useMLRAStore((s) => s.getActiveLauncher());
+  const daemonCancelOrchestration = useMLRAStore((s) => s.daemonCancelOrchestration);
+  const [stopConfirmOpen, setStopConfirmOpen] = useState(false);
   const [elapsed, setElapsed] = useState(0);
 
   useEffect(() => {
@@ -407,21 +415,50 @@ function RunningTimer() {
   const rounds = launcher?.roundHistory ?? [];
 
   return (
-    <span className="mlra-timer-wrapper">
-      <span className="mlra-timer">
-        <Icon name="clock" size={10} />
-        {display}
+    <>
+      <span className="mlra-timer-wrapper">
+        <span className="mlra-timer">
+          <Icon name="clock" size={10} />
+          {display}
+        </span>
+        <TimerStatsPopover rounds={rounds} stages={launcher?.blueprint.stages ?? []} onRequestStop={() => setStopConfirmOpen(true)} />
       </span>
-      <TimerStatsPopover rounds={rounds} stages={launcher?.blueprint.stages ?? []} />
-    </span>
+      {stopConfirmOpen && (
+        <div className="timer-stop-overlay" onClick={() => setStopConfirmOpen(false)}>
+          <div className="timer-stop-dialog" onClick={(event) => event.stopPropagation()}>
+            <div className="timer-stop-dialog-header">
+              <span>确认停止当前 MLRA</span>
+              <button type="button" className="settings-close-btn" onClick={() => setStopConfirmOpen(false)}>
+                <Icon name="win-close" size={10} />
+              </button>
+            </div>
+            <div className="timer-stop-dialog-body">当前编排会被取消，阻塞中的角色调用会被释放。</div>
+            <div className="timer-stop-dialog-actions">
+              <button type="button" className="timer-stop-secondary" onClick={() => setStopConfirmOpen(false)}>
+                取消
+              </button>
+              <button
+                type="button"
+                className="timer-stop-entry timer-stop-confirm-button"
+                onClick={() => {
+                  setStopConfirmOpen(false);
+                  daemonCancelOrchestration();
+                }}
+              >
+                <Icon name="close" size={12} />
+                确认停止
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+    </>
   );
 }
 
 /** MLRA title bar Row 2 */
 function MLRARow2() {
   const launcher = useMLRAStore((s) => s.getActiveLauncher());
-  const daemonCancelOrchestration = useMLRAStore((s) => s.daemonCancelOrchestration);
-  const [stopConfirming, setStopConfirming] = useState(false);
   const isActive = launcher?.status === "running" || launcher?.status === "paused" || launcher?.status === "awaiting-user";
   const runtime = launcher?.blueprintRuntime;
   const fallbackStage = launcher?.blueprint.stages.find((stage) => stage.id === launcher.selectedStageId) ?? launcher?.blueprint.stages[0] ?? null;
@@ -437,25 +474,6 @@ function MLRARow2() {
       : -1;
   const totalStages = runtime?.totalStages || launcher?.blueprint.stages.length || 0;
   const currentStageNo = totalStages > 0 && currentStageIndex >= 0 ? `${currentStageIndex + 1}/${totalStages}` : null;
-
-  useEffect(() => {
-    if (!stopConfirming) return;
-    const timer = window.setTimeout(() => setStopConfirming(false), 3000);
-    return () => window.clearTimeout(timer);
-  }, [stopConfirming]);
-
-  useEffect(() => {
-    if (!isActive) setStopConfirming(false);
-  }, [isActive]);
-
-  const handleStopClick = () => {
-    if (!stopConfirming) {
-      setStopConfirming(true);
-      return;
-    }
-    setStopConfirming(false);
-    daemonCancelOrchestration();
-  };
 
   return (
     <div data-tauri-drag-region className="flex items-center gap-2 px-3" style={{ height: 26 }}>
@@ -518,17 +536,6 @@ function MLRARow2() {
         </span>
       )}
       {isActive && <RunningTimer />}
-      {isActive && (
-        <button
-          className={`mlra-stop-btn${stopConfirming ? " confirming" : ""}`}
-          onClick={handleStopClick}
-          onBlur={() => setStopConfirming(false)}
-          title={stopConfirming ? "确认停止当前 MLRA" : "停止当前 MLRA"}
-        >
-          <Icon name="close" size={11} />
-          <span>{stopConfirming ? "确认停止" : "停止"}</span>
-        </button>
-      )}
     </div>
   );
 }

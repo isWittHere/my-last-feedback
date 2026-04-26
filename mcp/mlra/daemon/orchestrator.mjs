@@ -343,17 +343,27 @@ export class Orchestrator {
       return { error: `Cannot start: missing roles ${readiness.missing.join(", ")}` };
     }
 
-    this.status = "running";
+    this._endCurrentRound();
     this.userTask = userTask;
     this.taskType = taskType;
     this.blueprint = blueprint || null;
     this.orchestrationPolicy = normalizePolicy(orchestrationPolicy || this.orchestrationPolicy);
     this.humanGate = null;
+    this.ceoGate = this._emptyGate();
+    this.votes = { expert: null, inspector: null };
+    this.stageExitReadiness = this._emptyStageExitReadiness();
+    this.stageExitPending = this._emptyStageExitPending();
+    this.lastSubmitContent = null;
+    this.sameFeedbackCount = 0;
+    this.lastFeedbackHash = null;
+    this.rounds = [];
+    this.currentRound = null;
     const activeStage = this._selectStartStage();
     if (!activeStage) {
       return { error: "Blueprint has no enabled non-closing stage" };
     }
 
+    this.status = "running";
     this._emit({ type: "status_change", status: "running" });
     this._applyRoleStatusesForStage(activeStage);
     this._emit({
@@ -364,6 +374,32 @@ export class Orchestrator {
 
     const instructions = this._buildStageEntryInstructions(activeStage);
     return { instructions };
+  }
+
+  cancelOrchestration(reason = "Orchestration cancelled by user") {
+    const prev = this.status;
+    if (!["running", "paused", "awaiting-user"].includes(this.status)) {
+      return { ok: false, prev, status: this.status, reason: "not_active" };
+    }
+
+    this._endCurrentRound();
+    this.status = "cancelled";
+    this.humanGate = null;
+    this.ceoGate = this._emptyGate();
+    this.votes = { expert: null, inspector: null };
+    this.stageExitReadiness = this._emptyStageExitReadiness();
+    this.stageExitPending = this._emptyStageExitPending();
+    this.sameFeedbackCount = 0;
+    this.lastFeedbackHash = null;
+
+    for (const entry of this.roles.values()) {
+      entry.status = "idle";
+    }
+
+    this._emit({ type: "human_gate_update", humanGate: null });
+    this._emit({ type: "stage_exit_pending_update", stageExitPending: this.stageExitPending });
+    this._emit({ type: "status_change", prev, status: this.status, reason });
+    return { ok: true, prev, status: this.status };
   }
 
   // ── Submit Handling ──

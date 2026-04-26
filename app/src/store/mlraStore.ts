@@ -975,7 +975,7 @@ export const useMLRAStore = create<MLRAState>((set, get) => ({
 
   startOrchestration: (launcherId) => {
     const launcher = get().launchers.find((l) => l.id === launcherId);
-    if (!launcher || (launcher.status !== "configuring" && launcher.status !== "ready")) return;
+    if (!launcher || !["configuring", "ready", "completed", "cancelled"].includes(launcher.status)) return;
     const blueprintErrors = get().validateBlueprint(launcherId);
     if (blueprintErrors.length > 0) return;
     const blueprint: WorkflowBlueprint = {
@@ -1000,6 +1000,11 @@ export const useMLRAStore = create<MLRAState>((set, get) => ({
           pausedAt: null,
           pausedElapsed: 0,
           roundHistory: [],
+          ceoGate: null,
+          humanGate: null,
+          stageExitPending: null,
+          stageExitReadiness: null,
+          blueprintRuntime: null,
           blueprint,
           blueprintDirty: false,
           selectedStageId: startStage?.id ?? l.selectedStageId,
@@ -1049,7 +1054,33 @@ export const useMLRAStore = create<MLRAState>((set, get) => ({
   daemonApproveHumanGate: (payload) => { get().sendToDaemon({ type: "mlra_human_gate_approve", ...payload }); },
   daemonRejectHumanGate: (payload) => { get().sendToDaemon({ type: "mlra_human_gate_reject", ...payload }); },
   daemonCancelHumanGate: (payload) => { get().sendToDaemon({ type: "mlra_human_gate_cancel", ...payload }); },
-  daemonCancelOrchestration: () => { get().sendToDaemon({ type: "mlra_cancel" }); },
+  daemonCancelOrchestration: () => {
+    const launcher = get().getActiveLauncher();
+    if (launcher && ["running", "paused", "awaiting-user"].includes(launcher.status)) {
+      const now = new Date().toISOString();
+      set((s) => ({
+        launchers: s.launchers.map((l) => {
+          if (l.id !== launcher.id) return l;
+          return {
+            ...l,
+            status: "cancelled",
+            humanGate: null,
+            stageExitPending: null,
+            ceoGate: l.ceoGate ? { ...l.ceoGate, active: false, type: null } : l.ceoGate,
+            roundHistory: l.roundHistory.map((round) => round.endedAt ? round : { ...round, endedAt: now }),
+            agents: {
+              ...l.agents,
+              expert: l.agents.expert ? { ...l.agents.expert, status: "idle" } : null,
+              inspector: l.agents.inspector ? { ...l.agents.inspector, status: "idle" } : null,
+              ceo: l.agents.ceo ? { ...l.agents.ceo, status: "idle" } : null,
+            },
+            updatedAt: now,
+          };
+        }),
+      }));
+    }
+    get().sendToDaemon({ type: "mlra_cancel" });
+  },
   daemonTerminate: () => { get().sendToDaemon({ type: "mlra_terminate" }); },
   daemonSetBudget: (limit) => { get().sendToDaemon({ type: "mlra_set_budget", limit }); },
   daemonIncreaseBudget: (amount) => { get().sendToDaemon({ type: "mlra_increase_budget", amount }); },
