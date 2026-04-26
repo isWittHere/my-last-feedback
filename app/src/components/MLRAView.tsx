@@ -1,7 +1,6 @@
 import { useEffect, useMemo, useState } from "react";
 import { useMLRAStore, type HumanGateState } from "../store/mlraStore";
 import { LauncherHome } from "./LauncherHome";
-import { LauncherSidebar } from "./LauncherSidebar";
 import { AgentColumn } from "./AgentColumn";
 import { AppSelect } from "./AppSelect";
 import { Icon } from "./Icons";
@@ -134,8 +133,6 @@ function HumanGatePanel({ gate }: { gate: HumanGateState }) {
  */
 export function MLRAView() {
   const activeLauncher = useMLRAStore((s) => s.getActiveLauncher());
-  const launcherSidebarOpen = useMLRAStore((s) => s.launcherSidebarOpen);
-  const toggleSidebar = useMLRAStore((s) => s.toggleLauncherSidebar);
   const columnOrder = useMLRAStore((s) => s.columnOrder);
   const phaseRoles = useMemo(() => {
     const orderedRoles = columnOrder.filter((role): role is MainAgentRole => MAIN_AGENT_ROLES.includes(role as MainAgentRole));
@@ -146,11 +143,6 @@ export function MLRAView() {
 
   return (
     <div className="flex-1 flex flex-col min-h-0 relative">
-      {/* Launcher sidebar overlay */}
-      {launcherSidebarOpen && (
-        <LauncherSidebar onClose={() => toggleSidebar()} />
-      )}
-
       {/* Main content area — single unified launcher page, or running workspace */}
       {isActive ? (
         <div className="mlra-runtime-shell">

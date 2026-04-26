@@ -420,6 +420,8 @@ function RunningTimer() {
 /** MLRA title bar Row 2 */
 function MLRARow2() {
   const launcher = useMLRAStore((s) => s.getActiveLauncher());
+  const daemonCancelOrchestration = useMLRAStore((s) => s.daemonCancelOrchestration);
+  const [stopConfirming, setStopConfirming] = useState(false);
   const isActive = launcher?.status === "running" || launcher?.status === "paused" || launcher?.status === "awaiting-user";
   const runtime = launcher?.blueprintRuntime;
   const fallbackStage = launcher?.blueprint.stages.find((stage) => stage.id === launcher.selectedStageId) ?? launcher?.blueprint.stages[0] ?? null;
@@ -436,15 +438,27 @@ function MLRARow2() {
   const totalStages = runtime?.totalStages || launcher?.blueprint.stages.length || 0;
   const currentStageNo = totalStages > 0 && currentStageIndex >= 0 ? `${currentStageIndex + 1}/${totalStages}` : null;
 
+  useEffect(() => {
+    if (!stopConfirming) return;
+    const timer = window.setTimeout(() => setStopConfirming(false), 3000);
+    return () => window.clearTimeout(timer);
+  }, [stopConfirming]);
+
+  useEffect(() => {
+    if (!isActive) setStopConfirming(false);
+  }, [isActive]);
+
+  const handleStopClick = () => {
+    if (!stopConfirming) {
+      setStopConfirming(true);
+      return;
+    }
+    setStopConfirming(false);
+    daemonCancelOrchestration();
+  };
+
   return (
     <div data-tauri-drag-region className="flex items-center gap-2 px-3" style={{ height: 26 }}>
-      <button
-        className="launcher-btn"
-        onClick={() => useMLRAStore.getState().toggleLauncherSidebar()}
-        title="Launcher 管理"
-      >
-        <Icon name="menu" size={14} />
-      </button>
       {isActive && launcher && (
         <div className="mlra-control-mode-switcher">
           {ORCHESTRATION_PRESETS.map(({ id, label, description, icon, policy }) => (
@@ -504,6 +518,17 @@ function MLRARow2() {
         </span>
       )}
       {isActive && <RunningTimer />}
+      {isActive && (
+        <button
+          className={`mlra-stop-btn${stopConfirming ? " confirming" : ""}`}
+          onClick={handleStopClick}
+          onBlur={() => setStopConfirming(false)}
+          title={stopConfirming ? "确认停止当前 MLRA" : "停止当前 MLRA"}
+        >
+          <Icon name="close" size={11} />
+          <span>{stopConfirming ? "确认停止" : "停止"}</span>
+        </button>
+      )}
     </div>
   );
 }

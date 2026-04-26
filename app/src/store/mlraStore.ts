@@ -293,7 +293,6 @@ export interface Launcher {
 export interface MLRAState {
   launchers: Launcher[];
   activeLauncherId: string | null;
-  launcherSidebarOpen: boolean;
 
   columnOrder: string[];
   layoutMode: "auto" | 1 | 2 | 3 | 4;
@@ -332,7 +331,6 @@ export interface MLRAState {
   // View
   setColumnOrder: (order: string[]) => void;
   setLayoutMode: (mode: "auto" | 1 | 2 | 3 | 4) => void;
-  toggleLauncherSidebar: () => void;
 
   // Daemon communication
   sendToDaemon: (msg: Record<string, unknown>) => Promise<void>;
@@ -342,6 +340,7 @@ export interface MLRAState {
   daemonApproveHumanGate: (payload: { id: string; content?: string; verdict?: string; reason?: string; targets?: string[] }) => void;
   daemonRejectHumanGate: (payload: { id: string; reason: string }) => void;
   daemonCancelHumanGate: (payload: { id: string; reason?: string }) => void;
+  daemonCancelOrchestration: () => void;
   daemonTerminate: () => void;
   daemonSetBudget: (limit: number) => void;
   daemonIncreaseBudget: (amount: number) => void;
@@ -634,7 +633,6 @@ function hydrateAgentsFromRegistered(registeredAgents: RegisteredAgent[], agents
 export const useMLRAStore = create<MLRAState>((set, get) => ({
   launchers: [],
   activeLauncherId: null,
-  launcherSidebarOpen: false,
 
   columnOrder: ["expert", "inspector", "ceo", "workers"],
   layoutMode: "auto",
@@ -1028,7 +1026,6 @@ export const useMLRAStore = create<MLRAState>((set, get) => ({
 
   setColumnOrder: (order) => set({ columnOrder: order }),
   setLayoutMode: (mode) => set({ layoutMode: mode }),
-  toggleLauncherSidebar: () => set((s) => ({ launcherSidebarOpen: !s.launcherSidebarOpen })),
 
   // ── Daemon communication ──
 
@@ -1052,6 +1049,7 @@ export const useMLRAStore = create<MLRAState>((set, get) => ({
   daemonApproveHumanGate: (payload) => { get().sendToDaemon({ type: "mlra_human_gate_approve", ...payload }); },
   daemonRejectHumanGate: (payload) => { get().sendToDaemon({ type: "mlra_human_gate_reject", ...payload }); },
   daemonCancelHumanGate: (payload) => { get().sendToDaemon({ type: "mlra_human_gate_cancel", ...payload }); },
+  daemonCancelOrchestration: () => { get().sendToDaemon({ type: "mlra_cancel" }); },
   daemonTerminate: () => { get().sendToDaemon({ type: "mlra_terminate" }); },
   daemonSetBudget: (limit) => { get().sendToDaemon({ type: "mlra_set_budget", limit }); },
   daemonIncreaseBudget: (amount) => { get().sendToDaemon({ type: "mlra_increase_budget", amount }); },
