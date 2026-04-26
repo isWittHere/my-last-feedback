@@ -49,6 +49,63 @@ export interface MlcAttachment {
   description: string;
 }
 
+export interface LocatorCandidate {
+  kind: "css" | "playwright-role" | "playwright-label" | "playwright-text" | "testid" | "xpath";
+  value: string;
+  confidence: "high" | "medium" | "low";
+  reason: string;
+}
+
+export interface PickedElement {
+  sourceUrl: string;
+  frameUrl?: string;
+  tagName: string;
+  text: string;
+  role?: string;
+  ariaLabel?: string;
+  title?: string;
+  href?: string;
+  src?: string;
+  id?: string;
+  className?: string;
+  name?: string;
+  placeholder?: string;
+  inputType?: string;
+  selector: string;
+  selectorType: "id" | "testid" | "data-testid" | "data-test" | "data-cy" | "aria-label" | "name" | "placeholder" | "class" | "role" | "aria" | "css" | "nth";
+  locatorCandidates: LocatorCandidate[];
+  rect?: {
+    x: number;
+    y: number;
+    width: number;
+    height: number;
+  };
+  htmlSnippet?: string;
+  capturedAt: string;
+}
+
+export interface WebConsoleEntry {
+  id: string;
+  level: "log" | "info" | "warn" | "error" | "debug";
+  message: string;
+  args: string[];
+  sourceUrl: string;
+  line?: number;
+  column?: number;
+  stack?: string;
+  timestamp: string;
+}
+
+export interface WebAttachment {
+  id: string;
+  kind: "element" | "console";
+  sourceUrl: string;
+  pageTitle: string;
+  capturedAt: string;
+  element?: PickedElement;
+  consoleEntries?: WebConsoleEntry[];
+}
+
 export type ComposerFocusKind = "feedback" | "testLog" | "question" | "queuedDraft";
 
 export interface FocusedComposer {
@@ -60,7 +117,7 @@ export interface FocusedComposer {
 }
 
 export type MlcPanelPosition = "left" | "right";
-export type SidePanelTab = "mlc" | "resources" | "mlcPreview";
+export type SidePanelTab = "mlc" | "resources" | "mlcPreview" | "previewBrowser";
 export type DockColumnId = "leftSidebar" | "leftPage" | "rightSidebar";
 export type DockTabId = SidePanelTab;
 export type DockTabBarPosition = "top" | "bottom";
@@ -112,6 +169,7 @@ export interface FeedbackDraft {
   images: ImageAttachment[];
   gitAction: GitAction | null;
   mlcAttachments: MlcAttachment[];
+  webAttachments: WebAttachment[];
   updatedAt: string;
 }
 
@@ -129,6 +187,7 @@ export interface Session {
   images: ImageAttachment[];
   commandLogs: string;
   mlcAttachments: MlcAttachment[];
+  webAttachments: WebAttachment[];
   // Agent questions
   questions: QuestionItem[];
   // Git action
@@ -180,6 +239,9 @@ export interface FeedbackState {
   addSessionMlcAttachment: (sessionId: string, attachment: MlcAttachment) => void;
   removeSessionMlcAttachment: (sessionId: string, filePath: string) => void;
   clearSessionMlcAttachments: (sessionId: string) => void;
+  addSessionWebAttachment: (sessionId: string, attachment: WebAttachment) => void;
+  removeSessionWebAttachment: (sessionId: string, attachmentId: string) => void;
+  clearSessionWebAttachments: (sessionId: string) => void;
   setSessionGitAction: (sessionId: string, action: GitAction | null) => void;
   updateSessionGitBranchName: (sessionId: string, branchName: string) => void;
   markSessionResponded: (sessionId: string) => void;
@@ -211,6 +273,9 @@ export interface FeedbackState {
   addQueuedDraftMlcAttachment: (callerId: string, attachment: MlcAttachment) => void;
   removeQueuedDraftMlcAttachment: (callerId: string, filePath: string) => void;
   clearQueuedDraftMlcAttachments: (callerId: string) => void;
+  addQueuedDraftWebAttachment: (callerId: string, attachment: WebAttachment) => void;
+  removeQueuedDraftWebAttachment: (callerId: string, attachmentId: string) => void;
+  clearQueuedDraftWebAttachments: (callerId: string) => void;
   setQueuedDraftGitAction: (callerId: string, action: GitAction | null) => void;
   updateQueuedDraftGitBranchName: (callerId: string, branchName: string) => void;
   clearQueuedDraft: (callerId: string) => void;
@@ -248,8 +313,8 @@ const MLC_PANEL_MAX_WIDTH = 520;
 const DOCK_LAYOUT_STORAGE_KEY = "mlfb-dock-layout-v1";
 
 const DOCK_COLUMN_IDS: DockColumnId[] = ["leftSidebar", "leftPage", "rightSidebar"];
-const KNOWN_DOCK_TABS: DockTabId[] = ["mlc", "resources", "mlcPreview"];
-const DEFAULT_DOCK_TABS: DockTabId[] = ["mlc", "mlcPreview", "resources"];
+const KNOWN_DOCK_TABS: DockTabId[] = ["mlc", "resources", "mlcPreview", "previewBrowser"];
+const DEFAULT_DOCK_TABS: DockTabId[] = ["mlc", "mlcPreview", "resources", "previewBrowser"];
 
 function isDockTabId(value: unknown): value is DockTabId {
   return typeof value === "string" && KNOWN_DOCK_TABS.includes(value as DockTabId);
@@ -327,7 +392,7 @@ function migrateLegacyDockLayout(): DockLayoutState {
     rightSidebar: createDockColumn(),
   };
   columns[targetColumnId] = createDockColumn({
-    tabIds: ["mlc", "mlcPreview", "resources"],
+    tabIds: ["mlc", "mlcPreview", "resources", "previewBrowser"],
     activeTabId: legacyActiveTab,
     width: legacyWidth,
     tabBarPosition: legacyTabBarPosition,
@@ -359,7 +424,7 @@ function loadDockLayout(): DockLayoutState {
       }
       for (const tabId of DEFAULT_DOCK_TABS) {
         if (seen.has(tabId)) continue;
-        const fallbackColumnId = tabId === "mlcPreview"
+        const fallbackColumnId = tabId === "mlcPreview" || tabId === "previewBrowser"
           ? DOCK_COLUMN_IDS.find((columnId) => columns[columnId].tabIds.includes("mlc")) || "rightSidebar"
           : "rightSidebar";
         columns[fallbackColumnId].tabIds.push(tabId);
@@ -386,6 +451,7 @@ function emptyDraft(): FeedbackDraft {
     images: [],
     gitAction: null,
     mlcAttachments: [],
+    webAttachments: [],
     updatedAt: new Date().toISOString(),
   };
 }
@@ -396,6 +462,7 @@ function normalizeDraft(draft: Partial<FeedbackDraft> | null | undefined): Feedb
     ...(draft || {}),
     images: draft?.images || [],
     mlcAttachments: draft?.mlcAttachments || [],
+    webAttachments: draft?.webAttachments || [],
   };
 }
 
@@ -404,6 +471,7 @@ function isDraftEmpty(draft: FeedbackDraft): boolean {
     && !draft.testLogText.trim()
     && draft.images.length === 0
     && draft.mlcAttachments.length === 0
+    && draft.webAttachments.length === 0
     && !draft.gitAction;
 }
 
@@ -601,6 +669,7 @@ export const useFeedbackStore = create<FeedbackState>((set, get) => ({
           images: [...targetDraft.images, ...sourceDraft.images].slice(0, IMAGE_MAX_COUNT),
           gitAction: targetDraft.gitAction || sourceDraft.gitAction,
           mlcAttachments: [...(targetDraft.mlcAttachments || []), ...(sourceDraft.mlcAttachments || [])],
+          webAttachments: [...(targetDraft.webAttachments || []), ...(sourceDraft.webAttachments || [])],
           updatedAt: new Date().toISOString(),
         };
       } else {
@@ -642,7 +711,7 @@ export const useFeedbackStore = create<FeedbackState>((set, get) => ({
   },
 
   addSession: (session, options) => {
-    const normalizedSession = { ...session, mlcAttachments: session.mlcAttachments || [] };
+    const normalizedSession = { ...session, mlcAttachments: session.mlcAttachments || [], webAttachments: session.webAttachments || [] };
     const attentionMode = options?.attentionMode ?? "interrupt";
     const shouldInterrupt = attentionMode !== "passive";
     const wasHidden = get().hiddenCallerIds.includes(normalizedSession.callerId);
@@ -792,6 +861,37 @@ export const useFeedbackStore = create<FeedbackState>((set, get) => ({
     set((state) => ({
       sessions: state.sessions.map((s) =>
         s.id === sessionId && s.status === "pending" ? { ...s, mlcAttachments: [] } : s
+      ),
+    }));
+  },
+
+  addSessionWebAttachment: (sessionId, attachment) => {
+    const session = get().sessions.find((s) => s.id === sessionId);
+    if (!session || session.status !== "pending") return;
+    if ((session.webAttachments || []).some((item) => item.id === attachment.id)) return;
+    set((state) => ({
+      sessions: state.sessions.map((s) =>
+        s.id === sessionId
+          ? { ...s, webAttachments: [...(s.webAttachments || []), attachment] }
+          : s
+      ),
+    }));
+  },
+
+  removeSessionWebAttachment: (sessionId, attachmentId) => {
+    set((state) => ({
+      sessions: state.sessions.map((s) =>
+        s.id === sessionId && s.status === "pending"
+          ? { ...s, webAttachments: (s.webAttachments || []).filter((item) => item.id !== attachmentId) }
+          : s
+      ),
+    }));
+  },
+
+  clearSessionWebAttachments: (sessionId) => {
+    set((state) => ({
+      sessions: state.sessions.map((s) =>
+        s.id === sessionId && s.status === "pending" ? { ...s, webAttachments: [] } : s
       ),
     }));
   },
@@ -1205,6 +1305,43 @@ export const useFeedbackStore = create<FeedbackState>((set, get) => ({
     });
   },
 
+  addQueuedDraftWebAttachment: (callerId, attachment) => {
+    const draft = get().getQueuedDraft(callerId);
+    if (draft.webAttachments.find((item) => item.id === attachment.id)) return;
+    set((state) => {
+      const next = {
+        ...state.queuedDraftsByCallerId,
+        [callerId]: { ...draft, webAttachments: [...draft.webAttachments, attachment], updatedAt: new Date().toISOString() },
+      };
+      persistQueuedDrafts(next);
+      return { queuedDraftsByCallerId: next };
+    });
+  },
+
+  removeQueuedDraftWebAttachment: (callerId, attachmentId) => {
+    const draft = get().getQueuedDraft(callerId);
+    set((state) => {
+      const next = {
+        ...state.queuedDraftsByCallerId,
+        [callerId]: { ...draft, webAttachments: draft.webAttachments.filter((item) => item.id !== attachmentId), updatedAt: new Date().toISOString() },
+      };
+      persistQueuedDrafts(next);
+      return { queuedDraftsByCallerId: next };
+    });
+  },
+
+  clearQueuedDraftWebAttachments: (callerId) => {
+    const draft = get().getQueuedDraft(callerId);
+    set((state) => {
+      const next = {
+        ...state.queuedDraftsByCallerId,
+        [callerId]: { ...draft, webAttachments: [], updatedAt: new Date().toISOString() },
+      };
+      persistQueuedDrafts(next);
+      return { queuedDraftsByCallerId: next };
+    });
+  },
+
   setQueuedDraftGitAction: (callerId, action) => {
     const draft = get().getQueuedDraft(callerId);
     set((state) => {
@@ -1253,6 +1390,7 @@ export const useFeedbackStore = create<FeedbackState>((set, get) => ({
               images: draft.images,
               gitAction: draft.gitAction,
               mlcAttachments: draft.mlcAttachments,
+              webAttachments: draft.webAttachments,
             }
           : s
       ),

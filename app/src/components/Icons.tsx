@@ -38,6 +38,12 @@ const ICONS: Record<string, IconDef> = {
   "arrow-right-left": {
     paths: '<polyline points="17 3 21 7 17 11" /><line x1="21" y1="7" x2="9" y2="7" /><polyline points="7 21 3 17 7 13" /><line x1="15" y1="17" x2="3" y2="17" />',
   },
+  refresh: {
+    paths: '<path d="M21 12a9 9 0 0 0-15.5-6.2L3 8" /><path d="M3 3v5h5" /><path d="M3 12a9 9 0 0 0 15.5 6.2L21 16" /><path d="M16 16h5v5" />',
+  },
+  paperclip: {
+    paths: '<path d="m21.44 11.05-9.19 9.19a6 6 0 0 1-8.49-8.49l9.19-9.19a4 4 0 0 1 5.66 5.66l-9.2 9.19a2 2 0 1 1-2.83-2.83l8.49-8.48" />',
+  },
   edit: {
     paths: '<path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7" /><path d="M18.5 2.5a2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z" />',
   },
@@ -118,6 +124,9 @@ const ICONS: Record<string, IconDef> = {
   },
   "arrow-down-right": {
     paths: '<line x1="7" y1="7" x2="17" y2="17" /><polyline points="17 7 17 17 7 17" />',
+  },
+  globe: {
+    paths: '<circle cx="12" cy="12" r="10" /><path d="M2 12h20" /><path d="M12 2a15.3 15.3 0 0 1 4 10 15.3 15.3 0 0 1-4 10 15.3 15.3 0 0 1-4-10 15.3 15.3 0 0 1 4-10z" />',
   },
   "arrow-bend-down-right": {
     paths: '<path d="M4 4v7a4 4 0 0 0 4 4h12" /><polyline points="15 10 20 15 15 20" />',

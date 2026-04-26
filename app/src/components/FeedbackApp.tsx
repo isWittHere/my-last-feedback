@@ -42,6 +42,7 @@ const ROLE_LABEL_MAP: Record<string, string> = {
 function dockTabTitle(tabId: DockTabId, translate: (key: string, defaultValue: string) => string): string {
   if (tabId === "mlc") return translate("mlc.title", "My Last Chat");
   if (tabId === "mlcPreview") return translate("mlcPreview.title", "MLC Preview");
+  if (tabId === "previewBrowser") return translate("previewBrowser.title", "Preview Browser");
   return translate("resources.title", "Project resources");
 }
 
@@ -52,7 +53,7 @@ function DockDragPreview() {
   const label = dockTabTitle(draggingDockTab.tabId, t);
   return (
     <div className="dock-tab-drag-preview" style={{ left: draggingDockTab.pointerX + 12, top: draggingDockTab.pointerY + 10 }}>
-      {draggingDockTab.tabId === "mlc" ? <MlcLogoIcon size={15} /> : <Icon name={draggingDockTab.tabId === "mlcPreview" ? "file-text" : "folder"} size={15} />}
+      {draggingDockTab.tabId === "mlc" ? <MlcLogoIcon size={15} /> : <Icon name={draggingDockTab.tabId === "mlcPreview" ? "file-text" : draggingDockTab.tabId === "previewBrowser" ? "globe" : "folder"} size={15} />}
       <span>{label}</span>
     </div>
   );

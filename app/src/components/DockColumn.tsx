@@ -10,6 +10,7 @@ import { Icon, MlcLogoIcon } from "./Icons";
 import { MlcSidePanel } from "./MlcSidePanel";
 import { MlcPreviewPanel } from "./MlcPreviewPanel";
 import { ProjectResourcePanel } from "./ProjectResourcePanel";
+import { PreviewBrowserPanel } from "./PreviewBrowserPanel";
 
 const DOCK_COLUMN_LABELS: Record<DockColumnId, string> = {
   leftSidebar: "Left sidebar",
@@ -30,17 +31,19 @@ function getDockColumnIdAtPoint(clientX: number, clientY: number): DockColumnId 
 function dockTabLabel(tabId: DockTabId, translate: (key: string, defaultValue: string) => string): string {
   if (tabId === "mlc") return translate("mlc.title", "My Last Chat");
   if (tabId === "mlcPreview") return translate("mlcPreview.title", "MLC Preview");
+  if (tabId === "previewBrowser") return translate("previewBrowser.title", "Preview Browser");
   return translate("resources.title", "Project resources");
 }
 
 function dockTabIcon(tabId: DockTabId): ReactNode {
   if (tabId === "mlc") return <MlcLogoIcon size={16} />;
   if (tabId === "mlcPreview") return <Icon name="file-text" size={16} />;
+  if (tabId === "previewBrowser") return <Icon name="globe" size={16} />;
   return <Icon name="folder" size={16} />;
 }
 
 function isDockTabId(value: string): value is DockTabId {
-  return value === "mlc" || value === "resources" || value === "mlcPreview";
+  return value === "mlc" || value === "resources" || value === "mlcPreview" || value === "previewBrowser";
 }
 
 function dockColumnTargetIcon(columnId: DockColumnId): ReactNode {
@@ -53,6 +56,7 @@ function DockTabContent({ tabId }: { tabId: DockTabId | null }) {
   if (tabId === "mlc") return <MlcSidePanel />;
   if (tabId === "resources") return <ProjectResourcePanel />;
   if (tabId === "mlcPreview") return <MlcPreviewPanel />;
+  if (tabId === "previewBrowser") return <PreviewBrowserPanel />;
   return null;
 }
 

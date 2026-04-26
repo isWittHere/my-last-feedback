@@ -15,6 +15,7 @@ import { Icon } from "./Icons";
 import { TransferSubmitSplit } from "./TransferSubmitSplit";
 import { AttachmentTagBar, ReadonlyTagBar, RichText } from "./CallerPanelParts";
 import { getNotificationSettings } from "../notificationSettings";
+import { formatWebAttachments } from "../browser/webAttachmentFormat";
 
 function sanitizeMarkdownLine(value: string): string {
   return value.replace(/[\r\n]+/g, " ").trim();
@@ -210,10 +211,11 @@ function CallerContent() {
   const sessionTestLog = activeSession?.testLogText || "";
   const sessionImageCount = activeSession?.images?.length ?? 0;
   const sessionMlcAttachmentCount = activeSession?.mlcAttachments?.length ?? 0;
+  const sessionWebAttachmentCount = activeSession?.webAttachments?.length ?? 0;
   const hasQuestionAnswers = !!(activeSession?.questions?.some(
     (q) => q.answer.trim() || (q.selectedOptions && q.selectedOptions.length > 0)
   ));
-  const hasContent = !!(sessionFeedback.trim() || sessionTestLog.trim() || sessionImageCount > 0 || sessionMlcAttachmentCount > 0 || hasQuestionAnswers || activeSession?.gitAction);
+  const hasContent = !!(sessionFeedback.trim() || sessionTestLog.trim() || sessionImageCount > 0 || sessionMlcAttachmentCount > 0 || sessionWebAttachmentCount > 0 || hasQuestionAnswers || activeSession?.gitAction);
   const feedbackText = sessionFeedback;
   useEffect(() => {
     if (userResizedRef.current || isReadonly) return;
@@ -329,6 +331,10 @@ function CallerContent() {
       const mlcReferences = formatMlcReferences(activeSession.mlcAttachments || []);
       if (mlcReferences) {
         sections.push(mlcReferences);
+      }
+      const webReferences = formatWebAttachments(activeSession.webAttachments || []);
+      if (webReferences) {
+        sections.push(webReferences);
       }
       sections.push(
         "[System] Reminder: You MUST call the interactive_feedback tool again after completing this operation. Do NOT end your turn without invoking interactive_feedback."

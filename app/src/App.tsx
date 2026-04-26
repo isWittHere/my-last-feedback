@@ -77,6 +77,7 @@ function App() {
         command_logs: string | null;
         images: unknown[];
         mlc_attachments?: Array<{ file_path: string; title: string; description: string }>;
+        web_attachments?: Session["webAttachments"];
         questions?: Array<{ label: string; options?: string[] }>;
       }>;
     }>("load_history")
@@ -103,6 +104,7 @@ function App() {
               title: item.title,
               description: item.description,
             })),
+            webAttachments: sess.web_attachments || [],
             questions: (sess.questions || []).map((q: any) => ({
               label: q.label,
               options: q.options,
@@ -160,6 +162,7 @@ function App() {
         images: [],
         commandLogs: "",
         mlcAttachments: [],
+        webAttachments: [],
         questions: (data.questions || []).map((q) => ({
           label: q.label,
           options: q.options,

@@ -2,11 +2,12 @@ import { forwardRef, useCallback, useEffect, useMemo, useRef, useState } from "r
 import { createPortal } from "react-dom";
 import { useTranslation } from "react-i18next";
 import { useFeedbackStore } from "../store/feedbackStore";
-import type { DockColumnId, DockTabId, GitActionType, MlcAttachment } from "../store/feedbackStore";
+import type { DockColumnId, DockTabId, GitActionType, MlcAttachment, WebAttachment } from "../store/feedbackStore";
 import { useShallow } from "zustand/react/shallow";
 import { Icon, MlcLogoIcon } from "./Icons";
 import { useActiveCallerSession } from "./useActiveCallerSession";
 import { readText as readClipboardText } from "@tauri-apps/plugin-clipboard-manager";
+import { webAttachmentLabel } from "../browser/webAttachmentFormat";
 
 const DOCK_COLUMN_IDS: DockColumnId[] = ["leftSidebar", "leftPage", "rightSidebar"];
 
@@ -47,6 +48,8 @@ export function AttachmentTagBar({
   const updateQueuedDraftGitBranchName = useFeedbackStore((s) => s.updateQueuedDraftGitBranchName);
   const removeSessionMlcAttachment = useFeedbackStore((s) => s.removeSessionMlcAttachment);
   const removeQueuedDraftMlcAttachment = useFeedbackStore((s) => s.removeQueuedDraftMlcAttachment);
+  const removeSessionWebAttachment = useFeedbackStore((s) => s.removeSessionWebAttachment);
+  const removeQueuedDraftWebAttachment = useFeedbackStore((s) => s.removeQueuedDraftWebAttachment);
   const setFocusedComposer = useFeedbackStore((s) => s.setFocusedComposer);
   const mlcActiveWorkspacePath = useFeedbackStore((s) => s.mlcActiveWorkspacePath);
   const dockLayout = useFeedbackStore((s) => s.dockLayout);
@@ -58,6 +61,7 @@ export function AttachmentTagBar({
   const targetTestLogText = queuedCallerId ? (queuedDraft?.testLogText || "") : (activeSession?.testLogText || "");
   const targetGitAction = queuedCallerId ? (queuedDraft?.gitAction || null) : (activeSession?.gitAction || null);
   const targetMlcAttachments = queuedCallerId ? (queuedDraft?.mlcAttachments || []) : (activeSession?.mlcAttachments || []);
+  const targetWebAttachments = queuedCallerId ? (queuedDraft?.webAttachments || []) : (activeSession?.webAttachments || []);
   const images = targetImages;
   const hasTestLog = !!targetTestLogText.trim();
   const hasGitAction = !!targetGitAction;
@@ -65,9 +69,12 @@ export function AttachmentTagBar({
   const findDockColumnForTab = (tabId: DockTabId): DockColumnId | null => DOCK_COLUMN_IDS.find((columnId) => dockLayout.columns[columnId].tabIds.includes(tabId)) || null;
   const mlcDockColumnId = findDockColumnForTab("mlc");
   const resourcesDockColumnId = findDockColumnForTab("resources");
+  const previewDockColumnId = findDockColumnForTab("previewBrowser");
   const isMlcButtonActive = !!mlcDockColumnId && !dockLayout.columns[mlcDockColumnId].collapsed && dockLayout.columns[mlcDockColumnId].activeTabId === "mlc" && !!activeSession?.projectDirectory && mlcActiveWorkspacePath === activeSession.projectDirectory;
   const isResourceButtonActive = !!resourcesDockColumnId && !dockLayout.columns[resourcesDockColumnId].collapsed && dockLayout.columns[resourcesDockColumnId].activeTabId === "resources" && !!activeSession?.projectDirectory && mlcActiveWorkspacePath === activeSession.projectDirectory;
-  const hasTags = images.length > 0 || hasTestLog || showTestLog || hasGitAction || hasMlcAttachments;
+  const isPreviewButtonActive = !!previewDockColumnId && !dockLayout.columns[previewDockColumnId].collapsed && dockLayout.columns[previewDockColumnId].activeTabId === "previewBrowser";
+  const hasWebAttachments = targetWebAttachments.length > 0;
+  const hasTags = images.length > 0 || hasTestLog || showTestLog || hasGitAction || hasMlcAttachments || hasWebAttachments;
   const tagAreaRef = useRef<HTMLDivElement>(null);
   const branchInputRef = useRef<HTMLInputElement>(null);
 
@@ -145,6 +152,35 @@ export function AttachmentTagBar({
     setDockActiveTab(targetColumnId, "mlc");
   };
 
+  const handlePreviewClick = () => {
+    if (isPreviewButtonActive) {
+      if (previewDockColumnId) setDockColumnCollapsed(previewDockColumnId, true);
+      return;
+    }
+    if (queuedCallerId) {
+      if (caller) {
+        setFocusedComposer({
+          callerId: queuedCallerId,
+          projectDirectory: activeSession?.projectDirectory || "",
+          kind: "queuedDraft",
+          focusedAt: new Date().toISOString(),
+        });
+      }
+    } else if (activeSession && activeSession.status === "pending" && caller) {
+      setFocusedComposer({
+        callerId: caller.id,
+        sessionId: activeSession.id,
+        projectDirectory: activeSession.projectDirectory,
+        kind: "feedback",
+        focusedAt: new Date().toISOString(),
+      });
+    }
+    const targetColumnId = previewDockColumnId || "leftPage";
+    if (!previewDockColumnId) moveDockTabToColumn("previewBrowser", targetColumnId);
+    setDockColumnCollapsed(targetColumnId, false);
+    setDockActiveTab(targetColumnId, "previewBrowser");
+  };
+
   return (
     <div className="shrink-0">
       {/* Button row */}
@@ -198,6 +234,27 @@ export function AttachmentTagBar({
         >
           <Icon name="folder" size={12} />
           {t("resources.button", "资源")}
+        </button>
+        <button
+          className="btn"
+          style={{
+            fontSize: 11,
+            padding: "3px 10px",
+            background: isPreviewButtonActive ? callerColor : undefined,
+            borderColor: isPreviewButtonActive ? callerColor : undefined,
+            color: isPreviewButtonActive ? "#fff" : undefined,
+          }}
+          disabled={!queuedCallerId && (!activeSession || activeSession.status !== "pending")}
+          onClick={handlePreviewClick}
+          title={t("previewBrowser.openPanel", "Open preview browser")}
+        >
+          <Icon name="globe" size={12} />
+          {t("previewBrowser.button", "预览")}
+          {hasWebAttachments && (
+            <span style={{ color: isPreviewButtonActive ? "rgba(255,255,255,0.7)" : "var(--color-text-muted)", marginLeft: 2 }}>
+              {targetWebAttachments.length}
+            </span>
+          )}
         </button>
         <button
           className="btn"
@@ -272,6 +329,15 @@ export function AttachmentTagBar({
               onRemove={() => queuedCallerId
                 ? removeQueuedDraftMlcAttachment(queuedCallerId, attachment.filePath)
                 : activeSession && removeSessionMlcAttachment(activeSession.id, attachment.filePath)}
+            />
+          ))}
+          {targetWebAttachments.map((attachment) => (
+            <WebAttachmentTag
+              key={attachment.id}
+              attachment={attachment}
+              onRemove={() => queuedCallerId
+                ? removeQueuedDraftWebAttachment(queuedCallerId, attachment.id)
+                : activeSession && removeSessionWebAttachment(activeSession.id, attachment.id)}
             />
           ))}
         </div>
@@ -677,6 +743,28 @@ function MlcAttachmentTag({ attachment, onRemove, readonly }: { attachment: MlcA
   );
 }
 
+function WebAttachmentTag({ attachment, onRemove, readonly }: { attachment: WebAttachment; onRemove: () => void; readonly?: boolean }) {
+  const title = webAttachmentLabel(attachment);
+  const detail = attachment.kind === "console"
+    ? `${attachment.consoleEntries?.length || 0} entries`
+    : attachment.element?.selector || attachment.sourceUrl;
+  return (
+    <div className="attachment-tag" style={{ cursor: readonly ? "default" : "pointer" }} title={`${attachment.sourceUrl}\n${detail}`}>
+      {!readonly && (
+        <button
+          className="attachment-tag-remove"
+          style={{ display: "inline-flex" }}
+          onClick={(e) => { e.stopPropagation(); onRemove(); }}
+        >
+          <Icon name="close-sm" size={10} />
+        </button>
+      )}
+      <Icon name={attachment.kind === "console" ? "terminal" : "globe"} size={10} />
+      <span className="truncate" style={{ maxWidth: 160 }}>{title}</span>
+    </div>
+  );
+}
+
 /** Readonly tag bar for responded sessions — image tags with hover, test log tag with expandable preview */
 export function ReadonlyTagBar({ session }: { session: import("../store/feedbackStore").Session }) {
   const { t } = useTranslation();
@@ -684,6 +772,7 @@ export function ReadonlyTagBar({ session }: { session: import("../store/feedback
   const hasLog = session.testLogText.trim().length > 0;
   const hasGitAction = !!session.gitAction;
   const mlcAttachments = session.mlcAttachments || [];
+  const webAttachments = session.webAttachments || [];
 
   const gitLabel = hasGitAction ? ({
     commit: t("gitAction.commit"),
@@ -715,6 +804,9 @@ export function ReadonlyTagBar({ session }: { session: import("../store/feedback
         )}
         {mlcAttachments.map((attachment) => (
           <MlcAttachmentTag key={attachment.filePath} attachment={attachment} onRemove={() => {}} readonly />
+        ))}
+        {webAttachments.map((attachment) => (
+          <WebAttachmentTag key={attachment.id} attachment={attachment} onRemove={() => {}} readonly />
         ))}
       </div>
       {/* Expanded test log readonly */}

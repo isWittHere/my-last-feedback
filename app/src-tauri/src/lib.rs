@@ -1,5 +1,6 @@
 mod ipc;
 mod mlc;
+mod preview_browser;
 mod project_resources;
 mod remote;
 mod session;
@@ -17,6 +18,11 @@ use session::{
 use ipc::SharedMlraWriter;
 use mlc::{mlc_delete_document, mlc_read_document, mlc_search_documents, mlc_toggle_favorite};
 use project_resources::project_list_directory;
+use preview_browser::{
+    preview_close_tab, preview_create_tab, preview_go_back, preview_go_forward, preview_hide_tab,
+    preview_navigate, preview_reload, preview_set_bounds, preview_start_picker, preview_stop_picker,
+    PreviewBrowserState,
+};
 
 /// Global app state shared by persistent-mode commands
 pub struct AppState {
@@ -645,6 +651,7 @@ pub fn run() {
         })
         .manage(session_mgr.clone())
         .manage(mlra_writer.clone())
+        .manage(PreviewBrowserState::default())
         .invoke_handler(tauri::generate_handler![
             set_auto_focus_new_request,
             get_auto_focus_new_request,
@@ -677,6 +684,16 @@ pub fn run() {
             mlc_search_documents,
             mlc_toggle_favorite,
             project_list_directory,
+            preview_create_tab,
+            preview_navigate,
+            preview_reload,
+            preview_go_back,
+            preview_go_forward,
+            preview_set_bounds,
+            preview_hide_tab,
+            preview_close_tab,
+            preview_start_picker,
+            preview_stop_picker,
             send_to_mlra_daemon,
         ])
         .setup(move |app| {
