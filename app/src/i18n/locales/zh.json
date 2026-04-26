@@ -2,6 +2,11 @@
   "app": {
     "title": "My Last Feedback"
   },
+  "common": {
+    "confirm": "确定",
+    "copy": "复制",
+    "retry": "重试"
+  },
   "summary": {
     "title": "AI 摘要",
     "empty": "等待 AI 任务摘要...",
@@ -18,7 +23,8 @@
   },
   "testLog": {
     "placeholder": "在此输入测试日志，将附加到反馈中",
-    "attach": "附加日志"
+    "attach": "附加日志",
+    "copy": "复制日志"
   },
   "gitAction": {
     "button": "Git 操作",
@@ -79,6 +85,7 @@
   "images": {
     "attach": "附加图片",
     "attachments": "附件",
+    "copy": "复制图片",
     "clearAll": "清除全部",
     "limitCount": "最多只能附加 {{max}} 张图片。",
     "limitSize": "每张图片不能超过 {{max}}MB。当前: {{size}}MB",
@@ -164,7 +171,12 @@
     "layoutMode": "布局：{{mode}}",
     "layoutAuto": "自动",
     "toggleLightTheme": "切换到浅色主题",
-    "toggleDarkTheme": "切换到深色主题"
+    "toggleDarkTheme": "切换到深色主题",
+    "pinOnTop": "置顶",
+    "unpin": "取消置顶",
+    "minimize": "最小化",
+    "maximize": "最大化",
+    "close": "关闭"
   },
   "tooltip": {
     "alias": "Agent 假名",
@@ -219,6 +231,208 @@
     "hours": "小时",
     "callerCount": "{{count}} 个 caller"
   },
+  "dock": {
+    "closeLeftSidebar": "关闭左侧栏",
+    "openLeftSidebar": "打开左侧栏",
+    "moveToLeftSidebar": "移动到左侧栏",
+    "moveToLeftPage": "移动到左侧页面",
+    "moveToRightSidebar": "移动到右侧栏",
+    "closeLeftPage": "关闭左侧页面面板",
+    "openLeftPage": "打开左侧页面面板",
+    "closeRightSidebar": "关闭右侧栏",
+    "openRightSidebar": "打开右侧栏"
+  },
+  "resources": {
+    "title": "项目资源",
+    "button": "资源",
+    "openPanel": "打开项目资源",
+    "collapse": "折叠",
+    "expand": "展开",
+    "insert": "插入链接",
+    "noWorkspace": "暂无工作区",
+    "loading": "正在加载文件...",
+    "empty": "暂无文件"
+  },
+  "mlcPreview": {
+    "title": "MLC 预览",
+    "empty": "选择一个 MLC 文档进行预览",
+    "document": "文档",
+    "refresh": "刷新"
+  },
+  "transfer": {
+    "cancel": "取消转移",
+    "open": "转移提交",
+    "to": "转移到 {{alias}}",
+    "submitTo": "转移并提交 (Ctrl+Enter) 到 {{alias}}",
+    "descriptionPrefix": "转移身份：提交后通知 Agent 把",
+    "descriptionSuffix": "改为此值",
+    "aliasPlaceholder": "4 位十六进制（如 A1B2）",
+    "formatError": "格式错误：必须为 4 位 [0-9A-F]",
+    "formatHint": "格式：4 位大写十六进制字符"
+  },
+  "mlra": {
+    "title": "My Long Running Agents",
+    "status": {
+      "active": "活跃",
+      "standby": "待命",
+      "idle": "空闲",
+      "blocked": "阻塞",
+      "waitingHumanReview": "待人工",
+      "waitingPeer": "待对侧",
+      "waitingGate": "待门控",
+      "disconnected": "断开",
+      "derailed": "脱轨",
+      "broken": "断线"
+    },
+    "agent": {
+      "policyAria": "{{role}} 自动程度",
+      "noStandby": "无可用备用会话",
+      "poolBroken": "已断线",
+      "retryTitle": "重试 {{current}}/{{max}}",
+      "derailedCount": "脱轨 {{current}}/{{max}}",
+      "standbyCount": "{{count}} 个备用会话",
+      "failoverTitle": "已故障转移 {{count}} 次",
+      "failoverCount": "转移×{{count}}",
+      "injectPlaceholder": "向专家发送指令...",
+      "standbyExpert": "等待 Expert 接入当前阶段",
+      "standbyInspector": "等待 Inspector 接入当前阶段",
+      "standbyCeo": "CEO 将在阶段门控或结束阶段介入",
+      "standbyDefault": "当前阶段暂不参与",
+      "sessionPending": "Session 内容将在后端连接后显示"
+    },
+    "policy": {
+      "auto": "自动",
+      "manual": "人工",
+      "semiAuto": "半自动",
+      "submitAutoDesc": "该角色完成提交后自动释放给下一环节。",
+      "submitManualDesc": "该角色提交后先阻塞，等待人工确认、编辑或退回。",
+      "expertAutoDesc": "Expert 提交后自动进入下一环节。",
+      "expertManualDesc": "Expert 提交后等待人工确认、编辑或退回。",
+      "inspectorAutoDesc": "Inspector 提交后自动进入下一环节。",
+      "inspectorManualDesc": "Inspector 提交后等待人工确认、编辑或退回。",
+      "ceoAutoDesc": "CEO 自动审核并自动释放 verdict。",
+      "ceoManualDesc": "阶段门控由人工直接裁定，不等待 CEO 自动 verdict。",
+      "ceoReviewDesc": "CEO 先审核，verdict 再由人工确认后释放。"
+    },
+    "orchestration": {
+      "full-auto": { "label": "全自动", "description": "Expert、Inspector 与 CEO 全部自动流转。适合低风险、目标明确、希望尽快完成的任务。" },
+      "ceo-review": { "label": "审核CEO", "description": "Expert 与 Inspector 自动流转，CEO 先做门控审核，审核结论再由人工确认释放。适合需要最终把关但不想频繁介入的任务。" },
+      "ceo-user": { "label": "接管CEO", "description": "Expert 与 Inspector 自动流转，阶段门控不交给 CEO 自动裁定，而由人工直接接管。适合关键节点需要你亲自判断的任务。" },
+      "full-manual": { "label": "全面接管", "description": "Expert、Inspector 的 handoff 与 CEO 阶段门控都需要人工确认。适合高风险、需要逐步审查和强控制的任务。" }
+    },
+    "workflow": {
+      "untitled": "未命名 Workflow",
+      "template": "蓝图模板",
+      "taskDescription": "任务描述",
+      "taskPlaceholder": "描述这次工作要解决什么。",
+      "orchestration": "接管策略",
+      "namePlaceholder": "例如：登录系统重构蓝图"
+    },
+    "blueprintTemplate": {
+      "standard": { "label": "标准全链路", "description": "论证 → 交付 → 结束" },
+      "direct-execution": { "label": "直接交付", "description": "省略论证，直接进入交付" },
+      "architecture": { "label": "架构设计", "description": "方案论证 + 门控评审" },
+      "bugfix": { "label": "缺陷修复", "description": "定位 → 修复 → 验证" },
+      "audit": { "label": "审计复核", "description": "标准建立 + 举证判定" }
+    },
+    "start": {
+      "conditionTask": "任务描述已填写",
+      "conditionStageCount": "至少包含一个普通阶段",
+      "conditionStageNames": "所有阶段已有名称",
+      "conditionFinalGate": "最后一个普通阶段开启出口门控",
+      "conditionClosing": "蓝图末尾是结束汇总阶段",
+      "ready": "启动条件已满足",
+      "blocked": "启动前还需处理"
+    },
+    "stage": {
+      "noStages": "暂无阶段",
+      "fallbackName": "阶段 {{index}}",
+      "untitled": "未命名阶段",
+      "issueMissingName": "缺少阶段名称",
+      "issueCount": "缺 {{count}}",
+      "current": "当前",
+      "dragReorder": "拖动重排",
+      "dragAfterEdit": "开始编辑后可拖动重排",
+      "empty": "还没有阶段。先在顶部加一个节点。",
+      "actions": "阶段操作",
+      "copy": "复制阶段",
+      "delete": "删除阶段",
+      "cannotCopyClosing": "结束阶段不能复制",
+      "cannotDeleteClosing": "结束阶段不能删除",
+      "addHere": "在此处新增阶段",
+      "name": "阶段名称",
+      "closing": "结束阶段",
+      "template": "阶段模板",
+      "description": "阶段描述"
+    },
+    "stageTemplate": {
+      "custom": "自定义",
+      "customDesc": "不使用预置模板",
+      "deliberation": { "label": "论证评审", "description": "草案审阅，适用方案打磨" },
+      "delivery": { "label": "交付验证", "description": "实施交付与审查，适用落地验证" },
+      "closing": { "label": "结束汇总", "description": "面向用户的最终汇总，蓝图末尾不可删" }
+    },
+    "stageIcon": {
+      "git-branch": "分支",
+      "wrench": "扳手",
+      "search": "搜索",
+      "message-dot": "消息",
+      "check": "勾选",
+      "pin": "图钉",
+      "robot": "机器人",
+      "flag": "结束",
+      "file-text": "文本"
+    },
+    "inspector": {
+      "basics": "基本信息",
+      "prompts": "提示词",
+      "rules": "规则",
+      "skills": "技能",
+      "empty": "从左侧选择一个阶段后，在这里编辑它。",
+      "identityTemplate": "身份与模板",
+      "rolePrompts": "角色提示词",
+      "skillPackages": "技能包"
+    },
+    "prompts": {
+      "ceo": "CEO 提示词",
+      "expert": "Expert 提示词",
+      "inspector": "Inspector 提示词"
+    },
+    "gate": {
+      "title": "出口门控",
+      "gated": "门控",
+      "direct": "直进",
+      "enableTitle": "点击启用 CEO 出口门控",
+      "disableTitle": "点击关闭出口门控",
+      "closingInfo": "结束阶段不运行 CEO 出口 gate，由 CEO 汇总后等待用户响应。",
+      "defensiveLock": "CEO 防御性锁门控",
+      "enabledDesc": "启用后阶段出口需要 CEO 审批",
+      "disabledDesc": "关闭后出口认证满足即直进下一阶段",
+      "prompt": "门控规则提示词",
+      "promptPlaceholder": "补充本阶段的 CEO 出口门控规则、通过标准或必须检查的风险点"
+    },
+    "skills": {
+      "selected": "已选技能",
+      "count": "{{count}} 个技能",
+      "none": "未选择技能",
+      "emptyHint": "点击下方标签添加技能",
+      "options": "技能选项"
+    },
+    "timer": {
+      "unassigned": "未归属",
+      "noRounds": "暂无回合记录",
+      "roundCount": "{{count}} 轮",
+      "noStats": "暂无统计数据",
+      "stop": "停止当前 MLRA",
+      "stopConfirmTitle": "确认停止当前 MLRA",
+      "stopConfirmBody": "当前编排会被取消，阻塞中的角色调用会被释放。",
+      "stopConfirmAction": "确认停止"
+    },
+    "humanGate": {
+      "blocked": "阻塞: {{title}}",
+      "exitPending": "出口认证等待中"
+    }
+  },
   "previewBrowser": {
     "title": "开发预览",
     "infoTitle": "预览信息",
@@ -230,6 +444,10 @@
     "back": "后退",
     "forward": "前进",
     "reload": "刷新",
+    "zoom": "页面缩放",
+    "zoomIn": "放大",
+    "zoomOut": "缩小",
+    "resetZoom": "重置缩放",
     "addressPlaceholder": "输入 URL...",
     "pickElement": "选择元素",
     "console": "控制台",
@@ -250,6 +468,7 @@
     "filterWarnError": "警告 + 错误",
     "filterErrors": "仅错误",
     "filterAll": "全部",
+    "consoleFilter": "控制台筛选",
     "clearConsole": "清空",
     "noConsole": "暂无控制台信息"
   }

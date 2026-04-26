@@ -3,6 +3,7 @@ import ReactMarkdown from "react-markdown";
 import remarkGfm from "remark-gfm";
 import remarkBreaks from "remark-breaks";
 import { PrismLight as SyntaxHighlighter } from "react-syntax-highlighter";
+import { useTranslation } from "react-i18next";
 import { oneDark } from "react-syntax-highlighter/dist/esm/styles/prism";
 import { oneLight } from "react-syntax-highlighter/dist/esm/styles/prism";
 import typescript from "react-syntax-highlighter/dist/esm/languages/prism/typescript";
@@ -47,9 +48,10 @@ export interface MarkdownContentProps {
 }
 
 function CopyButton({ text }: { text: string }) {
+  const { t } = useTranslation();
   const { copied, copy } = useCopyToClipboard(1800);
   return (
-    <button onClick={() => copy(text)} className="code-copy-btn" title="Copy">
+    <button onClick={() => copy(text)} className="code-copy-btn" title={t("common.copy", "Copy")}>
       {copied ? <Icon name="check" size={14} /> : <Icon name="copy" size={14} />}
     </button>
   );

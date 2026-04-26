@@ -20,7 +20,8 @@ use mlc::{mlc_delete_document, mlc_read_document, mlc_search_documents, mlc_togg
 use project_resources::project_list_directory;
 use preview_browser::{
     preview_capture_element, preview_close_tab, preview_create_tab, preview_go_back, preview_go_forward,
-    preview_hide_tab, preview_navigate, preview_reload, preview_set_bounds, preview_start_picker, preview_stop_picker,
+    preview_hide_tab, preview_navigate, preview_reload, preview_set_bounds, preview_set_zoom,
+    preview_start_picker, preview_stop_picker,
     PreviewBrowserState,
 };
 
@@ -687,6 +688,7 @@ pub fn run() {
             preview_create_tab,
             preview_navigate,
             preview_reload,
+            preview_set_zoom,
             preview_go_back,
             preview_go_forward,
             preview_set_bounds,

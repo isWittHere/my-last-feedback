@@ -251,6 +251,7 @@ export interface FeedbackState {
   selectedMlcDocument: SelectedMlcDocument | null;
   dockLayout: DockLayoutState;
   draggingDockTab: DraggingDockTabState | null;
+  nativeWebViewBlockers: Record<string, number>;
 
   // Persistent mode actions
   addCaller: (caller: Caller) => void;
@@ -327,6 +328,8 @@ export interface FeedbackState {
   startDraggingDockTab: (tabId: DockTabId, sourceColumnId: DockColumnId, pointerX: number, pointerY: number, targetColumnId?: DockColumnId | null) => void;
   updateDraggingDockTab: (pointerX: number, pointerY: number, targetColumnId: DockColumnId | null) => void;
   finishDraggingDockTab: () => void;
+  pushNativeWebViewBlocker: (key: string) => void;
+  popNativeWebViewBlocker: (key: string) => void;
 
   // Derived getters
   getActiveCaller: () => Caller | null;
@@ -589,6 +592,7 @@ export const useFeedbackStore = create<FeedbackState>((set, get) => ({
   selectedMlcDocument: null,
   dockLayout: loadDockLayout(),
   draggingDockTab: null,
+  nativeWebViewBlockers: {},
 
   addCaller: (caller) => {
     const { callers, callerOrder } = get();
@@ -1602,6 +1606,23 @@ export const useFeedbackStore = create<FeedbackState>((set, get) => ({
     ? { draggingDockTab: { ...state.draggingDockTab, pointerX, pointerY, targetColumnId } }
     : {}),
   finishDraggingDockTab: () => set({ draggingDockTab: null }),
+
+  pushNativeWebViewBlocker: (key) => set((state) => ({
+    nativeWebViewBlockers: {
+      ...state.nativeWebViewBlockers,
+      [key]: (state.nativeWebViewBlockers[key] || 0) + 1,
+    },
+  })),
+
+  popNativeWebViewBlocker: (key) => set((state) => {
+    const current = state.nativeWebViewBlockers[key] || 0;
+    if (current <= 1) {
+      const nativeWebViewBlockers = { ...state.nativeWebViewBlockers };
+      delete nativeWebViewBlockers[key];
+      return { nativeWebViewBlockers };
+    }
+    return { nativeWebViewBlockers: { ...state.nativeWebViewBlockers, [key]: current - 1 } };
+  }),
 
   // Derived getters
   getActiveCaller: () => {

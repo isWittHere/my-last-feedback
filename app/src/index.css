@@ -1411,6 +1411,68 @@ body,
 }
 
 /* ── Attachment Tags ── */
+.attachment-action-row,
+.attachment-control-group {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  min-width: 0;
+}
+
+.attachment-action-row {
+  container-type: inline-size;
+  min-height: 24px;
+  overflow: hidden;
+}
+
+.attachment-control-group {
+  height: 28x;
+}
+
+.attachment-action-row .btn,
+.attachment-control-group .btn {
+  box-sizing: border-box;
+  height: 28px;
+  min-width: 24px;
+  flex: 0 0 auto;
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  line-height: 1;
+  padding-top: 0 !important;
+  padding-bottom: 0 !important;
+  white-space: nowrap;
+  overflow: hidden;
+}
+
+.attachment-action-row .btn svg,
+.attachment-control-group .btn svg {
+  flex: 0 0 auto;
+}
+
+.attachment-action-label,
+.attachment-action-meta {
+  display: inline-flex;
+  align-items: center;
+  min-width: 0;
+  line-height: 1;
+  white-space: nowrap;
+}
+
+.attachment-action-meta {
+  flex: 0 0 auto;
+}
+
+@container (max-width: 620px) {
+  .attachment-action-label {
+    display: none;
+  }
+}
+
+.attachment-tag-row {
+  padding-top: 3px;
+}
+
 .attachment-tag {
   display: inline-flex;
   align-items: center;
@@ -1650,9 +1712,9 @@ body,
   top: 0;
   bottom: 0;
   left: 0;
-  width: 4px;
+  width: 1px;
   cursor: col-resize;
-  z-index: 5;
+  z-index: 20;
 }
 .mlc-panel[data-position="left"] .mlc-resize-handle {
   left: auto;
@@ -1757,7 +1819,9 @@ body,
 .preview-browser-tab-strip {
   display: flex;
   align-items: stretch;
+  height: 32px;
   min-height: 32px;
+  box-sizing: border-box;
   border-bottom: 1px solid var(--color-border);
   background: color-mix(in srgb, var(--color-bg-elevated) 72%, transparent);
   overflow-x: auto;
@@ -1784,8 +1848,10 @@ body,
 }
 
 .preview-browser-tab {
-  max-width: 180px;
-  flex: 0 1 160px;
+  min-width: 104px;
+  max-width: 240px;
+  flex: 0 1 auto;
+  position: relative;
 }
 
 .preview-browser-tab.active {
@@ -1795,26 +1861,10 @@ body,
 
 .preview-browser-tab span:first-of-type {
   min-width: 0;
+  max-width: 160px;
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
-}
-
-.preview-browser-tab-status {
-  width: 6px;
-  height: 6px;
-  border-radius: 50%;
-  background: var(--color-text-muted);
-  flex: 0 0 auto;
-}
-
-.preview-browser-tab-status.loading {
-  background: var(--color-primary);
-  animation: pulse 1s ease-in-out infinite;
-}
-
-.preview-browser-tab-status.error {
-  background: var(--color-danger);
 }
 
 .preview-browser-tab-close {
@@ -1826,11 +1876,25 @@ body,
   border-radius: 4px;
   color: var(--color-text-muted);
   flex: 0 0 auto;
+  opacity: 0.35;
+}
+
+.preview-browser-tab:hover .preview-browser-tab-close,
+.preview-browser-tab.active .preview-browser-tab-close {
+  opacity: 1;
 }
 
 .preview-browser-tab-close:hover {
   background: var(--color-bg-elevated);
   color: var(--color-text-primary);
+}
+
+.preview-browser-spin {
+  animation: preview-browser-spin 0.9s linear infinite;
+}
+
+@keyframes preview-browser-spin {
+  to { transform: rotate(360deg); }
 }
 
 .preview-browser-new-tab {
@@ -1897,12 +1961,64 @@ body,
   font-size: 13px;
 }
 
+.preview-browser-zoom-control {
+  display: inline-flex;
+  align-items: center;
+  height: 28px;
+  border: 1px solid var(--color-border);
+  border-radius: 6px;
+  overflow: hidden;
+  background: var(--color-bg-input);
+  flex: 0 0 auto;
+}
+
+.preview-browser-zoom-control button {
+  height: 100%;
+  min-width: 28px;
+  border: 0;
+  border-right: 1px solid var(--color-border);
+  background: transparent;
+  color: var(--color-text-secondary);
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 11px;
+}
+
+.preview-browser-zoom-control button:last-child {
+  border-right: 0;
+}
+
+.preview-browser-zoom-control button:not(:disabled):hover {
+  background: var(--color-bg-elevated);
+  color: var(--color-text-primary);
+}
+
+.preview-browser-zoom-control button:disabled {
+  opacity: 0.42;
+}
+
+.preview-browser-zoom-value {
+  min-width: 42px !important;
+  font-variant-numeric: tabular-nums;
+}
+
 .preview-browser-viewport {
   position: relative;
   min-height: 160px;
   flex: 1;
   overflow: hidden;
   background: color-mix(in srgb, var(--color-bg) 86%, #001b24 14%);
+}
+
+.preview-browser-webview-mount {
+  position: absolute;
+  inset: 10px;
+  pointer-events: none;
+}
+
+.dock-column[data-tab-bar-position="bottom"] .preview-browser-webview-mount {
+  bottom: 36px;
 }
 
 .preview-browser-empty,
@@ -1963,15 +2079,17 @@ body,
 }
 
 .preview-browser-inspector-tabs {
+  height: 32px;
   min-height: 32px;
+  box-sizing: border-box;
   padding: 4px 7px;
   border-bottom: 1px solid var(--color-border);
+  background: color-mix(in srgb, var(--color-bg-elevated) 72%, transparent);
 }
 
 .preview-browser-inspector-tabs button,
-.preview-browser-console-tools button,
-.preview-browser-selected-actions button,
-.preview-browser-console-tools select {
+.preview-browser-console-tools > button,
+.preview-browser-selected-actions button {
   display: inline-flex;
   align-items: center;
   gap: 5px;
@@ -1982,6 +2100,67 @@ body,
   color: var(--color-text-secondary);
   font-size: 11px;
   padding: 2px 8px;
+}
+
+.preview-browser-console-tools > button,
+.preview-browser-selected-actions button {
+  height: 26px;
+  justify-content: center;
+  white-space: nowrap;
+}
+
+.preview-browser-inspector-tabs button {
+  height: 24px;
+  min-height: 24px;
+}
+
+.preview-browser-console-tools > button:disabled,
+.preview-browser-selected-actions button:disabled {
+  opacity: 0.42;
+}
+
+.preview-browser-console-tools > button:not(:disabled):hover,
+.preview-browser-selected-actions button:not(:disabled):hover {
+  background: var(--color-bg-elevated);
+  color: var(--color-text-primary);
+}
+
+.preview-browser-console-filter {
+  width: 184px;
+  height: 26px;
+}
+
+.preview-browser-console-filter .app-select-trigger {
+  border-color: var(--color-border);
+  border-radius: 6px;
+  background: var(--color-bg-input);
+  font-size: 11px;
+  padding: 0 7px;
+}
+
+.preview-browser-console-filter .app-select-trigger:hover,
+.preview-browser-console-filter .app-select-trigger.open {
+  background: var(--color-bg-elevated);
+  color: var(--color-text-primary);
+}
+
+.preview-browser-console-filter .app-select-panel {
+  left: 0;
+  right: auto;
+  min-width: 100%;
+  width: max-content;
+  max-width: 220px;
+  border-radius: 6px;
+}
+
+.preview-browser-console-filter .app-select-option {
+  min-height: 26px;
+}
+
+.preview-browser-tool-button svg,
+.preview-browser-selected-actions button svg,
+.preview-browser-console-tools > button svg {
+  flex: 0 0 auto;
 }
 
 .preview-browser-inspector-tabs button.active {
@@ -2098,6 +2277,11 @@ body,
   display: inline-flex;
   align-items: center;
   justify-content: center;
+}
+
+.preview-browser-selected-details button:hover {
+  background: var(--color-bg-elevated);
+  color: var(--color-text-primary);
 }
 
 .preview-browser-selected-details details {

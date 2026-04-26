@@ -149,7 +149,7 @@ export function ImageAttachmentWidget({ children, renderLayout, queuedCallerId }
 
   const controlsNode = (
     <div
-      className="flex items-center gap-2"
+      className="attachment-control-group"
     >
       <button
         onClick={() => fileInputRef.current?.click()}
@@ -163,10 +163,10 @@ export function ImageAttachmentWidget({ children, renderLayout, queuedCallerId }
         }}
         title={t("images.dropHint", { max: IMAGE_MAX_COUNT })}
       >
-        <Icon name="image" size={12} style={{ display: "inline", verticalAlign: "middle", marginRight: 3 }} />
-        {t("images.attach")}
+        <Icon name="image" size={12} />
+        <span className="attachment-action-label">{t("images.attach")}</span>
         {images.length > 0 && (
-          <span style={{ color: "var(--color-text-muted)", marginLeft: 2 }}>
+          <span className="attachment-action-meta" style={{ color: "var(--color-text-muted)" }}>
             {images.length}/{IMAGE_MAX_COUNT} · {sizeLabel}
           </span>
         )}
@@ -258,6 +258,7 @@ export function ImageAttachmentWidget({ children, renderLayout, queuedCallerId }
 }
 
 function ImageThumb({ img, onRemove }: { img: ImageAttachment; onRemove: (path: string) => void }) {
+  const { t } = useTranslation();
   const size = img.sizeKB >= 1024
     ? `${(img.sizeKB / 1024).toFixed(1)} MB`
     : `${img.sizeKB.toFixed(0)} KB`;
@@ -295,7 +296,7 @@ function ImageThumb({ img, onRemove }: { img: ImageAttachment; onRemove: (path: 
             cursor: "pointer",
             lineHeight: 1,
           }}
-          title="Remove"
+          title={t("images.remove", "Remove")}
         >
           <Icon name="close" size={8} color="#fff" strokeWidth={3} />
         </button>

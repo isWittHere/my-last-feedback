@@ -191,12 +191,18 @@ const CONSOLE_CAPTURE_SCRIPT: &str = r#"
       return short(value, 4096);
     }
   }
+  var recentMessages = {};
   function emit(level, args, extra) {
     var items = Array.prototype.slice.call(args || []).map(function (item) { return safe(item); });
+    var message = short(items.join(' '), 4096);
+    var fingerprint = level + ':' + message.slice(0, 300) + ':' + ((extra && extra.sourceUrl) || location.href);
+    var now = Date.now();
+    if (recentMessages[fingerprint] && now - recentMessages[fingerprint] < 2500) return;
+    recentMessages[fingerprint] = now;
     send('console-entry', Object.assign({
       id: 'console-' + Date.now() + '-' + Math.random().toString(16).slice(2),
       level: level,
-      message: short(items.join(' '), 4096),
+      message: message,
       args: items,
       sourceUrl: location.href,
       timestamp: new Date().toISOString()
@@ -246,6 +252,25 @@ const CONSOLE_CAPTURE_SCRIPT: &str = r#"
       return originalSend.apply(this, arguments);
     };
   }
+  var originalWindowOpen = window.open;
+  window.open = function (url) {
+    if (url) {
+      try { location.href = String(url); } catch (_) {}
+      return null;
+    }
+    return originalWindowOpen ? originalWindowOpen.apply(window, arguments) : null;
+  };
+  document.addEventListener('click', function (event) {
+    var target = event.target;
+    while (target && target !== document && target.tagName !== 'A') target = target.parentElement;
+    if (!target || target.tagName !== 'A') return;
+    var href = target.getAttribute('href');
+    var targetName = target.getAttribute('target');
+    if (!href || !targetName || targetName.toLowerCase() !== '_blank') return;
+    event.preventDefault();
+    event.stopPropagation();
+    location.href = target.href;
+  }, true);
   window.__MLFB_PREVIEW_BRIDGE__ = { send: send };
 })();
 "#;
@@ -254,9 +279,40 @@ const PICKER_SCRIPT: &str = r#"
 (function () {
   if (!window.__MLFB_PREVIEW_BRIDGE__) return;
   if (window.__MLFB_PICKER_CLEANUP__) window.__MLFB_PICKER_CLEANUP__();
-  var overlay = document.createElement('div');
-  overlay.style.cssText = 'position:fixed;z-index:2147483647;pointer-events:none;border:2px solid #22d3ee;background:rgba(34,211,238,.14);box-shadow:0 0 0 1px rgba(0,0,0,.25);display:none;';
-  document.documentElement.appendChild(overlay);
+  var highlighted = null;
+  var savedHighlight = null;
+  function saveStyle(el, name) {
+    return { value: el.style.getPropertyValue(name), priority: el.style.getPropertyPriority(name) };
+  }
+  function restoreStyle(el, name, saved) {
+    if (!saved) return;
+    if (saved.value) el.style.setProperty(name, saved.value, saved.priority || '');
+    else el.style.removeProperty(name);
+  }
+  function clearHighlight() {
+    if (!highlighted || !savedHighlight) return;
+    restoreStyle(highlighted, 'outline', savedHighlight.outline);
+    restoreStyle(highlighted, 'outline-offset', savedHighlight.outlineOffset);
+    restoreStyle(highlighted, 'box-shadow', savedHighlight.boxShadow);
+    restoreStyle(highlighted, 'background-color', savedHighlight.backgroundColor);
+    highlighted = null;
+    savedHighlight = null;
+  }
+  function applyHighlight(el) {
+    if (!el || el === highlighted || el === document.documentElement || el === document.body) return;
+    clearHighlight();
+    highlighted = el;
+    savedHighlight = {
+      outline: saveStyle(el, 'outline'),
+      outlineOffset: saveStyle(el, 'outline-offset'),
+      boxShadow: saveStyle(el, 'box-shadow'),
+      backgroundColor: saveStyle(el, 'background-color')
+    };
+    el.style.setProperty('outline', '1px solid #22d3ee', 'important');
+    el.style.setProperty('outline-offset', '0px', 'important');
+    el.style.setProperty('box-shadow', '0 0 0 1px rgba(37,99,235,.72), inset 0 0 0 9999px rgba(34,211,238,.12)', 'important');
+    if (!el.style.getPropertyValue('background-color')) el.style.setProperty('background-color', 'rgba(34,211,238,.08)', 'important');
+  }
   function textOf(el) { return (el.innerText || el.textContent || '').replace(/\s+/g, ' ').trim().slice(0, 500); }
   function cssEscape(value) { try { return CSS.escape(value); } catch (_) { return String(value).replace(/[^a-zA-Z0-9_-]/g, '\\$&'); } }
   function cssValue(value) { return String(value || '').replace(/\\/g, '\\\\').replace(/"/g, '\\"'); }
@@ -419,19 +475,14 @@ const PICKER_SCRIPT: &str = r#"
   }
   function move(event) {
     var el = event.target;
-    if (!el || el === overlay || el === document.documentElement || el === document.body) return;
-    var rect = el.getBoundingClientRect();
-    overlay.style.display = 'block';
-    overlay.style.left = rect.left + 'px';
-    overlay.style.top = rect.top + 'px';
-    overlay.style.width = rect.width + 'px';
-    overlay.style.height = rect.height + 'px';
+    if (!el || el === document.documentElement || el === document.body) return;
+    applyHighlight(el);
   }
   function cleanup(sendCancel) {
     document.removeEventListener('mousemove', move, true);
     document.removeEventListener('click', click, true);
     document.removeEventListener('keydown', keydown, true);
-    try { overlay.remove(); } catch (_) {}
+    clearHighlight();
     window.__MLFB_PICKER_CLEANUP__ = null;
     if (sendCancel) window.__MLFB_PREVIEW_BRIDGE__.send('picker-cancelled', {});
   }
@@ -543,6 +594,41 @@ pub async fn preview_reload(state: tauri::State<'_, PreviewBrowserState>, tab_id
 }
 
 #[tauri::command]
+pub async fn preview_set_zoom(
+  state: tauri::State<'_, PreviewBrowserState>,
+  tab_id: String,
+  zoom: f64,
+) -> Result<(), String> {
+  let zoom = zoom.clamp(0.5, 2.0);
+  let script = format!(r#"
+    (function () {{
+      var zoom = {};
+      var style = document.getElementById('__mlfb_preview_zoom_style__');
+      if (!style) {{
+        style = document.createElement('style');
+        style.id = '__mlfb_preview_zoom_style__';
+        document.head.appendChild(style);
+      }}
+      document.documentElement.style.zoom = '';
+      if (zoom === 1) {{
+        document.body.style.transform = '';
+        document.body.style.transformOrigin = '';
+        document.body.style.width = '';
+        style.textContent = '';
+        return;
+      }}
+      document.body.style.transformOrigin = '0 0';
+      document.body.style.transform = 'scale(' + zoom + ')';
+      document.body.style.width = (100 / zoom) + '%';
+      style.textContent = '';
+    }})();
+  "#, zoom);
+  let tabs = state.tabs.lock().map_err(|_| "Preview state is poisoned".to_string())?;
+  let runtime = tabs.get(&tab_id).ok_or_else(|| "Preview tab not found".to_string())?;
+  runtime.webview.eval(script).map_err(|e| e.to_string())
+}
+
+#[tauri::command]
 pub async fn preview_go_back(state: tauri::State<'_, PreviewBrowserState>, tab_id: String) -> Result<(), String> {
     let tabs = state.tabs.lock().map_err(|_| "Preview state is poisoned".to_string())?;
     let runtime = tabs.get(&tab_id).ok_or_else(|| "Preview tab not found".to_string())?;
@@ -598,16 +684,60 @@ pub async fn preview_capture_element(
   let captured_at = chrono::Utc::now().to_rfc3339();
   let id = format!("element-shot-{}", Uuid::new_v4());
   let main_window = app.get_window("main").ok_or_else(|| "Main window not found".to_string())?;
-  let outer_position = main_window.outer_position().map_err(|e| e.to_string())?;
+  let inner_position = main_window.inner_position().map_err(|e| e.to_string())?;
   let scale_factor = main_window.scale_factor().unwrap_or(request.device_pixel_ratio.max(1.0));
   let padding = 6.0;
-  let x = outer_position.x + ((request.bounds.x + request.rect.x - padding) * scale_factor).round() as i32;
-  let y = outer_position.y + ((request.bounds.y + request.rect.y - padding) * scale_factor).round() as i32;
-  let width = ((request.rect.width + padding * 2.0) * scale_factor).round().max(1.0) as u32;
-  let height = ((request.rect.height + padding * 2.0) * scale_factor).round().max(1.0) as u32;
+  let left = (request.bounds.x + request.rect.x - padding).max(request.bounds.x);
+  let top = (request.bounds.y + request.rect.y - padding).max(request.bounds.y);
+  let right = (request.bounds.x + request.rect.x + request.rect.width + padding).min(request.bounds.x + request.bounds.width);
+  let bottom = (request.bounds.y + request.rect.y + request.rect.height + padding).min(request.bounds.y + request.bounds.height);
+  if right <= left || bottom <= top {
+    return Err("Element area is outside the preview viewport".to_string());
+  }
 
-  let screen = screenshots::Screen::from_point(x, y).map_err(|e| e.to_string())?;
-  let image = screen.capture_area(x, y, width, height).map_err(|e| e.to_string())?;
+  let raw_x = inner_position.x + (left * scale_factor).round() as i32;
+  let raw_y = inner_position.y + (top * scale_factor).round() as i32;
+  let raw_right = inner_position.x + (right * scale_factor).round() as i32;
+  let raw_bottom = inner_position.y + (bottom * scale_factor).round() as i32;
+  let screen = screenshots::Screen::from_point(raw_x, raw_y).map_err(|e| e.to_string())?;
+  let display = screen.display_info;
+  let screen_left = display.x;
+  let screen_top = display.y;
+  let screen_right = display.x + display.width as i32;
+  let screen_bottom = display.y + display.height as i32;
+  let x = raw_x.max(screen_left).min(screen_right.saturating_sub(1));
+  let y = raw_y.max(screen_top).min(screen_bottom.saturating_sub(1));
+  let clipped_right = raw_right.max(x + 1).min(screen_right);
+  let clipped_bottom = raw_bottom.max(y + 1).min(screen_bottom);
+  let width = (clipped_right - x).max(1) as u32;
+  let height = (clipped_bottom - y).max(1) as u32;
+  let capture_x = x - screen_left;
+  let capture_y = y - screen_top;
+
+  let image = screen.capture_area(capture_x, capture_y, width, height).map_err(|e| {
+    format!(
+      "{} (capture x={}, y={}, width={}, height={}, global x={}, y={}, screen={}x{}@{},{}; preview x={}, y={}, width={}, height={}; element x={}, y={}, width={}, height={})",
+      e,
+      capture_x,
+      capture_y,
+      width,
+      height,
+      x,
+      y,
+      display.width,
+      display.height,
+      display.x,
+      display.y,
+      request.bounds.x,
+      request.bounds.y,
+      request.bounds.width,
+      request.bounds.height,
+      request.rect.x,
+      request.rect.y,
+      request.rect.width,
+      request.rect.height,
+    )
+  })?;
   let dir = std::env::temp_dir().join("my-last-feedback").join("preview-screenshots");
   fs::create_dir_all(&dir).map_err(|e| e.to_string())?;
   let file_name = format!("{}.png", id);

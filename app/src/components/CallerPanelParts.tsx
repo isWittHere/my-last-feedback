@@ -11,6 +11,37 @@ import { webAttachmentLabel } from "../browser/webAttachmentFormat";
 
 const DOCK_COLUMN_IDS: DockColumnId[] = ["leftSidebar", "leftPage", "rightSidebar"];
 
+function clampFloatingValue(value: number, min: number, max: number) {
+  return Math.min(Math.max(value, min), max);
+}
+
+function overlapsRect(left: number, top: number, width: number, height: number, rect: DOMRect, margin = 8) {
+  return left < rect.right + margin
+    && left + width > rect.left - margin
+    && top < rect.bottom + margin
+    && top + height > rect.top - margin;
+}
+
+function placeFloatingPreview(anchorRect: DOMRect, width: number, height: number) {
+  const viewportPadding = 4;
+  const maxLeft = window.innerWidth - width - viewportPadding;
+  const maxTop = window.innerHeight - height - viewportPadding;
+  const clamp = (position: { top: number; left: number }) => ({
+    top: clampFloatingValue(position.top, viewportPadding, Math.max(viewportPadding, maxTop)),
+    left: clampFloatingValue(position.left, viewportPadding, Math.max(viewportPadding, maxLeft)),
+  });
+  const candidates = [
+    clamp({ top: anchorRect.top - height - 2, left: anchorRect.left }),
+    clamp({ top: anchorRect.bottom + 2, left: anchorRect.left }),
+    clamp({ top: anchorRect.top, left: anchorRect.right + 8 }),
+    clamp({ top: anchorRect.top, left: anchorRect.left - width - 8 }),
+  ];
+  const webviewRects = Array.from(document.querySelectorAll<HTMLElement>(".preview-browser-webview-mount"))
+    .map((element) => element.getBoundingClientRect())
+    .filter((rect) => rect.width > 0 && rect.height > 0);
+  return candidates.find((position) => !webviewRects.some((rect) => overlapsRect(position.left, position.top, width, height, rect))) || candidates[0];
+}
+
 /** Attachment tag bar: images + test log + git actions as compact tags */
 export function AttachmentTagBar({
   controls,
@@ -190,7 +221,7 @@ export function AttachmentTagBar({
   return (
     <div className="shrink-0">
       {/* Button row */}
-      <div className="flex items-center gap-1.5 px-3 pt-1.5 pb-0.5">
+      <div className="attachment-action-row px-3 pt-1.5 pb-0.5">
         {controls}
         <button
           className="btn"
@@ -204,9 +235,9 @@ export function AttachmentTagBar({
           onClick={handleAttachLogClick}
         >
           <Icon name="terminal" size={12} />
-          {t("testLog.attach", "附加日志")}
+          <span className="attachment-action-label">{t("testLog.attach", "Attach Log")}</span>
           {targetTestLogText.length > 0 && (
-            <span style={{ color: showTestLog ? "rgba(255,255,255,0.7)" : "var(--color-text-muted)", marginLeft: 2 }}>
+            <span className="attachment-action-meta" style={{ color: showTestLog ? "rgba(255,255,255,0.7)" : "var(--color-text-muted)" }}>
               {targetTestLogText.length}
             </span>
           )}
@@ -223,7 +254,7 @@ export function AttachmentTagBar({
           onClick={() => setShowGitPanel((v) => !v)}
         >
           <Icon name="git-branch" size={12} />
-          {t("gitAction.button", "Git 操作")}
+          <span className="attachment-action-label">{t("gitAction.button", "Git Action")}</span>
         </button>
         <button
           className="btn"
@@ -239,7 +270,7 @@ export function AttachmentTagBar({
           title={t("resources.openPanel", "Open project resources")}
         >
           <Icon name="folder" size={12} />
-          {t("resources.button", "资源")}
+          <span className="attachment-action-label">{t("resources.button", "Resources")}</span>
         </button>
         <button
           className="btn"
@@ -255,9 +286,9 @@ export function AttachmentTagBar({
           title={t("previewBrowser.openPanel", "Open preview browser")}
         >
           <Icon name="globe" size={12} />
-          {t("previewBrowser.button", "预览")}
+          <span className="attachment-action-label">{t("previewBrowser.button", "Preview")}</span>
           {hasWebAttachments && (
-            <span style={{ color: isPreviewButtonActive ? "rgba(255,255,255,0.7)" : "var(--color-text-muted)", marginLeft: 2 }}>
+            <span className="attachment-action-meta" style={{ color: isPreviewButtonActive ? "rgba(255,255,255,0.7)" : "var(--color-text-muted)" }}>
               {targetWebAttachments.length}
             </span>
           )}
@@ -276,9 +307,9 @@ export function AttachmentTagBar({
           title={t("mlc.openPanel", "Open My Last Chat references")}
         >
           <MlcLogoIcon size={12} />
-          {t("mlc.button", "MLC")}
+          <span className="attachment-action-label">{t("mlc.button", "MLC")}</span>
           {hasMlcAttachments && (
-            <span style={{ color: isMlcButtonActive ? "rgba(255,255,255,0.7)" : "var(--color-text-muted)", marginLeft: 2 }}>
+            <span className="attachment-action-meta" style={{ color: isMlcButtonActive ? "rgba(255,255,255,0.7)" : "var(--color-text-muted)" }}>
               {targetMlcAttachments.length}
             </span>
           )}
@@ -290,7 +321,7 @@ export function AttachmentTagBar({
       {hasTags && (
         <div
           ref={tagAreaRef}
-          className="flex flex-wrap gap-1 px-3 pb-1 overflow-y-auto"
+          className="attachment-tag-row flex flex-wrap gap-1 px-3 pb-1 overflow-y-auto"
           style={{ maxHeight: 78 /* ~3 lines of tags */ }}
         >
           {images.length > 0 && (
@@ -416,7 +447,7 @@ export function AttachmentTagBar({
                 type="text"
                 value={targetGitAction.branchName || ""}
                 onChange={(e) => queuedCallerId ? updateQueuedDraftGitBranchName(queuedCallerId, e.target.value) : activeSession && updateSessionGitBranchName(activeSession.id, e.target.value)}
-                placeholder={t("gitAction.branchPlaceholder", "分支名称（可留空）")}
+                placeholder={t("gitAction.branchPlaceholder", "Branch name (optional)")}
                 className="input-area"
                 style={{
                   fontSize: 11,
@@ -439,6 +470,7 @@ export function AttachmentTagBar({
 
 /** Image tag with hover preview */
 function ImageTag({ img, onRemove, readonly }: { img: import("../store/feedbackStore").ImageAttachment; onRemove: () => void; readonly?: boolean }) {
+  const { t } = useTranslation();
   const [showPreview, setShowPreview] = useState(false);
   const tagRef = useRef<HTMLDivElement>(null);
   const [previewPos, setPreviewPos] = useState<{ top: number; left: number } | null>(null);
@@ -460,6 +492,7 @@ function ImageTag({ img, onRemove, readonly }: { img: import("../store/feedbackS
     <div
       ref={tagRef}
       className="attachment-tag group"
+      data-preview-overlay
       onMouseEnter={handleMouseEnter}
       onMouseLeave={() => setShowPreview(false)}
     >
@@ -492,7 +525,7 @@ function ImageTag({ img, onRemove, readonly }: { img: import("../store/feedbackS
               })
               .catch(() => navigator.clipboard.writeText(img.name));
           }}
-          title="Copy image"
+          title={t("images.copy", "Copy image")}
         >
           <Icon name="copy" size={10} />
         </button>
@@ -502,18 +535,15 @@ function ImageTag({ img, onRemove, readonly }: { img: import("../store/feedbackS
       {showPreview && previewPos && createPortal(
         <div
           className="attachment-preview"
+          data-preview-overlay
           ref={(el) => {
             if (!el || !tagRef.current) return;
             const rect = tagRef.current.getBoundingClientRect();
             const ph = el.offsetHeight;
             const pw = el.offsetWidth;
-            let top = rect.top - ph - 2;
-            let left = rect.left;
-            if (top < 4) top = rect.bottom + 2;
-            if (left + pw > window.innerWidth - 4) left = window.innerWidth - pw - 4;
-            if (left < 4) left = 4;
-            el.style.top = `${top}px`;
-            el.style.left = `${left}px`;
+            const position = placeFloatingPreview(rect, pw, ph);
+            el.style.top = `${position.top}px`;
+            el.style.left = `${position.left}px`;
           }}
           style={{
             position: "fixed",
@@ -559,6 +589,7 @@ function TestLogTag({
     <button
       ref={tagRef}
       className="attachment-tag"
+      data-preview-overlay
       style={{
         background: showTestLog ? callerColor : undefined,
         borderColor: showTestLog ? callerColor : "var(--color-border)",
@@ -582,18 +613,15 @@ function TestLogTag({
       {/* Hover preview — fixed position via portal */}
       {showPreview && createPortal(
         <div
+          data-preview-overlay
           ref={(el) => {
             if (!el || !tagRef.current) return;
             const rect = tagRef.current.getBoundingClientRect();
             const ph = el.offsetHeight;
             const pw = el.offsetWidth;
-            let top = rect.top - ph - 2;
-            let left = rect.left;
-            if (top < 4) top = rect.bottom + 2;
-            if (left + pw > window.innerWidth - 4) left = window.innerWidth - pw - 4;
-            if (left < 4) left = 4;
-            el.style.top = `${top}px`;
-            el.style.left = `${left}px`;
+            const position = placeFloatingPreview(rect, pw, ph);
+            el.style.top = `${position.top}px`;
+            el.style.left = `${position.left}px`;
           }}
           style={{
             position: "fixed",
@@ -652,6 +680,7 @@ function GitActionTag({
   return (
     <div
       className="attachment-tag"
+      data-preview-overlay
       style={{
         background: showGitPanel ? callerColor : undefined,
         borderColor: showGitPanel ? callerColor : "var(--color-border)",
@@ -677,6 +706,7 @@ function GitActionTag({
 }
 
 function MlcAttachmentTag({ attachment, onRemove, readonly }: { attachment: MlcAttachment; onRemove: () => void; readonly?: boolean }) {
+  const { t } = useTranslation();
   const cleanPath = attachment.filePath.replace(/^\\\\\?\\UNC\\/i, "\\\\").replace(/^\\\\\?\\/i, "");
   const tagRef = useRef<HTMLDivElement>(null);
   const [showPreview, setShowPreview] = useState(false);
@@ -695,6 +725,7 @@ function MlcAttachmentTag({ attachment, onRemove, readonly }: { attachment: MlcA
     <div
       ref={tagRef}
       className="attachment-tag"
+      data-preview-overlay
       style={{ cursor: readonly ? "default" : "pointer" }}
       onMouseEnter={handleMouseEnter}
       onMouseLeave={() => setShowPreview(false)}
@@ -714,7 +745,7 @@ function MlcAttachmentTag({ attachment, onRemove, readonly }: { attachment: MlcA
         <button
           className="attachment-tag-copy"
           onClick={(e) => { e.stopPropagation(); navigator.clipboard.writeText(cleanPath); }}
-          title="Copy path"
+          title={t("mlc.copyPath", "Copy path")}
         >
           <Icon name="copy" size={10} />
         </button>
@@ -722,18 +753,15 @@ function MlcAttachmentTag({ attachment, onRemove, readonly }: { attachment: MlcA
       {showPreview && previewPos && createPortal(
         <div
           className="mlc-custom-tooltip"
+          data-preview-overlay
           ref={(el) => {
             if (!el || !tagRef.current) return;
             const rect = tagRef.current.getBoundingClientRect();
             const tooltipHeight = el.offsetHeight;
             const tooltipWidth = el.offsetWidth;
-            let top = rect.top - tooltipHeight - 2;
-            let left = rect.left;
-            if (top < 4) top = rect.bottom + 2;
-            if (left + tooltipWidth > window.innerWidth - 4) left = window.innerWidth - tooltipWidth - 4;
-            if (left < 4) left = 4;
-            el.style.top = `${top}px`;
-            el.style.left = `${left}px`;
+            const position = placeFloatingPreview(rect, tooltipWidth, tooltipHeight);
+            el.style.top = `${position.top}px`;
+            el.style.left = `${position.left}px`;
           }}
           style={{ top: previewPos.top, left: previewPos.left, zIndex: 9999 }}
         >
@@ -754,8 +782,25 @@ function WebAttachmentTag({ attachment, onRemove, readonly }: { attachment: WebA
   const detail = attachment.kind === "console"
     ? `${attachment.consoleEntries?.length || 0} entries`
     : attachment.element?.selector || attachment.sourceUrl;
+  const tagRef = useRef<HTMLDivElement>(null);
+  const [showPreview, setShowPreview] = useState(false);
+  const [previewPos, setPreviewPos] = useState<{ top: number; left: number } | null>(null);
+  const handleMouseEnter = () => {
+    if (tagRef.current) {
+      const rect = tagRef.current.getBoundingClientRect();
+      setPreviewPos({ top: rect.top - 6, left: rect.left });
+    }
+    setShowPreview(true);
+  };
   return (
-    <div className="attachment-tag" style={{ cursor: readonly ? "default" : "pointer" }} title={`${attachment.sourceUrl}\n${detail}`}>
+    <div
+      ref={tagRef}
+      className="attachment-tag"
+      data-preview-overlay
+      style={{ cursor: readonly ? "default" : "pointer" }}
+      onMouseEnter={handleMouseEnter}
+      onMouseLeave={() => setShowPreview(false)}
+    >
       {!readonly && (
         <button
           className="attachment-tag-remove"
@@ -767,6 +812,29 @@ function WebAttachmentTag({ attachment, onRemove, readonly }: { attachment: WebA
       )}
       <Icon name={attachment.kind === "console" ? "terminal" : "globe"} size={10} />
       <span className="truncate" style={{ maxWidth: 160 }}>{title}</span>
+      {showPreview && previewPos && createPortal(
+        <div
+          className="mlc-custom-tooltip"
+          data-preview-overlay
+          ref={(el) => {
+            if (!el || !tagRef.current) return;
+            const rect = tagRef.current.getBoundingClientRect();
+            const tooltipHeight = el.offsetHeight;
+            const tooltipWidth = el.offsetWidth;
+            const position = placeFloatingPreview(rect, tooltipWidth, tooltipHeight);
+            el.style.top = `${position.top}px`;
+            el.style.left = `${position.left}px`;
+          }}
+          style={{ top: previewPos.top, left: previewPos.left, zIndex: 9999 }}
+        >
+          <div className="mlc-tooltip-doc">
+            <div className="mlc-tooltip-title">{title}</div>
+            <div className="mlc-tooltip-desc">{attachment.sourceUrl}</div>
+            <div className="mlc-tooltip-path">{detail}</div>
+          </div>
+        </div>,
+        document.body
+      )}
     </div>
   );
 }
@@ -803,7 +871,7 @@ export function ReadonlyTagBar({ session }: { session: import("../store/feedback
           />
         )}
         {hasGitAction && (
-          <div className="attachment-tag" style={{ cursor: "default" }}>
+          <div className="attachment-tag" data-preview-overlay style={{ cursor: "default" }}>
             <Icon name="git-branch" size={10} />
             <span className="truncate" style={{ maxWidth: 140 }}>{gitLabel}{gitDetail}</span>
           </div>
@@ -851,6 +919,7 @@ function ReadonlyLogTag({ testLogText, expanded, onToggle }: { testLogText: stri
     <div
       ref={tagRef}
       className="attachment-tag"
+      data-preview-overlay
       style={{
         background: expanded ? "var(--color-bg-elevated)" : undefined,
         borderColor: expanded ? "var(--color-border-strong)" : "var(--color-border)",
@@ -868,25 +937,22 @@ function ReadonlyLogTag({ testLogText, expanded, onToggle }: { testLogText: stri
       <button
         className="attachment-tag-copy"
         onClick={(e) => { e.stopPropagation(); navigator.clipboard.writeText(testLogText); }}
-        title="Copy log"
+        title={t("testLog.copy", "Copy log")}
       >
         <Icon name="copy" size={10} />
       </button>
 
       {showPreview && createPortal(
         <div
+          data-preview-overlay
           ref={(el) => {
             if (!el || !tagRef.current) return;
             const rect = tagRef.current.getBoundingClientRect();
             const ph = el.offsetHeight;
             const pw = el.offsetWidth;
-            let top = rect.top - ph - 2;
-            let left = rect.left;
-            if (top < 4) top = rect.bottom + 2;
-            if (left + pw > window.innerWidth - 4) left = window.innerWidth - pw - 4;
-            if (left < 4) left = 4;
-            el.style.top = `${top}px`;
-            el.style.left = `${left}px`;
+            const position = placeFloatingPreview(rect, pw, ph);
+            el.style.top = `${position.top}px`;
+            el.style.left = `${position.left}px`;
           }}
           style={{
             position: "fixed",

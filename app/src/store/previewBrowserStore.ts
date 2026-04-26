@@ -21,6 +21,7 @@ export interface PreviewBrowserTab {
   title: string;
   status: PreviewLoadStatus;
   errorMessage?: string;
+  zoom: number;
   canGoBack: boolean;
   canGoForward: boolean;
   selectedElement: PickedElement | null;
@@ -44,10 +45,12 @@ interface PreviewBrowserState {
   inspectorMode: PreviewInspectorMode;
   consoleFilter: "all" | "warnings-errors" | "errors";
   createTab: (url?: string) => Promise<string>;
+  ensureInitialTab: () => Promise<string | null>;
   closeTab: (tabId: string) => Promise<void>;
   setActiveTab: (tabId: string) => void;
   navigate: (tabId: string, url: string) => Promise<void>;
   reload: (tabId: string) => Promise<void>;
+  setZoom: (tabId: string, zoom: number) => Promise<void>;
   goBack: (tabId: string) => Promise<void>;
   goForward: (tabId: string) => Promise<void>;
   setBounds: (tabId: string, bounds: PreviewBounds, visible: boolean) => Promise<void>;
@@ -70,6 +73,8 @@ interface PreviewBrowserState {
   attachConsoleSnapshot: (tabId: string) => boolean;
 }
 
+let initialTabPromise: Promise<string> | null = null;
+
 function toTab(payload: PreviewTabPayload): PreviewBrowserTab {
   const now = new Date().toISOString();
   return {
@@ -79,6 +84,7 @@ function toTab(payload: PreviewTabPayload): PreviewBrowserTab {
     pendingUrl: payload.url === "about:blank" ? "" : payload.url,
     title: payload.title || payload.url || "Preview",
     status: payload.url === "about:blank" ? "idle" : "loading",
+    zoom: 1,
     canGoBack: false,
     canGoForward: false,
     selectedElement: null,
@@ -133,6 +139,14 @@ export const usePreviewBrowserStore = create<PreviewBrowserState>((set, get) => 
     return tab.id;
   },
 
+  ensureInitialTab: async () => {
+    const existing = get().activeTabId || get().tabs[0]?.id || null;
+    if (existing) return existing;
+    if (initialTabPromise) return initialTabPromise;
+    initialTabPromise = get().createTab().finally(() => { initialTabPromise = null; });
+    return initialTabPromise;
+  },
+
   closeTab: async (tabId) => {
     await invoke("preview_close_tab", { tabId });
     set((state) => {
@@ -147,14 +161,34 @@ export const usePreviewBrowserStore = create<PreviewBrowserState>((set, get) => 
     });
   },
 
-  setActiveTab: (tabId) => set({ activeTabId: tabId, pickerMode: "off" }),
+  setActiveTab: (tabId) => {
+    const current = get().activeTabId;
+    if (current && current !== tabId && get().pickerMode !== "off") {
+      void invoke("preview_stop_picker", { tabId: current }).catch(() => undefined);
+    }
+    set({ activeTabId: tabId, pickerMode: "off" });
+  },
 
   navigate: async (tabId, url) => {
+    if (get().pickerMode !== "off") await invoke("preview_stop_picker", { tabId }).catch(() => undefined);
+    set({ pickerMode: "off" });
     set((state) => ({ tabs: updateTab(state.tabs, tabId, { pendingUrl: url, status: "loading", errorMessage: undefined }) }));
     await invoke("preview_navigate", { tabId, url });
   },
 
-  reload: async (tabId) => { await invoke("preview_reload", { tabId }); },
+  reload: async (tabId) => {
+    const tab = get().tabs.find((item) => item.id === tabId);
+    if (!tab || tab.url === "about:blank") return;
+    if (get().pickerMode !== "off") await invoke("preview_stop_picker", { tabId }).catch(() => undefined);
+    set({ pickerMode: "off" });
+    set((state) => ({ tabs: updateTab(state.tabs, tabId, { status: "loading", errorMessage: undefined }) }));
+    await invoke("preview_reload", { tabId });
+  },
+  setZoom: async (tabId, zoom) => {
+    const nextZoom = Math.min(2, Math.max(0.5, Math.round(zoom * 100) / 100));
+    set((state) => ({ tabs: updateTab(state.tabs, tabId, { zoom: nextZoom }) }));
+    await invoke("preview_set_zoom", { tabId, zoom: nextZoom });
+  },
   goBack: async (tabId) => { await invoke("preview_go_back", { tabId }); },
   goForward: async (tabId) => { await invoke("preview_go_forward", { tabId }); },
   setBounds: async (tabId, bounds, visible) => {
@@ -224,7 +258,9 @@ export const usePreviewBrowserStore = create<PreviewBrowserState>((set, get) => 
   },
 
   handleLoadFinished: ({ tabId, url }) => {
+    const tab = get().tabs.find((item) => item.id === tabId);
     set((state) => ({ tabs: updateTab(state.tabs, tabId, { url, pendingUrl: url, status: "loaded", errorMessage: undefined }) }));
+    if (tab?.zoom && tab.zoom !== 1) void get().setZoom(tabId, tab.zoom);
   },
 
   handleLoadError: ({ tabId, url, error }) => {

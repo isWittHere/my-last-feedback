@@ -4,6 +4,7 @@ import { useTranslation } from "react-i18next";
 import { usePreviewBrowserStore, type PreviewBrowserTab } from "../store/previewBrowserStore";
 import { useFeedbackStore } from "../store/feedbackStore";
 import { Icon } from "./Icons";
+import { AppSelect, type AppSelectOption } from "./AppSelect";
 
 function consoleVisible(tab: PreviewBrowserTab, filter: "all" | "warnings-errors" | "errors") {
   if (filter === "errors") return tab.consoleEntries.filter((entry) => entry.level === "error");
@@ -43,6 +44,8 @@ function screenshotSrc(filePath: string | undefined): string | null {
   return convertFileSrc(filePath);
 }
 
+type ConsoleFilter = "all" | "warnings-errors" | "errors";
+
 export function PreviewBrowserInfoPanel() {
   const { t } = useTranslation();
   const tabs = usePreviewBrowserStore((state) => state.tabs);
@@ -74,6 +77,12 @@ export function PreviewBrowserInfoPanel() {
     const timer = window.setTimeout(() => setAttachNotice(null), 2200);
     return () => window.clearTimeout(timer);
   }, [attachNotice]);
+
+  const filterOptions: AppSelectOption<ConsoleFilter>[] = [
+    { value: "warnings-errors", label: `${t("previewBrowser.filterWarnError", "Warnings + errors")} (${consoleCounts.warnings + consoleCounts.errors})`, icon: "warning" },
+    { value: "errors", label: `${t("previewBrowser.filterErrors", "Errors")} (${consoleCounts.errors})`, icon: "circle-x" },
+    { value: "all", label: `${t("previewBrowser.filterAll", "All")} (${consoleCounts.total})`, icon: "terminal" },
+  ];
 
   const handleAttachElement = () => {
     if (!activeTab) return;
@@ -180,12 +189,17 @@ export function PreviewBrowserInfoPanel() {
         ) : (
           <div className="preview-browser-console">
             <div className="preview-browser-console-tools">
-              <select value={consoleFilter} onChange={(event) => setConsoleFilter(event.target.value as "all" | "warnings-errors" | "errors")}>
-                <option value="warnings-errors">{t("previewBrowser.filterWarnError", "Warnings + errors")} ({consoleCounts.warnings + consoleCounts.errors})</option>
-                <option value="errors">{t("previewBrowser.filterErrors", "Errors")} ({consoleCounts.errors})</option>
-                <option value="all">{t("previewBrowser.filterAll", "All")} ({consoleCounts.total})</option>
-              </select>
-              <button type="button" onClick={() => activeTab && clearConsole(activeTab.id)} disabled={!activeTab?.consoleEntries.length}>{t("previewBrowser.clearConsole", "Clear")}</button>
+              <AppSelect
+                value={consoleFilter}
+                options={filterOptions}
+                onChange={setConsoleFilter}
+                ariaLabel={t("previewBrowser.consoleFilter", "Console filter")}
+                className="preview-browser-console-filter"
+              />
+              <button type="button" className="preview-browser-tool-button" onClick={() => activeTab && clearConsole(activeTab.id)} disabled={!activeTab?.consoleEntries.length}>
+                <Icon name="trash" size={12} />
+                {t("previewBrowser.clearConsole", "Clear")}
+              </button>
               <button type="button" onClick={handleAttachConsole} disabled={!visibleConsoleEntries.length}><Icon name="paperclip" size={12} />{t("previewBrowser.attachConsole", "Attach console")}</button>
             </div>
             <div className="preview-browser-console-list">

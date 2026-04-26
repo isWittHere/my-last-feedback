@@ -78,6 +78,8 @@ export function DockColumn({ columnId }: { columnId: DockColumnId }) {
   const startDraggingDockTab = useFeedbackStore((state) => state.startDraggingDockTab);
   const updateDraggingDockTab = useFeedbackStore((state) => state.updateDraggingDockTab);
   const finishDraggingDockTab = useFeedbackStore((state) => state.finishDraggingDockTab);
+  const pushNativeWebViewBlocker = useFeedbackStore((state) => state.pushNativeWebViewBlocker);
+  const popNativeWebViewBlocker = useFeedbackStore((state) => state.popNativeWebViewBlocker);
   const resizeRef = useRef<{ startX: number; startWidth: number } | null>(null);
   const pointerDragRef = useRef<{ tabId: DockTabId; startX: number; startY: number; dragging: boolean } | null>(null);
   const suppressClickTabRef = useRef<DockTabId | null>(null);
@@ -92,6 +94,8 @@ export function DockColumn({ columnId }: { columnId: DockColumnId }) {
 
   useEffect(() => {
     if (!tabBarMenu) return;
+    const blockerKey = `dock-tab-menu-${columnId}`;
+    pushNativeWebViewBlocker(blockerKey);
     const handlePointerDown = (event: globalThis.MouseEvent) => {
       if (tabBarMenuRef.current?.contains(event.target as Node)) return;
       setTabBarMenu(null);
@@ -102,10 +106,11 @@ export function DockColumn({ columnId }: { columnId: DockColumnId }) {
     document.addEventListener("mousedown", handlePointerDown);
     document.addEventListener("keydown", handleKeyDown);
     return () => {
+      popNativeWebViewBlocker(blockerKey);
       document.removeEventListener("mousedown", handlePointerDown);
       document.removeEventListener("keydown", handleKeyDown);
     };
-  }, [tabBarMenu]);
+  }, [columnId, popNativeWebViewBlocker, pushNativeWebViewBlocker, tabBarMenu]);
 
   const visualPosition = columnId === "rightSidebar" ? "right" : "left";
 
@@ -223,6 +228,7 @@ export function DockColumn({ columnId }: { columnId: DockColumnId }) {
       <div
         key={tabId}
         className={`dock-tab-drag-host${showFullLabel ? " full-label" : ""}${draggingDockTab?.tabId === tabId ? " dock-tab-dragging" : ""}`}
+        data-preview-overlay
         onPointerDown={(event) => handleTabPointerDown(event, tabId)}
         onPointerMove={handleTabPointerMove}
         onPointerUp={handleTabPointerUp}
@@ -285,13 +291,13 @@ export function DockColumn({ columnId }: { columnId: DockColumnId }) {
       onDragOver={handleDragOver}
       onDrop={handleDrop}
     >
-      <div className="mlc-resize-handle" onMouseDown={handleResizeMouseDown} />
+      <div className="mlc-resize-handle" data-preview-overlay onMouseDown={handleResizeMouseDown} />
       {draggingDockTab ? <div className="dock-column-target-icon dock-column-target-badge" aria-hidden="true">{dockColumnTargetIcon(columnId)}</div> : null}
       {column.tabBarPosition === "top" ? renderPanelTabBar() : null}
       <DockTabContent tabId={column.activeTabId} />
       {column.tabBarPosition === "bottom" ? renderPanelTabBar() : null}
       {tabBarMenu ? (
-        <div ref={tabBarMenuRef} className="mlc-panel-tab-menu dock-tab-menu" style={{ left: tabBarMenu.left, top: tabBarMenu.top }} role="menu" onContextMenu={(event) => event.preventDefault()}>
+        <div ref={tabBarMenuRef} className="mlc-panel-tab-menu dock-tab-menu" data-preview-overlay style={{ left: tabBarMenu.left, top: tabBarMenu.top }} role="menu" onContextMenu={(event) => event.preventDefault()}>
           <button type="button" role="menuitem" onClick={() => moveMenuTab("leftSidebar")} disabled={columnId === "leftSidebar"}>
             <Icon name="sidebar" size={12} />
             <span>{t("dock.moveToLeftSidebar", "Move to left sidebar")}</span>

@@ -1,4 +1,5 @@
 import { useEffect, useMemo, useRef } from "react";
+import { useTranslation } from "react-i18next";
 import { Icon } from "./Icons";
 
 interface TransferSubmitSplitProps {
@@ -33,6 +34,7 @@ const sanitizeAlias = (s: string) => s.toUpperCase().replace(/[^0-9A-F]/g, "").s
  * inject a "TRANSFERRED" [System] notice instead of the normal "confirmed" one.
  */
 export function TransferSubmitSplit(props: TransferSubmitSplitProps) {
+  const { t } = useTranslation();
   const {
     color,
     disabled,
@@ -120,7 +122,7 @@ export function TransferSubmitSplit(props: TransferSubmitSplitProps) {
         <button
           onClick={onCancelTransfer}
           className="btn"
-          title="取消转移 Cancel transfer"
+          title={t("transfer.cancel", "Cancel transfer")}
           style={{
             width: 26,
             height: 34,
@@ -143,7 +145,7 @@ export function TransferSubmitSplit(props: TransferSubmitSplitProps) {
           onClick={popoverOpen ? onClosePopover : onOpenPopover}
           disabled={submitting}
           className="btn"
-          title="转移提交 Transfer submit"
+          title={t("transfer.open", "Transfer submit")}
           style={{
             width: 20,
             height: 34,
@@ -182,7 +184,7 @@ export function TransferSubmitSplit(props: TransferSubmitSplitProps) {
             gap: 5,
             maxWidth: 120,
           }}
-          title={`转移到 ${transferAlias}`}
+          title={t("transfer.to", "Transfer to {{alias}}", { alias: transferAlias })}
         >
           <Icon name="arrow-right" size={11} color={color} strokeWidth={2.5} />
           <span
@@ -203,7 +205,7 @@ export function TransferSubmitSplit(props: TransferSubmitSplitProps) {
         onClick={onSubmit}
         disabled={disabled}
         className="btn"
-        title={isTransfer ? `转移并提交 (Ctrl+Enter) → ${transferAlias}` : "Submit (Ctrl+Enter)"}
+        title={isTransfer ? t("transfer.submitTo", "Transfer and submit (Ctrl+Enter) to {{alias}}", { alias: transferAlias }) : t("feedback.submit", "Send Feedback (Ctrl+Enter)")}
         style={{
           ...commonMainStyle,
           borderTopLeftRadius: 0,
@@ -240,7 +242,7 @@ export function TransferSubmitSplit(props: TransferSubmitSplitProps) {
           onMouseDown={(e) => e.stopPropagation()}
         >
           <div style={{ fontSize: 11, color: "var(--color-text-muted)", lineHeight: 1.4 }}>
-            转移身份：提交后通知 Agent 把 <code>agent_name</code> 改为此值
+            {t("transfer.descriptionPrefix", "Transfer identity: after submitting, tell Agent to change")} <code>agent_name</code> {t("transfer.descriptionSuffix", "to this value")}
           </div>
           <input
             ref={inputRef}
@@ -252,7 +254,7 @@ export function TransferSubmitSplit(props: TransferSubmitSplitProps) {
                 handleConfirm();
               }
             }}
-            placeholder="4 位十六进制（如 A1B2）"
+            placeholder={t("transfer.aliasPlaceholder", "4 hex characters, e.g. A1B2")}
             spellCheck={false}
             autoComplete="off"
             maxLength={4}
@@ -278,8 +280,8 @@ export function TransferSubmitSplit(props: TransferSubmitSplitProps) {
             }}
           >
             {validation.reason === "format"
-              ? "格式错误：必须为 4 位 [0-9A-F]"
-              : "格式：4 位大写十六进制字符"}
+              ? t("transfer.formatError", "Invalid format: must be 4 characters [0-9A-F]")
+              : t("transfer.formatHint", "Format: 4 uppercase hexadecimal characters")}
           </div>
           <div style={{ display: "flex", justifyContent: "flex-end", gap: 6 }}>
             <button
@@ -292,7 +294,7 @@ export function TransferSubmitSplit(props: TransferSubmitSplitProps) {
                 color: "var(--color-text-muted)",
               }}
             >
-              取消
+              {t("sidebar.cancel", "Cancel")}
             </button>
             <button
               onClick={handleConfirm}
@@ -312,7 +314,7 @@ export function TransferSubmitSplit(props: TransferSubmitSplitProps) {
               }}
             >
               <Icon name="check" size={11} strokeWidth={2.5} />
-              确定
+              {t("common.confirm", "Confirm")}
             </button>
           </div>
         </div>

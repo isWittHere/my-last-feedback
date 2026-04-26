@@ -1,4 +1,5 @@
 import { useCallback, useEffect, useMemo, useRef, useState, type PointerEvent as ReactPointerEvent, type ReactNode } from "react";
+import { useTranslation } from "react-i18next";
 import {
   BLUEPRINT_TEMPLATE_OPTIONS,
   ORCHESTRATION_PRESETS,
@@ -35,15 +36,15 @@ type StartCondition = {
 };
 
 const STAGE_ICON_OPTIONS = [
-  { value: "git-branch", label: "分支" },
-  { value: "wrench", label: "扳手" },
-  { value: "search", label: "搜索" },
-  { value: "message-dot", label: "消息" },
-  { value: "check", label: "勾选" },
-  { value: "pin", label: "图钉" },
-  { value: "robot", label: "机器人" },
-  { value: "flag", label: "结束" },
-  { value: "file-text", label: "文本" },
+  { value: "git-branch", label: "Branch" },
+  { value: "wrench", label: "Tool" },
+  { value: "search", label: "Search" },
+  { value: "message-dot", label: "Message" },
+  { value: "check", label: "Check" },
+  { value: "pin", label: "Pin" },
+  { value: "robot", label: "Robot" },
+  { value: "flag", label: "Closing" },
+  { value: "file-text", label: "Text" },
 ] as const;
 
 const BUILTIN_SKILL_OPTIONS = [
@@ -59,20 +60,20 @@ const BUILTIN_SKILL_OPTIONS = [
   "vote_discipline",
 ] as const;
 
-function getStageTemplateLabel(templateId: StageTemplateId | null): string {
-  if (!templateId) return "自定义";
+function getStageTemplateLabel(templateId: StageTemplateId | null, translate: (key: string, defaultValue: string) => string): string {
+  if (!templateId) return translate("mlra.stageTemplate.custom", "Custom");
   const match = STAGE_TEMPLATE_OPTIONS.find((option) => option.id === templateId);
-  return match?.label || "自定义";
+  return match ? translate(`mlra.stageTemplate.${match.id}.label`, match.label) : translate("mlra.stageTemplate.custom", "Custom");
 }
 
-function getStageIssues(stage: StageBlueprint | null): string[] {
+function getStageIssues(stage: StageBlueprint | null, translate: (key: string, defaultValue: string) => string): string[] {
   if (!stage) return [];
   const issues: string[] = [];
-  if (!stage.name.trim()) issues.push("缺少阶段名称");
+  if (!stage.name.trim()) issues.push(translate("mlra.stage.issueMissingName", "Missing stage name"));
   return issues;
 }
 
-function getStartConditions(blueprint: WorkflowBlueprint, taskText: string): StartCondition[] {
+function getStartConditions(blueprint: WorkflowBlueprint, taskText: string, translate: (key: string, defaultValue: string) => string): StartCondition[] {
   const stages = [...blueprint.stages].sort((left, right) => left.order - right.order);
   const nonClosingStages = stages.filter((stage) => !isClosingStage(stage));
   const lastNonClosingStage = nonClosingStages[nonClosingStages.length - 1] || null;
@@ -81,27 +82,27 @@ function getStartConditions(blueprint: WorkflowBlueprint, taskText: string): Sta
   return [
     {
       id: "task",
-      label: "任务描述已填写",
+      label: translate("mlra.start.conditionTask", "Task description is filled"),
       passed: taskText.trim().length > 0,
     },
     {
       id: "stage-count",
-      label: "至少包含一个普通阶段",
+      label: translate("mlra.start.conditionStageCount", "Contains at least one normal stage"),
       passed: nonClosingStages.length > 0,
     },
     {
       id: "stage-names",
-      label: "所有阶段已有名称",
+      label: translate("mlra.start.conditionStageNames", "All stages have names"),
       passed: stages.length > 0 && stages.every((stage) => stage.name.trim().length > 0),
     },
     {
       id: "final-gate",
-      label: "最后一个普通阶段开启出口门控",
+      label: translate("mlra.start.conditionFinalGate", "The last normal stage has exit gate enabled"),
       passed: !!lastNonClosingStage?.exitGateEnabled,
     },
     {
       id: "closing",
-      label: "蓝图末尾是结束汇总阶段",
+      label: translate("mlra.start.conditionClosing", "Blueprint ends with a closing summary stage"),
       passed: !!lastStage && isClosingStage(lastStage),
     },
   ];
@@ -123,6 +124,7 @@ function DetailSection({
   title?: string;
   children: ReactNode;
 }) {
+  const { t } = useTranslation();
   return (
     <section className="mlra-editor-section">
       {title ? (
@@ -385,7 +387,7 @@ function BlueprintNode({
         <button
           type="button"
           className="mlra-stage-node-order-zone mlra-stage-node-order-handle"
-          title={canDrag ? "拖动重排" : "开始编辑后可拖动重排"}
+          title={canDrag ? t("mlra.stage.dragReorder", "Drag to reorder") : t("mlra.stage.dragAfterEdit", "Start editing before dragging to reorder")}
           onClick={(event) => event.stopPropagation()}
           onPointerDown={onGripPointerDown}
         >
@@ -400,12 +402,12 @@ function BlueprintNode({
           </div>
           <div className="mlra-stage-node-main">
             <div className="mlra-stage-node-title-row">
-              <span className="mlra-stage-node-title">{stage.name || "未命名阶段"}</span>
+              <span className="mlra-stage-node-title">{stage.name || t("mlra.stage.untitled", "Untitled stage")}</span>
             </div>
             <div className="mlra-stage-node-meta">
-              <span>{getStageTemplateLabel(stage.templateId)}</span>
-              {issueCount > 0 ? <span>缺 {issueCount}</span> : null}
-              {runtimeState === "current" ? <span>当前</span> : null}
+              <span>{getStageTemplateLabel(stage.templateId, t)}</span>
+              {issueCount > 0 ? <span>{t("mlra.stage.issueCount", "{{count}} issue(s)", { count: issueCount })}</span> : null}
+              {runtimeState === "current" ? <span>{t("mlra.stage.current", "Current")}</span> : null}
             </div>
           </div>
         </div>
@@ -416,6 +418,7 @@ function BlueprintNode({
 }
 
 export function LauncherHome({ launcher }: LauncherHomeProps) {
+  const { t } = useTranslation();
   const createLauncher = useMLRAStore((state) => state.createLauncher);
   const startOrchestration = useMLRAStore((state) => state.startOrchestration);
   const setUserTask = useMLRAStore((state) => state.setUserTask);
@@ -470,8 +473,8 @@ export function LauncherHome({ launcher }: LauncherHomeProps) {
 
   const hasLauncher = !!launcher;
   const previewBlueprint = useMemo(
-    () => createBlueprintFromTemplate(draftTemplateId, draftName.trim() || "未命名 Workflow"),
-    [draftTemplateId, draftName],
+    () => createBlueprintFromTemplate(draftTemplateId, draftName.trim() || t("mlra.workflow.untitled", "Untitled workflow")),
+    [draftTemplateId, draftName, t],
   );
   const workingBlueprint = launcher?.blueprint || previewBlueprint;
   const orderedStages = useMemo(
@@ -497,13 +500,13 @@ export function LauncherHome({ launcher }: LauncherHomeProps) {
 
   const ensureLauncher = useCallback((): string | null => {
     if (launcher) return launcher.id;
-    const name = draftName.trim() || "未命名 Workflow";
+    const name = draftName.trim() || t("mlra.workflow.untitled", "Untitled workflow");
     const id = createLauncher(name);
     if (draftTemplateId !== "standard") applyBlueprintTemplate(id, draftTemplateId);
     if (draftUserTask.trim()) setUserTask(id, draftUserTask);
     setOrchestrationPolicy(id, draftOrchestrationPolicy);
     return id;
-  }, [launcher, draftName, draftTemplateId, draftUserTask, draftOrchestrationPolicy, createLauncher, applyBlueprintTemplate, setUserTask, setOrchestrationPolicy]);
+  }, [launcher, draftName, draftTemplateId, draftUserTask, draftOrchestrationPolicy, createLauncher, applyBlueprintTemplate, setUserTask, setOrchestrationPolicy, t]);
 
   const commitName = useCallback(() => {
     if (!draftName.trim()) return;
@@ -731,8 +734,9 @@ export function LauncherHome({ launcher }: LauncherHomeProps) {
     () => getStartConditions(
       workingBlueprint,
       launcher ? launcher.userTask || launcher.blueprint.initialTask : draftUserTask,
+      t,
     ),
-    [workingBlueprint, launcher, draftUserTask],
+    [workingBlueprint, launcher, draftUserTask, t],
   );
   const startReadiness = useMemo(() => {
     const missing = startConditions.filter((condition) => !condition.passed).map((condition) => condition.label);
@@ -741,12 +745,12 @@ export function LauncherHome({ launcher }: LauncherHomeProps) {
   const passedStartConditionCount = startConditions.filter((condition) => condition.passed).length;
 
   const stageIssuesById = useMemo(
-    () => new Map(orderedStages.map((stage) => [stage.id, getStageIssues(stage)])),
-    [orderedStages],
+    () => new Map(orderedStages.map((stage) => [stage.id, getStageIssues(stage, t)])),
+    [orderedStages, t],
   );
   const runtimeStageId = launcher?.blueprintRuntime?.currentStageId || null;
   const runtimeStageIndex = launcher?.blueprintRuntime?.currentStageIndex ?? -1;
-  const launcherDisplayName = hasLauncher ? launcher.name : draftName.trim() || "未命名 Workflow";
+  const launcherDisplayName = hasLauncher ? launcher.name : draftName.trim() || t("mlra.workflow.untitled", "Untitled workflow");
   const currentOrchestrationPolicy = launcher?.orchestrationPolicy || draftOrchestrationPolicy;
 
   const updateOrchestrationPolicy = useCallback((nextPolicy: OrchestrationPolicy) => {
@@ -773,7 +777,7 @@ export function LauncherHome({ launcher }: LauncherHomeProps) {
             <div className="mlra-workbench-config-scroll">
               <DetailSection>
                 <div className="mlra-task-type-row">
-                  <label className="mlra-task-label">蓝图模板</label>
+                  <label className="mlra-task-label">{t("mlra.workflow.template", "Blueprint template")}</label>
                   <div className="mlra-task-type-chips">
                     {BLUEPRINT_TEMPLATE_OPTIONS.map((template) => {
                       const active = hasLauncher ? launcher.blueprint.templateId === template.id : draftTemplateId === template.id;
@@ -781,13 +785,13 @@ export function LauncherHome({ launcher }: LauncherHomeProps) {
                         <button
                           key={template.id}
                           className={`mlra-task-type-chip mlra-skill-tag${active ? " active" : ""}`}
-                          title={template.description}
+                          title={t(`mlra.blueprintTemplate.${template.id}.description`, template.description)}
                           onClick={() => {
                             if (launcher) applyBlueprintTemplate(launcher.id, template.id);
                             else setDraftTemplateId(template.id);
                           }}
                         >
-                          {template.label}
+                          {t(`mlra.blueprintTemplate.${template.id}.label`, template.label)}
                           {active ? <Icon name="check" size={12} /> : null}
                         </button>
                       );
@@ -796,10 +800,10 @@ export function LauncherHome({ launcher }: LauncherHomeProps) {
                 </div>
 
                 <div className="mlra-task-desc-row">
-                  <label className="mlra-task-label">任务描述</label>
+                  <label className="mlra-task-label">{t("mlra.workflow.taskDescription", "Task description")}</label>
                   <textarea
                     className="mlra-task-desc-input"
-                    placeholder="描述这次工作要解决什么。"
+                    placeholder={t("mlra.workflow.taskPlaceholder", "Describe what this work should solve.")}
                     value={hasLauncher ? launcher.blueprint.initialTask : draftUserTask}
                     onChange={(event) => handleUserTaskChange(event.target.value)}
                     rows={4}
@@ -807,7 +811,7 @@ export function LauncherHome({ launcher }: LauncherHomeProps) {
                 </div>
 
                 <div className="mlra-task-type-row">
-                  <label className="mlra-task-label">接管策略</label>
+                  <label className="mlra-task-label">{t("mlra.workflow.orchestration", "Orchestration policy")}</label>
                   <div className="mlra-task-type-chips">
                     {ORCHESTRATION_PRESETS.map((preset) => {
                       const active = currentOrchestrationPolicy.preset === preset.id;
@@ -815,14 +819,14 @@ export function LauncherHome({ launcher }: LauncherHomeProps) {
                         <button
                           key={preset.id}
                           className={`mlra-task-type-chip mlra-skill-tag${active ? " active" : ""}`}
-                          title={preset.description}
+                          title={t(`mlra.orchestration.${preset.id}.description`, preset.description)}
                           onClick={() => {
                             const nextPolicy = { ...preset.policy };
                             updateOrchestrationPolicy(nextPolicy);
                           }}
                         >
                           <Icon name={preset.icon} size={12} />
-                          {preset.label}
+                          {t(`mlra.orchestration.${preset.id}.label`, preset.label)}
                           {active ? <Icon name="check" size={12} /> : null}
                         </button>
                       );
@@ -833,8 +837,8 @@ export function LauncherHome({ launcher }: LauncherHomeProps) {
                       label="Expert submit"
                       value={currentOrchestrationPolicy.expertSubmit}
                       options={[
-                        { value: "auto", label: "自动", icon: "play", description: "Expert 提交后自动进入下一环节。" },
-                        { value: "user-review", label: "人工", icon: "users", description: "Expert 提交后等待人工确认、编辑或退回。" },
+                        { value: "auto", label: t("mlra.policy.auto", "Auto"), icon: "play", description: t("mlra.policy.expertAutoDesc", "Expert automatically advances after submitting.") },
+                        { value: "user-review", label: t("mlra.policy.manual", "Manual"), icon: "users", description: t("mlra.policy.expertManualDesc", "Expert waits for manual confirmation, edits, or rollback after submitting.") },
                       ]}
                       onChange={(value) => updateSubmitPolicy("expertSubmit", value)}
                     />
@@ -842,8 +846,8 @@ export function LauncherHome({ launcher }: LauncherHomeProps) {
                       label="Inspector submit"
                       value={currentOrchestrationPolicy.inspectorSubmit}
                       options={[
-                        { value: "auto", label: "自动", icon: "play", description: "Inspector 提交后自动进入下一环节。" },
-                        { value: "user-review", label: "人工", icon: "users", description: "Inspector 提交后等待人工确认、编辑或退回。" },
+                        { value: "auto", label: t("mlra.policy.auto", "Auto"), icon: "play", description: t("mlra.policy.inspectorAutoDesc", "Inspector automatically advances after submitting.") },
+                        { value: "user-review", label: t("mlra.policy.manual", "Manual"), icon: "users", description: t("mlra.policy.inspectorManualDesc", "Inspector waits for manual confirmation, edits, or rollback after submitting.") },
                       ]}
                       onChange={(value) => updateSubmitPolicy("inspectorSubmit", value)}
                     />
@@ -851,9 +855,9 @@ export function LauncherHome({ launcher }: LauncherHomeProps) {
                       label="CEO gate"
                       value={getCeoGateMode(currentOrchestrationPolicy)}
                       options={[
-                        { value: "auto", label: "自动", icon: "play", description: "CEO 自动审核并自动释放 verdict。" },
-                        { value: "user", label: "人工", icon: "users", description: "阶段门控由人工直接裁定，不等待 CEO 自动 verdict。" },
-                        { value: "review", label: "半自动", icon: "eye", description: "CEO 先审核，verdict 再由人工确认后释放。" },
+                        { value: "auto", label: t("mlra.policy.auto", "Auto"), icon: "play", description: t("mlra.policy.ceoAutoDesc", "CEO reviews and releases the verdict automatically.") },
+                        { value: "user", label: t("mlra.policy.manual", "Manual"), icon: "users", description: t("mlra.policy.ceoManualDesc", "The stage gate is decided directly by the user without waiting for an automatic CEO verdict.") },
+                        { value: "review", label: t("mlra.policy.semiAuto", "Semi-auto"), icon: "eye", description: t("mlra.policy.ceoReviewDesc", "CEO reviews first, then the verdict waits for user confirmation.") },
                       ]}
                       onChange={updateCeoPolicy}
                     />
@@ -875,7 +879,7 @@ export function LauncherHome({ launcher }: LauncherHomeProps) {
                         <input
                           type="text"
                           autoFocus
-                          placeholder="例如：登录系统重构蓝图"
+                          placeholder={t("mlra.workflow.namePlaceholder", "Example: Login system refactor blueprint")}
                           value={hasLauncher ? launcher.name : draftName}
                           onChange={(event) => {
                             const value = event.target.value;
@@ -914,12 +918,12 @@ export function LauncherHome({ launcher }: LauncherHomeProps) {
                       aria-describedby="mlra-start-readiness-popover"
                     >
                       <Icon name={startReadiness.ready ? "play" : "info"} size={13} />
-                      <span>开始</span>
+                      <span>{t("quickActions.start", "Start")}</span>
                       <span className="mlra-start-count">{passedStartConditionCount}/{startConditions.length}</span>
                     </button>
                     <div className="mlra-start-readiness-popover" id="mlra-start-readiness-popover" role="tooltip">
                       <div className="mlra-start-readiness-title">
-                        {startReadiness.ready ? "启动条件已满足" : "启动前还需处理"}
+                        {startReadiness.ready ? t("mlra.start.ready", "Ready to start") : t("mlra.start.blocked", "Resolve these before starting")}
                       </div>
                       <ul className="mlra-start-readiness-list">
                         {startConditions.map((condition) => (
@@ -936,7 +940,7 @@ export function LauncherHome({ launcher }: LauncherHomeProps) {
 
               <div className="mlra-flow-line-shell">
                 {orderedStages.length === 0 ? (
-                  <div className="mlra-flow-empty">还没有阶段。先在顶部加一个节点。</div>
+                  <div className="mlra-flow-empty">{t("mlra.stage.empty", "No stages yet. Add a node first.")}</div>
                 ) : (
                   <div className="mlra-flow-line" ref={flowListRef} onPointerMove={handleStagePointerMove} onPointerUp={handleStagePointerUp}>
                     {flowVisualItems.map((item, index) => {
@@ -988,14 +992,14 @@ export function LauncherHome({ launcher }: LauncherHomeProps) {
                               onPointerUp={handleStagePointerUp}
                             />
                             {stageSelected ? (
-                              <div className="mlra-stage-card-actions" aria-label="阶段操作">
+                              <div className="mlra-stage-card-actions" aria-label={t("mlra.stage.actions", "Stage actions")}>
                                 <button
                                   type="button"
                                   className="mlra-flow-fab"
                                   onClick={() => duplicateStage(stage)}
                                   disabled={stageClosing}
-                                  title={stageClosing ? "结束阶段不能复制" : "复制阶段"}
-                                  aria-label="复制阶段"
+                                  title={stageClosing ? t("mlra.stage.cannotCopyClosing", "The closing stage cannot be copied") : t("mlra.stage.copy", "Copy stage")}
+                                  aria-label={t("mlra.stage.copy", "Copy stage")}
                                 >
                                   <Icon name="copy" size={13} />
                                 </button>
@@ -1004,8 +1008,8 @@ export function LauncherHome({ launcher }: LauncherHomeProps) {
                                   className="mlra-flow-fab danger"
                                   onClick={() => removeStage(stage)}
                                   disabled={stageClosing}
-                                  title={stageClosing ? "结束阶段不能删除" : "删除阶段"}
-                                  aria-label="删除阶段"
+                                  title={stageClosing ? t("mlra.stage.cannotDeleteClosing", "The closing stage cannot be deleted") : t("mlra.stage.delete", "Delete stage")}
+                                  aria-label={t("mlra.stage.delete", "Delete stage")}
                                 >
                                   <Icon name="trash" size={13} />
                                 </button>
@@ -1020,7 +1024,7 @@ export function LauncherHome({ launcher }: LauncherHomeProps) {
                                   <button
                                     type="button"
                                     className={`mlra-stage-gate-toggle${stage.exitGateEnabled ? " active" : ""}`}
-                                    title={stage.exitGateEnabled ? "点击关闭出口门控" : "点击启用 CEO 出口门控"}
+                                    title={stage.exitGateEnabled ? t("mlra.gate.disableTitle", "Disable exit gate") : t("mlra.gate.enableTitle", "Enable CEO exit gate")}
                                     onPointerDown={(event) => event.stopPropagation()}
                                     onClick={(event) => {
                                       event.stopPropagation();
@@ -1038,7 +1042,7 @@ export function LauncherHome({ launcher }: LauncherHomeProps) {
                                     }}
                                   >
                                     <Icon name={stage.exitGateEnabled ? "lock" : "arrow-down"} size={12} />
-                                    <span>{stage.exitGateEnabled ? "门控" : "直进"}</span>
+                                    <span>{stage.exitGateEnabled ? t("mlra.gate.gated", "Gated") : t("mlra.gate.direct", "Direct")}</span>
                                   </button>
                                   <button
                                     type="button"
@@ -1047,8 +1051,8 @@ export function LauncherHome({ launcher }: LauncherHomeProps) {
                                       event.stopPropagation();
                                       addStageAfter(stage);
                                     }}
-                                    title="在此处新增阶段"
-                                    aria-label="在此处新增阶段"
+                                    title={t("mlra.stage.addHere", "Add stage here")}
+                                    aria-label={t("mlra.stage.addHere", "Add stage here")}
                                   >
                                     <Icon name="plus" size={12} />
                                   </button>
@@ -1075,60 +1079,60 @@ export function LauncherHome({ launcher }: LauncherHomeProps) {
                   <div className="mlra-selected-stage-order">{selectedStage.order + 1}</div>
                   <CustomSelect
                     value={selectedStage.icon as string}
-                    options={STAGE_ICON_OPTIONS.map((opt) => ({ value: opt.value as string, label: opt.label, icon: opt.value as string }))}
+                    options={STAGE_ICON_OPTIONS.map((opt) => ({ value: opt.value as string, label: t(`mlra.stageIcon.${opt.value}`, opt.label), icon: opt.value as string }))}
                     onChange={(value) => updateSelectedStage({ icon: value })}
                     layout="grid"
                     compact
                   />
                   <input
                     className="mlra-field-input mlra-inspector-stage-name-input"
-                    aria-label="阶段名称"
+                    aria-label={t("mlra.stage.name", "Stage name")}
                     value={selectedStage.name}
                     onChange={(event) => updateSelectedStage({ name: event.target.value })}
                   />
                   {isClosingStage(selectedStage) ? (
-                    <span className="mlra-stage-meta-pill mlra-inspector-gate-pill"><Icon name="flag" size={12} /> 结束阶段</span>
+                    <span className="mlra-stage-meta-pill mlra-inspector-gate-pill"><Icon name="flag" size={12} /> {t("mlra.stage.closing", "Closing stage")}</span>
                   ) : (
                     <button
                       type="button"
                       className={`mlra-stage-meta-pill mlra-inspector-gate-pill${selectedStage.exitGateEnabled ? " active" : ""}`}
                       onClick={() => updateSelectedStage({ exitGateEnabled: !selectedStage.exitGateEnabled })}
-                      title={selectedStage.exitGateEnabled ? "点击关闭出口门控" : "点击启用 CEO 出口门控"}
+                      title={selectedStage.exitGateEnabled ? t("mlra.gate.disableTitle", "Disable exit gate") : t("mlra.gate.enableTitle", "Enable CEO exit gate")}
                     >
                       <Icon name={selectedStage.exitGateEnabled ? "lock" : "arrow-right"} size={12} />
-                      {selectedStage.exitGateEnabled ? "门控" : "直进"}
+                      {selectedStage.exitGateEnabled ? t("mlra.gate.gated", "Gated") : t("mlra.gate.direct", "Direct")}
                     </button>
                   )}
                 </div>
                 <div className="mlra-inspector-tabs">
-                  <InspectorTabButton active={inspectorTab === "basics"} icon="file-text" label="基本信息" onClick={() => setInspectorTab("basics")} />
-                  <InspectorTabButton active={inspectorTab === "prompts"} icon="message-dot" label="提示词" onClick={() => setInspectorTab("prompts")} />
-                  <InspectorTabButton active={inspectorTab === "rules"} icon="check" label="规则" onClick={() => setInspectorTab("rules")} />
-                  <InspectorTabButton active={inspectorTab === "skills"} icon="robot" label="技能" onClick={() => setInspectorTab("skills")} />
+                  <InspectorTabButton active={inspectorTab === "basics"} icon="file-text" label={t("mlra.inspector.basics", "Basics")} onClick={() => setInspectorTab("basics")} />
+                  <InspectorTabButton active={inspectorTab === "prompts"} icon="message-dot" label={t("mlra.inspector.prompts", "Prompts")} onClick={() => setInspectorTab("prompts")} />
+                  <InspectorTabButton active={inspectorTab === "rules"} icon="check" label={t("mlra.inspector.rules", "Rules")} onClick={() => setInspectorTab("rules")} />
+                  <InspectorTabButton active={inspectorTab === "skills"} icon="robot" label={t("mlra.inspector.skills", "Skills")} onClick={() => setInspectorTab("skills")} />
                 </div>
               </>
             ) : null}
             <div className="mlra-stage-editor-scroll">
               {!selectedStage ? (
                 <div className="mlra-config-empty mlra-empty-state-large">
-                  <span>从左侧选择一个阶段后，在这里编辑它。</span>
+                  <span>{t("mlra.inspector.empty", "Select a stage on the left to edit it here.")}</span>
                 </div>
               ) : (
                 <>
                   {inspectorTab === "basics" ? (
                     <>
-                      <DetailSection title="身份与模板">
+                      <DetailSection title={t("mlra.inspector.identityTemplate", "Identity and template")}>
                         {!isClosingStage(selectedStage) && (
                           <div className="mlra-task-desc-row">
-                            <label className="mlra-task-label">阶段模板</label>
+                            <label className="mlra-task-label">{t("mlra.stage.template", "Stage template")}</label>
                             <CustomSelect
                               value={(selectedStage.templateId || "") as string}
                               options={[
-                                { value: "", label: "自定义", description: "不使用预置模板" },
+                                { value: "", label: t("mlra.stageTemplate.custom", "Custom"), description: t("mlra.stageTemplate.customDesc", "Do not use a preset template") },
                                 ...STAGE_TEMPLATE_OPTIONS.filter((opt) => !opt.isClosing).map((opt) => ({
                                   value: opt.id as string,
-                                  label: opt.label,
-                                  description: opt.description,
+                                  label: t(`mlra.stageTemplate.${opt.id}.label`, opt.label),
+                                  description: t(`mlra.stageTemplate.${opt.id}.description`, opt.description),
                                 })),
                               ]}
                               onChange={(value) => updateSelectedStage({ templateId: (value || null) as StageTemplateId | null })}
@@ -1139,7 +1143,7 @@ export function LauncherHome({ launcher }: LauncherHomeProps) {
 
                       <DetailSection>
                         <div className="mlra-task-desc-row">
-                          <label className="mlra-task-label">阶段描述</label>
+                          <label className="mlra-task-label">{t("mlra.stage.description", "Stage description")}</label>
                           <textarea
                             className="mlra-task-desc-input"
                             rows={4}
@@ -1152,10 +1156,10 @@ export function LauncherHome({ launcher }: LauncherHomeProps) {
                   ) : null}
 
                   {inspectorTab === "prompts" ? (
-                    <DetailSection title="角色提示词">
+                    <DetailSection title={t("mlra.inspector.rolePrompts", "Role prompts")}>
                       {isClosingStage(selectedStage) ? (
                         <div className="mlra-task-desc-row">
-                          <label className="mlra-task-label">CEO 提示词</label>
+                          <label className="mlra-task-label">{t("mlra.prompts.ceo", "CEO prompt")}</label>
                           <textarea
                             className="mlra-task-desc-input"
                             rows={10}
@@ -1166,7 +1170,7 @@ export function LauncherHome({ launcher }: LauncherHomeProps) {
                       ) : (
                         <>
                           <div className="mlra-task-desc-row">
-                            <label className="mlra-task-label">Expert 提示词</label>
+                              <label className="mlra-task-label">{t("mlra.prompts.expert", "Expert prompt")}</label>
                             <textarea
                               className="mlra-task-desc-input"
                               rows={8}
@@ -1175,7 +1179,7 @@ export function LauncherHome({ launcher }: LauncherHomeProps) {
                             />
                           </div>
                           <div className="mlra-task-desc-row">
-                            <label className="mlra-task-label">Inspector 提示词</label>
+                              <label className="mlra-task-label">{t("mlra.prompts.inspector", "Inspector prompt")}</label>
                             <textarea
                               className="mlra-task-desc-input"
                               rows={8}
@@ -1189,18 +1193,18 @@ export function LauncherHome({ launcher }: LauncherHomeProps) {
                   ) : null}
 
                   {inspectorTab === "rules" ? (
-                    <DetailSection title="出口门控">
+                    <DetailSection title={t("mlra.gate.title", "Exit gate") }>
                       {isClosingStage(selectedStage) ? (
                         <div className="mlra-inspector-check success">
                           <Icon name="info" size={14} />
-                          结束阶段不运行 CEO 出口 gate，由 CEO 汇总后等待用户响应。
+                          {t("mlra.gate.closingInfo", "The closing stage does not run a CEO exit gate. CEO summarizes and then waits for the user response.")}
                         </div>
                       ) : (
                         <>
                           <div className="mlra-gate-switch-row">
                             <div className="mlra-gate-switch-copy">
-                              <span>CEO 防御性锁门控</span>
-                              <small>{selectedStage.exitGateEnabled ? "启用后阶段出口需要 CEO 审批" : "关闭后出口认证满足即直进下一阶段"}</small>
+                              <span>{t("mlra.gate.defensiveLock", "CEO defensive gate")}</span>
+                              <small>{selectedStage.exitGateEnabled ? t("mlra.gate.enabledDesc", "When enabled, stage exit requires CEO approval") : t("mlra.gate.disabledDesc", "When disabled, passing exit certification advances directly")}</small>
                             </div>
                             <button
                               type="button"
@@ -1213,13 +1217,13 @@ export function LauncherHome({ launcher }: LauncherHomeProps) {
                             </button>
                           </div>
                           <div className="mlra-task-desc-row">
-                            <label className="mlra-task-label">门控规则提示词</label>
+                            <label className="mlra-task-label">{t("mlra.gate.prompt", "Gate rule prompt")}</label>
                             <textarea
                               className="mlra-task-desc-input"
                               rows={6}
                               value={selectedStage.exitGatePrompt ?? ""}
                               onChange={(event) => updateSelectedStage({ exitGatePrompt: event.target.value })}
-                              placeholder="补充本阶段的 CEO 出口门控规则、通过标准或必须检查的风险点"
+                              placeholder={t("mlra.gate.promptPlaceholder", "Add CEO exit gate rules, pass criteria, or risks that must be checked for this stage")}
                             />
                           </div>
                         </>
@@ -1228,11 +1232,11 @@ export function LauncherHome({ launcher }: LauncherHomeProps) {
                   ) : null}
 
                   {inspectorTab === "skills" ? (
-                    <DetailSection title="技能包">
+                    <DetailSection title={t("mlra.inspector.skillPackages", "Skill packages")}>
                       <div className="mlra-skill-selected-row">
                         <div className="mlra-skill-selected-meta">
-                          <span className="mlra-skill-selected-kicker">已选技能</span>
-                          <strong>{selectedStage.skillRefs.length ? `${selectedStage.skillRefs.length} 个技能` : "未选择技能"}</strong>
+                          <span className="mlra-skill-selected-kicker">{t("mlra.skills.selected", "Selected skills")}</span>
+                          <strong>{selectedStage.skillRefs.length ? t("mlra.skills.count", "{{count}} skills", { count: selectedStage.skillRefs.length }) : t("mlra.skills.none", "No skills selected")}</strong>
                         </div>
                         <div className="mlra-skill-selected-list">
                           {selectedStage.skillRefs.length ? (
@@ -1242,11 +1246,11 @@ export function LauncherHome({ launcher }: LauncherHomeProps) {
                               </span>
                             ))
                           ) : (
-                            <span className="mlra-skill-empty-text">点击下方标签添加技能</span>
+                            <span className="mlra-skill-empty-text">{t("mlra.skills.emptyHint", "Click tags below to add skills")}</span>
                           )}
                         </div>
                       </div>
-                      <div className="mlra-skill-option-row" aria-label="技能选项">
+                      <div className="mlra-skill-option-row" aria-label={t("mlra.skills.options", "Skill options")}>
                         {skillOptions.map((skill) => (
                           <SkillToggle
                             key={skill}

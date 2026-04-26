@@ -12,6 +12,7 @@ import { MLRACallerTabs } from "./MLRACallerTabs";
 import { Icon, MlcLogoIcon } from "./Icons";
 import { toggleTheme } from "../theme";
 import { useIsLightTheme } from "./useIsLightTheme";
+import i18n from "../i18n";
 import React from "react";
 import {
   ORCHESTRATION_PRESETS,
@@ -69,12 +70,13 @@ function DockDragPreview() {
 }
 
 function StageFlowPopover({ stages, currentStageId }: { stages: StageBlueprint[]; currentStageId: string | null }) {
+  const { t } = useTranslation();
   const currentIndex = stages.findIndex((stage) => stage.id === currentStageId);
 
   if (stages.length === 0) {
     return (
       <div className="mlra-stage-flow-popover">
-        <div className="mlra-stage-flow-empty">暂无阶段</div>
+        <div className="mlra-stage-flow-empty">{t("mlra.stage.noStages", "No stages")}</div>
       </div>
     );
   }
@@ -92,7 +94,7 @@ function StageFlowPopover({ stages, currentStageId }: { stages: StageBlueprint[]
                   <Icon name={stage.icon || "flag"} size={12} />
                 </span>
                 <span className="mlra-stage-flow-copy">
-                  <span className="mlra-stage-flow-name">{stage.name || `阶段 ${index + 1}`}</span>
+                  <span className="mlra-stage-flow-name">{stage.name || t("mlra.stage.fallbackName", "Stage {{index}}", { index: index + 1 })}</span>
                   <span className="mlra-stage-flow-meta">
                     {index + 1}/{stages.length}{stage.exitGateEnabled ? " · Gate" : ""}
                   </span>
@@ -109,6 +111,7 @@ function StageFlowPopover({ stages, currentStageId }: { stages: StageBlueprint[]
 
 /** Stats popover shown on timer hover */
 function TimerStatsPopover({ rounds, stages, onRequestStop }: { rounds: RoundRecord[]; stages: StageBlueprint[]; onRequestStop: () => void }) {
+  const { t } = useTranslation();
   const [stageFilter, setStageFilter] = useState<string>("all");
   const roundDuration = (round: RoundRecord) => {
     const end = round.endedAt ? new Date(round.endedAt).getTime() : Date.now();
@@ -119,7 +122,7 @@ function TimerStatsPopover({ rounds, stages, onRequestStop }: { rounds: RoundRec
     return {
       id: stage.id,
       icon: stage.icon || "flag",
-      name: stage.name || `阶段 ${index + 1}`,
+      name: stage.name || t("mlra.stage.fallbackName", "Stage {{index}}", { index: index + 1 }),
       index,
       count: stageRounds.length,
       totalMs: stageRounds.reduce((sum, round) => sum + roundDuration(round), 0),
@@ -130,7 +133,7 @@ function TimerStatsPopover({ rounds, stages, onRequestStop }: { rounds: RoundRec
     stageStats.push({
       id: "__unassigned",
       icon: "info",
-      name: "未归属",
+      name: t("mlra.timer.unassigned", "Unassigned"),
       index: stageStats.length,
       count: unassignedRounds.length,
       totalMs: unassignedRounds.reduce((sum, round) => sum + roundDuration(round), 0),
@@ -281,7 +284,7 @@ function TimerStatsPopover({ rounds, stages, onRequestStop }: { rounds: RoundRec
       {stageStats.length > 0 ? (
         <div className="timer-stats-stage-strip">
           <button className={`timer-stats-stage-chip${stageFilter === "all" ? " active" : ""}`} onClick={() => setStageFilter("all")}>
-            全部
+            {t("previewBrowser.filterAll", "All")}
             <span>{formatDuration(stageStats.reduce((sum, stage) => sum + stage.totalMs, 0))}</span>
           </button>
           {stageStats.map((stage) => (
@@ -301,7 +304,7 @@ function TimerStatsPopover({ rounds, stages, onRequestStop }: { rounds: RoundRec
       {/* Dual-track Gantt timeline */}
       <div className="timer-stats-dual" ref={timelineRef} onWheel={onWheel}>
         {visibleRounds.length === 0 ? (
-          <div className="timer-stats-empty">暂无回合记录</div>
+          <div className="timer-stats-empty">{t("mlra.timer.noRounds", "No round records")}</div>
         ) : (
           <div style={{ width: totalW, flexShrink: 0 }}>
             <div className="timer-stats-track timer-stats-track-main" style={{ height: MAX_H }}>
@@ -357,21 +360,21 @@ function TimerStatsPopover({ rounds, stages, onRequestStop }: { rounds: RoundRec
               <div key={role} className="timer-stats-row">
                 <span className="timer-stats-dot" style={{ background: (ROLE_COLORS as Record<string, string>)[role] || ROLE_COLORS.worker }} />
                 <span className="timer-stats-role">{ROLE_LABEL_MAP[role] || role}</span>
-                <span className="timer-stats-count">{stat.count} 轮</span>
+                <span className="timer-stats-count">{t("mlra.timer.roundCount", "{{count}} rounds", { count: stat.count })}</span>
                 <span className="timer-stats-pct">{pct}%</span>
                 <span className="timer-stats-time">{formatDuration(stat.totalMs)}</span>
               </div>
             );
           })}
           {Object.keys(roleStats).length === 0 && (
-            <div className="timer-stats-empty">暂无统计数据</div>
+            <div className="timer-stats-empty">{t("mlra.timer.noStats", "No statistics")}</div>
           )}
         </div>
       </div>
       <div className="timer-stats-danger-zone">
         <button type="button" className="timer-stop-entry" onClick={onRequestStop}>
           <Icon name="close" size={12} />
-          停止当前 MLRA
+          {t("mlra.timer.stop", "Stop current MLRA")}
         </button>
       </div>
     </div>
@@ -398,7 +401,7 @@ class MLRAErrorBoundary extends React.Component<
           <div style={{ color: "#999", fontSize: 11, maxWidth: 500, wordBreak: "break-all" }}>{this.state.error.message}</div>
           <div style={{ color: "#666", fontSize: 10, maxWidth: 500, wordBreak: "break-all" }}>{this.state.error.stack?.split("\n").slice(0, 5).join("\n")}</div>
           <button onClick={() => this.setState({ error: null })} style={{ marginTop: 12, padding: "4px 12px", background: "#333", color: "#ddd", border: "1px solid #555", borderRadius: 4, cursor: "pointer" }}>
-            重试
+            {i18n.t("common.retry", "Retry")}
           </button>
         </div>
       );
@@ -413,10 +416,19 @@ const IS_MACOS = navigator.userAgent.includes('Macintosh');
 
 /** Running timer — counts up from startedAt, subtracting paused time */
 function RunningTimer() {
+  const { t } = useTranslation();
   const launcher = useMLRAStore((s) => s.getActiveLauncher());
   const daemonCancelOrchestration = useMLRAStore((s) => s.daemonCancelOrchestration);
+  const pushNativeWebViewBlocker = useFeedbackStore((s) => s.pushNativeWebViewBlocker);
+  const popNativeWebViewBlocker = useFeedbackStore((s) => s.popNativeWebViewBlocker);
   const [stopConfirmOpen, setStopConfirmOpen] = useState(false);
   const [elapsed, setElapsed] = useState(0);
+
+  useEffect(() => {
+    if (!stopConfirmOpen) return;
+    pushNativeWebViewBlocker("mlra-stop-confirm");
+    return () => popNativeWebViewBlocker("mlra-stop-confirm");
+  }, [popNativeWebViewBlocker, pushNativeWebViewBlocker, stopConfirmOpen]);
 
   useEffect(() => {
     if (!launcher?.startedAt) { setElapsed(0); return; }
@@ -452,15 +464,15 @@ function RunningTimer() {
         <div className="timer-stop-overlay" onClick={() => setStopConfirmOpen(false)}>
           <div className="timer-stop-dialog" onClick={(event) => event.stopPropagation()}>
             <div className="timer-stop-dialog-header">
-              <span>确认停止当前 MLRA</span>
+              <span>{t("mlra.timer.stopConfirmTitle", "Stop current MLRA?")}</span>
               <button type="button" className="settings-close-btn" onClick={() => setStopConfirmOpen(false)}>
                 <Icon name="win-close" size={10} />
               </button>
             </div>
-            <div className="timer-stop-dialog-body">当前编排会被取消，阻塞中的角色调用会被释放。</div>
+            <div className="timer-stop-dialog-body">{t("mlra.timer.stopConfirmBody", "The current orchestration will be cancelled and blocked role calls will be released.")}</div>
             <div className="timer-stop-dialog-actions">
               <button type="button" className="timer-stop-secondary" onClick={() => setStopConfirmOpen(false)}>
-                取消
+                {t("sidebar.cancel", "Cancel")}
               </button>
               <button
                 type="button"
@@ -471,7 +483,7 @@ function RunningTimer() {
                 }}
               >
                 <Icon name="close" size={12} />
-                确认停止
+                {t("mlra.timer.stopConfirmAction", "Stop")}
               </button>
             </div>
           </div>
@@ -483,6 +495,7 @@ function RunningTimer() {
 
 /** MLRA title bar Row 2 */
 function MLRARow2() {
+  const { t } = useTranslation();
   const launcher = useMLRAStore((s) => s.getActiveLauncher());
   const isActive = launcher?.status === "running" || launcher?.status === "paused" || launcher?.status === "awaiting-user";
   const runtime = launcher?.blueprintRuntime;
@@ -513,10 +526,10 @@ function MLRARow2() {
                 useMLRAStore.getState().setOrchestrationPolicy(launcher.id, nextPolicy);
                 useMLRAStore.getState().daemonSetOrchestrationPolicy(nextPolicy);
               }}
-              title={description}
+              title={t(`mlra.orchestration.${id}.description`, description)}
             >
               <Icon name={icon} size={11} />
-              {label}
+              {t(`mlra.orchestration.${id}.label`, label)}
             </button>
           ))}
         </div>
@@ -532,7 +545,7 @@ function MLRARow2() {
             background: "rgba(245, 158, 11, 0.1)",
           }}
         >
-          阻塞: {launcher.humanGate.title}
+          {t("mlra.humanGate.blocked", "Blocked: {{title}}", { title: launcher.humanGate.title })}
         </span>
       )}
       {isActive && launcher?.stageExitPending?.active && !launcher?.humanGate?.active && (
@@ -546,7 +559,7 @@ function MLRARow2() {
             background: "rgba(129, 140, 248, 0.1)",
           }}
         >
-          出口认证等待中
+          {t("mlra.humanGate.exitPending", "Exit certification pending")}
         </span>
       )}
       <div style={{ flex: 1 }} />
@@ -641,7 +654,15 @@ export function FeedbackApp() {
   }, [dockColumns, setDockColumnCollapsed]);
 
   const [settingsOpen, setSettingsOpen] = useState(false);
+  const pushNativeWebViewBlocker = useFeedbackStore((s) => s.pushNativeWebViewBlocker);
+  const popNativeWebViewBlocker = useFeedbackStore((s) => s.popNativeWebViewBlocker);
   const isLightTheme = useIsLightTheme();
+
+  useEffect(() => {
+    if (!settingsOpen) return;
+    pushNativeWebViewBlocker("settings-dialog");
+    return () => popNativeWebViewBlocker("settings-dialog");
+  }, [popNativeWebViewBlocker, pushNativeWebViewBlocker, settingsOpen]);
 
   return (
     <div className="flex flex-col h-screen select-none" data-app-view={appView} style={{ background: "var(--color-bg-base)" }}>
@@ -673,7 +694,7 @@ export function FeedbackApp() {
             <button
               className={`app-view-toggle-btn${appView === "MLFB" ? " app-view-toggle-active" : ""}`}
               onClick={() => setAppView("MLFB")}
-              title="My Last Feedback"
+              title={t("app.title", "My Last Feedback")}
             >
               <Icon name="message" size={12} />
               MLFB
@@ -681,7 +702,7 @@ export function FeedbackApp() {
             <button
               className={`app-view-toggle-btn${appView === "MLRA" ? " app-view-toggle-active" : ""}`}
               onClick={() => setAppView("MLRA")}
-              title="My Long Running Agents"
+              title={t("mlra.title", "My Long Running Agents")}
             >
               <Icon name="clock" size={12} />
               MLRA
@@ -693,7 +714,7 @@ export function FeedbackApp() {
                 <button
                   onClick={() => toggleDockColumn("leftSidebar")}
                   className={`titlebar-btn titlebar-side-toggle titlebar-side-toggle-left${!leftSidebarColumn.collapsed ? " titlebar-btn-active" : ""}`}
-                  title={!leftSidebarColumn.collapsed ? t("mlc.close", "Close My Last Chat") : t("mlc.open", "Open My Last Chat")}
+                  title={!leftSidebarColumn.collapsed ? t("dock.closeLeftSidebar", "Close left sidebar") : t("dock.openLeftSidebar", "Open left sidebar")}
                 >
                   <Icon name="sidebar" size={13} />
                 </button>
@@ -744,7 +765,7 @@ export function FeedbackApp() {
             <button
               onClick={() => toggleDockColumn("rightSidebar")}
               className={`titlebar-btn titlebar-side-toggle titlebar-side-toggle-right${rightSidebarColumn.tabIds.length > 0 && !rightSidebarColumn.collapsed ? " titlebar-btn-active" : ""}`}
-              title={rightSidebarColumn.tabIds.length > 0 && !rightSidebarColumn.collapsed ? t("mlc.close", "Close My Last Chat") : t("mlc.open", "Open My Last Chat")}
+              title={rightSidebarColumn.tabIds.length > 0 && !rightSidebarColumn.collapsed ? t("dock.closeRightSidebar", "Close right sidebar") : t("dock.openRightSidebar", "Open right sidebar")}
             >
               <Icon name="sidebar" size={13} />
             </button>
@@ -762,19 +783,19 @@ export function FeedbackApp() {
           <button
             onClick={toggleAlwaysOnTop}
             className={`titlebar-btn${alwaysOnTop ? " titlebar-btn-active" : ""}`}
-            title={alwaysOnTop ? "Unpin" : "Pin on top"}
+            title={alwaysOnTop ? t("titlebar.unpin", "Unpin") : t("titlebar.pinOnTop", "Pin on top")}
           >
             <Icon name="pin" size={12} fill={alwaysOnTop ? "currentColor" : "none"} />
           </button>
           {!IS_MACOS && (
             <>
-          <button onClick={() => getCurrentWindow().minimize()} className="titlebar-btn" title="Minimize">
+          <button onClick={() => getCurrentWindow().minimize()} className="titlebar-btn" title={t("titlebar.minimize", "Minimize")}>
             <Icon name="win-minimize" size={10} />
           </button>
-          <button onClick={() => getCurrentWindow().toggleMaximize()} className="titlebar-btn" title="Maximize">
+          <button onClick={() => getCurrentWindow().toggleMaximize()} className="titlebar-btn" title={t("titlebar.maximize", "Maximize")}>
             <Icon name="win-maximize" size={10} />
           </button>
-          <button onClick={() => getCurrentWindow().close()} className="titlebar-btn titlebar-close" title="Close">
+          <button onClick={() => getCurrentWindow().close()} className="titlebar-btn titlebar-close" title={t("titlebar.close", "Close")}>
             <Icon name="win-close" size={10} />
           </button>
             </>
@@ -842,8 +863,16 @@ function LayoutModeButton({
   onSelect: (mode: LayoutMode) => void;
 }) {
   const { t } = useTranslation();
+  const pushNativeWebViewBlocker = useFeedbackStore((s) => s.pushNativeWebViewBlocker);
+  const popNativeWebViewBlocker = useFeedbackStore((s) => s.popNativeWebViewBlocker);
   const [showDropdown, setShowDropdown] = useState(false);
   const hideTimer = useRef<ReturnType<typeof setTimeout>>(undefined);
+
+  useEffect(() => {
+    if (!showDropdown) return;
+    pushNativeWebViewBlocker("layout-dropdown");
+    return () => popNativeWebViewBlocker("layout-dropdown");
+  }, [popNativeWebViewBlocker, pushNativeWebViewBlocker, showDropdown]);
 
   const handleMouseEnter = () => {
     clearTimeout(hideTimer.current);

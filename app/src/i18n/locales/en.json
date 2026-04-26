@@ -2,6 +2,11 @@
   "app": {
     "title": "My Last Feedback"
   },
+  "common": {
+    "confirm": "Confirm",
+    "copy": "Copy",
+    "retry": "Retry"
+  },
   "summary": {
     "title": "AI Summary",
     "empty": "Waiting for AI task summary...",
@@ -18,7 +23,8 @@
   },
   "testLog": {
     "placeholder": "Enter test logs here, will be appended to feedback",
-    "attach": "Attach Log"
+    "attach": "Attach Log",
+    "copy": "Copy log"
   },
   "gitAction": {
     "button": "Git Action",
@@ -79,6 +85,7 @@
   "images": {
     "attach": "Attach Images",
     "attachments": "Attachments",
+    "copy": "Copy image",
     "clearAll": "Clear All",
     "limitCount": "You can attach up to {{max}} images.",
     "limitSize": "Each image must be under {{max}}MB. Current: {{size}}MB",
@@ -164,7 +171,12 @@
     "layoutMode": "Layout: {{mode}}",
     "layoutAuto": "Auto",
     "toggleLightTheme": "Switch to light theme",
-    "toggleDarkTheme": "Switch to dark theme"
+    "toggleDarkTheme": "Switch to dark theme",
+    "pinOnTop": "Pin on top",
+    "unpin": "Unpin",
+    "minimize": "Minimize",
+    "maximize": "Maximize",
+    "close": "Close"
   },
   "tooltip": {
     "alias": "Agent ID",
@@ -219,6 +231,208 @@
     "hours": "h",
     "callerCount": "{{count}} callers"
   },
+  "dock": {
+    "closeLeftSidebar": "Close left sidebar",
+    "openLeftSidebar": "Open left sidebar",
+    "moveToLeftSidebar": "Move to left sidebar",
+    "moveToLeftPage": "Move to left page",
+    "moveToRightSidebar": "Move to right sidebar",
+    "closeLeftPage": "Close left page panel",
+    "openLeftPage": "Open left page panel",
+    "closeRightSidebar": "Close right sidebar",
+    "openRightSidebar": "Open right sidebar"
+  },
+  "resources": {
+    "title": "Project resources",
+    "button": "Resources",
+    "openPanel": "Open project resources",
+    "collapse": "Collapse",
+    "expand": "Expand",
+    "insert": "Insert link",
+    "noWorkspace": "No workspace",
+    "loading": "Loading files...",
+    "empty": "No files"
+  },
+  "mlcPreview": {
+    "title": "MLC Preview",
+    "empty": "Select an MLC document to preview",
+    "document": "Document",
+    "refresh": "Refresh"
+  },
+  "transfer": {
+    "cancel": "Cancel transfer",
+    "open": "Transfer submit",
+    "to": "Transfer to {{alias}}",
+    "submitTo": "Transfer and submit (Ctrl+Enter) to {{alias}}",
+    "descriptionPrefix": "Transfer identity: after submitting, tell Agent to change",
+    "descriptionSuffix": "to this value",
+    "aliasPlaceholder": "4 hex characters, e.g. A1B2",
+    "formatError": "Invalid format: must be 4 characters [0-9A-F]",
+    "formatHint": "Format: 4 uppercase hexadecimal characters"
+  },
+  "mlra": {
+    "title": "My Long Running Agents",
+    "status": {
+      "active": "Active",
+      "standby": "Standby",
+      "idle": "Idle",
+      "blocked": "Blocked",
+      "waitingHumanReview": "Waiting for human",
+      "waitingPeer": "Waiting for peer",
+      "waitingGate": "Waiting for gate",
+      "disconnected": "Disconnected",
+      "derailed": "Derailed",
+      "broken": "Broken"
+    },
+    "agent": {
+      "policyAria": "{{role}} automation level",
+      "noStandby": "No standby sessions available",
+      "poolBroken": "Disconnected",
+      "retryTitle": "Retry {{current}}/{{max}}",
+      "derailedCount": "Derailed {{current}}/{{max}}",
+      "standbyCount": "{{count}} standby session(s)",
+      "failoverTitle": "Failed over {{count}} time(s)",
+      "failoverCount": "Failover x{{count}}",
+      "injectPlaceholder": "Send instructions to Expert...",
+      "standbyExpert": "Waiting for Expert to join this stage",
+      "standbyInspector": "Waiting for Inspector to join this stage",
+      "standbyCeo": "CEO will join at gates or the closing stage",
+      "standbyDefault": "This role is not participating in the current stage",
+      "sessionPending": "Session content will appear after the backend connects"
+    },
+    "policy": {
+      "auto": "Auto",
+      "manual": "Manual",
+      "semiAuto": "Semi-auto",
+      "submitAutoDesc": "Release this role automatically after it submits.",
+      "submitManualDesc": "Pause after this role submits for manual review, edits, or rollback.",
+      "expertAutoDesc": "Expert automatically advances after submitting.",
+      "expertManualDesc": "Expert waits for manual confirmation, edits, or rollback after submitting.",
+      "inspectorAutoDesc": "Inspector automatically advances after submitting.",
+      "inspectorManualDesc": "Inspector waits for manual confirmation, edits, or rollback after submitting.",
+      "ceoAutoDesc": "CEO reviews and releases the verdict automatically.",
+      "ceoManualDesc": "The stage gate is decided directly by the user without waiting for an automatic CEO verdict.",
+      "ceoReviewDesc": "CEO reviews first, then the verdict waits for user confirmation."
+    },
+    "orchestration": {
+      "full-auto": { "label": "Full auto", "description": "Expert, Inspector, and CEO all advance automatically. Best for low-risk, clear tasks that should finish quickly." },
+      "ceo-review": { "label": "Review CEO", "description": "Expert and Inspector advance automatically. CEO reviews gates first, then the user confirms the verdict." },
+      "ceo-user": { "label": "Override CEO", "description": "Expert and Inspector advance automatically. Stage gates are decided directly by the user instead of automatic CEO verdicts." },
+      "full-manual": { "label": "Full manual", "description": "Expert and Inspector handoff plus CEO stage gates all require manual confirmation. Best for high-risk work." }
+    },
+    "workflow": {
+      "untitled": "Untitled workflow",
+      "template": "Blueprint template",
+      "taskDescription": "Task description",
+      "taskPlaceholder": "Describe what this work should solve.",
+      "orchestration": "Orchestration policy",
+      "namePlaceholder": "Example: Login system refactor blueprint"
+    },
+    "blueprintTemplate": {
+      "standard": { "label": "Standard flow", "description": "Deliberation -> Delivery -> Closing" },
+      "direct-execution": { "label": "Direct delivery", "description": "Skip deliberation and go straight to delivery" },
+      "architecture": { "label": "Architecture design", "description": "Design deliberation + gated review" },
+      "bugfix": { "label": "Bug fix", "description": "Diagnose -> Fix -> Verify" },
+      "audit": { "label": "Audit review", "description": "Define criteria + evaluate evidence" }
+    },
+    "start": {
+      "conditionTask": "Task description is filled",
+      "conditionStageCount": "Contains at least one normal stage",
+      "conditionStageNames": "All stages have names",
+      "conditionFinalGate": "The last normal stage has exit gate enabled",
+      "conditionClosing": "Blueprint ends with a closing summary stage",
+      "ready": "Ready to start",
+      "blocked": "Resolve these before starting"
+    },
+    "stage": {
+      "noStages": "No stages",
+      "fallbackName": "Stage {{index}}",
+      "untitled": "Untitled stage",
+      "issueMissingName": "Missing stage name",
+      "issueCount": "{{count}} issue(s)",
+      "current": "Current",
+      "dragReorder": "Drag to reorder",
+      "dragAfterEdit": "Start editing before dragging to reorder",
+      "empty": "No stages yet. Add a node first.",
+      "actions": "Stage actions",
+      "copy": "Copy stage",
+      "delete": "Delete stage",
+      "cannotCopyClosing": "The closing stage cannot be copied",
+      "cannotDeleteClosing": "The closing stage cannot be deleted",
+      "addHere": "Add stage here",
+      "name": "Stage name",
+      "closing": "Closing stage",
+      "template": "Stage template",
+      "description": "Stage description"
+    },
+    "stageTemplate": {
+      "custom": "Custom",
+      "customDesc": "Do not use a preset template",
+      "deliberation": { "label": "Deliberation review", "description": "Draft review for polishing proposals" },
+      "delivery": { "label": "Delivery verification", "description": "Implementation delivery and review" },
+      "closing": { "label": "Closing summary", "description": "Final user-facing summary at the end of the blueprint" }
+    },
+    "stageIcon": {
+      "git-branch": "Branch",
+      "wrench": "Tool",
+      "search": "Search",
+      "message-dot": "Message",
+      "check": "Check",
+      "pin": "Pin",
+      "robot": "Robot",
+      "flag": "Closing",
+      "file-text": "Text"
+    },
+    "inspector": {
+      "basics": "Basics",
+      "prompts": "Prompts",
+      "rules": "Rules",
+      "skills": "Skills",
+      "empty": "Select a stage on the left to edit it here.",
+      "identityTemplate": "Identity and template",
+      "rolePrompts": "Role prompts",
+      "skillPackages": "Skill packages"
+    },
+    "prompts": {
+      "ceo": "CEO prompt",
+      "expert": "Expert prompt",
+      "inspector": "Inspector prompt"
+    },
+    "gate": {
+      "title": "Exit gate",
+      "gated": "Gated",
+      "direct": "Direct",
+      "enableTitle": "Enable CEO exit gate",
+      "disableTitle": "Disable exit gate",
+      "closingInfo": "The closing stage does not run a CEO exit gate. CEO summarizes and then waits for the user response.",
+      "defensiveLock": "CEO defensive gate",
+      "enabledDesc": "When enabled, stage exit requires CEO approval",
+      "disabledDesc": "When disabled, passing exit certification advances directly",
+      "prompt": "Gate rule prompt",
+      "promptPlaceholder": "Add CEO exit gate rules, pass criteria, or risks that must be checked for this stage"
+    },
+    "skills": {
+      "selected": "Selected skills",
+      "count": "{{count}} skills",
+      "none": "No skills selected",
+      "emptyHint": "Click tags below to add skills",
+      "options": "Skill options"
+    },
+    "timer": {
+      "unassigned": "Unassigned",
+      "noRounds": "No round records",
+      "roundCount": "{{count}} rounds",
+      "noStats": "No statistics",
+      "stop": "Stop current MLRA",
+      "stopConfirmTitle": "Stop current MLRA?",
+      "stopConfirmBody": "The current orchestration will be cancelled and blocked role calls will be released.",
+      "stopConfirmAction": "Stop"
+    },
+    "humanGate": {
+      "blocked": "Blocked: {{title}}",
+      "exitPending": "Exit certification pending"
+    }
+  },
   "previewBrowser": {
     "title": "Preview Browser",
     "infoTitle": "Preview Info",
@@ -230,6 +444,10 @@
     "back": "Back",
     "forward": "Forward",
     "reload": "Reload",
+    "zoom": "Page zoom",
+    "zoomIn": "Zoom in",
+    "zoomOut": "Zoom out",
+    "resetZoom": "Reset zoom",
     "addressPlaceholder": "Enter URL...",
     "pickElement": "Pick element",
     "console": "Console",
@@ -250,6 +468,7 @@
     "filterWarnError": "Warnings + errors",
     "filterErrors": "Errors",
     "filterAll": "All",
+    "consoleFilter": "Console filter",
     "clearConsole": "Clear",
     "noConsole": "No console entries"
   }

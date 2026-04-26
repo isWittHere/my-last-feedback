@@ -33,6 +33,24 @@ function getTooltipPlacementPreference(element: HTMLElement): TooltipPlacementPr
   return placement === "top" || placement === "bottom" ? placement : "auto";
 }
 
+function overlapsPreviewWebView(x: number, y: number, placement: "top" | "bottom", width: number, height: number): boolean {
+  if (width <= 0 || height <= 0) return false;
+  const tooltipRect = {
+    left: x - width / 2,
+    right: x + width / 2,
+    top: placement === "top" ? y - height : y,
+    bottom: placement === "top" ? y : y + height,
+  };
+  return Array.from(document.querySelectorAll<HTMLElement>(".preview-browser-webview-mount"))
+    .map((element) => element.getBoundingClientRect())
+    .some((rect) => rect.width > 0
+      && rect.height > 0
+      && tooltipRect.left < rect.right + TOOLTIP_MARGIN
+      && tooltipRect.right > rect.left - TOOLTIP_MARGIN
+      && tooltipRect.top < rect.bottom + TOOLTIP_MARGIN
+      && tooltipRect.bottom > rect.top - TOOLTIP_MARGIN);
+}
+
 function silenceNativeTitle(element: HTMLElement) {
   const title = element.getAttribute("title");
   if (!title) return;
@@ -62,13 +80,19 @@ function createTooltipState(element: HTMLElement, text: string, tooltipWidth = 0
   const fitsBottom = tooltipHeight > 0
     ? rect.bottom + TOOLTIP_OFFSET + tooltipHeight + TOOLTIP_MARGIN <= viewportHeight
     : rect.bottom + 52 <= viewportHeight;
-  const showTop = placementPreference === "top"
+  let showTop = placementPreference === "top"
     ? fitsTop || !fitsBottom
     : placementPreference === "bottom"
       ? !(fitsBottom || !fitsTop)
       : tooltipHeight > 0
     ? rect.bottom + TOOLTIP_OFFSET + tooltipHeight + TOOLTIP_MARGIN > viewportHeight && rect.top - TOOLTIP_OFFSET - tooltipHeight - TOOLTIP_MARGIN > 0
     : rect.bottom + 52 > viewportHeight && rect.top > 52;
+  if (tooltipWidth > 0 && tooltipHeight > 0) {
+    const topOverlapsWebView = overlapsPreviewWebView(x, rect.top - TOOLTIP_OFFSET, "top", tooltipWidth, tooltipHeight);
+    const bottomOverlapsWebView = overlapsPreviewWebView(x, rect.bottom + TOOLTIP_OFFSET, "bottom", tooltipWidth, tooltipHeight);
+    if (!showTop && bottomOverlapsWebView && !topOverlapsWebView) showTop = true;
+    if (showTop && topOverlapsWebView && !bottomOverlapsWebView) showTop = false;
+  }
   return {
     text,
     x,

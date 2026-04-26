@@ -1,4 +1,5 @@
 import { useState, useCallback } from "react";
+import { useTranslation } from "react-i18next";
 import {
   customizeOrchestrationPolicy,
   getCeoGateMode,
@@ -25,37 +26,8 @@ const ROLE_LABELS: Record<string, string> = {
   ceo: "CEO",
 };
 
-const STANDBY_MESSAGES: Record<string, string> = {
-  expert: "等待 Expert 接入当前阶段",
-  inspector: "等待 Inspector 接入当前阶段",
-  ceo: "CEO 将在阶段门控或结束阶段介入",
-};
-
-const STATUS_LABELS: Record<string, string> = {
-  active: "活跃",
-  standby: "待命",
-  idle: "空闲",
-  blocked: "阻塞",
-  "waiting-human-review": "待人工",
-  "waiting-peer": "待对侧",
-  "waiting-gate": "待门控",
-  disconnected: "断开",
-  derailed: "脱轨",
-  broken: "断线",
-};
-
-const SUBMIT_POLICY_OPTIONS: Array<AppSelectOption<SubmitReleasePolicy>> = [
-  { value: "auto", label: "自动", icon: "play", description: "该角色完成提交后自动释放给下一环节。" },
-  { value: "user-review", label: "人工", icon: "users", description: "该角色提交后先阻塞，等待人工确认、编辑或退回。" },
-];
-
-const CEO_POLICY_OPTIONS: Array<AppSelectOption<CeoGateMode>> = [
-  { value: "auto", label: "自动", icon: "play", description: "CEO 自动审核并自动释放 verdict。" },
-  { value: "user", label: "人工", icon: "users", description: "跳过 CEO 自动裁定，由人工直接完成阶段门控。" },
-  { value: "review", label: "半自动", icon: "eye", description: "CEO 先产出 verdict，再由人工确认后释放。" },
-];
-
 function AgentPolicySelect({ role }: { role: "expert" | "inspector" | "ceo" }) {
+  const { t } = useTranslation();
   const launcher = useMLRAStore((s) => s.getActiveLauncher());
   const setOrchestrationPolicy = useMLRAStore((s) => s.setOrchestrationPolicy);
   const daemonSetOrchestrationPolicy = useMLRAStore((s) => s.daemonSetOrchestrationPolicy);
@@ -69,7 +41,16 @@ function AgentPolicySelect({ role }: { role: "expert" | "inspector" | "ceo" }) {
     : role === "expert"
       ? policy.expertSubmit
       : policy.inspectorSubmit;
-  const options = isCeo ? CEO_POLICY_OPTIONS : SUBMIT_POLICY_OPTIONS;
+  const submitPolicyOptions: Array<AppSelectOption<SubmitReleasePolicy>> = [
+    { value: "auto", label: t("mlra.policy.auto", "Auto"), icon: "play", description: t("mlra.policy.submitAutoDesc", "Release this role automatically after it submits.") },
+    { value: "user-review", label: t("mlra.policy.manual", "Manual"), icon: "users", description: t("mlra.policy.submitManualDesc", "Pause after this role submits for manual review, edits, or rollback.") },
+  ];
+  const ceoPolicyOptions: Array<AppSelectOption<CeoGateMode>> = [
+    { value: "auto", label: t("mlra.policy.auto", "Auto"), icon: "play", description: t("mlra.policy.ceoAutoDesc", "CEO reviews and releases the verdict automatically.") },
+    { value: "user", label: t("mlra.policy.manual", "Manual"), icon: "users", description: t("mlra.policy.ceoManualDesc", "Skip automatic CEO verdicts and let the user decide the gate directly.") },
+    { value: "review", label: t("mlra.policy.semiAuto", "Semi-auto"), icon: "eye", description: t("mlra.policy.ceoReviewDesc", "CEO produces a verdict, then waits for user confirmation.") },
+  ];
+  const options = isCeo ? ceoPolicyOptions : submitPolicyOptions;
 
   const handleChange = (nextValue: string) => {
     const nextPolicy = isCeo
@@ -87,12 +68,13 @@ function AgentPolicySelect({ role }: { role: "expert" | "inspector" | "ceo" }) {
       value={value}
       options={options}
       onChange={handleChange}
-      ariaLabel={`${ROLE_LABELS[role]} 自动程度`}
+      ariaLabel={t("mlra.agent.policyAria", "{{role}} automation level", { role: ROLE_LABELS[role] })}
     />
   );
 }
 
 function SessionPoolBadge({ pool }: { pool: SessionPool }) {
+  const { t } = useTranslation();
   const standbyCount = pool.standbys.length;
   const primaryStatus = pool.primary?.status || "unknown";
   const isDerailed = primaryStatus === "derailed";
@@ -100,23 +82,23 @@ function SessionPoolBadge({ pool }: { pool: SessionPool }) {
 
   if (isBroken && standbyCount === 0) {
     return (
-      <span className="session-pool-badge session-pool-broken" title="无可用备用会话">
-        ✕ 已断线
+      <span className="session-pool-badge session-pool-broken" title={t("mlra.agent.noStandby", "No standby sessions available")}>
+        {t("mlra.agent.poolBroken", "Disconnected")}
       </span>
     );
   }
 
   if (isDerailed) {
     return (
-      <span className="session-pool-badge session-pool-derailed" title={`重试 ${pool.retryCount}/${pool.maxRetries}`}>
-        ⚠ 脱轨 {pool.retryCount}/{pool.maxRetries}
+      <span className="session-pool-badge session-pool-derailed" title={t("mlra.agent.retryTitle", "Retry {{current}}/{{max}}", { current: pool.retryCount, max: pool.maxRetries })}>
+        {t("mlra.agent.derailedCount", "Derailed {{current}}/{{max}}", { current: pool.retryCount, max: pool.maxRetries })}
       </span>
     );
   }
 
   if (standbyCount > 0) {
     return (
-      <span className="session-pool-badge session-pool-ok" title={`${standbyCount} 个备用会话`}>
+      <span className="session-pool-badge session-pool-ok" title={t("mlra.agent.standbyCount", "{{count}} standby session(s)", { count: standbyCount })}>
         ● 1+{standbyCount}
       </span>
     );
@@ -124,8 +106,8 @@ function SessionPoolBadge({ pool }: { pool: SessionPool }) {
 
   if (pool.failoverCount > 0) {
     return (
-      <span className="session-pool-badge session-pool-failover" title={`已故障转移 ${pool.failoverCount} 次`}>
-        ↻ 转移×{pool.failoverCount}
+      <span className="session-pool-badge session-pool-failover" title={t("mlra.agent.failoverTitle", "Failed over {{count}} time(s)", { count: pool.failoverCount })}>
+        {t("mlra.agent.failoverCount", "Failover x{{count}}", { count: pool.failoverCount })}
       </span>
     );
   }
@@ -135,6 +117,7 @@ function SessionPoolBadge({ pool }: { pool: SessionPool }) {
 
 /** Inline message input for expert columns — allows user to inject messages to experts */
 function ExpertMessageInput({ callerId }: { callerId: string }) {
+  const { t } = useTranslation();
   const [text, setText] = useState("");
   const daemonInjectMessage = useMLRAStore((s) => s.daemonInjectMessage);
 
@@ -150,7 +133,7 @@ function ExpertMessageInput({ callerId }: { callerId: string }) {
       <input
         type="text"
         className="agent-column-inject-input"
-        placeholder="向专家发送指令..."
+        placeholder={t("mlra.agent.injectPlaceholder", "Send instructions to Expert...")}
         value={text}
         onChange={(e) => setText(e.target.value)}
         onKeyDown={(e) => { if (e.key === "Enter") handleSend(); }}
@@ -167,6 +150,7 @@ function ExpertMessageInput({ callerId }: { callerId: string }) {
  * Shows StandbyPlaceholder when standby, or a mock panel when active.
  */
 export function AgentColumn({ role }: AgentColumnProps) {
+  const { t } = useTranslation();
   const activeLauncher = useMLRAStore((s) => s.getActiveLauncher());
   const color = ROLE_COLORS[role];
   const slot: AgentSlot | null = activeLauncher ? activeLauncher.agents[role] : null;
@@ -174,6 +158,24 @@ export function AgentColumn({ role }: AgentColumnProps) {
 
   const isStandby = !slot || slot.status === "standby";
   const isExpert = role === "expert";
+
+  const standbyMessages: Record<string, string> = {
+    expert: t("mlra.agent.standbyExpert", "Waiting for Expert to join this stage"),
+    inspector: t("mlra.agent.standbyInspector", "Waiting for Inspector to join this stage"),
+    ceo: t("mlra.agent.standbyCeo", "CEO will join at gates or the closing stage"),
+  };
+  const statusLabels: Record<string, string> = {
+    active: t("mlra.status.active", "Active"),
+    standby: t("mlra.status.standby", "Standby"),
+    idle: t("mlra.status.idle", "Idle"),
+    blocked: t("mlra.status.blocked", "Blocked"),
+    "waiting-human-review": t("mlra.status.waitingHumanReview", "Waiting for human"),
+    "waiting-peer": t("mlra.status.waitingPeer", "Waiting for peer"),
+    "waiting-gate": t("mlra.status.waitingGate", "Waiting for gate"),
+    disconnected: t("mlra.status.disconnected", "Disconnected"),
+    derailed: t("mlra.status.derailed", "Derailed"),
+    broken: t("mlra.status.broken", "Broken"),
+  };
 
   return (
     <div
@@ -192,7 +194,7 @@ export function AgentColumn({ role }: AgentColumnProps) {
           <AgentPolicySelect role={role} />
           {slot && (
             <span className={`agent-column-status agent-column-status-${slot.status}`}>
-              {STATUS_LABELS[slot.status]}
+              {statusLabels[slot.status]}
             </span>
           )}
         </div>
@@ -202,7 +204,7 @@ export function AgentColumn({ role }: AgentColumnProps) {
       {isStandby ? (
         <StandbyPlaceholder
           role={ROLE_LABELS[role]}
-          message={STANDBY_MESSAGES[role] || "当前阶段暂不参与"}
+          message={standbyMessages[role] || t("mlra.agent.standbyDefault", "This role is not participating in the current stage")}
         />
       ) : (
         <div className="agent-column-content">
@@ -212,7 +214,7 @@ export function AgentColumn({ role }: AgentColumnProps) {
               {slot.displayName}
             </div>
             <div style={{ fontSize: 10, marginTop: 4, color: "var(--color-text-muted)" }}>
-              Session 内容将在后端连接后显示
+              {t("mlra.agent.sessionPending", "Session content will appear after the backend connects")}
             </div>
           </div>
           {/* Expert message injection */}
