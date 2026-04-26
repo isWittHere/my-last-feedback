@@ -47,7 +47,6 @@ export function AttachmentTagBar({
   const removeQueuedDraftMlcAttachment = useFeedbackStore((s) => s.removeQueuedDraftMlcAttachment);
   const setFocusedComposer = useFeedbackStore((s) => s.setFocusedComposer);
   const setMlcPanelVisible = useFeedbackStore((s) => s.setMlcPanelVisible);
-  const setMlcPanelCollapsed = useFeedbackStore((s) => s.setMlcPanelCollapsed);
   const setMlcActiveWorkspacePath = useFeedbackStore((s) => s.setMlcActiveWorkspacePath);
   const targetImages = queuedCallerId ? (queuedDraft?.images || []) : (activeSession?.images || []);
   const targetTestLogText = queuedCallerId ? (queuedDraft?.testLogText || "") : (activeSession?.testLogText || "");
@@ -89,7 +88,6 @@ export function AttachmentTagBar({
         focusedAt: new Date().toISOString(),
       });
       setMlcActiveWorkspacePath(activeSession?.projectDirectory || null);
-      setMlcPanelCollapsed(false);
       setMlcPanelVisible(true);
       return;
     }
@@ -102,7 +100,6 @@ export function AttachmentTagBar({
       focusedAt: new Date().toISOString(),
     });
     setMlcActiveWorkspacePath(activeSession.projectDirectory);
-    setMlcPanelCollapsed(false);
     setMlcPanelVisible(true);
   };
 

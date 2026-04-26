@@ -7,8 +7,6 @@ import { AppSelect, type AppSelectOption } from "./AppSelect";
 import { Icon } from "./Icons";
 import { useIsLightTheme } from "./useIsLightTheme";
 
-const MLC_PANEL_COLLAPSED_WIDTH = 34;
-
 type SortBy = "updated-desc" | "created-desc" | "created-asc" | "title-asc" | "title-desc";
 type ViewMode = "detail" | "compact";
 
@@ -124,12 +122,9 @@ export function MlcSidePanel() {
   const callers = useFeedbackStore((state) => state.callers);
   const sessions = useFeedbackStore((state) => state.sessions);
   const focusedComposer = useFeedbackStore((state) => state.focusedComposer);
-  const collapsed = useFeedbackStore((state) => state.mlcPanelCollapsed);
   const position = useFeedbackStore((state) => state.mlcPanelPosition);
   const width = useFeedbackStore((state) => state.mlcPanelWidth);
   const activeWorkspacePath = useFeedbackStore((state) => state.mlcActiveWorkspacePath);
-  const setCollapsed = useFeedbackStore((state) => state.setMlcPanelCollapsed);
-  const setPosition = useFeedbackStore((state) => state.setMlcPanelPosition);
   const setWidth = useFeedbackStore((state) => state.setMlcPanelWidth);
   const setVisible = useFeedbackStore((state) => state.setMlcPanelVisible);
   const setActiveWorkspacePath = useFeedbackStore((state) => state.setMlcActiveWorkspacePath);
@@ -361,30 +356,16 @@ export function MlcSidePanel() {
     </div>
   );
 
-  if (collapsed) {
-    return (
-      <aside className="mlc-panel mlc-panel-collapsed" data-position={position} style={{ width: MLC_PANEL_COLLAPSED_WIDTH }}>
-        <button className="mlc-toggle-btn" onClick={() => setCollapsed(false)} title={t("mlc.expand", "Expand My Last Chat")}>
-          <Icon name="book" size={14} />
-        </button>
-      </aside>
-    );
-  }
-
   return (
     <aside className="mlc-panel" data-position={position} style={{ width }}>
       <div className="mlc-resize-handle" onMouseDown={handleResizeMouseDown} />
-      <div className="mlc-panel-header">
-        <button className="mlc-icon-btn" onClick={() => setCollapsed(true)} title={t("mlc.collapse", "Collapse My Last Chat")}>
-          <Icon name={position === "right" ? "chevron-right" : "chevron-left"} size={14} />
-        </button>
-        <div className="mlc-panel-title">
-          <Icon name="book" size={15} />
-          <span>{t("mlc.title", "My Last Chat")}</span>
+      <div className="mlc-panel-header mlc-panel-tabs-row">
+        <div className="mlc-panel-tabs">
+          <button type="button" className="mlc-panel-tab active">
+            <Icon name="book" size={13} />
+            <span>MLC</span>
+          </button>
         </div>
-        <button className="mlc-icon-btn" onClick={() => setPosition(position === "right" ? "left" : "right")} title={t("mlc.switchSide", "Switch side")}>
-          <Icon name="sidebar" size={14} />
-        </button>
         <button className="mlc-icon-btn" onClick={() => setVisible(false)} title={t("mlc.close", "Close My Last Chat")}>
           <Icon name="close-sm" size={10} />
         </button>

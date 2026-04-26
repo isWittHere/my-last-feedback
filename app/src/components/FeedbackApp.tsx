@@ -546,6 +546,7 @@ export function FeedbackApp() {
   const mlcPanelVisible = useFeedbackStore((s) => s.mlcPanelVisible);
   const mlcPanelPosition = useFeedbackStore((s) => s.mlcPanelPosition);
   const setMlcPanelVisible = useFeedbackStore((s) => s.setMlcPanelVisible);
+  const setMlcPanelPosition = useFeedbackStore((s) => s.setMlcPanelPosition);
 
   // Caller workspace width tracking for responsive multi-column layout
   const callerWorkspaceRef = useRef<HTMLDivElement>(null);
@@ -603,6 +604,15 @@ export function FeedbackApp() {
     setAlwaysOnTop(next);
   }, [alwaysOnTop]);
 
+  const toggleMlcPanelAt = useCallback((panelPosition: "left" | "right") => {
+    if (!mlcPanelVisible || mlcPanelPosition !== panelPosition) {
+      setMlcPanelPosition(panelPosition);
+      setMlcPanelVisible(true);
+      return;
+    }
+    setMlcPanelVisible(false);
+  }, [mlcPanelPosition, mlcPanelVisible, setMlcPanelPosition, setMlcPanelVisible]);
+
   const [settingsOpen, setSettingsOpen] = useState(false);
   const isLightTheme = useIsLightTheme();
 
@@ -649,6 +659,15 @@ export function FeedbackApp() {
               MLRA
             </button>
           </div>
+          {appView === "MLFB" && (
+            <button
+              onClick={() => toggleMlcPanelAt("left")}
+              className={`titlebar-btn titlebar-side-toggle titlebar-side-toggle-left${mlcPanelVisible && mlcPanelPosition === "left" ? " titlebar-btn-active" : ""}`}
+              title={mlcPanelVisible && mlcPanelPosition === "left" ? t("mlc.close", "Close My Last Chat") : t("mlc.open", "Open My Last Chat")}
+            >
+              <Icon name="sidebar" size={13} />
+            </button>
+          )}
         </div>
 
         {/* Center: Caller tabs */}
@@ -682,11 +701,11 @@ export function FeedbackApp() {
           )}
           {appView === "MLFB" && (
             <button
-              onClick={() => setMlcPanelVisible(!mlcPanelVisible)}
-              className={`titlebar-btn${mlcPanelVisible ? " titlebar-btn-active" : ""}`}
-              title={t("mlc.title", "My Last Chat")}
+              onClick={() => toggleMlcPanelAt("right")}
+              className={`titlebar-btn titlebar-side-toggle titlebar-side-toggle-right${mlcPanelVisible && mlcPanelPosition === "right" ? " titlebar-btn-active" : ""}`}
+              title={mlcPanelVisible && mlcPanelPosition === "right" ? t("mlc.close", "Close My Last Chat") : t("mlc.open", "Open My Last Chat")}
             >
-              <Icon name="book" size={13} />
+              <Icon name="sidebar" size={13} />
             </button>
           )}
           <button
