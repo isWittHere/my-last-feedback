@@ -2,7 +2,7 @@ import { forwardRef, useCallback, useEffect, useMemo, useRef, useState } from "r
 import { createPortal } from "react-dom";
 import { useTranslation } from "react-i18next";
 import { useFeedbackStore } from "../store/feedbackStore";
-import type { GitActionType } from "../store/feedbackStore";
+import type { GitActionType, MlcAttachment } from "../store/feedbackStore";
 import { useShallow } from "zustand/react/shallow";
 import { Icon } from "./Icons";
 import { useActiveCallerSession } from "./useActiveCallerSession";
@@ -31,7 +31,7 @@ export function AttachmentTagBar({
   queuedCallerId?: string;
 }) {
   const { t } = useTranslation();
-  const { session: activeSession } = useActiveCallerSession();
+  const { session: activeSession, caller } = useActiveCallerSession();
   const queuedDraft = useFeedbackStore((s) => queuedCallerId ? s.queuedDraftsByCallerId[queuedCallerId] : null);
   const removeSessionImage = useFeedbackStore((s) => s.removeSessionImage);
   const clearSessionImages = useFeedbackStore((s) => s.clearSessionImages);
@@ -43,13 +43,21 @@ export function AttachmentTagBar({
   const updateQueuedDraftField = useFeedbackStore((s) => s.updateQueuedDraftField);
   const setQueuedDraftGitAction = useFeedbackStore((s) => s.setQueuedDraftGitAction);
   const updateQueuedDraftGitBranchName = useFeedbackStore((s) => s.updateQueuedDraftGitBranchName);
+  const removeSessionMlcAttachment = useFeedbackStore((s) => s.removeSessionMlcAttachment);
+  const removeQueuedDraftMlcAttachment = useFeedbackStore((s) => s.removeQueuedDraftMlcAttachment);
+  const setFocusedComposer = useFeedbackStore((s) => s.setFocusedComposer);
+  const setMlcPanelVisible = useFeedbackStore((s) => s.setMlcPanelVisible);
+  const setMlcPanelCollapsed = useFeedbackStore((s) => s.setMlcPanelCollapsed);
+  const setMlcActiveWorkspacePath = useFeedbackStore((s) => s.setMlcActiveWorkspacePath);
   const targetImages = queuedCallerId ? (queuedDraft?.images || []) : (activeSession?.images || []);
   const targetTestLogText = queuedCallerId ? (queuedDraft?.testLogText || "") : (activeSession?.testLogText || "");
   const targetGitAction = queuedCallerId ? (queuedDraft?.gitAction || null) : (activeSession?.gitAction || null);
+  const targetMlcAttachments = queuedCallerId ? (queuedDraft?.mlcAttachments || []) : (activeSession?.mlcAttachments || []);
   const images = targetImages;
   const hasTestLog = !!targetTestLogText.trim();
   const hasGitAction = !!targetGitAction;
-  const hasTags = images.length > 0 || hasTestLog || showTestLog || hasGitAction;
+  const hasMlcAttachments = targetMlcAttachments.length > 0;
+  const hasTags = images.length > 0 || hasTestLog || showTestLog || hasGitAction || hasMlcAttachments;
   const tagAreaRef = useRef<HTMLDivElement>(null);
   const branchInputRef = useRef<HTMLInputElement>(null);
 
@@ -69,6 +77,33 @@ export function AttachmentTagBar({
       }
       setTimeout(() => testLogRef.current?.focus(), 50);
     }
+  };
+
+  const handleMlcClick = () => {
+    if (queuedCallerId) {
+      if (!caller) return;
+      setFocusedComposer({
+        callerId: queuedCallerId,
+        projectDirectory: activeSession?.projectDirectory || "",
+        kind: "queuedDraft",
+        focusedAt: new Date().toISOString(),
+      });
+      setMlcActiveWorkspacePath(activeSession?.projectDirectory || null);
+      setMlcPanelCollapsed(false);
+      setMlcPanelVisible(true);
+      return;
+    }
+    if (!activeSession || activeSession.status !== "pending" || !caller) return;
+    setFocusedComposer({
+      callerId: caller.id,
+      sessionId: activeSession.id,
+      projectDirectory: activeSession.projectDirectory,
+      kind: "feedback",
+      focusedAt: new Date().toISOString(),
+    });
+    setMlcActiveWorkspacePath(activeSession.projectDirectory);
+    setMlcPanelCollapsed(false);
+    setMlcPanelVisible(true);
   };
 
   return (
@@ -108,6 +143,27 @@ export function AttachmentTagBar({
         >
           <Icon name="git-branch" size={12} />
           {t("gitAction.button", "Git 操作")}
+        </button>
+        <button
+          className="btn"
+          style={{
+            fontSize: 11,
+            padding: "3px 10px",
+            background: hasMlcAttachments ? callerColor : undefined,
+            borderColor: hasMlcAttachments ? callerColor : undefined,
+            color: hasMlcAttachments ? "#fff" : undefined,
+          }}
+          disabled={!queuedCallerId && (!activeSession || activeSession.status !== "pending")}
+          onClick={handleMlcClick}
+          title={t("mlc.openPanel", "Open My Last Chat references")}
+        >
+          <Icon name="book" size={12} />
+          {t("mlc.button", "MLC")}
+          {hasMlcAttachments && (
+            <span style={{ color: hasMlcAttachments ? "rgba(255,255,255,0.7)" : "var(--color-text-muted)", marginLeft: 2 }}>
+              {targetMlcAttachments.length}
+            </span>
+          )}
         </button>
         {fileInput}
       </div>
@@ -154,6 +210,15 @@ export function AttachmentTagBar({
               onRemove={() => queuedCallerId ? setQueuedDraftGitAction(queuedCallerId, null) : activeSession && setSessionGitAction(activeSession.id, null)}
             />
           )}
+          {targetMlcAttachments.map((attachment) => (
+            <MlcAttachmentTag
+              key={attachment.filePath}
+              attachment={attachment}
+              onRemove={() => queuedCallerId
+                ? removeQueuedDraftMlcAttachment(queuedCallerId, attachment.filePath)
+                : activeSession && removeSessionMlcAttachment(activeSession.id, attachment.filePath)}
+            />
+          ))}
         </div>
       )}
 
@@ -484,12 +549,44 @@ function GitActionTag({
   );
 }
 
+function MlcAttachmentTag({ attachment, onRemove, readonly }: { attachment: MlcAttachment; onRemove: () => void; readonly?: boolean }) {
+  const cleanPath = attachment.filePath.replace(/^\\\\\?\\UNC\\/i, "\\\\").replace(/^\\\\\?\\/i, "");
+  const title = attachment.title || cleanPath;
+  const preview = [title, attachment.description, cleanPath].filter(Boolean).join("\n");
+
+  return (
+    <div className="attachment-tag" title={preview} style={{ cursor: readonly ? "default" : "pointer" }}>
+      {!readonly && (
+        <button
+          className="attachment-tag-remove"
+          style={{ display: "inline-flex" }}
+          onClick={(e) => { e.stopPropagation(); onRemove(); }}
+        >
+          <Icon name="close-sm" size={10} />
+        </button>
+      )}
+      <Icon name="book" size={10} />
+      <span className="truncate" style={{ maxWidth: 160 }}>{title}</span>
+      {readonly && (
+        <button
+          className="attachment-tag-copy"
+          onClick={(e) => { e.stopPropagation(); navigator.clipboard.writeText(cleanPath); }}
+          title="Copy path"
+        >
+          <Icon name="copy" size={10} />
+        </button>
+      )}
+    </div>
+  );
+}
+
 /** Readonly tag bar for responded sessions — image tags with hover, test log tag with expandable preview */
 export function ReadonlyTagBar({ session }: { session: import("../store/feedbackStore").Session }) {
   const { t } = useTranslation();
   const [showLog, setShowLog] = useState(false);
   const hasLog = session.testLogText.trim().length > 0;
   const hasGitAction = !!session.gitAction;
+  const mlcAttachments = session.mlcAttachments || [];
 
   const gitLabel = hasGitAction ? ({
     commit: t("gitAction.commit"),
@@ -519,6 +616,9 @@ export function ReadonlyTagBar({ session }: { session: import("../store/feedback
             <span className="truncate" style={{ maxWidth: 140 }}>{gitLabel}{gitDetail}</span>
           </div>
         )}
+        {mlcAttachments.map((attachment) => (
+          <MlcAttachmentTag key={attachment.filePath} attachment={attachment} onRemove={() => {}} readonly />
+        ))}
       </div>
       {/* Expanded test log readonly */}
       {showLog && hasLog && (
@@ -708,13 +808,14 @@ export function RichText({ text, style, className }: { text: string; style?: Rea
 /** Test log textarea */
 const TestLogInput = forwardRef<HTMLTextAreaElement, { queuedCallerId?: string }>(function TestLogInput({ queuedCallerId }, forwardedRef) {
   const { t } = useTranslation();
-  const { session: activeSession } = useActiveCallerSession();
+  const { session: activeSession, caller } = useActiveCallerSession();
   const queuedDraft = useFeedbackStore((s) => queuedCallerId ? s.queuedDraftsByCallerId[queuedCallerId] : null);
-  const { updateSessionField, addSessionImage, updateQueuedDraftField, addQueuedDraftImage } = useFeedbackStore(useShallow((s) => ({
+  const { updateSessionField, addSessionImage, updateQueuedDraftField, addQueuedDraftImage, setFocusedComposer } = useFeedbackStore(useShallow((s) => ({
     updateSessionField: s.updateSessionField,
     addSessionImage: s.addSessionImage,
     updateQueuedDraftField: s.updateQueuedDraftField,
     addQueuedDraftImage: s.addQueuedDraftImage,
+    setFocusedComposer: s.setFocusedComposer,
   })));
 
   const value = queuedCallerId ? (queuedDraft?.testLogText || "") : (activeSession?.testLogText || "");
@@ -742,6 +843,27 @@ const TestLogInput = forwardRef<HTMLTextAreaElement, { queuedCallerId?: string }
       updateSessionField(activeSession.id, "testLogText", e.target.value);
     }
   };
+
+  const handleFocus = useCallback(() => {
+    if (queuedCallerId) {
+      if (!caller) return;
+      setFocusedComposer({
+        callerId: queuedCallerId,
+        projectDirectory: activeSession?.projectDirectory || "",
+        kind: "queuedDraft",
+        focusedAt: new Date().toISOString(),
+      });
+      return;
+    }
+    if (!activeSession || activeSession.status !== "pending" || !caller) return;
+    setFocusedComposer({
+      callerId: caller.id,
+      sessionId: activeSession.id,
+      projectDirectory: activeSession.projectDirectory,
+      kind: "testLog",
+      focusedAt: new Date().toISOString(),
+    });
+  }, [activeSession, caller, queuedCallerId, setFocusedComposer]);
 
   const handlePaste = useCallback(
     (e: React.ClipboardEvent<HTMLTextAreaElement>) => {
@@ -778,6 +900,7 @@ const TestLogInput = forwardRef<HTMLTextAreaElement, { queuedCallerId?: string }
       value={value}
       onChange={handleChange}
       onPaste={handlePaste}
+      onFocus={handleFocus}
       readOnly={isReadonly}
       placeholder={t("testLog.placeholder")}
       className="input-area"

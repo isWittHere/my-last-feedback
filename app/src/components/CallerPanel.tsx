@@ -16,6 +16,27 @@ import { TransferSubmitSplit } from "./TransferSubmitSplit";
 import { AttachmentTagBar, ReadonlyTagBar, RichText } from "./CallerPanelParts";
 import { getNotificationSettings } from "../notificationSettings";
 
+function sanitizeMarkdownLine(value: string): string {
+  return value.replace(/[\r\n]+/g, " ").trim();
+}
+
+function cleanMlcDisplayPath(path: string): string {
+  return path.replace(/^\\\\\?\\UNC\\/i, "\\\\").replace(/^\\\\\?\\/i, "");
+}
+
+function formatMlcReferences(attachments: import("../store/feedbackStore").MlcAttachment[]): string | null {
+  if (attachments.length === 0) return null;
+  const blocks = attachments.map((item) => {
+    const filePath = cleanMlcDisplayPath(item.filePath);
+    return [
+    `### ${sanitizeMarkdownLine(item.title || filePath)}`,
+    `- ${sanitizeMarkdownLine(item.description || "")}`,
+    `- ${sanitizeMarkdownLine(filePath)}`,
+  ].join("\n");
+  });
+  return ["## Attachment: MLC References", ...blocks].join("\n\n");
+}
+
 /**
  * Self-contained panel for a single caller.
  * Provides CallerContext so all children read this caller's active session.
@@ -188,10 +209,11 @@ function CallerContent() {
   const sessionFeedback = activeSession?.feedbackText || "";
   const sessionTestLog = activeSession?.testLogText || "";
   const sessionImageCount = activeSession?.images?.length ?? 0;
+  const sessionMlcAttachmentCount = activeSession?.mlcAttachments?.length ?? 0;
   const hasQuestionAnswers = !!(activeSession?.questions?.some(
     (q) => q.answer.trim() || (q.selectedOptions && q.selectedOptions.length > 0)
   ));
-  const hasContent = !!(sessionFeedback.trim() || sessionTestLog.trim() || sessionImageCount > 0 || hasQuestionAnswers || activeSession?.gitAction);
+  const hasContent = !!(sessionFeedback.trim() || sessionTestLog.trim() || sessionImageCount > 0 || sessionMlcAttachmentCount > 0 || hasQuestionAnswers || activeSession?.gitAction);
   const feedbackText = sessionFeedback;
   useEffect(() => {
     if (userResizedRef.current || isReadonly) return;
@@ -304,6 +326,10 @@ function CallerContent() {
           `## Attachment: Images\n${imageList.length} image(s) attached, please review the accompanying image content.`
         );
       }
+      const mlcReferences = formatMlcReferences(activeSession.mlcAttachments || []);
+      if (mlcReferences) {
+        sections.push(mlcReferences);
+      }
       sections.push(
         "[System] Reminder: You MUST call the interactive_feedback tool again after completing this operation. Do NOT end your turn without invoking interactive_feedback."
       );
@@ -323,6 +349,7 @@ function CallerContent() {
           feedbackText: finalFeedback,
           commandLogs: activeSession.commandLogs,
           images: imageList,
+          mlcAttachments: activeSession.mlcAttachments || [],
           transferToAlias: transferAlias,
         });
         pushMessageHistory(activeSession.callerId, historyText);
@@ -377,7 +404,7 @@ function CallerContent() {
             <>
               <ReadonlyStatusBadge status={activeSession.status as "responded" | "cancelled"} />
               {/* Readonly tag bar: fixed, not scrollable */}
-              {(activeSession.images.length > 0 || activeSession.testLogText.trim() || activeSession.gitAction) && (
+              {(activeSession.images.length > 0 || activeSession.testLogText.trim() || activeSession.gitAction || (activeSession.mlcAttachments || []).length > 0) && (
                 <ReadonlyTagBar session={activeSession} />
               )}
               {/* Scrollable feedback text */}

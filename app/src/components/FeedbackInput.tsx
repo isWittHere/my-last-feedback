@@ -10,11 +10,12 @@ export function FeedbackInput({ minHeight, queuedCallerId }: { minHeight?: numbe
   const friendlyName = useFriendlyName();
   const { session: activeSession, caller } = useActiveCallerSession();
   const queuedDraft = useFeedbackStore((s) => queuedCallerId ? s.queuedDraftsByCallerId[queuedCallerId] : null);
-  const { updateSessionField, addSessionImage, updateQueuedDraftField, addQueuedDraftImage } = useFeedbackStore(useShallow((s) => ({
+  const { updateSessionField, addSessionImage, updateQueuedDraftField, addQueuedDraftImage, setFocusedComposer } = useFeedbackStore(useShallow((s) => ({
     updateSessionField: s.updateSessionField,
     addSessionImage: s.addSessionImage,
     updateQueuedDraftField: s.updateQueuedDraftField,
     addQueuedDraftImage: s.addQueuedDraftImage,
+    setFocusedComposer: s.setFocusedComposer,
   })));
   const textareaRef = useRef<HTMLTextAreaElement>(null);
   const historyIndexRef = useRef<number | null>(null);
@@ -44,6 +45,27 @@ export function FeedbackInput({ minHeight, queuedCallerId }: { minHeight?: numbe
       updateSessionField(activeSession.id, "feedbackText", e.target.value);
     }
   };
+
+  const handleFocus = useCallback(() => {
+    if (queuedCallerId) {
+      if (!caller) return;
+      setFocusedComposer({
+        callerId: queuedCallerId,
+        projectDirectory: activeSession?.projectDirectory || "",
+        kind: "queuedDraft",
+        focusedAt: new Date().toISOString(),
+      });
+      return;
+    }
+    if (!activeSession || activeSession.status !== "pending" || !caller) return;
+    setFocusedComposer({
+      callerId: caller.id,
+      sessionId: activeSession.id,
+      projectDirectory: activeSession.projectDirectory,
+      kind: "feedback",
+      focusedAt: new Date().toISOString(),
+    });
+  }, [activeSession, caller, queuedCallerId, setFocusedComposer]);
 
   const setCurrentValue = useCallback((nextValue: string) => {
     if (queuedCallerId) {
@@ -153,6 +175,7 @@ export function FeedbackInput({ minHeight, queuedCallerId }: { minHeight?: numbe
       onChange={handleChange}
       onKeyDown={handleKeyDown}
       onPaste={handlePaste}
+      onFocus={handleFocus}
       readOnly={isReadonly}
       placeholder={placeholderText}
       className={`input-area${minHeight === undefined ? " flex-1" : ""}`}

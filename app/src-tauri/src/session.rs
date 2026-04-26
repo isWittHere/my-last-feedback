@@ -87,7 +87,17 @@ pub struct SessionDetail {
     pub command_logs: Option<String>,
     pub images: Vec<serde_json::Value>,
     #[serde(default)]
+    pub mlc_attachments: Vec<MlcAttachment>,
+    #[serde(default)]
     pub questions: Vec<serde_json::Value>,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct MlcAttachment {
+    #[serde(alias = "filePath")]
+    pub file_path: String,
+    pub title: String,
+    pub description: String,
 }
 
 /// Feedback payload submitted by user
@@ -129,6 +139,8 @@ struct PersistedSession {
     feedback_text: Option<String>,
     command_logs: Option<String>,
     image_refs: Vec<ImageRef>,
+    #[serde(default)]
+    mlc_attachments: Vec<MlcAttachment>,
     #[serde(default)]
     questions: Vec<serde_json::Value>,
 }
@@ -288,6 +300,7 @@ impl SessionManager {
             feedback_text: None,
             command_logs: None,
             images: Vec::new(),
+            mlc_attachments: Vec::new(),
             questions,
         };
         self.sessions.push(SessionEntry {
@@ -410,6 +423,7 @@ impl SessionManager {
         &mut self,
         session_id: &str,
         payload: FeedbackPayload,
+        mlc_attachments: Vec<MlcAttachment>,
     ) -> Result<(), String> {
         let images_dir = self.images_dir();
         let _ = std::fs::create_dir_all(&images_dir);
@@ -432,6 +446,7 @@ impl SessionManager {
         entry.detail.status = SessionStatus::Responded;
         entry.detail.feedback_text = Some(payload.interactive_feedback.clone());
         entry.detail.command_logs = Some(payload.command_logs.clone());
+        entry.detail.mlc_attachments = mlc_attachments;
 
         // Save images to separate files; store file references in detail
         let mut image_refs = Vec::new();
@@ -752,6 +767,7 @@ impl SessionManager {
                     feedback_text: entry.detail.feedback_text.clone(),
                     command_logs: entry.detail.command_logs.clone(),
                     image_refs,
+                    mlc_attachments: entry.detail.mlc_attachments.clone(),
                     questions: entry.detail.questions.clone(),
                 }
             })
@@ -823,6 +839,7 @@ impl SessionManager {
                         feedback_text: ps.feedback_text,
                         command_logs: ps.command_logs,
                         images,
+                        mlc_attachments: ps.mlc_attachments,
                         questions: ps.questions,
                     },
                     response_tx: None,

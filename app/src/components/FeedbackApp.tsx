@@ -5,6 +5,7 @@ import { CallerTabs } from "./CallerTabs";
 import { CallerPanel } from "./CallerPanel";
 import { SettingsDialog } from "./SettingsDialog";
 import { WelcomeHome } from "./WelcomeHome";
+import { MlcSidePanel } from "./MlcSidePanel.tsx";
 import { MLRAView } from "./MLRAView";
 import { MLRACallerTabs } from "./MLRACallerTabs";
 import { Icon } from "./Icons";
@@ -542,13 +543,21 @@ export function FeedbackApp() {
   const callerOrder = useFeedbackStore((s) => s.callerOrder);
   const hiddenCallerIds = useFeedbackStore((s) => s.hiddenCallerIds);
   const activeCallerId = useFeedbackStore((s) => s.activeCallerId);
+  const mlcPanelVisible = useFeedbackStore((s) => s.mlcPanelVisible);
+  const mlcPanelPosition = useFeedbackStore((s) => s.mlcPanelPosition);
+  const setMlcPanelVisible = useFeedbackStore((s) => s.setMlcPanelVisible);
 
-  // Window width tracking for responsive multi-column layout
-  const [windowWidth, setWindowWidth] = useState(window.innerWidth);
+  // Caller workspace width tracking for responsive multi-column layout
+  const callerWorkspaceRef = useRef<HTMLDivElement>(null);
+  const [callerWorkspaceWidth, setCallerWorkspaceWidth] = useState(window.innerWidth);
   useEffect(() => {
-    const handler = () => setWindowWidth(window.innerWidth);
-    window.addEventListener("resize", handler);
-    return () => window.removeEventListener("resize", handler);
+    const node = callerWorkspaceRef.current;
+    if (!node) return;
+    const update = () => setCallerWorkspaceWidth(node.getBoundingClientRect().width || window.innerWidth);
+    update();
+    const observer = new ResizeObserver(update);
+    observer.observe(node);
+    return () => observer.disconnect();
   }, []);
 
   // Visible callers (excluding hidden ones)
@@ -565,7 +574,7 @@ export function FeedbackApp() {
   }, []);
 
   // Dynamic parallel: how many columns can fit?
-  const autoMaxColumns = Math.max(1, Math.floor(windowWidth / PANEL_MIN_WIDTH));
+  const autoMaxColumns = Math.max(1, Math.floor(callerWorkspaceWidth / PANEL_MIN_WIDTH));
   const maxColumns = layoutMode === "auto" ? autoMaxColumns : layoutMode;
   const canMultiColumn = visibleCallers.length > 1 && maxColumns >= 2;
 
@@ -671,6 +680,15 @@ export function FeedbackApp() {
             <LayoutModeButton layoutMode={layoutMode} onCycle={cycleLayoutMode} onSelect={setLayoutMode} />
             </>
           )}
+          {appView === "MLFB" && (
+            <button
+              onClick={() => setMlcPanelVisible(!mlcPanelVisible)}
+              className={`titlebar-btn${mlcPanelVisible ? " titlebar-btn-active" : ""}`}
+              title={t("mlc.title", "My Last Chat")}
+            >
+              <Icon name="book" size={13} />
+            </button>
+          )}
           <button
             onClick={() => toggleTheme()}
             className="titlebar-btn"
@@ -719,21 +737,27 @@ export function FeedbackApp() {
             <MLRAView />
           </MLRAErrorBoundary>
         ) : (
-          useMultiColumn ? (
-            /* Multi-column: parallel CallerPanels for column callers */
-            columnCallerIds.map((id) => (
-              <CallerPanel key={id} callerId={id} />
-            ))
-          ) : columnCallerIds.length === 1 ? (
-            /* Single column with multiple callers: show first from callerOrder */
-            <CallerPanel key={columnCallerIds[0]} callerId={columnCallerIds[0]} />
-          ) : activeCallerId ? (
-            /* Single column: one CallerPanel for the active caller */
-            <CallerPanel key={activeCallerId} callerId={activeCallerId} />
-          ) : (
-            /* No callers yet — show welcome page with key settings */
-            <WelcomeHome />
-          )
+          <>
+            {mlcPanelVisible && mlcPanelPosition === "left" && <MlcSidePanel />}
+            <div ref={callerWorkspaceRef} className="caller-workspace">
+              {useMultiColumn ? (
+                /* Multi-column: parallel CallerPanels for column callers */
+                columnCallerIds.map((id) => (
+                  <CallerPanel key={id} callerId={id} />
+                ))
+              ) : columnCallerIds.length === 1 ? (
+                /* Single column with multiple callers: show first from callerOrder */
+                <CallerPanel key={columnCallerIds[0]} callerId={columnCallerIds[0]} />
+              ) : activeCallerId ? (
+                /* Single column: one CallerPanel for the active caller */
+                <CallerPanel key={activeCallerId} callerId={activeCallerId} />
+              ) : (
+                /* No callers yet — show welcome page with key settings */
+                <WelcomeHome />
+              )}
+            </div>
+            {mlcPanelVisible && mlcPanelPosition === "right" && <MlcSidePanel />}
+          </>
         )}
       </div>
       </div>{/* end content-blurred wrapper */}

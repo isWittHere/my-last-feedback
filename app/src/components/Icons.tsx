@@ -74,6 +74,15 @@ const ICONS: Record<string, IconDef> = {
   terminal: {
     paths: '<polyline points="4 17 10 11 4 5" /><line x1="12" y1="19" x2="20" y2="19" />',
   },
+  code: {
+    paths: '<polyline points="8 7 3 12 8 17" /><line x1="14" y1="5" x2="10" y2="19" /><polyline points="16 7 21 12 16 17" />',
+  },
+  bug: {
+    paths: '<path d="M8 2l1.88 1.88" /><path d="M14.12 3.88L16 2" /><path d="M9 7.13V6a3 3 0 0 1 6 0v1.13" /><path d="M12 20c-3.3 0-6-2.7-6-6v-3a4 4 0 0 1 4-4h4a4 4 0 0 1 4 4v3c0 3.3-2.7 6-6 6Z" /><path d="M12 20v-9" /><path d="M6 13H2" /><path d="M22 13h-4" /><path d="M6.7 17.7 4 20" /><path d="M17.3 17.7 20 20" />',
+  },
+  checklist: {
+    paths: '<path d="M9 11l3 3L22 4" /><path d="M21 12v7a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h11" />',
+  },
   "git-branch": {
     paths: '<circle cx="18" cy="18" r="3" /><circle cx="6" cy="6" r="3" /><path d="M13 6h3a2 2 0 0 1 2 2v7" /><line x1="6" y1="9" x2="6" y2="21" />',
   },
@@ -108,6 +117,9 @@ const ICONS: Record<string, IconDef> = {
   "arrow-down-right": {
     paths: '<line x1="7" y1="7" x2="17" y2="17" /><polyline points="17 7 17 17 7 17" />',
   },
+  "arrow-bend-down-right": {
+    paths: '<path d="M4 4v7a4 4 0 0 0 4 4h12" /><polyline points="15 10 20 15 15 20" />',
+  },
   folder: {
     paths: '<path d="M4 20h16a2 2 0 0 0 2-2V8a2 2 0 0 0-2-2h-7.93a2 2 0 0 1-1.66-.9l-.82-1.2A2 2 0 0 0 7.93 3H4a2 2 0 0 0-2 2v13c0 1.1.9 2 2 2Z" />',
   },
@@ -140,6 +152,9 @@ const ICONS: Record<string, IconDef> = {
   info: {
     paths: '<circle cx="12" cy="12" r="10" /><line x1="12" y1="16" x2="12" y2="12" /><line x1="12" y1="8" x2="12.01" y2="8" />',
   },
+  inbox: {
+    paths: '<polyline points="22 12 16 12 14 15 10 15 8 12 2 12" /><path d="M5.45 5.11 2 12v6a2 2 0 0 0 2 2h16a2 2 0 0 0 2-2v-6l-3.45-6.89A2 2 0 0 0 16.76 4H7.24a2 2 0 0 0-1.79 1.11z" />',
+  },
   clock: {
     paths: '<circle cx="12" cy="12" r="10" /><polyline points="12 6 12 12 16 14" />',
   },
@@ -151,6 +166,19 @@ const ICONS: Record<string, IconDef> = {
   },
   "file-text": {
     paths: '<path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z" /><polyline points="14 2 14 8 20 8" /><line x1="16" y1="13" x2="8" y2="13" /><line x1="16" y1="17" x2="8" y2="17" /><polyline points="10 9 9 9 8 9" />',
+  },
+  "list-tree": {
+    paths: '<path d="M21 6H8" /><path d="M21 12H8" /><path d="M21 18H8" /><path d="M3 6h.01" /><path d="M3 12h.01" /><path d="M3 18h.01" />',
+  },
+  "star-empty": {
+    paths: '<polygon points="12 2 15.09 8.26 22 9.27 17 14.14 18.18 21.02 12 17.77 5.82 21.02 7 14.14 2 9.27 8.91 8.26 12 2" />',
+  },
+  "star-full": {
+    paths: '<polygon points="12 2 15.09 8.26 22 9.27 17 14.14 18.18 21.02 12 17.77 5.82 21.02 7 14.14 2 9.27 8.91 8.26 12 2" />',
+    defaultFill: "currentColor",
+  },
+  book: {
+    paths: '<path d="M4 19.5A2.5 2.5 0 0 1 6.5 17H20" /><path d="M4 4.5A2.5 2.5 0 0 1 6.5 2H20v20H6.5A2.5 2.5 0 0 1 4 19.5z" />',
   },
   sort: {
     paths: '<line x1="4" y1="6" x2="14" y2="6" /><line x1="4" y1="12" x2="18" y2="12" /><line x1="4" y1="18" x2="11" y2="18" /><polyline points="16 16 19 19 22 16" />',
@@ -166,6 +194,9 @@ const ICONS: Record<string, IconDef> = {
   },
   radio: {
     paths: '<path d="M16.24 7.76a6 6 0 0 1 0 8.49" /><path d="M19.07 4.93a10 10 0 0 1 0 14.14" /><path d="M7.76 16.24a6 6 0 0 1 0-8.49" /><path d="M4.93 19.07a10 10 0 0 1 0-14.14" /><circle cx="12" cy="12" r="2" />',
+  },
+  aim: {
+    paths: '<circle cx="12" cy="12" r="7" /><circle cx="12" cy="12" r="2" /><line x1="12" y1="2" x2="12" y2="5" /><line x1="12" y1="19" x2="12" y2="22" /><line x1="2" y1="12" x2="5" y2="12" /><line x1="19" y1="12" x2="22" y2="12" />',
   },
 
   // ── Window controls (10×10 viewBox) ──

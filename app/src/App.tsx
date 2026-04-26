@@ -76,6 +76,7 @@ function App() {
         feedback_text: string | null;
         command_logs: string | null;
         images: unknown[];
+        mlc_attachments?: Array<{ file_path: string; title: string; description: string }>;
         questions?: Array<{ label: string; options?: string[] }>;
       }>;
     }>("load_history")
@@ -97,6 +98,11 @@ function App() {
             testLogText: "",
             images: [],
             commandLogs: sess.command_logs || "",
+            mlcAttachments: (sess.mlc_attachments || []).map((item) => ({
+              filePath: item.file_path,
+              title: item.title,
+              description: item.description,
+            })),
             questions: (sess.questions || []).map((q: any) => ({
               label: q.label,
               options: q.options,
@@ -153,6 +159,7 @@ function App() {
         testLogText: "",
         images: [],
         commandLogs: "",
+        mlcAttachments: [],
         questions: (data.questions || []).map((q) => ({
           label: q.label,
           options: q.options,

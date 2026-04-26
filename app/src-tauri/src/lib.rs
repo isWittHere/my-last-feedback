@@ -1,4 +1,5 @@
 mod ipc;
+mod mlc;
 mod remote;
 mod session;
 
@@ -10,9 +11,10 @@ use serde::{Deserialize, Serialize};
 use tauri_plugin_autostart::{MacosLauncher, ManagerExt};
 
 use session::{
-    CallerInfo, FeedbackPayload, SessionDetail, SessionSummary, SharedSessionManager,
+    CallerInfo, FeedbackPayload, MlcAttachment, SessionDetail, SessionSummary, SharedSessionManager,
 };
 use ipc::SharedMlraWriter;
+use mlc::{mlc_delete_document, mlc_search_documents, mlc_toggle_favorite};
 
 /// Global app state shared by persistent-mode commands
 pub struct AppState {
@@ -248,6 +250,7 @@ async fn submit_session_feedback(
     feedback_text: String,
     command_logs: String,
     images: Vec<ImageData>,
+    mlc_attachments: Vec<MlcAttachment>,
     transfer_to_alias: Option<String>,
 ) -> Result<(), String> {
     let image_values: Vec<serde_json::Value> = images
@@ -286,7 +289,7 @@ async fn submit_session_feedback(
     };
 
     let mut mgr = session_mgr.lock().await;
-    mgr.submit_feedback(&session_id, payload)
+    mgr.submit_feedback(&session_id, payload, mlc_attachments)
 }
 
 /// Update caller tab color
@@ -667,6 +670,9 @@ pub fn run() {
             remove_empty_callers,
             trim_caller_sessions,
             clear_all_history,
+            mlc_delete_document,
+            mlc_search_documents,
+            mlc_toggle_favorite,
             send_to_mlra_daemon,
         ])
         .setup(move |app| {

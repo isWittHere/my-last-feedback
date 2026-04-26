@@ -12,6 +12,8 @@ solved_lists:
   - 完成草稿图片draft-images文件持久化
   - 完成旧版legacy三段式界面与fallback链路清理
   - 修复ImageData误删导致的Rust构建错误
+favorite: false
+updatedAt: 2026-04-26T07:16:07.355484300+00:00
 ---
 
 # MLFB注意力队列与Legacy清理会话摘要

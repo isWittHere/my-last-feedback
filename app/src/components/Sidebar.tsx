@@ -198,6 +198,7 @@ export function Sidebar() {
         feedbackText: "",
         commandLogs: "",
         images: [],
+        mlcAttachments: [],
       });
       markSessionResponded(pendingDeleteId);
     } catch (e) {

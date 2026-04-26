@@ -43,6 +43,24 @@ export interface GitAction {
   branchName?: string;
 }
 
+export interface MlcAttachment {
+  filePath: string;
+  title: string;
+  description: string;
+}
+
+export type ComposerFocusKind = "feedback" | "testLog" | "question" | "queuedDraft";
+
+export interface FocusedComposer {
+  callerId: string;
+  sessionId?: string;
+  projectDirectory: string;
+  kind: ComposerFocusKind;
+  focusedAt: string;
+}
+
+export type MlcPanelPosition = "left" | "right";
+
 export type NewRequestAttentionMode = "interrupt" | "passive";
 
 export interface AddSessionOptions {
@@ -55,6 +73,7 @@ export interface FeedbackDraft {
   testLogText: string;
   images: ImageAttachment[];
   gitAction: GitAction | null;
+  mlcAttachments: MlcAttachment[];
   updatedAt: string;
 }
 
@@ -71,6 +90,7 @@ export interface Session {
   testLogText: string;
   images: ImageAttachment[];
   commandLogs: string;
+  mlcAttachments: MlcAttachment[];
   // Agent questions
   questions: QuestionItem[];
   // Git action
@@ -98,6 +118,12 @@ export interface FeedbackState {
   activeSessionId: string | null;
   queuedDraftsByCallerId: Record<string, FeedbackDraft>;
   messageHistoryByCallerId: Record<string, string[]>;
+  focusedComposer: FocusedComposer | null;
+  mlcPanelVisible: boolean;
+  mlcPanelCollapsed: boolean;
+  mlcPanelPosition: MlcPanelPosition;
+  mlcPanelWidth: number;
+  mlcActiveWorkspacePath: string | null;
 
   // Persistent mode actions
   addCaller: (caller: Caller) => void;
@@ -114,6 +140,9 @@ export interface FeedbackState {
   addSessionImage: (sessionId: string, img: ImageAttachment) => void;
   removeSessionImage: (sessionId: string, path: string) => void;
   clearSessionImages: (sessionId: string) => void;
+  addSessionMlcAttachment: (sessionId: string, attachment: MlcAttachment) => void;
+  removeSessionMlcAttachment: (sessionId: string, filePath: string) => void;
+  clearSessionMlcAttachments: (sessionId: string) => void;
   setSessionGitAction: (sessionId: string, action: GitAction | null) => void;
   updateSessionGitBranchName: (sessionId: string, branchName: string) => void;
   markSessionResponded: (sessionId: string) => void;
@@ -142,6 +171,9 @@ export interface FeedbackState {
   addQueuedDraftImage: (callerId: string, img: ImageAttachment) => void;
   removeQueuedDraftImage: (callerId: string, path: string) => void;
   clearQueuedDraftImages: (callerId: string) => void;
+  addQueuedDraftMlcAttachment: (callerId: string, attachment: MlcAttachment) => void;
+  removeQueuedDraftMlcAttachment: (callerId: string, filePath: string) => void;
+  clearQueuedDraftMlcAttachments: (callerId: string) => void;
   setQueuedDraftGitAction: (callerId: string, action: GitAction | null) => void;
   updateQueuedDraftGitBranchName: (callerId: string, branchName: string) => void;
   clearQueuedDraft: (callerId: string) => void;
@@ -149,6 +181,13 @@ export interface FeedbackState {
   pushMessageHistory: (callerId: string, text: string) => void;
   getMessageHistory: (callerId: string) => string[];
   clearMessageHistory: (callerId?: string) => void;
+  setFocusedComposer: (focus: FocusedComposer) => void;
+  clearFocusedComposer: (sessionId?: string) => void;
+  setMlcPanelVisible: (visible: boolean) => void;
+  setMlcPanelCollapsed: (collapsed: boolean) => void;
+  setMlcPanelPosition: (position: MlcPanelPosition) => void;
+  setMlcPanelWidth: (width: number) => void;
+  setMlcActiveWorkspacePath: (path: string | null) => void;
 
   // Derived getters
   getActiveCaller: () => Caller | null;
@@ -160,6 +199,9 @@ const IMAGE_MAX_COUNT = 5;
 const IMAGE_MAX_SIZE_MB = 5;
 const IMAGE_MAX_TOTAL_MB = 20;
 const MESSAGE_HISTORY_MAX = 50;
+const MLC_PANEL_DEFAULT_WIDTH = 320;
+const MLC_PANEL_MIN_WIDTH = 240;
+const MLC_PANEL_MAX_WIDTH = 520;
 
 function emptyDraft(): FeedbackDraft {
   return {
@@ -167,12 +209,26 @@ function emptyDraft(): FeedbackDraft {
     testLogText: "",
     images: [],
     gitAction: null,
+    mlcAttachments: [],
     updatedAt: new Date().toISOString(),
   };
 }
 
+function normalizeDraft(draft: Partial<FeedbackDraft> | null | undefined): FeedbackDraft {
+  return {
+    ...emptyDraft(),
+    ...(draft || {}),
+    images: draft?.images || [],
+    mlcAttachments: draft?.mlcAttachments || [],
+  };
+}
+
 function isDraftEmpty(draft: FeedbackDraft): boolean {
-  return !draft.feedbackText.trim() && !draft.testLogText.trim() && draft.images.length === 0 && !draft.gitAction;
+  return !draft.feedbackText.trim()
+    && !draft.testLogText.trim()
+    && draft.images.length === 0
+    && draft.mlcAttachments.length === 0
+    && !draft.gitAction;
 }
 
 function loadMessageHistory(): Record<string, string[]> {
@@ -251,6 +307,28 @@ export const useFeedbackStore = create<FeedbackState>((set, get) => ({
   activeSessionId: null,
   queuedDraftsByCallerId: {},
   messageHistoryByCallerId: loadMessageHistory(),
+  focusedComposer: null,
+  mlcPanelVisible: (() => {
+    try { return localStorage.getItem("mlfb-mlc-panel-visible") === "true"; } catch { return false; }
+  })(),
+  mlcPanelCollapsed: (() => {
+    try { return localStorage.getItem("mlfb-mlc-panel-collapsed") === "true"; } catch { return false; }
+  })(),
+  mlcPanelPosition: (() => {
+    try {
+      const stored = localStorage.getItem("mlfb-mlc-panel-position");
+      return stored === "left" ? "left" : "right";
+    } catch { return "right"; }
+  })(),
+  mlcPanelWidth: (() => {
+    try {
+      const stored = Number(localStorage.getItem("mlfb-mlc-panel-width"));
+      return Number.isFinite(stored) && stored > 0
+        ? Math.min(MLC_PANEL_MAX_WIDTH, Math.max(MLC_PANEL_MIN_WIDTH, stored))
+        : MLC_PANEL_DEFAULT_WIDTH;
+    } catch { return MLC_PANEL_DEFAULT_WIDTH; }
+  })(),
+  mlcActiveWorkspacePath: null,
 
   addCaller: (caller) => {
     const { callers, callerOrder } = get();
@@ -399,45 +477,47 @@ export const useFeedbackStore = create<FeedbackState>((set, get) => ({
       unreadCallerIds: [],
       queuedDraftsByCallerId: {},
       messageHistoryByCallerId: {},
+      focusedComposer: null,
     });
   },
 
   addSession: (session, options) => {
+    const normalizedSession = { ...session, mlcAttachments: session.mlcAttachments || [] };
     const attentionMode = options?.attentionMode ?? "interrupt";
     const shouldInterrupt = attentionMode !== "passive";
-    const wasHidden = get().hiddenCallerIds.includes(session.callerId);
+    const wasHidden = get().hiddenCallerIds.includes(normalizedSession.callerId);
     let inserted = false;
     set((state) => {
       // Idempotent upsert: if a session with the same id already exists,
       // replace it (covers StrictMode double-invoke of load_history and any
       // other duplicate-add path). Otherwise append.
-      const idx = state.sessions.findIndex((s) => s.id === session.id);
+      const idx = state.sessions.findIndex((s) => s.id === normalizedSession.id);
       if (idx >= 0) {
         const next = state.sessions.slice();
-        next[idx] = session;
+        next[idx] = normalizedSession;
         return { sessions: next };
       }
       inserted = true;
-      return { sessions: [...state.sessions, session] };
+      return { sessions: [...state.sessions, normalizedSession] };
     });
-    if (inserted && session.status === "pending" && options?.applyQueuedDraft !== false) {
-      get().applyQueuedDraftToSession(session.callerId, session.id);
+    if (inserted && normalizedSession.status === "pending" && options?.applyQueuedDraft !== false) {
+      get().applyQueuedDraftToSession(normalizedSession.callerId, normalizedSession.id);
     }
     // Auto-unhide caller when a new pending session arrives
-    if (shouldInterrupt && session.status === "pending") {
-      get().unhideCaller(session.callerId);
+    if (shouldInterrupt && normalizedSession.status === "pending") {
+      get().unhideCaller(normalizedSession.callerId);
     }
     // Move caller to visible columns' last position if it was outside the visible window
-    if (shouldInterrupt && session.status === "pending") {
+    if (shouldInterrupt && normalizedSession.status === "pending") {
       const { callerOrder, hiddenCallerIds, visibleColumnCount, callers } = get();
       if (visibleColumnCount > 0) {
         const order = callerOrder.length > 0 ? callerOrder : callers.map(c => c.id);
         const visibleOrder = order.filter(id => !hiddenCallerIds.includes(id));
-        const posInVisible = visibleOrder.indexOf(session.callerId);
+        const posInVisible = visibleOrder.indexOf(normalizedSession.callerId);
         // Only move if caller exists and is outside the visible columns
         if (posInVisible >= visibleColumnCount || (wasHidden && posInVisible === -1)) {
           // Remove from current position and insert at the last visible column position
-          const newOrder = order.filter(id => id !== session.callerId);
+          const newOrder = order.filter(id => id !== normalizedSession.callerId);
           // Find the index in newOrder where the (visibleColumnCount-1)th visible caller is
           let visibleSeen = 0;
           let insertAfterIdx = -1;
@@ -452,18 +532,18 @@ export const useFeedbackStore = create<FeedbackState>((set, get) => ({
           }
           if (insertAfterIdx === -1) {
             // Less visible callers than columnCount, just append
-            newOrder.push(session.callerId);
+            newOrder.push(normalizedSession.callerId);
           } else {
-            newOrder.splice(insertAfterIdx, 0, session.callerId);
+            newOrder.splice(insertAfterIdx, 0, normalizedSession.callerId);
           }
           get().setCallerOrder(newOrder);
         }
       }
     }
     // Update pending count for the caller
-    get().updateCallerPendingCount(session.callerId);
+    get().updateCallerPendingCount(normalizedSession.callerId);
     // Auto-trim sessions per caller if limit is set
-    get().trimCallerSessions(session.callerId);
+    get().trimCallerSessions(normalizedSession.callerId);
     // Auto-remove empty callers if enabled
     if (get().autoRemoveEmptyCallers) {
       get().removeEmptyCallers();
@@ -520,6 +600,42 @@ export const useFeedbackStore = create<FeedbackState>((set, get) => ({
     }));
   },
 
+  addSessionMlcAttachment: (sessionId, attachment) => {
+    const session = get().sessions.find((s) => s.id === sessionId);
+    if (!session || session.status !== "pending") return;
+    const normalized = {
+      filePath: attachment.filePath,
+      title: attachment.title || attachment.filePath,
+      description: attachment.description || "",
+    };
+    if (!normalized.filePath || (session.mlcAttachments || []).some((item) => item.filePath === normalized.filePath)) return;
+    set((state) => ({
+      sessions: state.sessions.map((s) =>
+        s.id === sessionId
+          ? { ...s, mlcAttachments: [...(s.mlcAttachments || []), normalized] }
+          : s
+      ),
+    }));
+  },
+
+  removeSessionMlcAttachment: (sessionId, filePath) => {
+    set((state) => ({
+      sessions: state.sessions.map((s) =>
+        s.id === sessionId && s.status === "pending"
+          ? { ...s, mlcAttachments: (s.mlcAttachments || []).filter((item) => item.filePath !== filePath) }
+          : s
+      ),
+    }));
+  },
+
+  clearSessionMlcAttachments: (sessionId) => {
+    set((state) => ({
+      sessions: state.sessions.map((s) =>
+        s.id === sessionId && s.status === "pending" ? { ...s, mlcAttachments: [] } : s
+      ),
+    }));
+  },
+
   setSessionGitAction: (sessionId, action) => {
     set((state) => ({
       sessions: state.sessions.map((s) =>
@@ -545,6 +661,7 @@ export const useFeedbackStore = create<FeedbackState>((set, get) => ({
       sessions: state.sessions.map((s) =>
         s.id === sessionId ? { ...s, status: "responded" as const } : s
       ),
+      focusedComposer: state.focusedComposer?.sessionId === sessionId ? null : state.focusedComposer,
     }));
     // Find the caller and update pending count
     const session = get().sessions.find((s) => s.id === sessionId);
@@ -558,6 +675,7 @@ export const useFeedbackStore = create<FeedbackState>((set, get) => ({
       sessions: state.sessions.map((s) =>
         s.id === sessionId ? { ...s, status: "cancelled" as const } : s
       ),
+      focusedComposer: state.focusedComposer?.sessionId === sessionId ? null : state.focusedComposer,
     }));
     invoke("cancel_session", { sessionId }).catch((e: unknown) =>
       console.error("Failed to persist cancelled session:", e)
@@ -606,7 +724,10 @@ export const useFeedbackStore = create<FeedbackState>((set, get) => ({
     const session = sessions.find((s) => s.id === sessionId);
     if (!session) return;
     const remaining = sessions.filter((s) => s.id !== sessionId);
-    set({ sessions: remaining });
+    set((state) => ({
+      sessions: remaining,
+      focusedComposer: state.focusedComposer?.sessionId === sessionId ? null : state.focusedComposer,
+    }));
     // If we removed the active session, select another one from the same caller
     if (activeSessionId === sessionId) {
       const callerSessions = remaining.filter((s) => s.callerId === session.callerId);
@@ -732,6 +853,7 @@ export const useFeedbackStore = create<FeedbackState>((set, get) => ({
       activeSessionId: newActiveSessionId,
       queuedDraftsByCallerId: newQueuedDrafts,
       messageHistoryByCallerId: Object.fromEntries(Object.entries(messageHistoryByCallerId).filter(([id]) => id !== callerId)),
+      focusedComposer: get().focusedComposer?.callerId === callerId ? null : get().focusedComposer,
     });
     saveMessageHistory(get().messageHistoryByCallerId);
   },
@@ -757,6 +879,7 @@ export const useFeedbackStore = create<FeedbackState>((set, get) => ({
       activeCallerId: newActiveCallerId,
       queuedDraftsByCallerId: newQueuedDrafts,
       messageHistoryByCallerId: Object.fromEntries(Object.entries(messageHistoryByCallerId).filter(([id]) => !removedSet.has(id))),
+      focusedComposer: get().focusedComposer && removedSet.has(get().focusedComposer!.callerId) ? null : get().focusedComposer,
     });
     saveMessageHistory(get().messageHistoryByCallerId);
     return removedIds;
@@ -822,9 +945,13 @@ export const useFeedbackStore = create<FeedbackState>((set, get) => ({
 
   setVisibleColumnCount: (count) => set({ visibleColumnCount: count }),
 
-  setQueuedDrafts: (drafts) => set({ queuedDraftsByCallerId: drafts || {} }),
+  setQueuedDrafts: (drafts) => set({
+    queuedDraftsByCallerId: Object.fromEntries(
+      Object.entries(drafts || {}).map(([callerId, draft]) => [callerId, normalizeDraft(draft)])
+    ),
+  }),
 
-  getQueuedDraft: (callerId) => get().queuedDraftsByCallerId[callerId] || emptyDraft(),
+  getQueuedDraft: (callerId) => normalizeDraft(get().queuedDraftsByCallerId[callerId]),
 
   updateQueuedDraftField: (callerId, field, value) => {
     set((state) => {
@@ -881,6 +1008,43 @@ export const useFeedbackStore = create<FeedbackState>((set, get) => ({
     });
   },
 
+  addQueuedDraftMlcAttachment: (callerId, attachment) => {
+    const draft = get().getQueuedDraft(callerId);
+    if (draft.mlcAttachments.find((item) => item.filePath === attachment.filePath)) return;
+    set((state) => {
+      const next = {
+        ...state.queuedDraftsByCallerId,
+        [callerId]: { ...draft, mlcAttachments: [...draft.mlcAttachments, attachment], updatedAt: new Date().toISOString() },
+      };
+      persistQueuedDrafts(next);
+      return { queuedDraftsByCallerId: next };
+    });
+  },
+
+  removeQueuedDraftMlcAttachment: (callerId, filePath) => {
+    const draft = get().getQueuedDraft(callerId);
+    set((state) => {
+      const next = {
+        ...state.queuedDraftsByCallerId,
+        [callerId]: { ...draft, mlcAttachments: draft.mlcAttachments.filter((item) => item.filePath !== filePath), updatedAt: new Date().toISOString() },
+      };
+      persistQueuedDrafts(next);
+      return { queuedDraftsByCallerId: next };
+    });
+  },
+
+  clearQueuedDraftMlcAttachments: (callerId) => {
+    const draft = get().getQueuedDraft(callerId);
+    set((state) => {
+      const next = {
+        ...state.queuedDraftsByCallerId,
+        [callerId]: { ...draft, mlcAttachments: [], updatedAt: new Date().toISOString() },
+      };
+      persistQueuedDrafts(next);
+      return { queuedDraftsByCallerId: next };
+    });
+  },
+
   setQueuedDraftGitAction: (callerId, action) => {
     const draft = get().getQueuedDraft(callerId);
     set((state) => {
@@ -916,7 +1080,8 @@ export const useFeedbackStore = create<FeedbackState>((set, get) => ({
   },
 
   applyQueuedDraftToSession: (callerId, sessionId) => {
-    const draft = get().queuedDraftsByCallerId[callerId];
+    const rawDraft = get().queuedDraftsByCallerId[callerId];
+    const draft = normalizeDraft(rawDraft);
     if (!draft || isDraftEmpty(draft)) return;
     set((state) => ({
       sessions: state.sessions.map((s) =>
@@ -927,6 +1092,7 @@ export const useFeedbackStore = create<FeedbackState>((set, get) => ({
               testLogText: draft.testLogText,
               images: draft.images,
               gitAction: draft.gitAction,
+              mlcAttachments: draft.mlcAttachments,
             }
           : s
       ),
@@ -958,6 +1124,37 @@ export const useFeedbackStore = create<FeedbackState>((set, get) => ({
       return { messageHistoryByCallerId: next };
     });
   },
+
+  setFocusedComposer: (focus) => set({ focusedComposer: focus, mlcActiveWorkspacePath: focus.projectDirectory || null }),
+
+  clearFocusedComposer: (sessionId) => {
+    set((state) => ({
+      focusedComposer: !sessionId || state.focusedComposer?.sessionId === sessionId ? null : state.focusedComposer,
+    }));
+  },
+
+  setMlcPanelVisible: (visible) => {
+    set({ mlcPanelVisible: visible });
+    try { localStorage.setItem("mlfb-mlc-panel-visible", String(visible)); } catch {}
+  },
+
+  setMlcPanelCollapsed: (collapsed) => {
+    set({ mlcPanelCollapsed: collapsed });
+    try { localStorage.setItem("mlfb-mlc-panel-collapsed", String(collapsed)); } catch {}
+  },
+
+  setMlcPanelPosition: (position) => {
+    set({ mlcPanelPosition: position });
+    try { localStorage.setItem("mlfb-mlc-panel-position", position); } catch {}
+  },
+
+  setMlcPanelWidth: (width) => {
+    const nextWidth = Math.min(MLC_PANEL_MAX_WIDTH, Math.max(MLC_PANEL_MIN_WIDTH, width));
+    set({ mlcPanelWidth: nextWidth });
+    try { localStorage.setItem("mlfb-mlc-panel-width", String(nextWidth)); } catch {}
+  },
+
+  setMlcActiveWorkspacePath: (path) => set({ mlcActiveWorkspacePath: path }),
 
   // Derived getters
   getActiveCaller: () => {
