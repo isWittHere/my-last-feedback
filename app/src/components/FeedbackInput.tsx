@@ -5,6 +5,13 @@ import { useShallow } from "zustand/react/shallow";
 import { useActiveCallerSession } from "./useActiveCallerSession";
 import { useFriendlyName } from "./useFriendlyName";
 
+interface InsertFeedbackTextEventDetail {
+  callerId: string;
+  sessionId?: string;
+  kind: string;
+  text: string;
+}
+
 export function FeedbackInput({ minHeight, queuedCallerId }: { minHeight?: number; queuedCallerId?: string } = {}) {
   const { t } = useTranslation();
   const friendlyName = useFriendlyName();
@@ -80,6 +87,38 @@ export function FeedbackInput({ minHeight, queuedCallerId }: { minHeight?: numbe
       el.setSelectionRange(pos, pos);
     });
   }, [activeSession, queuedCallerId, updateQueuedDraftField, updateSessionField]);
+
+  useEffect(() => {
+    const handleInsertText = (event: Event) => {
+      const detail = (event as CustomEvent<InsertFeedbackTextEventDetail>).detail;
+      if (!detail?.text) return;
+      const matchesQueuedDraft = !!queuedCallerId && detail.kind === "queuedDraft" && detail.callerId === queuedCallerId;
+      const matchesSession = !queuedCallerId && !!activeSession && detail.kind === "feedback" && detail.sessionId === activeSession.id;
+      if (!matchesQueuedDraft && !matchesSession) return;
+
+      const textarea = textareaRef.current;
+      const start = textarea?.selectionStart ?? value.length;
+      const end = textarea?.selectionEnd ?? value.length;
+      const nextValue = value.slice(0, start) + detail.text + value.slice(end);
+      const nextCursor = start + detail.text.length;
+
+      if (queuedCallerId) {
+        updateQueuedDraftField(queuedCallerId, "feedbackText", nextValue);
+      } else if (activeSession) {
+        updateSessionField(activeSession.id, "feedbackText", nextValue);
+      }
+
+      requestAnimationFrame(() => {
+        const nextTextarea = textareaRef.current;
+        if (!nextTextarea) return;
+        nextTextarea.focus();
+        nextTextarea.setSelectionRange(nextCursor, nextCursor);
+      });
+    };
+
+    window.addEventListener("mlfb-insert-feedback-text", handleInsertText);
+    return () => window.removeEventListener("mlfb-insert-feedback-text", handleInsertText);
+  }, [activeSession, queuedCallerId, updateQueuedDraftField, updateSessionField, value]);
 
   const handleKeyDown = useCallback((e: React.KeyboardEvent<HTMLTextAreaElement>) => {
     if (isReadonly || (e.key !== "ArrowUp" && e.key !== "ArrowDown" && e.key !== "Escape")) return;

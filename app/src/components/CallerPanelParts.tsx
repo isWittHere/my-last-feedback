@@ -48,8 +48,10 @@ export function AttachmentTagBar({
   const setFocusedComposer = useFeedbackStore((s) => s.setFocusedComposer);
   const mlcPanelVisible = useFeedbackStore((s) => s.mlcPanelVisible);
   const mlcActiveWorkspacePath = useFeedbackStore((s) => s.mlcActiveWorkspacePath);
+  const sidePanelActiveTab = useFeedbackStore((s) => s.sidePanelActiveTab);
   const setMlcPanelVisible = useFeedbackStore((s) => s.setMlcPanelVisible);
   const setMlcActiveWorkspacePath = useFeedbackStore((s) => s.setMlcActiveWorkspacePath);
+  const setSidePanelActiveTab = useFeedbackStore((s) => s.setSidePanelActiveTab);
   const targetImages = queuedCallerId ? (queuedDraft?.images || []) : (activeSession?.images || []);
   const targetTestLogText = queuedCallerId ? (queuedDraft?.testLogText || "") : (activeSession?.testLogText || "");
   const targetGitAction = queuedCallerId ? (queuedDraft?.gitAction || null) : (activeSession?.gitAction || null);
@@ -58,7 +60,8 @@ export function AttachmentTagBar({
   const hasTestLog = !!targetTestLogText.trim();
   const hasGitAction = !!targetGitAction;
   const hasMlcAttachments = targetMlcAttachments.length > 0;
-  const isMlcButtonActive = mlcPanelVisible && !!activeSession?.projectDirectory && mlcActiveWorkspacePath === activeSession.projectDirectory;
+  const isMlcButtonActive = mlcPanelVisible && sidePanelActiveTab === "mlc" && !!activeSession?.projectDirectory && mlcActiveWorkspacePath === activeSession.projectDirectory;
+  const isResourceButtonActive = mlcPanelVisible && sidePanelActiveTab === "resources" && !!activeSession?.projectDirectory && mlcActiveWorkspacePath === activeSession.projectDirectory;
   const hasTags = images.length > 0 || hasTestLog || showTestLog || hasGitAction || hasMlcAttachments;
   const tagAreaRef = useRef<HTMLDivElement>(null);
   const branchInputRef = useRef<HTMLInputElement>(null);
@@ -81,6 +84,25 @@ export function AttachmentTagBar({
     }
   };
 
+  const handleResourceClick = () => {
+    if (isResourceButtonActive) {
+      setMlcPanelVisible(false);
+      return;
+    }
+    const projectDirectory = activeSession?.projectDirectory || "";
+    if (!projectDirectory || !caller) return;
+    setFocusedComposer({
+      callerId: queuedCallerId || caller.id,
+      sessionId: queuedCallerId ? undefined : activeSession?.id,
+      projectDirectory,
+      kind: queuedCallerId ? "queuedDraft" : "feedback",
+      focusedAt: new Date().toISOString(),
+    });
+    setMlcActiveWorkspacePath(projectDirectory);
+    setSidePanelActiveTab("resources");
+    setMlcPanelVisible(true);
+  };
+
   const handleMlcClick = () => {
     if (isMlcButtonActive) {
       setMlcPanelVisible(false);
@@ -95,6 +117,7 @@ export function AttachmentTagBar({
         focusedAt: new Date().toISOString(),
       });
       setMlcActiveWorkspacePath(activeSession?.projectDirectory || null);
+      setSidePanelActiveTab("mlc");
       setMlcPanelVisible(true);
       return;
     }
@@ -107,6 +130,7 @@ export function AttachmentTagBar({
       focusedAt: new Date().toISOString(),
     });
     setMlcActiveWorkspacePath(activeSession.projectDirectory);
+    setSidePanelActiveTab("mlc");
     setMlcPanelVisible(true);
   };
 
@@ -147,6 +171,22 @@ export function AttachmentTagBar({
         >
           <Icon name="git-branch" size={12} />
           {t("gitAction.button", "Git 操作")}
+        </button>
+        <button
+          className="btn"
+          style={{
+            fontSize: 11,
+            padding: "3px 10px",
+            background: isResourceButtonActive ? callerColor : undefined,
+            borderColor: isResourceButtonActive ? callerColor : undefined,
+            color: isResourceButtonActive ? "#fff" : undefined,
+          }}
+          disabled={!queuedCallerId && (!activeSession || activeSession.status !== "pending")}
+          onClick={handleResourceClick}
+          title={t("resources.openPanel", "Open project resources")}
+        >
+          <Icon name="folder" size={12} />
+          {t("resources.button", "资源")}
         </button>
         <button
           className="btn"
@@ -768,14 +808,39 @@ function ReadonlyLogTag({ testLogText, expanded, onToggle }: { testLogText: stri
   );
 }
 
-/** Render text with clickable links and color swatches */
+type RichTextPart =
+  | { type: "text"; value: string }
+  | { type: "url"; value: string }
+  | { type: "color"; value: string }
+  | { type: "resourceLink"; label: string; href: string; kind: "file" | "folder" };
+
+function decodeResourceHref(value: string): string {
+  try { return decodeURIComponent(value); } catch { return value; }
+}
+
+function normalizeResourcePath(value: string): string {
+  return decodeResourceHref(value).replace(/\\/g, "/");
+}
+
+function isLocalResourceHref(value: string): boolean {
+  const normalized = normalizeResourcePath(value);
+  return /^[A-Za-z]:\//.test(normalized) || /^\//.test(normalized);
+}
+
+function resourceKind(label: string, href: string): "file" | "folder" {
+  const normalized = normalizeResourcePath(href);
+  return label.endsWith("/") || normalized.endsWith("/") ? "folder" : "file";
+}
+
+/** Render text with clickable links, color swatches and readonly resource tags */
 export function RichText({ text, style, className }: { text: string; style?: React.CSSProperties; className?: string }) {
   const parts = useMemo(() => {
+    const RESOURCE_LINK_RE = /\[([^\]\n]+)\]\(([^)\n]+)\)/g;
     const URL_RE = /https?:\/\/[^\s<>"')\]]+/g;
     const COLOR_RE = /#(?:[0-9a-fA-F]{3}){1,2}\b|rgba?\(\s*\d+\s*,\s*\d+\s*,\s*\d+\s*(?:,\s*[\d.]+\s*)?\)/g;
-    const COMBINED = new RegExp(`(${URL_RE.source})|(${COLOR_RE.source})`, "g");
+    const COMBINED = new RegExp(`(${RESOURCE_LINK_RE.source})|(${URL_RE.source})|(${COLOR_RE.source})`, "g");
 
-    const result: { type: "text" | "url" | "color"; value: string }[] = [];
+    const result: RichTextPart[] = [];
     let lastIndex = 0;
     let match: RegExpExecArray | null;
 
@@ -784,9 +849,17 @@ export function RichText({ text, style, className }: { text: string; style?: Rea
         result.push({ type: "text", value: text.slice(lastIndex, match.index) });
       }
       if (match[1]) {
-        result.push({ type: "url", value: match[1] });
-      } else if (match[2]) {
-        result.push({ type: "color", value: match[2] });
+        const label = match[2];
+        const href = match[3];
+        if (isLocalResourceHref(href)) {
+          result.push({ type: "resourceLink", label, href: normalizeResourcePath(href), kind: resourceKind(label, href) });
+        } else {
+          result.push({ type: "text", value: match[1] });
+        }
+      } else if (match[4]) {
+        result.push({ type: "url", value: match[4] });
+      } else if (match[5]) {
+        result.push({ type: "color", value: match[5] });
       }
       lastIndex = match.index + match[0].length;
     }
@@ -842,6 +915,29 @@ export function RichText({ text, style, className }: { text: string; style?: Rea
                 }}
               />
               <code style={{ fontSize: "inherit", color: "inherit" }}>{part.value}</code>
+            </span>
+          );
+        }
+        if (part.type === "resourceLink") {
+          const copyPath = () => navigator.clipboard.writeText(part.href).catch(() => {});
+          return (
+            <span
+              key={i}
+              className="readonly-resource-tag"
+              role="button"
+              tabIndex={0}
+              data-tooltip={`${part.kind === "folder" ? "Folder" : "File"}\n${part.href}`}
+              data-tooltip-placement="top"
+              onClick={copyPath}
+              onKeyDown={(event) => {
+                if (event.key === "Enter" || event.key === " ") {
+                  event.preventDefault();
+                  copyPath();
+                }
+              }}
+            >
+              <Icon name={part.kind === "folder" ? "folder" : "file-text"} size={11} />
+              <span>{part.label}</span>
             </span>
           );
         }

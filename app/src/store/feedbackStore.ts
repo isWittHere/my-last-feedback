@@ -60,6 +60,7 @@ export interface FocusedComposer {
 }
 
 export type MlcPanelPosition = "left" | "right";
+export type SidePanelTab = "mlc" | "resources";
 
 export type NewRequestAttentionMode = "interrupt" | "passive";
 
@@ -124,6 +125,7 @@ export interface FeedbackState {
   mlcPanelPosition: MlcPanelPosition;
   mlcPanelWidth: number;
   mlcActiveWorkspacePath: string | null;
+  sidePanelActiveTab: SidePanelTab;
 
   // Persistent mode actions
   addCaller: (caller: Caller) => void;
@@ -188,6 +190,7 @@ export interface FeedbackState {
   setMlcPanelPosition: (position: MlcPanelPosition) => void;
   setMlcPanelWidth: (width: number) => void;
   setMlcActiveWorkspacePath: (path: string | null) => void;
+  setSidePanelActiveTab: (tab: SidePanelTab) => void;
 
   // Derived getters
   getActiveCaller: () => Caller | null;
@@ -329,6 +332,12 @@ export const useFeedbackStore = create<FeedbackState>((set, get) => ({
     } catch { return MLC_PANEL_DEFAULT_WIDTH; }
   })(),
   mlcActiveWorkspacePath: null,
+  sidePanelActiveTab: (() => {
+    try {
+      const stored = localStorage.getItem("mlfb-side-panel-active-tab");
+      return stored === "resources" ? "resources" : "mlc";
+    } catch { return "mlc"; }
+  })(),
 
   addCaller: (caller) => {
     const { callers, callerOrder } = get();
@@ -1156,6 +1165,11 @@ export const useFeedbackStore = create<FeedbackState>((set, get) => ({
   },
 
   setMlcActiveWorkspacePath: (path) => set({ mlcActiveWorkspacePath: path }),
+
+  setSidePanelActiveTab: (tab) => {
+    set({ sidePanelActiveTab: tab });
+    try { localStorage.setItem("mlfb-side-panel-active-tab", tab); } catch {}
+  },
 
   // Derived getters
   getActiveCaller: () => {

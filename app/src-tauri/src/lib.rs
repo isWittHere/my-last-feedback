@@ -1,5 +1,6 @@
 mod ipc;
 mod mlc;
+mod project_resources;
 mod remote;
 mod session;
 
@@ -15,6 +16,7 @@ use session::{
 };
 use ipc::SharedMlraWriter;
 use mlc::{mlc_delete_document, mlc_search_documents, mlc_toggle_favorite};
+use project_resources::project_list_directory;
 
 /// Global app state shared by persistent-mode commands
 pub struct AppState {
@@ -673,6 +675,7 @@ pub fn run() {
             mlc_delete_document,
             mlc_search_documents,
             mlc_toggle_favorite,
+            project_list_directory,
             send_to_mlra_daemon,
         ])
         .setup(move |app| {

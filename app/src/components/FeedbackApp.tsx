@@ -5,7 +5,7 @@ import { CallerTabs } from "./CallerTabs";
 import { CallerPanel } from "./CallerPanel";
 import { SettingsDialog } from "./SettingsDialog";
 import { WelcomeHome } from "./WelcomeHome";
-import { MlcSidePanel } from "./MlcSidePanel.tsx";
+import { ContextSidePanel } from "./ContextSidePanel";
 import { MLRAView } from "./MLRAView";
 import { MLRACallerTabs } from "./MLRACallerTabs";
 import { Icon } from "./Icons";
@@ -757,7 +757,7 @@ export function FeedbackApp() {
           </MLRAErrorBoundary>
         ) : (
           <>
-            {mlcPanelVisible && mlcPanelPosition === "left" && <MlcSidePanel />}
+            {mlcPanelVisible && mlcPanelPosition === "left" && <ContextSidePanel />}
             <div ref={callerWorkspaceRef} className="caller-workspace">
               {useMultiColumn ? (
                 /* Multi-column: parallel CallerPanels for column callers */
@@ -775,7 +775,7 @@ export function FeedbackApp() {
                 <WelcomeHome />
               )}
             </div>
-            {mlcPanelVisible && mlcPanelPosition === "right" && <MlcSidePanel />}
+            {mlcPanelVisible && mlcPanelPosition === "right" && <ContextSidePanel />}
           </>
         )}
       </div>
