@@ -6,6 +6,11 @@ import { invoke } from "@tauri-apps/api/core";
 export type RuntimeMainRole = "expert" | "inspector" | "ceo";
 export type AgentRole = RuntimeMainRole | "worker";
 export type ControlMode = "autopilot" | "ceo-override";
+export type SubmitReleasePolicy = "auto" | "user-review";
+export type CeoGateTriggerPolicy = "auto-to-ceo" | "user-replaces-ceo";
+export type CeoVerdictReleasePolicy = "auto-release" | "user-review";
+export type CeoGateMode = "auto" | "user" | "review";
+export type OrchestrationPresetId = "autopilot" | "ceo-user" | "ceo-review" | "full-review" | "custom";
 export type LauncherStatus =
   | "configuring"
   | "ready"
@@ -14,8 +19,54 @@ export type LauncherStatus =
   | "completed"
   | "cancelled"
   | "awaiting-user";
-export type AgentSlotStatus = "active" | "standby" | "idle";
+export type AgentSlotStatus = "active" | "standby" | "idle" | "blocked" | "waiting-human-review" | "waiting-peer" | "waiting-gate" | "disconnected";
 export type WorkerStatus = "ready" | "working" | "broken";
+
+export interface OrchestrationPolicy {
+  preset: OrchestrationPresetId;
+  expertSubmit: SubmitReleasePolicy;
+  inspectorSubmit: SubmitReleasePolicy;
+  ceoGateTrigger: CeoGateTriggerPolicy;
+  ceoVerdict: CeoVerdictReleasePolicy;
+}
+
+export type HumanGateKind = "submit_handoff_review" | "stage_exit_gate_trigger" | "ceo_verdict_review" | "closing_feedback";
+export type HumanGateRole = RuntimeMainRole | "orchestrator" | "user";
+export type PendingToolName = "expert_submit" | "inspector_submit" | "expert_vote" | "inspector_vote" | "ceo_verdict" | "interactive_feedback";
+
+export interface HumanGateState {
+  id: string;
+  active: boolean;
+  kind: HumanGateKind;
+  title: string;
+  sourceRole: HumanGateRole;
+  targetRole?: HumanGateRole;
+  pendingTool: PendingToolName;
+  blockedRoles: HumanGateRole[];
+  originalContent: string;
+  draftContent: string;
+  metadata?: Record<string, unknown>;
+  createdAt: string;
+}
+
+export interface StageExitPendingSummary {
+  active: boolean;
+  stageId: string | null;
+  materials: string | null;
+  expert: { blocked: boolean; reason: string; certification?: unknown } | null;
+  inspector: { blocked: boolean; reason: string; certification?: unknown } | null;
+}
+
+export interface StageExitReadinessSummary {
+  deliverableVersion: number;
+  reviewedDeliverableVersion: number;
+  hasDeliverable: boolean;
+  hasReview: boolean;
+  certifications: {
+    expert: unknown | null;
+    inspector: unknown | null;
+  };
+}
 
 // ── Blueprint types (stage-flow system) ──
 
@@ -203,6 +254,7 @@ export interface Launcher {
   name: string;
   status: LauncherStatus;
   controlMode: ControlMode;
+  orchestrationPolicy: OrchestrationPolicy;
   createdAt: string;
   updatedAt: string;
   startedAt: string | null;
@@ -222,6 +274,9 @@ export interface Launcher {
   sessionPools: Record<string, SessionPool>;
   budget: BudgetStatus | null;
   ceoGate: CeoGateStatus | null;
+  humanGate: HumanGateState | null;
+  stageExitPending: StageExitPendingSummary | null;
+  stageExitReadiness: StageExitReadinessSummary | null;
 
   taskType: string | null;
   userTask: string;
@@ -246,6 +301,7 @@ export interface MLRAState {
   createLauncher: (name: string) => string;
   switchLauncher: (id: string) => void;
   setControlMode: (id: string, mode: ControlMode) => void;
+  setOrchestrationPolicy: (id: string, policy: OrchestrationPolicy) => void;
   deleteLauncher: (id: string) => void;
   renameLauncher: (id: string, name: string) => void;
 
@@ -279,10 +335,12 @@ export interface MLRAState {
 
   // Daemon communication
   sendToDaemon: (msg: Record<string, unknown>) => Promise<void>;
-  daemonStartOrchestration: (launcherId: string, userTask: string, taskType: string | null, blueprint: WorkflowBlueprint) => void;
+  daemonStartOrchestration: (launcherId: string, userTask: string, taskType: string | null, blueprint: WorkflowBlueprint, orchestrationPolicy: OrchestrationPolicy) => void;
   daemonSetControlMode: (mode: ControlMode) => void;
-  daemonReviewApproved: (content: string) => void;
-  daemonReviewRejected: (reason: string) => void;
+  daemonSetOrchestrationPolicy: (policy: OrchestrationPolicy) => void;
+  daemonApproveHumanGate: (payload: { id: string; content?: string; verdict?: string; reason?: string; targets?: string[] }) => void;
+  daemonRejectHumanGate: (payload: { id: string; reason: string }) => void;
+  daemonCancelHumanGate: (payload: { id: string; reason?: string }) => void;
   daemonTerminate: () => void;
   daemonSetBudget: (limit: number) => void;
   daemonIncreaseBudget: (amount: number) => void;
@@ -309,6 +367,76 @@ export function isClosingStage(stage: StageBlueprint | null | undefined): boolea
 
 function emptyAgents(): Launcher["agents"] {
   return { expert: null, inspector: null, ceo: null, workers: [] };
+}
+
+export const ORCHESTRATION_PRESETS: Array<{ id: OrchestrationPresetId; label: string; description: string; icon: string; policy: OrchestrationPolicy }> = [
+  {
+    id: "autopilot",
+    label: "全自动",
+    description: "主 agent handoff 与 CEO verdict 都自动释放。",
+    icon: "play",
+    policy: { preset: "autopilot", expertSubmit: "auto", inspectorSubmit: "auto", ceoGateTrigger: "auto-to-ceo", ceoVerdict: "auto-release" },
+  },
+  {
+    id: "ceo-review",
+    label: "审核CEO",
+    description: "CEO 先审核，verdict 由人工确认后释放。",
+    icon: "eye",
+    policy: { preset: "ceo-review", expertSubmit: "auto", inspectorSubmit: "auto", ceoGateTrigger: "auto-to-ceo", ceoVerdict: "user-review" },
+  },
+  {
+    id: "ceo-user",
+    label: "接管CEO",
+    description: "主 agent 自动流转，阶段门控由人工直接裁定。",
+    icon: "users",
+    policy: { preset: "ceo-user", expertSubmit: "auto", inspectorSubmit: "auto", ceoGateTrigger: "user-replaces-ceo", ceoVerdict: "auto-release" },
+  },
+  {
+    id: "full-review",
+    label: "全面接管",
+    description: "每次主 agent handoff 与阶段门控都经过用户。",
+    icon: "lock",
+    policy: { preset: "full-review", expertSubmit: "user-review", inspectorSubmit: "user-review", ceoGateTrigger: "user-replaces-ceo", ceoVerdict: "auto-release" },
+  },
+];
+
+export function getDefaultOrchestrationPolicy(): OrchestrationPolicy {
+  return { ...ORCHESTRATION_PRESETS[0].policy };
+}
+
+export function policyFromControlMode(mode: ControlMode): OrchestrationPolicy {
+  if (mode === "ceo-override") return { ...(ORCHESTRATION_PRESETS.find((preset) => preset.id === "ceo-user")?.policy ?? ORCHESTRATION_PRESETS[0].policy) };
+  return getDefaultOrchestrationPolicy();
+}
+
+export function getCeoGateMode(policy: OrchestrationPolicy): CeoGateMode {
+  if (policy.ceoGateTrigger === "user-replaces-ceo") return "user";
+  if (policy.ceoVerdict === "user-review") return "review";
+  return "auto";
+}
+
+export function customizeOrchestrationPolicy(policy: OrchestrationPolicy, patch: Partial<OrchestrationPolicy>): OrchestrationPolicy {
+  return { ...policy, ...patch, preset: "custom" };
+}
+
+export function setPolicyCeoGateMode(policy: OrchestrationPolicy, mode: CeoGateMode): OrchestrationPolicy {
+  if (mode === "user") {
+    return customizeOrchestrationPolicy(policy, { ceoGateTrigger: "user-replaces-ceo", ceoVerdict: "auto-release" });
+  }
+  if (mode === "review") {
+    return customizeOrchestrationPolicy(policy, { ceoGateTrigger: "auto-to-ceo", ceoVerdict: "user-review" });
+  }
+  return customizeOrchestrationPolicy(policy, { ceoGateTrigger: "auto-to-ceo", ceoVerdict: "auto-release" });
+}
+
+function normalizeAgentStatus(status: unknown): AgentSlotStatus {
+  if (status === "blocked") return "blocked";
+  if (status === "waiting-human-review") return "waiting-human-review";
+  if (status === "waiting-peer") return "waiting-peer";
+  if (status === "waiting-gate") return "waiting-gate";
+  if (status === "registered") return "idle";
+  if (status === "active" || status === "standby" || status === "idle" || status === "disconnected") return status;
+  return "idle";
 }
 
 // Stage template "presets" — mirror mcp_prompts/stage_templates/*.json.
@@ -519,7 +647,8 @@ export const useMLRAStore = create<MLRAState>((set, get) => ({
       id,
       name,
       status: "configuring",
-      controlMode: "ceo-override",
+      controlMode: "autopilot",
+      orchestrationPolicy: getDefaultOrchestrationPolicy(),
       createdAt: new Date().toISOString(),
       updatedAt: new Date().toISOString(),
       startedAt: null,
@@ -531,6 +660,9 @@ export const useMLRAStore = create<MLRAState>((set, get) => ({
       sessionPools: {},
       budget: null,
       ceoGate: null,
+      humanGate: null,
+      stageExitPending: null,
+      stageExitReadiness: null,
       taskType: null,
       userTask: "",
       blueprint,
@@ -550,7 +682,14 @@ export const useMLRAStore = create<MLRAState>((set, get) => ({
   setControlMode: (id, mode) =>
     set((s) => ({
       launchers: s.launchers.map((l) =>
-        l.id === id ? { ...l, controlMode: mode, updatedAt: new Date().toISOString() } : l
+        l.id === id ? { ...l, controlMode: mode, orchestrationPolicy: policyFromControlMode(mode), updatedAt: new Date().toISOString() } : l
+      ),
+    })),
+
+  setOrchestrationPolicy: (id, policy) =>
+    set((s) => ({
+      launchers: s.launchers.map((l) =>
+        l.id === id ? { ...l, orchestrationPolicy: policy, updatedAt: new Date().toISOString() } : l
       ),
     })),
 
@@ -846,7 +985,7 @@ export const useMLRAStore = create<MLRAState>((set, get) => ({
     };
     const startStage = getBlueprintStartStage(blueprint);
 
-    get().daemonStartOrchestration(launcherId, blueprint.initialTask, launcher.taskType, blueprint);
+    get().daemonStartOrchestration(launcherId, blueprint.initialTask, launcher.taskType, blueprint, launcher.orchestrationPolicy);
 
     set((s) => ({
       launchers: s.launchers.map((l) => {
@@ -900,16 +1039,18 @@ export const useMLRAStore = create<MLRAState>((set, get) => ({
     }
   },
 
-  daemonStartOrchestration: (launcherId, userTask, taskType, blueprint) => {
+  daemonStartOrchestration: (launcherId, userTask, taskType, blueprint, orchestrationPolicy) => {
     get().sendToDaemon({
       type: "mlra_start",
-      config: { launcherId, userTask, taskType: taskType || null, blueprint },
+      config: { launcherId, userTask, taskType: taskType || null, blueprint, orchestrationPolicy },
     });
   },
 
   daemonSetControlMode: (mode) => { get().sendToDaemon({ type: "mlra_set_control_mode", mode }); },
-  daemonReviewApproved: (content) => { get().sendToDaemon({ type: "mlra_review_approved", content }); },
-  daemonReviewRejected: (reason) => { get().sendToDaemon({ type: "mlra_review_rejected", reason }); },
+  daemonSetOrchestrationPolicy: (policy) => { get().sendToDaemon({ type: "mlra_set_orchestration_policy", policy }); },
+  daemonApproveHumanGate: (payload) => { get().sendToDaemon({ type: "mlra_human_gate_approve", ...payload }); },
+  daemonRejectHumanGate: (payload) => { get().sendToDaemon({ type: "mlra_human_gate_reject", ...payload }); },
+  daemonCancelHumanGate: (payload) => { get().sendToDaemon({ type: "mlra_human_gate_cancel", ...payload }); },
   daemonTerminate: () => { get().sendToDaemon({ type: "mlra_terminate" }); },
   daemonSetBudget: (limit) => { get().sendToDaemon({ type: "mlra_set_budget", limit }); },
   daemonIncreaseBudget: (amount) => { get().sendToDaemon({ type: "mlra_increase_budget", amount }); },
@@ -946,16 +1087,53 @@ export const useMLRAStore = create<MLRAState>((set, get) => ({
           set((s) => ({
             launchers: s.launchers.map((l) => {
               if (l.id !== launcher.id) return l;
+              const roleState = (state.roles || {}) as Record<RuntimeMainRole, { status?: string; model?: string }>;
+              const agents = { ...l.agents };
+              for (const role of ["expert", "inspector", "ceo"] as RuntimeMainRole[]) {
+                const slot = agents[role];
+                const roleInfo = roleState[role];
+                if (slot && roleInfo) {
+                  agents[role] = {
+                    ...slot,
+                    model: roleInfo.model || slot.model,
+                    status: normalizeAgentStatus(roleInfo.status),
+                  };
+                }
+              }
               return {
                 ...l,
                 status: state.status || l.status,
                 controlMode: state.controlMode || l.controlMode,
+                orchestrationPolicy: state.orchestrationPolicy || l.orchestrationPolicy,
                 ceoGate: state.ceoGate || l.ceoGate,
+                humanGate: state.humanGate || null,
+                stageExitPending: state.stageExitPending || null,
+                stageExitReadiness: state.stageExitReadiness || l.stageExitReadiness,
                 blueprintRuntime: state.blueprintRuntime || l.blueprintRuntime,
                 selectedStageId: state.blueprintRuntime?.currentStageId || l.selectedStageId,
+                agents,
                 updatedAt: new Date().toISOString(),
               };
             }),
+          }));
+          break;
+        }
+
+        case "mlra_human_gate_update": {
+          const launcher = get().getActiveLauncher();
+          if (!launcher) break;
+          const humanGate = (msg.humanGate || null) as HumanGateState | null;
+          set((s) => ({
+            launchers: s.launchers.map((l) =>
+              l.id === launcher.id
+                ? {
+                    ...l,
+                    humanGate,
+                    status: humanGate?.active ? "awaiting-user" : (l.status === "awaiting-user" ? "running" : l.status),
+                    updatedAt: new Date().toISOString(),
+                  }
+                : l
+            ),
           }));
           break;
         }
@@ -984,11 +1162,6 @@ export const useMLRAStore = create<MLRAState>((set, get) => ({
               }),
             }));
           }
-          break;
-        }
-
-        case "mlra_human_review": {
-          console.log("[MLRA] Human review requested:", msg.content);
           break;
         }
 

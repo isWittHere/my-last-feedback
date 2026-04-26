@@ -1,15 +1,23 @@
 import { useCallback, useEffect, useMemo, useRef, useState, type PointerEvent as ReactPointerEvent, type ReactNode } from "react";
 import {
   BLUEPRINT_TEMPLATE_OPTIONS,
+  ORCHESTRATION_PRESETS,
   STAGE_TEMPLATE_OPTIONS,
   createBlueprintFromTemplate,
+  customizeOrchestrationPolicy,
+  getCeoGateMode,
+  getDefaultOrchestrationPolicy,
   getStageTemplatePromptDefaults,
   isClosingStage,
+  setPolicyCeoGateMode,
   useMLRAStore,
   type BlueprintTemplateId,
+  type CeoGateMode,
   type Launcher,
+  type OrchestrationPolicy,
   type StageBlueprint,
   type StageTemplateId,
+  type SubmitReleasePolicy,
   type WorkflowBlueprint,
 } from "../store/mlraStore";
 import { Icon } from "./Icons";
@@ -161,6 +169,57 @@ function InspectorTabButton({
         <Icon name={icon} size={14} />
         {label}
       </button>
+    </div>
+  );
+}
+
+function PolicyOptionButton<T extends string>({
+  active,
+  label,
+  value,
+  onSelect,
+}: {
+  active: boolean;
+  label: string;
+  value: T;
+  onSelect: (value: T) => void;
+}) {
+  return (
+    <button
+      type="button"
+      className={`mlra-policy-option${active ? " active" : ""}`}
+      onClick={() => onSelect(value)}
+    >
+      {label}
+    </button>
+  );
+}
+
+function PolicyControlRow<T extends string>({
+  label,
+  value,
+  options,
+  onChange,
+}: {
+  label: string;
+  value: T;
+  options: Array<{ value: T; label: string }>;
+  onChange: (value: T) => void;
+}) {
+  return (
+    <div className="mlra-policy-control-row">
+      <span className="mlra-policy-control-label">{label}</span>
+      <div className="mlra-policy-control-options">
+        {options.map((option) => (
+          <PolicyOptionButton
+            key={option.value}
+            active={option.value === value}
+            label={option.label}
+            value={option.value}
+            onSelect={onChange}
+          />
+        ))}
+      </div>
     </div>
   );
 }
@@ -352,6 +411,7 @@ export function LauncherHome({ launcher }: LauncherHomeProps) {
   const createLauncher = useMLRAStore((state) => state.createLauncher);
   const startOrchestration = useMLRAStore((state) => state.startOrchestration);
   const setUserTask = useMLRAStore((state) => state.setUserTask);
+  const setOrchestrationPolicy = useMLRAStore((state) => state.setOrchestrationPolicy);
   const updateBlueprintMeta = useMLRAStore((state) => state.updateBlueprintMeta);
   const applyBlueprintTemplate = useMLRAStore((state) => state.applyBlueprintTemplate);
   const selectBlueprintStage = useMLRAStore((state) => state.selectBlueprintStage);
@@ -364,6 +424,7 @@ export function LauncherHome({ launcher }: LauncherHomeProps) {
   const [draftName, setDraftName] = useState("");
   const [draftUserTask, setDraftUserTask] = useState("");
   const [draftTemplateId, setDraftTemplateId] = useState<BlueprintTemplateId>("standard");
+  const [draftOrchestrationPolicy, setDraftOrchestrationPolicy] = useState(getDefaultOrchestrationPolicy);
   const [draftSelectedStageOrder, setDraftSelectedStageOrder] = useState(0);
   const [draggingStageId, setDraggingStageId] = useState<string | null>(null);
   const [stageDropIndex, _setStageDropIndex] = useState<number | null>(null);
@@ -432,8 +493,9 @@ export function LauncherHome({ launcher }: LauncherHomeProps) {
     const id = createLauncher(name);
     if (draftTemplateId !== "standard") applyBlueprintTemplate(id, draftTemplateId);
     if (draftUserTask.trim()) setUserTask(id, draftUserTask);
+    setOrchestrationPolicy(id, draftOrchestrationPolicy);
     return id;
-  }, [launcher, draftName, draftTemplateId, draftUserTask, createLauncher, applyBlueprintTemplate, setUserTask]);
+  }, [launcher, draftName, draftTemplateId, draftUserTask, draftOrchestrationPolicy, createLauncher, applyBlueprintTemplate, setUserTask, setOrchestrationPolicy]);
 
   const commitName = useCallback(() => {
     if (!draftName.trim()) return;
@@ -677,6 +739,23 @@ export function LauncherHome({ launcher }: LauncherHomeProps) {
   const runtimeStageId = launcher?.blueprintRuntime?.currentStageId || null;
   const runtimeStageIndex = launcher?.blueprintRuntime?.currentStageIndex ?? -1;
   const launcherDisplayName = hasLauncher ? launcher.name : draftName.trim() || "未命名 Workflow";
+  const currentOrchestrationPolicy = launcher?.orchestrationPolicy || draftOrchestrationPolicy;
+
+  const updateOrchestrationPolicy = useCallback((nextPolicy: OrchestrationPolicy) => {
+    if (launcher) {
+      setOrchestrationPolicy(launcher.id, nextPolicy);
+      return;
+    }
+    setDraftOrchestrationPolicy(nextPolicy);
+  }, [launcher, setOrchestrationPolicy]);
+
+  const updateSubmitPolicy = useCallback((role: "expertSubmit" | "inspectorSubmit", value: SubmitReleasePolicy) => {
+    updateOrchestrationPolicy(customizeOrchestrationPolicy(currentOrchestrationPolicy, { [role]: value }));
+  }, [currentOrchestrationPolicy, updateOrchestrationPolicy]);
+
+  const updateCeoPolicy = useCallback((mode: CeoGateMode) => {
+    updateOrchestrationPolicy(setPolicyCeoGateMode(currentOrchestrationPolicy, mode));
+  }, [currentOrchestrationPolicy, updateOrchestrationPolicy]);
 
   return (
     <div className="flex-1 flex flex-col min-h-0 min-w-0 overflow-hidden">
@@ -693,7 +772,7 @@ export function LauncherHome({ launcher }: LauncherHomeProps) {
                       return (
                         <button
                           key={template.id}
-                          className={`mlra-task-type-chip${active ? " active" : ""}`}
+                          className={`mlra-task-type-chip mlra-skill-tag${active ? " active" : ""}`}
                           title={template.description}
                           onClick={() => {
                             if (launcher) applyBlueprintTemplate(launcher.id, template.id);
@@ -701,6 +780,7 @@ export function LauncherHome({ launcher }: LauncherHomeProps) {
                           }}
                         >
                           {template.label}
+                          {active ? <Icon name="check" size={12} /> : null}
                         </button>
                       );
                     })}
@@ -716,6 +796,50 @@ export function LauncherHome({ launcher }: LauncherHomeProps) {
                     onChange={(event) => handleUserTaskChange(event.target.value)}
                     rows={4}
                   />
+                </div>
+
+                <div className="mlra-task-type-row">
+                  <label className="mlra-task-label">接管策略</label>
+                  <div className="mlra-task-type-chips">
+                    {ORCHESTRATION_PRESETS.map((preset) => {
+                      const active = currentOrchestrationPolicy.preset === preset.id;
+                      return (
+                        <button
+                          key={preset.id}
+                          className={`mlra-task-type-chip mlra-skill-tag${active ? " active" : ""}`}
+                          title={preset.description}
+                          onClick={() => {
+                            const nextPolicy = { ...preset.policy };
+                            updateOrchestrationPolicy(nextPolicy);
+                          }}
+                        >
+                          <Icon name={preset.icon} size={12} />
+                          {preset.label}
+                          {active ? <Icon name="check" size={12} /> : null}
+                        </button>
+                      );
+                    })}
+                  </div>
+                  <div className="mlra-policy-control-list">
+                    <PolicyControlRow
+                      label="Expert submit"
+                      value={currentOrchestrationPolicy.expertSubmit}
+                      options={[{ value: "auto", label: "自动" }, { value: "user-review", label: "人工" }]}
+                      onChange={(value) => updateSubmitPolicy("expertSubmit", value)}
+                    />
+                    <PolicyControlRow
+                      label="Inspector submit"
+                      value={currentOrchestrationPolicy.inspectorSubmit}
+                      options={[{ value: "auto", label: "自动" }, { value: "user-review", label: "人工" }]}
+                      onChange={(value) => updateSubmitPolicy("inspectorSubmit", value)}
+                    />
+                    <PolicyControlRow
+                      label="CEO gate"
+                      value={getCeoGateMode(currentOrchestrationPolicy)}
+                      options={[{ value: "auto", label: "自动" }, { value: "user", label: "人工" }, { value: "review", label: "半自动" }]}
+                      onChange={updateCeoPolicy}
+                    />
+                  </div>
                 </div>
               </DetailSection>
             </div>

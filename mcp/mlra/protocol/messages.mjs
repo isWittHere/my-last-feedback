@@ -26,6 +26,10 @@ export const MSG = Object.freeze({
   MLRA_START: "mlra_start",             // { config: { launcherId, userTask, taskType, blueprint } }
   MLRA_CANCEL: "mlra_cancel",
   MLRA_STATUS: "mlra_status",
+  MLRA_SET_ORCHESTRATION_POLICY: "mlra_set_orchestration_policy",
+  MLRA_HUMAN_GATE_APPROVE: "mlra_human_gate_approve",
+  MLRA_HUMAN_GATE_REJECT: "mlra_human_gate_reject",
+  MLRA_HUMAN_GATE_CANCEL: "mlra_human_gate_cancel",
 
   // ── Daemon → App UI (push events) ──
   MLRA_ROLE_CONNECTED: "mlra_role_connected",
@@ -34,4 +38,5 @@ export const MSG = Object.freeze({
   MLRA_GATE_STATUS: "mlra_gate_status",
   MLRA_WORKFLOW_COMPLETE: "mlra_workflow_complete",
   MLRA_WORKFLOW_PAUSED: "mlra_workflow_paused",
+  MLRA_HUMAN_GATE_UPDATE: "mlra_human_gate_update",
 });

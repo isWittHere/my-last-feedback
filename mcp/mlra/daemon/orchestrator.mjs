@@ -18,6 +18,31 @@ import { createHash } from "node:crypto";
 
 /** @typedef {"ceo"|"expert"|"inspector"} Role */
 
+const DEFAULT_ORCHESTRATION_POLICY = Object.freeze({
+  preset: "autopilot",
+  expertSubmit: "auto",
+  inspectorSubmit: "auto",
+  ceoGateTrigger: "auto-to-ceo",
+  ceoVerdict: "auto-release",
+});
+
+function normalizePolicy(policy = {}) {
+  const next = { ...DEFAULT_ORCHESTRATION_POLICY, ...(policy || {}) };
+  if (!["auto", "user-review"].includes(next.expertSubmit)) next.expertSubmit = "auto";
+  if (!["auto", "user-review"].includes(next.inspectorSubmit)) next.inspectorSubmit = "auto";
+  if (!["auto-to-ceo", "user-replaces-ceo"].includes(next.ceoGateTrigger)) next.ceoGateTrigger = "auto-to-ceo";
+  if (!["auto-release", "user-review"].includes(next.ceoVerdict)) next.ceoVerdict = "auto-release";
+  if (!next.preset) next.preset = "custom";
+  return next;
+}
+
+function policyFromControlMode(mode) {
+  if (mode === "ceo-override") {
+    return normalizePolicy({ preset: "ceo-user", ceoGateTrigger: "user-replaces-ceo" });
+  }
+  return normalizePolicy({ preset: "autopilot" });
+}
+
 export class Orchestrator {
   constructor() {
     /** @type {"configuring"|"ready"|"running"|"paused"|"completed"|"cancelled"|"awaiting-user"} */
@@ -62,10 +87,12 @@ export class Orchestrator {
     this.rounds = [];
     this.currentRound = null;
 
-    // Control mode
-    this.controlMode = "ceo-override";
+    // Compatibility field. Runtime decisions use orchestrationPolicy.
+    this.controlMode = "autopilot";
+    this.orchestrationPolicy = normalizePolicy();
 
-    this.humanReviewPending = null;
+    this.humanGate = null;
+    this.stageExitPending = this._emptyStageExitPending();
 
     /** Event callback set by daemon */
     this.onEvent = null;
@@ -95,9 +122,73 @@ export class Orchestrator {
     };
   }
 
+  _emptyStageExitPending() {
+    return {
+      active: false,
+      stageId: null,
+      materials: null,
+      expert: null,
+      inspector: null,
+    };
+  }
+
+  _resetStageExitPending() {
+    this.stageExitPending = this._emptyStageExitPending();
+    this._emit({ type: "stage_exit_pending_update", stageExitPending: this.stageExitPending });
+  }
+
+  _createHumanGate(kind, payload = {}) {
+    if (this.humanGate?.active) {
+      return { error: `Human gate already active: ${this.humanGate.id}` };
+    }
+    this.status = "awaiting-user";
+    this.humanGate = {
+      id: `gate_${Date.now()}_${Math.random().toString(36).slice(2, 7)}`,
+      active: true,
+      kind,
+      title: payload.title || "等待人工确认",
+      sourceRole: payload.sourceRole || "orchestrator",
+      targetRole: payload.targetRole,
+      pendingTool: payload.pendingTool || "interactive_feedback",
+      blockedRoles: payload.blockedRoles || [],
+      originalContent: payload.originalContent || "",
+      draftContent: payload.draftContent ?? payload.originalContent ?? "",
+      metadata: payload.metadata || {},
+      createdAt: new Date().toISOString(),
+    };
+    for (const role of this.humanGate.blockedRoles || []) {
+      if (this.roles.has(role)) this.roles.get(role).status = "waiting-human-review";
+    }
+    this._emit({ type: "status_change", status: this.status });
+    this._emit({ type: "human_gate_update", humanGate: this.humanGate });
+    return { ok: true, gate: this.humanGate };
+  }
+
+  _clearHumanGate(id = null) {
+    if (id && this.humanGate?.id !== id) return { error: "Human gate id mismatch" };
+    this.humanGate = null;
+    if (this.status === "awaiting-user") this.status = "running";
+    this._emit({ type: "human_gate_update", humanGate: null });
+    this._emit({ type: "status_change", status: this.status });
+    return { ok: true };
+  }
+
+  _recordBlockedCertification(role, reason, certification) {
+    if (this.roles.has(role)) this.roles.get(role).status = "waiting-gate";
+    this.stageExitPending = {
+      ...this.stageExitPending,
+      active: true,
+      stageId: this.currentStageId,
+      materials: this.lastSubmitContent || "(阶段提交)",
+      [role]: { blocked: true, reason, certification },
+    };
+    this._emit({ type: "stage_exit_pending_update", stageExitPending: this.stageExitPending });
+  }
+
   _resetStageExitReadiness() {
     this.votes = { expert: null, inspector: null };
     this.stageExitReadiness = this._emptyStageExitReadiness();
+    this._resetStageExitPending();
   }
 
   _clearStageExitCertifications() {
@@ -243,9 +334,10 @@ export class Orchestrator {
    *
    * @param {string} userTask
    * @param {object} blueprint
-   * @param {string|null} [taskType]
+  * @param {string|null} [taskType]
+  * @param {object|null} [orchestrationPolicy]
    */
-  startOrchestration(userTask, blueprint, taskType = null) {
+  startOrchestration(userTask, blueprint, taskType = null, orchestrationPolicy = null) {
     const readiness = this.checkStartReady();
     if (!readiness.ready) {
       return { error: `Cannot start: missing roles ${readiness.missing.join(", ")}` };
@@ -255,6 +347,8 @@ export class Orchestrator {
     this.userTask = userTask;
     this.taskType = taskType;
     this.blueprint = blueprint || null;
+    this.orchestrationPolicy = normalizePolicy(orchestrationPolicy || this.orchestrationPolicy);
+    this.humanGate = null;
     const activeStage = this._selectStartStage();
     if (!activeStage) {
       return { error: "Blueprint has no enabled non-closing stage" };
@@ -292,13 +386,10 @@ export class Orchestrator {
 
     this._trackSubmit(ROLES.EXPERT, content);
 
-    if (this._needsHumanReview(ROLES.EXPERT)) {
-      this.humanReviewPending = {
-        role: ROLES.EXPERT,
-        originalContent: content,
-        targetRole: ROLES.INSPECTOR,
-      };
-      return { action: "human_review", role: ROLES.EXPERT, content };
+    if (this._shouldReviewSubmit(ROLES.EXPERT)) {
+      const gate = this._createSubmitHumanGate(ROLES.EXPERT, ROLES.INSPECTOR, "expert_submit", content);
+      if (gate.error) return gate;
+      return { action: "human_gate", gate: gate.gate };
     }
 
     return this._routeExpertSubmit(content);
@@ -320,13 +411,10 @@ export class Orchestrator {
 
     this._trackSubmit(ROLES.INSPECTOR, content);
 
-    if (this._needsHumanReview(ROLES.INSPECTOR)) {
-      this.humanReviewPending = {
-        role: ROLES.INSPECTOR,
-        originalContent: content,
-        targetRole: ROLES.EXPERT,
-      };
-      return { action: "human_review", role: ROLES.INSPECTOR, content };
+    if (this._shouldReviewSubmit(ROLES.INSPECTOR)) {
+      const gate = this._createSubmitHumanGate(ROLES.INSPECTOR, ROLES.EXPERT, "inspector_submit", content);
+      if (gate.error) return gate;
+      return { action: "human_gate", gate: gate.gate };
     }
 
     return this._routeToExpert(content);
@@ -353,33 +441,82 @@ export class Orchestrator {
     this._checkStagnation(content);
   }
 
-  _needsHumanReview(role) {
-    switch (this.controlMode) {
-      case "autopilot": return false;
-      case "ceo-override": return role === ROLES.CEO;
-      default: return false;
-    }
+  _getSubmitPolicy(role) {
+    if (role === ROLES.EXPERT) return this.orchestrationPolicy.expertSubmit;
+    if (role === ROLES.INSPECTOR) return this.orchestrationPolicy.inspectorSubmit;
+    return "auto";
   }
 
-  approveHumanReview(modifiedContent) {
-    if (!this.humanReviewPending) return { error: "No pending review" };
-    const { role, originalContent } = this.humanReviewPending;
-    const content = modifiedContent || originalContent;
-    this.humanReviewPending = null;
-    if (role === ROLES.EXPERT) return this._routeExpertSubmit(content);
-    if (role === ROLES.INSPECTOR) return this._routeToExpert(content);
+  _shouldReviewSubmit(role) {
+    return this._getSubmitPolicy(role) === "user-review";
+  }
+
+  _createSubmitHumanGate(sourceRole, targetRole, pendingTool, content) {
+    const sourceLabel = sourceRole === ROLES.EXPERT ? "Expert" : "Inspector";
+    const targetLabel = targetRole === ROLES.EXPERT ? "Expert" : "Inspector";
+    return this._createHumanGate("submit_handoff_review", {
+      title: `${sourceLabel} -> ${targetLabel} 待审阅`,
+      sourceRole,
+      targetRole,
+      pendingTool,
+      blockedRoles: [sourceRole],
+      originalContent: content,
+      metadata: { sourceRole, targetRole },
+    });
+  }
+
+  approveHumanGate(payload = {}) {
+    const gate = this.humanGate;
+    if (!gate?.active) return { error: "No pending human gate" };
+    if (payload.id && gate.id !== payload.id) return { error: "Human gate id mismatch" };
+    const content = payload.content ?? gate.draftContent ?? gate.originalContent;
+
+    if (gate.kind === "submit_handoff_review") {
+      const sourceRole = gate.sourceRole;
+      const clear = this._clearHumanGate(gate.id);
+      if (clear.error) return clear;
+      if (sourceRole === ROLES.EXPERT) return this._routeExpertSubmit(content);
+      if (sourceRole === ROLES.INSPECTOR) return this._routeToExpert(content);
+      return { action: "noop" };
+    }
+
+    if (gate.kind === "stage_exit_gate_trigger" || gate.kind === "ceo_verdict_review") {
+      const verdict = payload.verdict || gate.metadata?.verdict || "approved";
+      const reason = payload.reason || content || gate.metadata?.reason || "用户确认通过。";
+      const targets = Array.isArray(payload.targets) ? payload.targets : (Array.isArray(gate.metadata?.targets) ? gate.metadata.targets : []);
+      const clear = this._clearHumanGate(gate.id);
+      if (clear.error) return clear;
+      return this.applyCeoVerdict(verdict, reason, targets);
+    }
+
     return { action: "noop" };
   }
 
-  rejectHumanReview(reason) {
-    if (!this.humanReviewPending) return { error: "No pending review" };
-    const { role } = this.humanReviewPending;
-    this.humanReviewPending = null;
+  rejectHumanGate(payload = {}) {
+    const gate = this.humanGate;
+    if (!gate?.active) return { error: "No pending human gate" };
+    if (payload.id && gate.id !== payload.id) return { error: "Human gate id mismatch" };
+    const reason = payload.reason || "用户退回。";
+    const sourceRole = gate.sourceRole;
+    const clear = this._clearHumanGate(gate.id);
+    if (clear.error) return clear;
+
+    if (gate.kind === "stage_exit_gate_trigger" || gate.kind === "ceo_verdict_review") {
+      return this.applyCeoVerdict("rejected", reason, [ROLES.INSPECTOR]);
+    }
+
     return {
       action: "route",
-      targetRole: role,
+      targetRole: sourceRole,
       content: `[人工审查拒绝] ${reason}\n\n请根据反馈修改后重新提交。`,
     };
+  }
+
+  cancelHumanGate(payload = {}) {
+    return this.rejectHumanGate({
+      id: payload.id,
+      reason: payload.reason || "用户取消当前人工门控，请重新整理后继续。",
+    });
   }
 
   _routeExpertSubmit(content) {
@@ -492,7 +629,24 @@ export class Orchestrator {
 
     this.votes[role] = { vote, reason, certification };
     this._recordStageExitCertification(role, reason, certification);
-    return this._resolveVotes();
+    this._recordBlockedCertification(role, reason, certification);
+    const resolved = this._resolveVotes();
+    if (resolved.status === "passed") {
+      return {
+        action: "stage_exit_ready",
+        role,
+        materials: this.lastSubmitContent || "(阶段提交)",
+        message: resolved.message,
+      };
+    }
+    const targetRole = role === ROLES.EXPERT ? ROLES.INSPECTOR : ROLES.EXPERT;
+    return {
+      action: "certification_recorded",
+      role,
+      targetRole,
+      content: `[阶段出口认证已记录]\n\n${reason}\n\n请基于当前阶段材料完成你的出口认证；如果仍发现问题，请继续提交审查意见。`,
+      message: resolved.message,
+    };
   }
 
   handleExpertVote(vote, reason, certification = null) {
@@ -517,7 +671,6 @@ export class Orchestrator {
       };
     }
     if (this.votes.expert.vote === "pass" && this.votes.inspector.vote === "pass") {
-      this._emit({ type: "votes_passed" });
       return { status: "passed", message: "Stage-exit certifications accepted. Preparing stage-exit review." };
     }
     this._clearStageExitCertifications();
@@ -530,21 +683,22 @@ export class Orchestrator {
   // ── Stage advancement & gate ──
 
   /**
-   * Called by daemon when votes_passed event fires. Depending on the current
-   * stage's exitGateEnabled, either trigger the CEO gate or advance directly.
+    * Called by daemon when both stage-exit certifications are accepted.
+    * Depending on the current stage's exitGateEnabled, either trigger the CEO
+    * gate or advance directly.
    */
   triggerStageExit(materials) {
     const stage = this._getCurrentStage();
     if (!stage) return { action: "noop" };
 
-    if (stage.exitGateEnabled !== false && this.roles.has(ROLES.CEO)) {
+    if (stage.exitGateEnabled !== false && (this.roles.has(ROLES.CEO) || this.orchestrationPolicy.ceoGateTrigger === "user-replaces-ceo")) {
       // Gate enabled AND CEO connected — trigger defensive-lock gate.
       this.ceoGate = {
         active: true,
         type: "stage_gate",
         round: 0,
-        minDefensiveRounds: 2,
-        requiredConsecutive: 2,
+        minDefensiveRounds: this.orchestrationPolicy.ceoGateTrigger === "user-replaces-ceo" ? 0 : 2,
+        requiredConsecutive: this.orchestrationPolicy.ceoGateTrigger === "user-replaces-ceo" ? 1 : 2,
         consecutiveApprovals: 0,
         materials,
         history: [],
@@ -552,9 +706,24 @@ export class Orchestrator {
       const { prefix, suffix } = buildRoutingPrompt("orchestrator", ROLES.CEO, stage, {
         routingReason: "stage_gate",
       });
+      const gateContent = `${prefix}\n\n## 原始任务\n\n${this.userTask}\n\n## 阶段产出\n\n${materials}\n\n${suffix}`;
+
+      if (this.orchestrationPolicy.ceoGateTrigger === "user-replaces-ceo") {
+        const gate = this._createHumanGate("stage_exit_gate_trigger", {
+          title: "阶段出口门控待裁定",
+          sourceRole: "orchestrator",
+          pendingTool: "ceo_verdict",
+          blockedRoles: [ROLES.EXPERT, ROLES.INSPECTOR],
+          originalContent: gateContent,
+          metadata: { verdict: "approved", targets: [ROLES.INSPECTOR], gateType: "stage_gate" },
+        });
+        if (gate.error) return gate;
+        return { action: "human_gate", gate: gate.gate };
+      }
+
       return {
         action: "wake_ceo",
-        content: `${prefix}\n\n## 原始任务\n\n${this.userTask}\n\n## 阶段产出\n\n${materials}\n\n${suffix}`,
+        content: gateContent,
       };
     }
     // Gate disabled or no CEO — advance directly.
@@ -563,6 +732,7 @@ export class Orchestrator {
 
   _advanceStage(carriedContent) {
     this._clearStageExitCertifications();
+    this._resetStageExitPending();
     this._emit({ type: "stage_advance", stageId: this.currentStageId });
 
     const nextStage = this._selectNextStage();
@@ -579,6 +749,25 @@ export class Orchestrator {
 
   handleCeoVerdict(verdict, reason, targets = []) {
     if (!this.roles.has(ROLES.CEO)) return { error: "CEO role not connected" };
+    if (!this.ceoGate.active) return { error: "No active CEO gate" };
+
+    if (this.orchestrationPolicy.ceoVerdict === "user-review") {
+      const gate = this._createHumanGate("ceo_verdict_review", {
+        title: "CEO verdict 待确认",
+        sourceRole: ROLES.CEO,
+        pendingTool: "ceo_verdict",
+        blockedRoles: [ROLES.CEO, ROLES.EXPERT, ROLES.INSPECTOR],
+        originalContent: reason || "",
+        metadata: { verdict, reason, targets, gateType: this.ceoGate.type },
+      });
+      if (gate.error) return gate;
+      return { action: "human_gate", gate: gate.gate };
+    }
+
+    return this.applyCeoVerdict(verdict, reason, targets);
+  }
+
+  applyCeoVerdict(verdict, reason, targets = []) {
     if (!this.ceoGate.active) return { error: "No active CEO gate" };
 
     this.ceoGate.history.push({ round: this.ceoGate.round, verdict, reason });
@@ -654,9 +843,11 @@ export class Orchestrator {
 
     if (gateType === "stage_gate") {
       this._clearStageExitCertifications();
+      this._resetStageExitPending();
       this._emit({ type: "ceo_gate_resolved", gateType, verdict: "rejected", reason });
 
-      for (const role of [ROLES.EXPERT, ROLES.INSPECTOR]) {
+      const resolvedTargets = targets.length > 0 ? targets : [ROLES.INSPECTOR];
+      for (const role of resolvedTargets) {
         if (!this.roles.has(role)) continue;
         const { prefix, suffix } = buildRoutingPrompt(ROLES.CEO, role, this._getCurrentStage(), {
           routingReason: "rejection",
@@ -705,8 +896,15 @@ export class Orchestrator {
       return { error: `Invalid mode: ${mode}` };
     }
     this.controlMode = mode;
+    this.orchestrationPolicy = policyFromControlMode(mode);
     this._emit({ type: "control_mode_change", mode });
     return { ok: true };
+  }
+
+  setOrchestrationPolicy(policy) {
+    this.orchestrationPolicy = normalizePolicy(policy);
+    this._emit({ type: "orchestration_policy_change", policy: this.orchestrationPolicy });
+    return { ok: true, policy: this.orchestrationPolicy };
   }
 
   // ── Stagnation Detection ──
@@ -809,6 +1007,7 @@ export class Orchestrator {
       status: this.status,
       taskType: this.taskType,
       controlMode: this.controlMode,
+      orchestrationPolicy: this.orchestrationPolicy,
       blueprintRuntime: this.blueprint
         ? {
             name: this.blueprint.name || null,
@@ -839,7 +1038,9 @@ export class Orchestrator {
         history: this.ceoGate.history,
       },
       rounds: this.rounds,
-      humanReviewPending: this.humanReviewPending,
+      humanGate: this.humanGate,
+      stageExitPending: this.stageExitPending,
+      stageExitReadiness: this.stageExitReadiness,
     };
   }
 }

@@ -139,6 +139,13 @@ class OrchestratorDaemon {
       if (connRole) {
         this.connections.delete(connRole);
         this.router.reject(connRole, "Role disconnected");
+        if (this.orchestrator.humanGate?.active && this.orchestrator.humanGate.blockedRoles?.includes(connRole)) {
+          this.orchestrator._clearHumanGate(this.orchestrator.humanGate.id);
+        }
+        if (this.orchestrator.stageExitPending?.[connRole]?.blocked) {
+          this.orchestrator._clearStageExitCertifications();
+          this.orchestrator._resetStageExitPending();
+        }
         this.orchestrator.unregisterRole(connRole);
         this.ipcBridge.send({ type: MSG.MLRA_ROLE_DISCONNECTED, role: connRole });
       }
@@ -201,15 +208,15 @@ class OrchestratorDaemon {
       // ── EXPERT_VOTE ──
       case MSG.EXPERT_VOTE: {
         const { vote, reason, certification } = msg;
-        const result = this.orchestrator.handleExpertVote(vote, reason, certification);
-        return { type: MSG.RESOLVE, content: JSON.stringify(result) };
+        const decision = this.orchestrator.handleExpertVote(vote, reason, certification);
+        return await this._followCertificationDecision(decision, ROLES.EXPERT);
       }
 
       // ── INSPECTOR_VOTE ──
       case MSG.INSPECTOR_VOTE: {
         const { vote, reason, certification } = msg;
-        const result = this.orchestrator.handleInspectorVote(vote, reason, certification);
-        return { type: MSG.RESOLVE, content: JSON.stringify(result) };
+        const decision = this.orchestrator.handleInspectorVote(vote, reason, certification);
+        return await this._followCertificationDecision(decision, ROLES.INSPECTOR);
       }
 
       // ── CEO_VERDICT ──
@@ -218,6 +225,16 @@ class OrchestratorDaemon {
         console.error(`[MLRA-Daemon] ceo_verdict: ${verdict}`);
         const decision = this.orchestrator.handleCeoVerdict(verdict, reason, targets || []);
         if (decision.error) return { type: MSG.ERROR, message: decision.error };
+
+        if (decision.action === "human_gate") {
+          this._pushStatus();
+          try {
+            const nextMaterials = await this.router.block(ROLES.CEO, "ceo_verdict");
+            return { type: MSG.RESOLVE, content: nextMaterials };
+          } catch (e) {
+            return { type: MSG.ERROR, message: e.message };
+          }
+        }
 
         this._executeCeoDecision(decision);
 
@@ -276,15 +293,10 @@ class OrchestratorDaemon {
   async _followDecision(decision, submitterRole) {
     if (decision.error) return { type: MSG.ERROR, message: decision.error };
 
-    if (decision.action === "human_review") {
-      this.ipcBridge.send({
-        type: MSG.MLRA_WORKFLOW_PAUSED,
-        reason: "human_review",
-        role: decision.role,
-        content: decision.content,
-      });
+    if (decision.action === "human_gate") {
+      this._pushStatus();
       try {
-        const instruction = await this.router.block(submitterRole, "submit");
+        const instruction = await this.router.block(submitterRole, "human_gate");
         return { type: MSG.RESOLVE, content: instruction };
       } catch (e) {
         return { type: MSG.ERROR, message: e.message };
@@ -316,6 +328,36 @@ class OrchestratorDaemon {
     return { type: MSG.ERROR, message: `Unknown decision: ${decision.action}` };
   }
 
+  async _followCertificationDecision(decision, role) {
+    if (decision.error) return { type: MSG.ERROR, message: decision.error };
+
+    if (decision.action === "certification_recorded") {
+      this._routeTo(decision.targetRole, decision.content);
+      this._pushStatus();
+      try {
+        const instruction = await this.router.block(role, "certification");
+        return { type: MSG.RESOLVE, content: instruction };
+      } catch (e) {
+        return { type: MSG.ERROR, message: e.message };
+      }
+    }
+
+    if (decision.action === "stage_exit_ready") {
+      const stageDecision = this.orchestrator.triggerStageExit(decision.materials);
+      console.error(`[MLRA-Daemon] Stage exit ready → ${stageDecision.action}`);
+      this._executeCeoDecision(stageDecision);
+      this._pushStatus();
+      try {
+        const instruction = await this.router.block(role, "certification");
+        return { type: MSG.RESOLVE, content: instruction };
+      } catch (e) {
+        return { type: MSG.ERROR, message: e.message };
+      }
+    }
+
+    return { type: MSG.RESOLVE, content: JSON.stringify(decision) };
+  }
+
   async _blockForNext(role) {
     try {
       const instruction = await this.router.block(role, "submit");
@@ -339,11 +381,12 @@ class OrchestratorDaemon {
 
     switch (msg.type) {
       case MSG.MLRA_START: {
-        const { userTask, taskType, blueprint } = msg.config || msg;
+        const { userTask, taskType, blueprint, orchestrationPolicy } = msg.config || msg;
         const result = this.orchestrator.startOrchestration(
           userTask || "",
           blueprint || null,
           taskType || null,
+          orchestrationPolicy || null,
         );
         if (result.error) {
           console.error("[MLRA-Daemon] Start error:", result.error);
@@ -359,7 +402,10 @@ class OrchestratorDaemon {
 
       case MSG.MLRA_CANCEL: {
         this.orchestrator.status = "cancelled";
+        this.orchestrator.humanGate = null;
+        this.orchestrator.stageExitPending = this.orchestrator._emptyStageExitPending();
         this.router.cancelAll("Orchestration cancelled by user");
+        this.ipcBridge.send({ type: MSG.MLRA_HUMAN_GATE_UPDATE, humanGate: null });
         this._pushStatus();
         break;
       }
@@ -369,24 +415,41 @@ class OrchestratorDaemon {
         break;
       }
 
-      // Human review controls (optional, when controlMode=ceo-override)
-      case "mlra_review_approved": {
-        const { content } = msg;
-        const result = this.orchestrator.approveHumanReview(content);
+      case MSG.MLRA_HUMAN_GATE_APPROVE: {
+        const result = this.orchestrator.approveHumanGate(msg);
         if (result.error) { console.error(result.error); break; }
-        if (result.action === "route") this._routeTo(result.targetRole, result.content);
+        this._executeCeoDecision(result);
+        if (result.action === "complete" && this.router.isBlocked(ROLES.CEO)) {
+          this.router.release(ROLES.CEO, "编排已完成。");
+        }
+        this._pushStatus();
         break;
       }
-      case "mlra_review_rejected": {
-        const { reason } = msg;
-        const result = this.orchestrator.rejectHumanReview(reason);
+
+      case MSG.MLRA_HUMAN_GATE_REJECT: {
+        const result = this.orchestrator.rejectHumanGate(msg);
         if (result.error) { console.error(result.error); break; }
-        if (result.action === "route") this._routeTo(result.targetRole, result.content);
+        this._executeCeoDecision(result);
+        this._pushStatus();
+        break;
+      }
+
+      case MSG.MLRA_HUMAN_GATE_CANCEL: {
+        const result = this.orchestrator.cancelHumanGate(msg);
+        if (result.error) { console.error(result.error); break; }
+        this._executeCeoDecision(result);
+        this._pushStatus();
         break;
       }
 
       case "mlra_set_control_mode": {
         this.orchestrator.setControlMode(msg.mode);
+        this._pushStatus();
+        break;
+      }
+
+      case MSG.MLRA_SET_ORCHESTRATION_POLICY: {
+        this.orchestrator.setOrchestrationPolicy(msg.policy || {});
         this._pushStatus();
         break;
       }
@@ -410,8 +473,22 @@ class OrchestratorDaemon {
       case "role_status_change":
         this._pushStatus();
         break;
-      case "votes_passed":
-        this._handleVotesPassed();
+      case "round_start":
+        this.ipcBridge.send({ type: "mlra_round_event", event: "start", round: event.round });
+        break;
+      case "round_end":
+        this.ipcBridge.send({ type: "mlra_round_event", event: "end", round: event.round });
+        break;
+      case "human_gate_update":
+        this.ipcBridge.send({ type: MSG.MLRA_HUMAN_GATE_UPDATE, humanGate: event.humanGate || null });
+        this._pushStatus();
+        break;
+      case "stage_exit_pending_update":
+        this._pushStatus();
+        break;
+      case "orchestration_policy_change":
+      case "control_mode_change":
+        this._pushStatus();
         break;
       case "stagnation_detected":
         this._handleStagnation(event);
@@ -429,13 +506,6 @@ class OrchestratorDaemon {
         this.ipcBridge.send({ type: MSG.MLRA_GATE_STATUS, event: event.type, ...event });
         break;
     }
-  }
-
-  _handleVotesPassed() {
-    const materials = this.orchestrator.lastSubmitContent || "(阶段提交)";
-    const decision = this.orchestrator.triggerStageExit(materials);
-    console.error(`[MLRA-Daemon] Votes passed → ${decision.action}`);
-    this._executeCeoDecision(decision);
   }
 
   _handleStagnation(event) {
@@ -474,6 +544,14 @@ class OrchestratorDaemon {
         for (const t of decision.targets) {
           this._routeTo(t.targetRole, t.content);
         }
+        break;
+
+      case "route":
+        this._routeTo(decision.targetRole, decision.content);
+        break;
+
+      case "human_gate":
+        this._pushStatus();
         break;
 
       case "complete":

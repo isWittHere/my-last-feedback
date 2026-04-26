@@ -848,6 +848,14 @@ body,
   opacity: 0.85;
   transform: scale(1.08);
 }
+.mlra-role-icon {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  flex-shrink: 0;
+  border-radius: 4px;
+  line-height: 1;
+}
 .caller-tab-initial {
   font-size: 11px;
   font-weight: 700;
@@ -2386,13 +2394,17 @@ body,
   flex-shrink: 0;
 }
 .mlra-control-mode-btn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 4px;
   font-size: 10px;
   font-weight: 600;
   padding: 2px 7px;
   border: none;
   border-right: 1px solid var(--color-border-subtle);
   cursor: pointer;
-  background: transparent;
+  background: var(--color-bg-surface);
   color: var(--color-text-secondary);
   transition: all 0.12s;
   white-space: nowrap;
@@ -2402,7 +2414,7 @@ body,
 }
 .mlra-control-mode-btn:hover {
   color: var(--color-text-primary);
-  background: rgba(255, 255, 255, 0.04);
+  background: var(--color-bg-base);
 }
 .mlra-control-mode-btn.active {
   color: #fff;
@@ -2733,6 +2745,57 @@ body,
 .mlra-task-type-chip.active {
   background: var(--color-bg-surface);
   border-color: var(--color-text-secondary);
+  color: var(--color-text-primary);
+}
+
+.mlra-policy-control-list {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  margin-top: 8px;
+}
+
+.mlra-policy-control-row {
+  display: grid;
+  grid-template-columns: minmax(86px, 1fr) auto;
+  align-items: center;
+  gap: 8px;
+}
+
+.mlra-policy-control-label {
+  min-width: 0;
+  font-size: 11px;
+  color: var(--color-text-secondary);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.mlra-policy-control-options {
+  display: inline-flex;
+  border: 1px solid var(--color-border-subtle);
+  border-radius: 5px;
+  overflow: hidden;
+}
+
+.mlra-policy-option {
+  min-width: 34px;
+  border: none;
+  border-right: 1px solid var(--color-border-subtle);
+  background: transparent;
+  color: var(--color-text-secondary);
+  font-size: 10px;
+  font-weight: 600;
+  padding: 3px 6px;
+}
+
+.mlra-policy-option:last-child {
+  border-right: none;
+}
+
+.mlra-policy-option:hover,
+.mlra-policy-option.active {
+  background: var(--color-bg-surface);
   color: var(--color-text-primary);
 }
 
@@ -4722,6 +4785,133 @@ button.mlra-inspector-gate-pill {
   gap: 0;
 }
 
+.mlra-runtime-shell {
+  display: flex;
+  flex: 1;
+  min-height: 0;
+  flex-direction: column;
+}
+
+.mlra-human-gate-panel {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  padding: 10px 12px;
+  border-bottom: 1px solid var(--color-border);
+  background: var(--color-bg-surface);
+  flex-shrink: 0;
+}
+
+.mlra-human-gate-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+}
+
+.mlra-human-gate-title-block {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  min-width: 0;
+  font-size: 12px;
+}
+
+.mlra-human-gate-kind,
+.mlra-human-gate-route {
+  font-size: 10px;
+  color: var(--color-text-secondary);
+  border: 1px solid var(--color-border-subtle);
+  border-radius: 8px;
+  padding: 2px 6px;
+  background: var(--color-bg-base);
+  white-space: nowrap;
+}
+
+.mlra-human-gate-field {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  min-width: 0;
+  font-size: 11px;
+  color: var(--color-text-secondary);
+}
+
+.mlra-human-gate-field textarea,
+.mlra-human-gate-field select {
+  width: 100%;
+  border: 1px solid var(--color-border);
+  border-radius: 6px;
+  background: var(--color-bg-base);
+  color: var(--color-text-primary);
+  font-size: 12px;
+  padding: 7px 8px;
+  resize: vertical;
+}
+
+.mlra-human-gate-verdict-grid {
+  display: grid;
+  grid-template-columns: 160px minmax(0, 1fr) auto;
+  gap: 8px;
+}
+
+.mlra-human-gate-targets {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  font-size: 11px;
+  color: var(--color-text-secondary);
+}
+
+.mlra-human-gate-targets label {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  font-size: 10px;
+  color: var(--color-text-secondary);
+}
+
+.mlra-human-gate-original summary {
+  cursor: pointer;
+  font-size: 11px;
+  color: var(--color-text-secondary);
+}
+
+.mlra-human-gate-original pre {
+  max-height: 120px;
+  overflow: auto;
+  margin: 6px 0 0;
+  padding: 8px;
+  border: 1px solid var(--color-border-subtle);
+  border-radius: 6px;
+  background: var(--color-bg-base);
+  color: var(--color-text-secondary);
+  font-size: 11px;
+  white-space: pre-wrap;
+}
+
+.mlra-human-gate-actions {
+  display: flex;
+  gap: 8px;
+  justify-content: flex-end;
+}
+
+.mlra-human-gate-btn {
+  border: 1px solid var(--color-border);
+  border-radius: 6px;
+  background: var(--color-bg-base);
+  color: var(--color-text-primary);
+  font-size: 12px;
+  font-weight: 600;
+  padding: 6px 10px;
+}
+
+.mlra-human-gate-btn.primary {
+  border-color: rgba(16, 185, 129, 0.45);
+  background: rgba(16, 185, 129, 0.12);
+  color: #10B981;
+}
+
 /* ── Agent Column (shared by expert/inspector/ceo/workers) ── */
 /* Mirrors .caller-panel structure for consistent theming */
 .agent-column {
@@ -4769,8 +4959,27 @@ button.mlra-inspector-gate-pill {
   border-radius: 8px;
   white-space: nowrap;
 }
-.agent-column-status {
+.agent-column-header-actions {
   margin-left: auto;
+  display: flex;
+  align-items: center;
+  justify-content: flex-end;
+  gap: 6px;
+  min-width: 0;
+  flex-shrink: 0;
+}
+.agent-column-policy-select {
+  width: 68px;
+  height: 20px;
+  border: 1px solid var(--color-border-subtle);
+  border-radius: 4px;
+  background: var(--color-bg-base);
+  color: var(--color-text-secondary);
+  font-size: 10px;
+  font-weight: 600;
+  padding: 0 4px;
+}
+.agent-column-status {
   font-size: 9px;
   font-weight: 600;
   padding: 1px 6px;
@@ -4789,6 +4998,23 @@ button.mlra-inspector-gate-pill {
 .agent-column-status-idle {
   color: var(--color-text-muted);
   background: var(--color-bg-base);
+}
+.agent-column-status-blocked,
+.agent-column-status-waiting-peer {
+  color: #64748B;
+  background: rgba(100, 116, 139, 0.12);
+}
+.agent-column-status-waiting-human-review {
+  color: #F59E0B;
+  background: rgba(245, 158, 11, 0.12);
+}
+.agent-column-status-waiting-gate {
+  color: #818CF8;
+  background: rgba(129, 140, 248, 0.12);
+}
+.agent-column-status-disconnected {
+  color: #EF4444;
+  background: rgba(239, 68, 68, 0.1);
 }
 .agent-column-status-derailed {
   color: #F59E0B;
@@ -5061,6 +5287,14 @@ button.mlra-inspector-gate-pill {
 
 /* On very narrow screens, stack columns vertically */
 @media (max-width: 800px) {
+  .mlra-human-gate-head,
+  .mlra-human-gate-actions {
+    align-items: stretch;
+    flex-direction: column;
+  }
+  .mlra-human-gate-verdict-grid {
+    grid-template-columns: 1fr;
+  }
   .mlra-workspace {
     flex-direction: column;
   }

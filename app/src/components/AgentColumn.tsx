@@ -1,7 +1,17 @@
 import { useState, useCallback } from "react";
-import { useMLRAStore, type AgentSlot, type SessionPool, ROLE_COLORS } from "../store/mlraStore";
+import {
+  customizeOrchestrationPolicy,
+  getCeoGateMode,
+  setPolicyCeoGateMode,
+  useMLRAStore,
+  type AgentSlot,
+  type CeoGateMode,
+  type SessionPool,
+  type SubmitReleasePolicy,
+  ROLE_COLORS,
+} from "../store/mlraStore";
 import { StandbyPlaceholder } from "./StandbyPlaceholder";
-import { IdenticonAvatar } from "./IdenticonAvatar";
+import { MLRARoleIcon } from "./MLRARoleIcon";
 import { Icon } from "./Icons";
 
 interface AgentColumnProps {
@@ -24,9 +34,66 @@ const STATUS_LABELS: Record<string, string> = {
   active: "活跃",
   standby: "待命",
   idle: "空闲",
+  blocked: "阻塞",
+  "waiting-human-review": "待人工",
+  "waiting-peer": "待对侧",
+  "waiting-gate": "待门控",
+  disconnected: "断开",
   derailed: "脱轨",
   broken: "断线",
 };
+
+const SUBMIT_POLICY_OPTIONS: Array<{ value: SubmitReleasePolicy; label: string }> = [
+  { value: "auto", label: "自动" },
+  { value: "user-review", label: "人工" },
+];
+
+const CEO_POLICY_OPTIONS: Array<{ value: CeoGateMode; label: string }> = [
+  { value: "auto", label: "自动" },
+  { value: "user", label: "人工" },
+  { value: "review", label: "半自动" },
+];
+
+function AgentPolicySelect({ role }: { role: "expert" | "inspector" | "ceo" }) {
+  const launcher = useMLRAStore((s) => s.getActiveLauncher());
+  const setOrchestrationPolicy = useMLRAStore((s) => s.setOrchestrationPolicy);
+  const daemonSetOrchestrationPolicy = useMLRAStore((s) => s.daemonSetOrchestrationPolicy);
+
+  if (!launcher) return null;
+
+  const policy = launcher.orchestrationPolicy;
+  const isCeo = role === "ceo";
+  const value = isCeo
+    ? getCeoGateMode(policy)
+    : role === "expert"
+      ? policy.expertSubmit
+      : policy.inspectorSubmit;
+  const options = isCeo ? CEO_POLICY_OPTIONS : SUBMIT_POLICY_OPTIONS;
+
+  const handleChange = (nextValue: string) => {
+    const nextPolicy = isCeo
+      ? setPolicyCeoGateMode(policy, nextValue as CeoGateMode)
+      : customizeOrchestrationPolicy(policy, {
+          [role === "expert" ? "expertSubmit" : "inspectorSubmit"]: nextValue as SubmitReleasePolicy,
+        });
+    setOrchestrationPolicy(launcher.id, nextPolicy);
+    daemonSetOrchestrationPolicy(nextPolicy);
+  };
+
+  return (
+    <select
+      className="agent-column-policy-select"
+      value={value}
+      onChange={(event) => handleChange(event.target.value)}
+      aria-label={`${ROLE_LABELS[role]} 自动程度`}
+      title={`${ROLE_LABELS[role]} 自动程度`}
+    >
+      {options.map((option) => (
+        <option key={option.value} value={option.value}>{option.label}</option>
+      ))}
+    </select>
+  );
+}
 
 function SessionPoolBadge({ pool }: { pool: SessionPool }) {
   const standbyCount = pool.standbys.length;
@@ -118,17 +185,20 @@ export function AgentColumn({ role }: AgentColumnProps) {
     >
       {/* Column header */}
       <div className="agent-column-header">
-        <IdenticonAvatar alias={ROLE_LABELS[role]} color={color} size={18} />
+        <MLRARoleIcon role={role} color={color} size={18} />
         <span className="agent-column-role" style={{ color }}>{ROLE_LABELS[role]}</span>
         {slot && (
           <span className="agent-column-model-tag">{slot.model}</span>
         )}
         {pool && <SessionPoolBadge pool={pool} />}
-        {slot && (
-          <span className={`agent-column-status agent-column-status-${slot.status}`}>
-            {STATUS_LABELS[slot.status]}
-          </span>
-        )}
+        <div className="agent-column-header-actions">
+          <AgentPolicySelect role={role} />
+          {slot && (
+            <span className={`agent-column-status agent-column-status-${slot.status}`}>
+              {STATUS_LABELS[slot.status]}
+            </span>
+          )}
+        </div>
       </div>
 
       {/* Body */}

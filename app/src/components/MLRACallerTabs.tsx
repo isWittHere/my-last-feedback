@@ -1,13 +1,13 @@
 import { useRef, useState, useCallback } from "react";
-import { useMLRAStore, ROLE_COLORS } from "../store/mlraStore";
-import { IdenticonAvatar } from "./IdenticonAvatar";
+import { useMLRAStore, ROLE_COLORS, type RuntimeMainRole } from "../store/mlraStore";
+import { MLRARoleIcon } from "./MLRARoleIcon";
 
 interface MLRACallerTabsProps {
   columnCount?: number;
 }
 
 interface RoleTabDef {
-  id: string;
+  id: RuntimeMainRole;
   label: string;
   color: string;
 }
@@ -24,10 +24,10 @@ export function MLRACallerTabs({ columnCount }: MLRACallerTabsProps = {}) {
   const [dropIndex, _setDropIndex] = useState<number | null>(null);
   const dropIndexRef = useRef<number | null>(null);
   const setDropIndex = (v: number | null) => { dropIndexRef.current = v; _setDropIndex(v); };
-  const [draggingId, setDraggingId] = useState<string | null>(null);
-  const [hoveredTabId, setHoveredTabId] = useState<string | null>(null);
+  const [draggingId, setDraggingId] = useState<RuntimeMainRole | null>(null);
+  const [hoveredTabId, setHoveredTabId] = useState<RuntimeMainRole | null>(null);
   const hoverTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
-  const dragSrcId = useRef<string | null>(null);
+  const dragSrcId = useRef<RuntimeMainRole | null>(null);
   const containerRef = useRef<HTMLDivElement>(null);
   const tabRectsRef = useRef<{ left: number; width: number }[]>([]);
   const didDragRef = useRef(false);
@@ -39,6 +39,7 @@ export function MLRACallerTabs({ columnCount }: MLRACallerTabsProps = {}) {
     { id: "ceo", label: "CEO", color: ROLE_COLORS.ceo },
   ];
   const defaultOrder = phaseTabs.map((t) => t.id);
+  const isMainRole = (item: string): item is RuntimeMainRole => defaultOrder.includes(item as RuntimeMainRole);
 
   // ── Drag handlers (all hooks must be before any early return) ──
 
@@ -74,14 +75,16 @@ export function MLRACallerTabs({ columnCount }: MLRACallerTabsProps = {}) {
 
     if (!srcId || !wasDrag || currentDropIndex == null) return;
 
-    const currentOrder = [...((columnOrder.length > 0 ? columnOrder : defaultOrder).filter((item) => defaultOrder.includes(item)))];
+    const baseOrder = columnOrder.length > 0 ? columnOrder : defaultOrder;
+    const currentOrder = [...baseOrder.filter(isMainRole)];
     const srcIdx = currentOrder.indexOf(srcId);
     if (srcIdx === -1) return;
 
     currentOrder.splice(srcIdx, 1);
     const adjustedIdx = currentDropIndex > srcIdx ? currentDropIndex - 1 : currentDropIndex;
     currentOrder.splice(adjustedIdx, 0, srcId);
-    setColumnOrder(currentOrder);
+    const nonRoleEntries = baseOrder.filter((item) => !isMainRole(item));
+    setColumnOrder([...currentOrder, ...nonRoleEntries]);
   }, [columnOrder, defaultOrder, setColumnOrder]);
 
   // ── Early return AFTER all hooks ──
@@ -105,7 +108,7 @@ export function MLRACallerTabs({ columnCount }: MLRACallerTabsProps = {}) {
     return slot.status ?? null;
   };
 
-  const handlePointerDown = (e: React.PointerEvent, tabId: string) => {
+  const handlePointerDown = (e: React.PointerEvent, tabId: RuntimeMainRole) => {
     if (e.button !== 0) return;
     e.preventDefault();
     e.stopPropagation();
@@ -187,7 +190,7 @@ export function MLRACallerTabs({ columnCount }: MLRACallerTabsProps = {}) {
           zIndex: isDragging ? 10 : isHovered ? 20 : 1,
         }}
       >
-        <IdenticonAvatar alias={tab.label} color={tab.color} size={16} />
+        <MLRARoleIcon role={tab.id} color={tab.color} size={16} />
         {isHovered && (
           <div className="caller-tab-tooltip">
             <div className="caller-tab-tooltip-name" style={{ color: tab.color }}>{tab.label}</div>

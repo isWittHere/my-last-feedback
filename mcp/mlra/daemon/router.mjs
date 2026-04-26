@@ -26,7 +26,7 @@ export class MessageRouter {
    * Block an agent. Returns a Promise that resolves when release() is called.
    * If there are queued messages, resolves immediately with the first queued message.
    * @param {string} callerId
-   * @param {"register"|"submit"|"worker_feedback"|"ceo_verdict"} type
+  * @param {"hello"|"submit"|"certification"|"ceo_verdict"|"human_gate"|"worker_feedback"} type
    * @returns {Promise<string>}
    */
   block(callerId, type) {

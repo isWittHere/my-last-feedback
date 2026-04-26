@@ -15,7 +15,13 @@ import { MLRAView } from "./MLRAView";
 import { MLRACallerTabs } from "./MLRACallerTabs";
 import { Icon } from "./Icons";
 import React from "react";
-import { useMLRAStore, ROLE_COLORS, type RoundRecord } from "../store/mlraStore";
+import {
+  ORCHESTRATION_PRESETS,
+  useMLRAStore,
+  ROLE_COLORS,
+  type OrchestrationPresetId,
+  type RoundRecord,
+} from "../store/mlraStore";
 
 /** Format milliseconds to MM:SS or H:MM:SS */
 function formatDuration(ms: number): string {
@@ -322,13 +328,8 @@ function RunningTimer() {
 /** MLRA title bar Row 2 */
 function MLRARow2() {
   const launcher = useMLRAStore((s) => s.getActiveLauncher());
-  const isActive = launcher?.status === "running" || launcher?.status === "paused";
+  const isActive = launcher?.status === "running" || launcher?.status === "paused" || launcher?.status === "awaiting-user";
   const currentStageName = launcher?.blueprintRuntime?.currentStage?.name;
-
-  const controlModes: Array<{ mode: import("../store/mlraStore").ControlMode; label: string }> = [
-    { mode: "autopilot", label: "全自动" },
-    { mode: "ceo-override", label: "接管CEO" },
-  ];
 
   return (
     <div data-tauri-drag-region className="flex items-center gap-2 px-3" style={{ height: 26 }}>
@@ -341,16 +342,18 @@ function MLRARow2() {
       </button>
       {isActive && launcher && (
         <div className="mlra-control-mode-switcher">
-          {controlModes.map(({ mode, label }) => (
+          {ORCHESTRATION_PRESETS.map(({ id, label, icon, policy }) => (
             <button
-              key={mode}
-              className={`mlra-control-mode-btn${launcher.controlMode === mode ? " active" : ""}`}
+              key={id}
+              className={`mlra-control-mode-btn${launcher.orchestrationPolicy.preset === id ? " active" : ""}`}
               onClick={() => {
-                useMLRAStore.getState().setControlMode(launcher.id, mode);
-                useMLRAStore.getState().daemonSetControlMode(mode);
+                const nextPolicy = { ...policy, preset: id as OrchestrationPresetId };
+                useMLRAStore.getState().setOrchestrationPolicy(launcher.id, nextPolicy);
+                useMLRAStore.getState().daemonSetOrchestrationPolicy(nextPolicy);
               }}
               title={label}
             >
+              <Icon name={icon} size={11} />
               {label}
             </button>
           ))}
@@ -368,6 +371,34 @@ function MLRARow2() {
           }}
         >
           阶段: {currentStageName}
+        </span>
+      )}
+      {isActive && launcher?.humanGate?.active && (
+        <span
+          style={{
+            fontSize: 11,
+            color: "#F59E0B",
+            border: "1px solid rgba(245, 158, 11, 0.35)",
+            borderRadius: 999,
+            padding: "2px 8px",
+            background: "rgba(245, 158, 11, 0.1)",
+          }}
+        >
+          阻塞: {launcher.humanGate.title}
+        </span>
+      )}
+      {isActive && launcher?.stageExitPending?.active && !launcher?.humanGate?.active && (
+        <span
+          style={{
+            fontSize: 11,
+            color: "#818CF8",
+            border: "1px solid rgba(129, 140, 248, 0.35)",
+            borderRadius: 999,
+            padding: "2px 8px",
+            background: "rgba(129, 140, 248, 0.1)",
+          }}
+        >
+          出口认证等待中
         </span>
       )}
       <div style={{ flex: 1 }} />
