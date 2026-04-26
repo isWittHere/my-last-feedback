@@ -8,6 +8,7 @@ import { useCopyToClipboard } from "./useCopyToClipboard";
 import { useFriendlyName } from "./useFriendlyName";
 import { useIsLightTheme } from "./useIsLightTheme";
 import { MarkdownContent } from "./MarkdownContent";
+import { MarkdownHeadingNav, parseMarkdownHeadings } from "./MarkdownHeadingNav";
 import type { QuestionItem } from "../store/feedbackStore";
 
 /** Questions form rendered at the bottom of the summary panel */
@@ -119,74 +120,6 @@ function QuestionsForm({
   );
 }
 
-/** Parse headings from raw markdown text */
-interface HeadingEntry { level: number; text: string; index: number; }
-
-function parseHeadings(md: string): HeadingEntry[] {
-  const result: HeadingEntry[] = [];
-  const lines = md.split("\n");
-  let inCodeBlock = false;
-  let idx = 0;
-  for (const line of lines) {
-    // Toggle code block state on fenced code markers
-    if (/^\s*(`{3,}|~{3,})/.test(line)) {
-      inCodeBlock = !inCodeBlock;
-      continue;
-    }
-    if (inCodeBlock) continue;
-    const m = /^(#{1,4})\s+(.+)$/.exec(line);
-    if (m) {
-      result.push({ level: m[1].length, text: m[2].trim(), index: idx++ });
-    }
-  }
-  return result;
-}
-
-/** Minimap-style heading navigation bar (lines only, no text) */
-function HeadingNavBar({
-  headings,
-  scrollContainerRef,
-  activeIndex,
-}: {
-  headings: HeadingEntry[];
-  scrollContainerRef: React.RefObject<HTMLDivElement | null>;
-  activeIndex: number;
-}) {
-  if (headings.length === 0) return null;
-
-  const handleClick = (h: HeadingEntry) => {
-    const container = scrollContainerRef.current;
-    if (!container) return;
-    // Find the matching heading element inside the prose
-    const allHeadings = container.querySelectorAll("h1, h2, h3, h4");
-    const target = allHeadings[h.index] as HTMLElement | undefined;
-    if (target) {
-      target.scrollIntoView({ behavior: "smooth", block: "start" });
-    }
-  };
-
-  // Width based on heading level: h1=100%, h2=70%, h3=45%, h4=25%
-  const widthMap: Record<number, string> = { 1: "100%", 2: "70%", 3: "45%", 4: "25%" };
-  const thicknessMap: Record<number, number> = { 1: 3, 2: 2, 3: 2, 4: 1 };
-
-  return (
-    <div className="heading-nav-bar">
-      {headings.map((h, i) => (
-        <button
-          key={i}
-          className={`heading-nav-line${i === activeIndex ? " active" : ""}`}
-          style={{
-            width: widthMap[h.level] || "25%",
-            height: thicknessMap[h.level] || 1,
-          }}
-          title={h.text}
-          onClick={() => handleClick(h)}
-        />
-      ))}
-    </div>
-  );
-}
-
 export function SummaryPanel() {
   const { t } = useTranslation();
   const friendlyName = useFriendlyName();
@@ -213,7 +146,7 @@ export function SummaryPanel() {
   const scrollRef = useRef<HTMLDivElement>(null);
   const [activeHeadingIdx, setActiveHeadingIdx] = useState(0);
 
-  const headings = useMemo(() => parseHeadings(summary), [summary]);
+  const headings = useMemo(() => parseMarkdownHeadings(summary), [summary]);
 
   // Track which heading is currently in view
   useEffect(() => {
@@ -293,7 +226,7 @@ export function SummaryPanel() {
 
       {/* Heading minimap nav bar — right side */}
       {summary && headings.length > 0 && (
-        <HeadingNavBar
+        <MarkdownHeadingNav
           headings={headings}
           scrollContainerRef={scrollRef}
           activeIndex={activeHeadingIdx}

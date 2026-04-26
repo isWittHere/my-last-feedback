@@ -136,7 +136,8 @@ body,
   pointer-events: none;
   z-index: 2;
 }
-.group\/summary:hover .heading-nav-bar {
+.group\/summary:hover .heading-nav-bar,
+.mlc-preview-panel:hover .heading-nav-bar {
   opacity: 1;
 }
 .heading-nav-line {
@@ -2223,6 +2224,9 @@ body,
   opacity: 0.35;
 }
 .mlc-preview-panel {
+  position: relative;
+  --caller-color: var(--color-primary);
+  --mlc-preview-accent: var(--color-primary);
   height: 100%;
   min-height: 0;
   display: flex;
@@ -2237,8 +2241,8 @@ body,
   gap: 8px;
   padding: 9px 10px 8px;
   border-bottom: 1px solid var(--color-border-subtle);
-  box-shadow: inset 2px 0 0 var(--color-primary);
-  background: color-mix(in srgb, var(--color-primary) 6%, transparent);
+  box-shadow: inset 2px 0 0 var(--mlc-preview-accent);
+  background: color-mix(in srgb, var(--mlc-preview-accent) 6%, transparent);
 }
 .mlc-preview-title-block {
   flex: 1;
@@ -2248,7 +2252,7 @@ body,
   display: flex;
   align-items: center;
   gap: 5px;
-  color: var(--color-primary);
+  color: var(--mlc-preview-accent);
   font-size: 11px;
   line-height: 16px;
   text-transform: uppercase;
@@ -2304,9 +2308,9 @@ body,
   cursor: pointer;
 }
 .mlc-preview-actions button:hover:not(:disabled) {
-  color: var(--color-primary);
-  background: color-mix(in srgb, var(--color-primary) 12%, transparent);
-  border-color: color-mix(in srgb, var(--color-primary) 28%, transparent);
+  color: var(--mlc-preview-accent);
+  background: color-mix(in srgb, var(--mlc-preview-accent) 12%, transparent);
+  border-color: color-mix(in srgb, var(--mlc-preview-accent) 28%, transparent);
 }
 .mlc-preview-actions button:disabled {
   cursor: default;
@@ -2318,7 +2322,20 @@ body,
   min-width: 0;
   overflow-y: auto;
   overflow-x: hidden;
-  padding: 10px 12px 16px;
+  padding: 10px 28px 16px 12px;
+}
+.mlc-preview-panel .heading-nav-bar {
+  top: 76px;
+  right: 5px;
+  bottom: 12px;
+  opacity: 1;
+  z-index: 12;
+}
+.mlc-preview-panel .heading-nav-line {
+  background: color-mix(in srgb, var(--mlc-preview-accent) 50%, var(--color-text-muted));
+}
+.mlc-preview-panel .heading-nav-line.active {
+  background: var(--mlc-preview-accent);
 }
 .mlc-preview-markdown {
   font-size: 13px;
@@ -2338,7 +2355,7 @@ body,
 }
 .mlc-preview-empty svg,
 .mlc-preview-state svg {
-  color: var(--color-primary);
+  color: var(--mlc-preview-accent);
 }
 .mlc-preview-state.error svg {
   color: var(--color-danger);

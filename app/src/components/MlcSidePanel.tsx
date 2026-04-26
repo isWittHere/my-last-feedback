@@ -5,6 +5,7 @@ import { openPath } from "@tauri-apps/plugin-opener";
 import { useFeedbackStore, type MlcAttachment, type SelectedMlcDocument } from "../store/feedbackStore";
 import { AppSelect, type AppSelectOption } from "./AppSelect";
 import { Icon, MlcLogoIcon } from "./Icons";
+import { MLC_TYPE_TABS, getMlcTypeColor, getMlcTypeConfig, getMlcTypeLabel } from "./mlcTypeConfig";
 import { useIsLightTheme } from "./useIsLightTheme";
 
 type SortBy = "updated-desc" | "created-desc" | "created-asc" | "title-asc" | "title-desc";
@@ -32,15 +33,6 @@ type MlcTooltipContent =
   | { kind: "text"; text: string }
   | { kind: "document"; document: MlcDocument };
 
-const TYPE_TABS = [
-  { value: "all", label: "All" },
-  { value: "coding", label: "Coding", icon: "code", color: "#4fc3f7", lightColor: "#0079dc" },
-  { value: "debug", label: "Debug", icon: "bug", color: "#ef5350", lightColor: "#d32f2f" },
-  { value: "planning", label: "Planning", icon: "checklist", color: "#66bb6a", lightColor: "#009207" },
-  { value: "spec", label: "Spec", icon: "file-text", color: "#ab47bc", lightColor: "#8e24aa" },
-  { value: "knowledge", label: "Knowledge", icon: "book", color: "#e48900", lightColor: "#d77600" },
-];
-
 function basename(path: string): string {
   const normalized = path.replace(/\\/g, "/");
   return normalized.split("/").filter(Boolean).pop() || path;
@@ -56,15 +48,6 @@ function cleanDisplayPath(path: string): string {
 
 function samePath(left: string, right: string): boolean {
   return normalizePathForCompare(left) === normalizePathForCompare(right);
-}
-
-function getTypeConfig(type: string) {
-  return TYPE_TABS.find((tab) => tab.value === type);
-}
-
-function getTypeColor(type: string, isLightTheme: boolean): string | undefined {
-  const config = getTypeConfig(type);
-  return isLightTheme ? config?.lightColor : config?.color;
 }
 
 function dateValue(value: string): number {
@@ -99,10 +82,6 @@ function groupLabel(value: string, translate: (key: string, defaultValue: string
   if (days === 1) return translate("mlc.yesterday", "Yesterday");
   if (days < 7) return translate("mlc.lastWeek", "Last week");
   return translate("mlc.earlier", "Earlier");
-}
-
-function typeLabel(type: string): string {
-  return getTypeConfig(type)?.label || type || "General";
 }
 
 function documentTooltip(document: MlcDocument): MlcTooltipContent {
@@ -350,14 +329,14 @@ export function MlcSidePanel() {
   const renderTooltipContent = (content: MlcTooltipContent) => {
     if (content.kind === "text") return content.text;
     const document = content.document;
-    const config = getTypeConfig(document.type);
-    const type = typeLabel(document.type);
+    const config = getMlcTypeConfig(document.type);
+    const type = getMlcTypeLabel(document.type);
     return (
       <div className="mlc-tooltip-doc">
         <div className="mlc-tooltip-title">{document.title}</div>
         <div className="mlc-tooltip-time">{formatExactTime(document.updatedAt || document.createdAt)}</div>
         <div className="mlc-tooltip-type-tag">
-          <Icon name={config?.icon || "message"} size={12} color={getTypeColor(document.type, isLightTheme)} />
+          <Icon name={config?.icon || "message"} size={12} color={getMlcTypeColor(document.type, isLightTheme)} />
           <span>{type}</span>
         </div>
         {document.description ? <div className="mlc-tooltip-desc">{document.description}</div> : null}
@@ -404,9 +383,9 @@ export function MlcSidePanel() {
       </div>
 
       <div className="mlc-tabs">
-        {TYPE_TABS.map((tab) => (
+        {MLC_TYPE_TABS.map((tab) => (
           <button key={tab.value} className={selectedType === tab.value ? "active" : ""} onClick={() => setSelectedType(tab.value)} {...tooltipProps(tab.label)}>
-            {tab.icon ? <Icon name={tab.icon} size={11} color={getTypeColor(tab.value, isLightTheme)} /> : null}
+            {tab.icon ? <Icon name={tab.icon} size={11} color={getMlcTypeColor(tab.value, isLightTheme)} /> : null}
             <span>{tab.label}</span>
           </button>
         ))}
@@ -446,7 +425,7 @@ export function MlcSidePanel() {
               <div className={`mlc-group-items${isCollapsed ? " collapsed" : ""}`}>
                 {items.map((document) => (
                   <article key={document.filePath} className={`mlc-doc-item ${viewMode}${selectedMlcDocument?.filePath === cleanDisplayPath(document.filePath) ? " selected" : ""}`} onClick={() => handleSelectDocument(document)}>
-                    <Icon name={getTypeConfig(document.type)?.icon || "message"} size={viewMode === "compact" ? 14 : 18} className="mlc-doc-icon" color={getTypeColor(document.type, isLightTheme)} />
+                    <Icon name={getMlcTypeConfig(document.type)?.icon || "message"} size={viewMode === "compact" ? 14 : 18} className="mlc-doc-icon" color={getMlcTypeColor(document.type, isLightTheme)} />
                     <div className="mlc-doc-content">
                       <div className="mlc-doc-title" {...tooltipProps(documentTooltip(document))}>{document.title}</div>
                       {viewMode === "detail" && document.description ? <div className="mlc-doc-desc">{document.description}</div> : null}
