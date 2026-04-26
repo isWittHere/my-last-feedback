@@ -43,7 +43,7 @@ Windows 上还需要安装 [Visual Studio Build Tools](https://visualstudio.micr
 
 ```
 my-last-feedback/
-├── server.mjs              # MCP Server（Node.js，stdio 传输）
+├── mcp/                    # MCP Server（Node.js，stdio 传输）
 ├── package.json            # MCP Server 依赖（@modelcontextprotocol/sdk）
 ├── mcp.json.template       # MCP 配置模板
 ├── mcp_prompts/            # 自定义 Prompt 按钮模板
@@ -163,7 +163,7 @@ bash scripts/package-win.sh
 脚本流程：
 1. `npx tauri build --no-bundle` — 编译 release 二进制
 2. 清理并创建 `dist/win-x64/my-last-feedback/` 目录
-3. 复制 `app.exe`、`server.mjs`、`package.json`、`mcp.json.template`、`SETUP.md`、`prompt.instructions.md`
+3. 复制 `app.exe`、`mcp/`、`package.json`、`mcp.json.template`、`SETUP.md`、`prompt.instructions.md`
 4. 复制 `mcp_prompts/*.prompt.md`
 5. `npm install --omit=dev` — 安装生产依赖（仅 `@modelcontextprotocol/sdk`）
 
@@ -187,7 +187,7 @@ mkdir -p dist/win-x64/my-last-feedback/mcp_prompts
 
 # 3. 复制文件
 cp app/src-tauri/target/release/app.exe  dist/win-x64/my-last-feedback/
-cp server.mjs                            dist/win-x64/my-last-feedback/
+cp -R mcp                                dist/win-x64/my-last-feedback/
 cp package.json                          dist/win-x64/my-last-feedback/
 cp mcp.json.template                     dist/win-x64/my-last-feedback/
 cp dist/SETUP.md                         dist/win-x64/my-last-feedback/

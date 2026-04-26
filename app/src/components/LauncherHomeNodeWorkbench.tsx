@@ -145,7 +145,6 @@ function SkillToggle({
   label: string;
   onClick: () => void;
 }) {
-  const { t } = useTranslation();
   return (
     <button className={`mlra-task-type-chip mlra-skill-tag${selected ? " active" : ""}`} onClick={onClick}>
       {label}
@@ -365,6 +364,7 @@ function BlueprintNode({
   onPointerMove: (event: ReactPointerEvent<HTMLElement>) => void;
   onPointerUp: (event: ReactPointerEvent<HTMLElement>) => void;
 }) {
+  const { t } = useTranslation();
   return (
     <article
       className={[
