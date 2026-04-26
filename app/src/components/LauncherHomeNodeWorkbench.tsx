@@ -124,7 +124,6 @@ function DetailSection({
   title?: string;
   children: ReactNode;
 }) {
-  const { t } = useTranslation();
   return (
     <section className="mlra-editor-section">
       {title ? (
@@ -146,6 +145,7 @@ function SkillToggle({
   label: string;
   onClick: () => void;
 }) {
+  const { t } = useTranslation();
   return (
     <button className={`mlra-task-type-chip mlra-skill-tag${selected ? " active" : ""}`} onClick={onClick}>
       {label}
