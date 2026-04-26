@@ -2,7 +2,7 @@ import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { useTranslation } from "react-i18next";
 import { invoke } from "@tauri-apps/api/core";
 import { openPath } from "@tauri-apps/plugin-opener";
-import { useFeedbackStore, type MlcAttachment } from "../store/feedbackStore";
+import { useFeedbackStore, type MlcAttachment, type SelectedMlcDocument } from "../store/feedbackStore";
 import { AppSelect, type AppSelectOption } from "./AppSelect";
 import { Icon, MlcLogoIcon } from "./Icons";
 import { useIsLightTheme } from "./useIsLightTheme";
@@ -117,6 +117,22 @@ function toAttachment(document: MlcDocument): MlcAttachment {
   };
 }
 
+function toSelectedDocument(document: MlcDocument): SelectedMlcDocument {
+  return {
+    filePath: cleanDisplayPath(document.filePath),
+    fileName: document.fileName,
+    title: document.title,
+    description: document.description,
+    project: document.project,
+    type: document.type,
+    updatedAt: document.updatedAt,
+    workspaceName: document.workspaceName,
+    workspacePath: document.workspacePath,
+    folderName: document.folderName,
+    folderPath: document.folderPath,
+  };
+}
+
 export function MlcSidePanel() {
   const { t } = useTranslation();
   const isLightTheme = useIsLightTheme();
@@ -125,6 +141,9 @@ export function MlcSidePanel() {
   const focusedComposer = useFeedbackStore((state) => state.focusedComposer);
   const activeWorkspacePath = useFeedbackStore((state) => state.mlcActiveWorkspacePath);
   const setActiveWorkspacePath = useFeedbackStore((state) => state.setMlcActiveWorkspacePath);
+  const selectedMlcDocument = useFeedbackStore((state) => state.selectedMlcDocument);
+  const setSelectedMlcDocument = useFeedbackStore((state) => state.setSelectedMlcDocument);
+  const openDockTab = useFeedbackStore((state) => state.openDockTab);
   const addSessionMlcAttachment = useFeedbackStore((state) => state.addSessionMlcAttachment);
   const addQueuedDraftMlcAttachment = useFeedbackStore((state) => state.addQueuedDraftMlcAttachment);
 
@@ -240,12 +259,20 @@ export function MlcSidePanel() {
     openPath(filePath).catch(() => navigator.clipboard.writeText(filePath));
   }, []);
 
+  const handleSelectDocument = useCallback((document: MlcDocument) => {
+    setSelectedMlcDocument(toSelectedDocument(document));
+    openDockTab("mlcPreview", "leftPage");
+  }, [openDockTab, setSelectedMlcDocument]);
+
   const handleDelete = useCallback((document: MlcDocument) => {
     if (!window.confirm(t("mlc.deleteConfirm", "Delete \"{{name}}\"?").replace("{{name}}", document.title))) return;
     invoke("mlc_delete_document", { filePath: document.filePath })
-      .then(() => setDocuments((current) => current.filter((item) => item.filePath !== document.filePath)))
+      .then(() => {
+        setDocuments((current) => current.filter((item) => item.filePath !== document.filePath));
+        if (selectedMlcDocument?.filePath === cleanDisplayPath(document.filePath)) setSelectedMlcDocument(null);
+      })
       .catch((err) => setError(String(err)));
-  }, [t]);
+  }, [selectedMlcDocument?.filePath, setSelectedMlcDocument, t]);
 
   const handleToggleFavorite = useCallback((document: MlcDocument) => {
     invoke<boolean>("mlc_toggle_favorite", { filePath: document.filePath })
@@ -341,6 +368,9 @@ export function MlcSidePanel() {
 
   const renderDocumentActions = (document: MlcDocument) => (
     <div className="mlc-doc-actions">
+      <button className="mlc-doc-action-open" onClick={(event) => { event.stopPropagation(); handleOpen(document.filePath); }} title={t("mlc.open", "Open")}> 
+        <Icon name="file-text" size={12} />
+      </button>
       <button className="mlc-doc-action-del" onClick={(event) => { event.stopPropagation(); handleDelete(document); }} title={t("mlc.delete", "Delete")}>
         <Icon name="trash" size={12} />
       </button>
@@ -415,10 +445,10 @@ export function MlcSidePanel() {
               </button>
               <div className={`mlc-group-items${isCollapsed ? " collapsed" : ""}`}>
                 {items.map((document) => (
-                  <article key={document.filePath} className={`mlc-doc-item ${viewMode}`}>
+                  <article key={document.filePath} className={`mlc-doc-item ${viewMode}${selectedMlcDocument?.filePath === cleanDisplayPath(document.filePath) ? " selected" : ""}`} onClick={() => handleSelectDocument(document)}>
                     <Icon name={getTypeConfig(document.type)?.icon || "message"} size={viewMode === "compact" ? 14 : 18} className="mlc-doc-icon" color={getTypeColor(document.type, isLightTheme)} />
                     <div className="mlc-doc-content">
-                      <div className="mlc-doc-title" onClick={(event) => { event.stopPropagation(); handleOpen(document.filePath); }} {...tooltipProps(documentTooltip(document))}>{document.title}</div>
+                      <div className="mlc-doc-title" {...tooltipProps(documentTooltip(document))}>{document.title}</div>
                       {viewMode === "detail" && document.description ? <div className="mlc-doc-desc">{document.description}</div> : null}
                       {viewMode === "detail" && document.tags.length > 0 ? (
                         <div className="mlc-doc-tags">{document.tags.slice(0, 4).map((tag) => <span key={tag}>{tag}</span>)}</div>

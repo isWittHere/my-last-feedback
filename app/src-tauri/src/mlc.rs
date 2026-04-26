@@ -3,6 +3,8 @@ use serde::{Deserialize, Serialize};
 use std::collections::{HashMap, HashSet};
 use std::path::{Path, PathBuf};
 
+const MLC_PREVIEW_MAX_BYTES: u64 = 2 * 1024 * 1024;
+
 #[derive(Debug, Deserialize)]
 #[serde(rename_all = "camelCase")]
 pub struct MlcSearchRequest {
@@ -29,6 +31,15 @@ pub struct MlcDocument {
     pub workspace_path: String,
 }
 
+#[derive(Debug, Clone, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct MlcDocumentContent {
+    pub file_path: String,
+    pub title: String,
+    pub markdown: String,
+    pub updated_at: String,
+}
+
 struct MlcRoot {
     workspace_name: String,
     workspace_path: PathBuf,
@@ -46,6 +57,36 @@ pub async fn mlc_search_documents(request: MlcSearchRequest) -> Result<Vec<MlcDo
 
     documents.sort_by(|a, b| b.updated_at.cmp(&a.updated_at));
     Ok(documents)
+}
+
+#[tauri::command]
+pub async fn mlc_read_document(file_path: String) -> Result<MlcDocumentContent, String> {
+    let path = canonical_markdown_file(&file_path)?;
+    if !is_inside_mlc_storage(&path) {
+        return Err("Markdown file is not inside a .myLastChat directory".to_string());
+    }
+    let stats = std::fs::metadata(&path).map_err(|e| e.to_string())?;
+    if stats.len() > MLC_PREVIEW_MAX_BYTES {
+        return Err("Markdown file is too large to preview".to_string());
+    }
+
+    let content = std::fs::read_to_string(&path).map_err(|e| e.to_string())?;
+    let frontmatter = extract_frontmatter(&content);
+    let file_name = path
+        .file_name()
+        .map(|name| name.to_string_lossy().to_string())
+        .unwrap_or_else(|| "Markdown".to_string());
+    let updated_at = frontmatter
+        .scalar("updatedAt")
+        .or_else(|| stats.modified().ok().map(system_time_to_iso))
+        .unwrap_or_else(|| Utc::now().to_rfc3339());
+
+    Ok(MlcDocumentContent {
+        file_path: display_path(&path),
+        title: frontmatter.scalar("title").unwrap_or_else(|| file_name.trim_end_matches(".md").to_string()),
+        markdown: markdown_body(&content),
+        updated_at,
+    })
 }
 
 #[tauri::command]
@@ -82,6 +123,24 @@ fn canonical_markdown_file(file_path: &str) -> Result<PathBuf, String> {
         return Err("Not a markdown file".to_string());
     }
     Ok(path)
+}
+
+fn is_inside_mlc_storage(path: &Path) -> bool {
+    path.ancestors().any(|ancestor| {
+        ancestor
+            .file_name()
+            .and_then(|name| name.to_str())
+            .is_some_and(|name| name.eq_ignore_ascii_case(".myLastChat"))
+    })
+}
+
+fn markdown_body(content: &str) -> String {
+    let trimmed = content.trim_start_matches('\u{feff}');
+    if let Some((_, _, body_start)) = frontmatter_bounds(trimmed) {
+        trimmed[body_start..].trim_start_matches(|ch| ch == '\r' || ch == '\n').to_string()
+    } else {
+        trimmed.to_string()
+    }
 }
 
 fn discover_roots(workspace_paths: Vec<String>) -> Result<Vec<MlcRoot>, String> {

@@ -60,10 +60,24 @@ export interface FocusedComposer {
 }
 
 export type MlcPanelPosition = "left" | "right";
-export type SidePanelTab = "mlc" | "resources";
+export type SidePanelTab = "mlc" | "resources" | "mlcPreview";
 export type DockColumnId = "leftSidebar" | "leftPage" | "rightSidebar";
 export type DockTabId = SidePanelTab;
 export type DockTabBarPosition = "top" | "bottom";
+
+export interface SelectedMlcDocument {
+  filePath: string;
+  fileName: string;
+  title: string;
+  description: string;
+  project: string;
+  type: string;
+  updatedAt: string;
+  workspaceName: string;
+  workspacePath: string;
+  folderName?: string | null;
+  folderPath?: string | null;
+}
 
 export interface DockColumnState {
   tabIds: DockTabId[];
@@ -144,6 +158,7 @@ export interface FeedbackState {
   messageHistoryByCallerId: Record<string, string[]>;
   focusedComposer: FocusedComposer | null;
   mlcActiveWorkspacePath: string | null;
+  selectedMlcDocument: SelectedMlcDocument | null;
   dockLayout: DockLayoutState;
   draggingDockTab: DraggingDockTabState | null;
 
@@ -206,11 +221,13 @@ export interface FeedbackState {
   setFocusedComposer: (focus: FocusedComposer) => void;
   clearFocusedComposer: (sessionId?: string) => void;
   setMlcActiveWorkspacePath: (path: string | null) => void;
+  setSelectedMlcDocument: (document: SelectedMlcDocument | null) => void;
   setDockColumnWidth: (columnId: DockColumnId, width: number) => void;
   setDockColumnCollapsed: (columnId: DockColumnId, collapsed: boolean) => void;
   setDockColumnTabBarPosition: (columnId: DockColumnId, position: DockTabBarPosition) => void;
   setDockActiveTab: (columnId: DockColumnId, tabId: DockTabId | null) => void;
   moveDockTabToColumn: (tabId: DockTabId, targetColumnId: DockColumnId) => void;
+  openDockTab: (tabId: DockTabId, preferredColumnId: DockColumnId) => void;
   startDraggingDockTab: (tabId: DockTabId, sourceColumnId: DockColumnId, pointerX: number, pointerY: number, targetColumnId?: DockColumnId | null) => void;
   updateDraggingDockTab: (pointerX: number, pointerY: number, targetColumnId: DockColumnId | null) => void;
   finishDraggingDockTab: () => void;
@@ -231,6 +248,12 @@ const MLC_PANEL_MAX_WIDTH = 520;
 const DOCK_LAYOUT_STORAGE_KEY = "mlfb-dock-layout-v1";
 
 const DOCK_COLUMN_IDS: DockColumnId[] = ["leftSidebar", "leftPage", "rightSidebar"];
+const KNOWN_DOCK_TABS: DockTabId[] = ["mlc", "resources", "mlcPreview"];
+const DEFAULT_DOCK_TABS: DockTabId[] = ["mlc", "mlcPreview", "resources"];
+
+function isDockTabId(value: unknown): value is DockTabId {
+  return typeof value === "string" && KNOWN_DOCK_TABS.includes(value as DockTabId);
+}
 
 function clampDockWidth(width: number): number {
   return Math.min(MLC_PANEL_MAX_WIDTH, Math.max(MLC_PANEL_MIN_WIDTH, width));
@@ -249,7 +272,7 @@ function createDockColumn(overrides: Partial<DockColumnState> = {}): DockColumnS
 
 function normalizeDockColumn(value: Partial<DockColumnState> | null | undefined): DockColumnState {
   const tabIds = Array.isArray(value?.tabIds)
-    ? value.tabIds.filter((tab): tab is DockTabId => tab === "mlc" || tab === "resources")
+    ? value.tabIds.filter(isDockTabId)
     : [];
   const activeTabId = value?.activeTabId && tabIds.includes(value.activeTabId) ? value.activeTabId : tabIds[0] || null;
   return createDockColumn({
@@ -304,7 +327,7 @@ function migrateLegacyDockLayout(): DockLayoutState {
     rightSidebar: createDockColumn(),
   };
   columns[targetColumnId] = createDockColumn({
-    tabIds: ["mlc", "resources"],
+    tabIds: ["mlc", "mlcPreview", "resources"],
     activeTabId: legacyActiveTab,
     width: legacyWidth,
     tabBarPosition: legacyTabBarPosition,
@@ -334,8 +357,12 @@ function loadDockLayout(): DockLayoutState {
         });
         if (column.activeTabId && !column.tabIds.includes(column.activeTabId)) column.activeTabId = column.tabIds[0] || null;
       }
-      for (const tabId of ["mlc", "resources"] satisfies DockTabId[]) {
-        if (!seen.has(tabId)) columns.rightSidebar.tabIds.push(tabId);
+      for (const tabId of DEFAULT_DOCK_TABS) {
+        if (seen.has(tabId)) continue;
+        const fallbackColumnId = tabId === "mlcPreview"
+          ? DOCK_COLUMN_IDS.find((columnId) => columns[columnId].tabIds.includes("mlc")) || "rightSidebar"
+          : "rightSidebar";
+        columns[fallbackColumnId].tabIds.push(tabId);
       }
       normalizeLeftDockColumns(columns);
       for (const columnId of DOCK_COLUMN_IDS) {
@@ -458,6 +485,7 @@ export const useFeedbackStore = create<FeedbackState>((set, get) => ({
   messageHistoryByCallerId: loadMessageHistory(),
   focusedComposer: null,
   mlcActiveWorkspacePath: null,
+  selectedMlcDocument: null,
   dockLayout: loadDockLayout(),
   draggingDockTab: null,
 
@@ -1267,6 +1295,8 @@ export const useFeedbackStore = create<FeedbackState>((set, get) => ({
 
   setMlcActiveWorkspacePath: (path) => set({ mlcActiveWorkspacePath: path }),
 
+  setSelectedMlcDocument: (document) => set({ selectedMlcDocument: document }),
+
   setDockColumnWidth: (columnId, width) => {
     set((state) => {
       const dockLayout: DockLayoutState = {
@@ -1367,6 +1397,32 @@ export const useFeedbackStore = create<FeedbackState>((set, get) => ({
       return {
         dockLayout,
       };
+    });
+  },
+
+  openDockTab: (tabId, preferredColumnId) => {
+    set((state) => {
+      const nextColumns: DockLayoutState["columns"] = {
+        leftSidebar: { ...state.dockLayout.columns.leftSidebar, tabIds: [...state.dockLayout.columns.leftSidebar.tabIds] },
+        leftPage: { ...state.dockLayout.columns.leftPage, tabIds: [...state.dockLayout.columns.leftPage.tabIds] },
+        rightSidebar: { ...state.dockLayout.columns.rightSidebar, tabIds: [...state.dockLayout.columns.rightSidebar.tabIds] },
+      };
+      let targetColumnId: DockColumnId | null = null;
+      for (const columnId of DOCK_COLUMN_IDS) {
+        if (nextColumns[columnId].tabIds.includes(tabId)) {
+          targetColumnId = columnId;
+          break;
+        }
+      }
+      targetColumnId ||= preferredColumnId;
+      const targetColumn = nextColumns[targetColumnId];
+      if (!targetColumn.tabIds.includes(tabId)) targetColumn.tabIds.push(tabId);
+      targetColumn.activeTabId = tabId;
+      targetColumn.collapsed = false;
+      normalizeLeftDockColumns(nextColumns);
+      const dockLayout = { columns: nextColumns };
+      persistDockLayout(dockLayout);
+      return { dockLayout };
     });
   },
 

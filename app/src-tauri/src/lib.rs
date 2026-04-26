@@ -15,7 +15,7 @@ use session::{
     CallerInfo, FeedbackPayload, MlcAttachment, SessionDetail, SessionSummary, SharedSessionManager,
 };
 use ipc::SharedMlraWriter;
-use mlc::{mlc_delete_document, mlc_search_documents, mlc_toggle_favorite};
+use mlc::{mlc_delete_document, mlc_read_document, mlc_search_documents, mlc_toggle_favorite};
 use project_resources::project_list_directory;
 
 /// Global app state shared by persistent-mode commands
@@ -673,6 +673,7 @@ pub fn run() {
             trim_caller_sessions,
             clear_all_history,
             mlc_delete_document,
+            mlc_read_document,
             mlc_search_documents,
             mlc_toggle_favorite,
             project_list_directory,
