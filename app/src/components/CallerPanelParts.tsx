@@ -18,6 +18,7 @@ export function AttachmentTagBar({
   callerColor,
   showGitPanel,
   setShowGitPanel,
+  queuedCallerId,
 }: {
   controls: React.ReactNode;
   fileInput: React.ReactNode;
@@ -27,17 +28,27 @@ export function AttachmentTagBar({
   testLogRef: React.RefObject<HTMLTextAreaElement | null>;
   showGitPanel: boolean;
   setShowGitPanel: (fn: (v: boolean) => boolean) => void;
+  queuedCallerId?: string;
 }) {
   const { t } = useTranslation();
   const { session: activeSession } = useActiveCallerSession();
+  const queuedDraft = useFeedbackStore((s) => queuedCallerId ? s.queuedDraftsByCallerId[queuedCallerId] : null);
   const removeSessionImage = useFeedbackStore((s) => s.removeSessionImage);
   const clearSessionImages = useFeedbackStore((s) => s.clearSessionImages);
   const updateSessionField = useFeedbackStore((s) => s.updateSessionField);
   const setSessionGitAction = useFeedbackStore((s) => s.setSessionGitAction);
   const updateSessionGitBranchName = useFeedbackStore((s) => s.updateSessionGitBranchName);
-  const images = activeSession?.images || [];
-  const hasTestLog = !!(activeSession?.testLogText?.trim());
-  const hasGitAction = !!activeSession?.gitAction;
+  const removeQueuedDraftImage = useFeedbackStore((s) => s.removeQueuedDraftImage);
+  const clearQueuedDraftImages = useFeedbackStore((s) => s.clearQueuedDraftImages);
+  const updateQueuedDraftField = useFeedbackStore((s) => s.updateQueuedDraftField);
+  const setQueuedDraftGitAction = useFeedbackStore((s) => s.setQueuedDraftGitAction);
+  const updateQueuedDraftGitBranchName = useFeedbackStore((s) => s.updateQueuedDraftGitBranchName);
+  const targetImages = queuedCallerId ? (queuedDraft?.images || []) : (activeSession?.images || []);
+  const targetTestLogText = queuedCallerId ? (queuedDraft?.testLogText || "") : (activeSession?.testLogText || "");
+  const targetGitAction = queuedCallerId ? (queuedDraft?.gitAction || null) : (activeSession?.gitAction || null);
+  const images = targetImages;
+  const hasTestLog = !!targetTestLogText.trim();
+  const hasGitAction = !!targetGitAction;
   const hasTags = images.length > 0 || hasTestLog || showTestLog || hasGitAction;
   const tagAreaRef = useRef<HTMLDivElement>(null);
   const branchInputRef = useRef<HTMLInputElement>(null);
@@ -45,13 +56,14 @@ export function AttachmentTagBar({
   const handleAttachLogClick = async () => {
     const wasHidden = !showTestLog;
     setShowTestLog((v) => !v);
-    if (wasHidden && activeSession) {
+    if (wasHidden && (activeSession || queuedCallerId)) {
       // Auto-paste clipboard text if > 50 chars and test log is empty
-      if (!activeSession.testLogText?.trim()) {
+      if (!targetTestLogText.trim()) {
         try {
           const text = await readClipboardText();
           if (text && text.length > 50) {
-            updateSessionField(activeSession.id, "testLogText", text);
+            if (queuedCallerId) updateQueuedDraftField(queuedCallerId, "testLogText", text);
+            else if (activeSession) updateSessionField(activeSession.id, "testLogText", text);
           }
         } catch { /* clipboard access denied or empty */ }
       }
@@ -77,9 +89,9 @@ export function AttachmentTagBar({
         >
           <Icon name="terminal" size={12} />
           {t("testLog.attach", "附加日志")}
-          {(activeSession?.testLogText?.length ?? 0) > 0 && (
+          {targetTestLogText.length > 0 && (
             <span style={{ color: showTestLog ? "rgba(255,255,255,0.7)" : "var(--color-text-muted)", marginLeft: 2 }}>
-              {activeSession!.testLogText!.length}
+              {targetTestLogText.length}
             </span>
           )}
         </button>
@@ -110,7 +122,7 @@ export function AttachmentTagBar({
           {images.length > 0 && (
             <div
               className="attachment-tag attachment-tag-danger"
-              onClick={() => activeSession && clearSessionImages(activeSession.id)}
+              onClick={() => queuedCallerId ? clearQueuedDraftImages(queuedCallerId) : activeSession && clearSessionImages(activeSession.id)}
               title={t("images.clearAll")}
             >
               <Icon name="trash" size={10} />
@@ -121,7 +133,7 @@ export function AttachmentTagBar({
             <ImageTag
               key={img.path}
               img={img}
-              onRemove={() => activeSession && removeSessionImage(activeSession.id, img.path)}
+              onRemove={() => queuedCallerId ? removeQueuedDraftImage(queuedCallerId, img.path) : activeSession && removeSessionImage(activeSession.id, img.path)}
             />
           ))}
           {(hasTestLog || showTestLog) && (
@@ -129,17 +141,17 @@ export function AttachmentTagBar({
               showTestLog={showTestLog}
               setShowTestLog={setShowTestLog}
               testLogRef={testLogRef}
-              testLogText={activeSession?.testLogText || ""}
+              testLogText={targetTestLogText}
               callerColor={callerColor}
             />
           )}
           {hasGitAction && (
             <GitActionTag
-              gitAction={activeSession!.gitAction!}
+              gitAction={targetGitAction!}
               showGitPanel={showGitPanel}
               setShowGitPanel={setShowGitPanel}
               callerColor={callerColor}
-              onRemove={() => activeSession && setSessionGitAction(activeSession.id, null)}
+              onRemove={() => queuedCallerId ? setQueuedDraftGitAction(queuedCallerId, null) : activeSession && setSessionGitAction(activeSession.id, null)}
             />
           )}
         </div>
@@ -159,7 +171,7 @@ export function AttachmentTagBar({
               overflowY: "auto",
             }}
           >
-            <TestLogInput ref={testLogRef} />
+              <TestLogInput ref={testLogRef} queuedCallerId={queuedCallerId} />
           </div>
         </div>
       )}
@@ -175,7 +187,7 @@ export function AttachmentTagBar({
             }}
           >
             {(["commit", "commit-push", "create-branch"] as GitActionType[]).map((type) => {
-              const isSelected = activeSession?.gitAction?.type === type;
+              const isSelected = targetGitAction?.type === type;
               return (
                 <button
                   key={type}
@@ -188,11 +200,14 @@ export function AttachmentTagBar({
                     color: isSelected ? "#fff" : undefined,
                   }}
                   onClick={() => {
-                    if (!activeSession) return;
+                    if (!activeSession && !queuedCallerId) return;
                     if (isSelected) {
-                      setSessionGitAction(activeSession.id, null);
+                      if (queuedCallerId) setQueuedDraftGitAction(queuedCallerId, null);
+                      else if (activeSession) setSessionGitAction(activeSession.id, null);
                     } else {
-                      setSessionGitAction(activeSession.id, { type, branchName: type === "create-branch" ? "" : undefined });
+                      const action = { type, branchName: type === "create-branch" ? "" : undefined };
+                      if (queuedCallerId) setQueuedDraftGitAction(queuedCallerId, action);
+                      else if (activeSession) setSessionGitAction(activeSession.id, action);
                       if (type === "create-branch") {
                         setTimeout(() => branchInputRef.current?.focus(), 50);
                       }
@@ -203,12 +218,12 @@ export function AttachmentTagBar({
                 </button>
               );
             })}
-            {activeSession?.gitAction?.type === "create-branch" && (
+            {targetGitAction?.type === "create-branch" && (
               <input
                 ref={branchInputRef}
                 type="text"
-                value={activeSession.gitAction.branchName || ""}
-                onChange={(e) => activeSession && updateSessionGitBranchName(activeSession.id, e.target.value)}
+                value={targetGitAction.branchName || ""}
+                onChange={(e) => queuedCallerId ? updateQueuedDraftGitBranchName(queuedCallerId, e.target.value) : activeSession && updateSessionGitBranchName(activeSession.id, e.target.value)}
                 placeholder={t("gitAction.branchPlaceholder", "分支名称（可留空）")}
                 className="input-area"
                 style={{
@@ -691,16 +706,19 @@ export function RichText({ text, style, className }: { text: string; style?: Rea
 }
 
 /** Test log textarea */
-const TestLogInput = forwardRef<HTMLTextAreaElement>(function TestLogInput(_props, forwardedRef) {
+const TestLogInput = forwardRef<HTMLTextAreaElement, { queuedCallerId?: string }>(function TestLogInput({ queuedCallerId }, forwardedRef) {
   const { t } = useTranslation();
   const { session: activeSession } = useActiveCallerSession();
-  const { updateSessionField, addSessionImage } = useFeedbackStore(useShallow((s) => ({
+  const queuedDraft = useFeedbackStore((s) => queuedCallerId ? s.queuedDraftsByCallerId[queuedCallerId] : null);
+  const { updateSessionField, addSessionImage, updateQueuedDraftField, addQueuedDraftImage } = useFeedbackStore(useShallow((s) => ({
     updateSessionField: s.updateSessionField,
     addSessionImage: s.addSessionImage,
+    updateQueuedDraftField: s.updateQueuedDraftField,
+    addQueuedDraftImage: s.addQueuedDraftImage,
   })));
 
-  const value = activeSession?.testLogText || "";
-  const isReadonly = activeSession?.status === "responded" || activeSession?.status === "cancelled";
+  const value = queuedCallerId ? (queuedDraft?.testLogText || "") : (activeSession?.testLogText || "");
+  const isReadonly = !queuedCallerId && (activeSession?.status === "responded" || activeSession?.status === "cancelled");
   const internalRef = useRef<HTMLTextAreaElement>(null);
 
   const combinedRef = useCallback((el: HTMLTextAreaElement | null) => {
@@ -718,7 +736,9 @@ const TestLogInput = forwardRef<HTMLTextAreaElement>(function TestLogInput(_prop
   }, [value]);
 
   const handleChange = (e: React.ChangeEvent<HTMLTextAreaElement>) => {
-    if (activeSession) {
+    if (queuedCallerId) {
+      updateQueuedDraftField(queuedCallerId, "testLogText", e.target.value);
+    } else if (activeSession) {
       updateSessionField(activeSession.id, "testLogText", e.target.value);
     }
   };
@@ -726,7 +746,7 @@ const TestLogInput = forwardRef<HTMLTextAreaElement>(function TestLogInput(_prop
   const handlePaste = useCallback(
     (e: React.ClipboardEvent<HTMLTextAreaElement>) => {
       const items = e.clipboardData?.items;
-      if (!items || !activeSession) return;
+      if (!items || (!activeSession && !queuedCallerId)) return;
       for (const item of Array.from(items)) {
         if (item.type.startsWith("image/")) {
           const file = item.getAsFile();
@@ -734,12 +754,14 @@ const TestLogInput = forwardRef<HTMLTextAreaElement>(function TestLogInput(_prop
             const namedFile = new File([file], `clipboard_${Date.now()}.png`, { type: file.type });
             const reader = new FileReader();
             reader.onload = (ev) => {
-              addSessionImage(activeSession.id, {
+              const img = {
                 path: `blob:clipboard:${Date.now()}`,
                 name: namedFile.name,
                 sizeKB: namedFile.size / 1024,
                 dataUrl: ev.target?.result as string,
-              });
+              };
+              if (queuedCallerId) addQueuedDraftImage(queuedCallerId, img);
+              else if (activeSession) addSessionImage(activeSession.id, img);
             };
             reader.readAsDataURL(namedFile);
             e.preventDefault();
@@ -747,7 +769,7 @@ const TestLogInput = forwardRef<HTMLTextAreaElement>(function TestLogInput(_prop
         }
       }
     },
-    [activeSession, addSessionImage]
+    [activeSession, addSessionImage, queuedCallerId, addQueuedDraftImage]
   );
 
   return (

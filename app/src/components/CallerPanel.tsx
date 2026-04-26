@@ -14,6 +14,7 @@ import { useActiveCallerSession } from "./useActiveCallerSession";
 import { Icon } from "./Icons";
 import { TransferSubmitSplit } from "./TransferSubmitSplit";
 import { AttachmentTagBar, ReadonlyTagBar, RichText } from "./CallerPanelParts";
+import { getNotificationSettings } from "../notificationSettings";
 
 /**
  * Self-contained panel for a single caller.
@@ -59,7 +60,7 @@ export function CallerPanel({ callerId }: { callerId: string }) {
   useEffect(() => {
     if (callerSessions.length > prevSessionCountRef.current) {
       const latest = callerSessions[callerSessions.length - 1];
-      if (latest.status === "pending") {
+      if (latest.status === "pending" && getNotificationSettings().autoFocusNewRequest) {
         setSelectedSessionId(latest.id);
       }
     }
@@ -95,6 +96,7 @@ function CallerContent() {
 
   // Panel resize state — 2 panels: summary + input area
   const containerRef = useRef<HTMLDivElement>(null);
+  const contentRootRef = useRef<HTMLDivElement>(null);
   const feedbackPanelRef = useRef<HTMLDivElement>(null);
   const INPUT_DEFAULT = 0.25;
   const INPUT_AUTO_MAX = 0.55;
@@ -102,7 +104,17 @@ function CallerContent() {
   const panelSizesRef = useRef(panelSizes);
   panelSizesRef.current = panelSizes;
   const resizingRef = useRef<{ index: number; startY: number; startSizes: number[] } | null>(null);
+  const draftResizingRef = useRef<{ startY: number; startHeight: number } | null>(null);
   const userResizedRef = useRef(false);
+  const DRAFT_DEFAULT_HEIGHT = 230;
+  const DRAFT_MIN_HEIGHT = 136;
+  const DRAFT_MAX_HEIGHT = 460;
+  const [queuedDraftHeight, setQueuedDraftHeight] = useState(() => {
+    try {
+      const stored = localStorage.getItem("mlf-queued-draft-height");
+      return stored ? Number(stored) : DRAFT_DEFAULT_HEIGHT;
+    } catch { return DRAFT_DEFAULT_HEIGHT; }
+  });
 
   const handleMouseDown = useCallback(
     (index: number, e: React.MouseEvent) => {
@@ -142,6 +154,34 @@ function CallerContent() {
     },
     [] // stable callback — uses refs internally
   );
+
+  const handleDraftResizeMouseDown = useCallback((e: React.MouseEvent) => {
+    e.preventDefault();
+    draftResizingRef.current = { startY: e.clientY, startHeight: queuedDraftHeight };
+
+    const handleMouseMove = (ev: MouseEvent) => {
+      const draftResize = draftResizingRef.current;
+      if (!draftResize) return;
+      const rootH = contentRootRef.current?.getBoundingClientRect().height ?? window.innerHeight;
+      const maxHeight = Math.max(DRAFT_MIN_HEIGHT, Math.min(DRAFT_MAX_HEIGHT, rootH - 120));
+      const nextHeight = Math.max(DRAFT_MIN_HEIGHT, Math.min(maxHeight, draftResize.startHeight + draftResize.startY - ev.clientY));
+      setQueuedDraftHeight(nextHeight);
+      try { localStorage.setItem("mlf-queued-draft-height", String(nextHeight)); } catch {}
+    };
+
+    const handleMouseUp = () => {
+      draftResizingRef.current = null;
+      document.removeEventListener("mousemove", handleMouseMove);
+      document.removeEventListener("mouseup", handleMouseUp);
+      document.body.style.cursor = "";
+      document.body.style.userSelect = "";
+    };
+
+    document.body.style.cursor = "row-resize";
+    document.body.style.userSelect = "none";
+    document.addEventListener("mousemove", handleMouseMove);
+    document.addEventListener("mouseup", handleMouseUp);
+  }, [queuedDraftHeight]);
 
   // Auto-expand feedback panel based on textarea content
   const isReadonly = activeSession?.status === "responded" || activeSession?.status === "cancelled";
@@ -206,6 +246,7 @@ function CallerContent() {
   const [transferDraft, setTransferDraft] = useState("");
   const markSessionResponded = useFeedbackStore((s) => s.markSessionResponded);
   const updateSessionField = useFeedbackStore((s) => s.updateSessionField);
+  const pushMessageHistory = useFeedbackStore((s) => s.pushMessageHistory);
 
   // Reset transfer state when the active session changes
   useEffect(() => {
@@ -254,9 +295,6 @@ function CallerContent() {
         sections.push(`## Git Action\n${gitMessages[activeSession.gitAction.type]}`);
       }
 
-      sections.push(
-        "[System] Reminder: You MUST call the interactive_feedback tool again after completing this operation. Do NOT end your turn without invoking interactive_feedback."
-      );
       if (activeSession.testLogText.trim()) {
         sections.push(`## Attachment: Test Logs\n${activeSession.testLogText.trim()}`);
       }
@@ -266,7 +304,11 @@ function CallerContent() {
           `## Attachment: Images\n${imageList.length} image(s) attached, please review the accompanying image content.`
         );
       }
+      sections.push(
+        "[System] Reminder: You MUST call the interactive_feedback tool again after completing this operation. Do NOT end your turn without invoking interactive_feedback."
+      );
       const finalFeedback = sections.join("\n\n");
+      const historyText = [activeSession.feedbackText.trim(), quickAction?.trim()].filter(Boolean).join("\n\n");
 
       // Save the quick action text into feedbackText for history display
       if (quickAction && !activeSession.feedbackText.trim()) {
@@ -283,6 +325,7 @@ function CallerContent() {
           images: imageList,
           transferToAlias: transferAlias,
         });
+        pushMessageHistory(activeSession.callerId, historyText);
         markSessionResponded(activeSession.id);
         // Clear transfer state after successful submit
         setTransferAlias(null);
@@ -294,7 +337,7 @@ function CallerContent() {
         setSessionSubmitting(false);
       }
     },
-    [activeSession, sessionSubmitting, markSessionResponded, updateSessionField, transferAlias]
+    [activeSession, sessionSubmitting, markSessionResponded, updateSessionField, pushMessageHistory, transferAlias]
   );
 
   // Ctrl+Enter shortcut — scoped to this panel
@@ -320,7 +363,7 @@ function CallerContent() {
   }
 
   return (
-    <div className="flex-1 flex flex-col min-h-0 min-w-0">
+    <div ref={contentRootRef} className="flex-1 flex flex-col min-h-0 min-w-0">
       {/* 2 resizable panels: summary (top) + input area (bottom) */}
       <div ref={containerRef} className="flex-1 flex flex-col min-h-0 min-w-0 overflow-hidden" style={{ gap: 0 }}>
         {/* Summary panel */}
@@ -329,9 +372,10 @@ function CallerContent() {
         </div>
         <div className="resize-handle" onMouseDown={(e) => handleMouseDown(0, e)} />
         {/* Input area: attachments + feedback */}
-        <div ref={feedbackPanelRef} className="flex flex-col panel-card panel-feedback" style={{ flex: `0 0 ${panelSizes[1] * 100}%`, minHeight: 48 }}>
+        <div ref={feedbackPanelRef} className="flex flex-col panel-card panel-feedback" style={{ flex: `0 0 ${panelSizes[1] * 100}%`, minHeight: 48, position: "relative" }}>
           {isReadonly ? (
             <>
+              <ReadonlyStatusBadge status={activeSession.status as "responded" | "cancelled"} />
               {/* Readonly tag bar: fixed, not scrollable */}
               {(activeSession.images.length > 0 || activeSession.testLogText.trim() || activeSession.gitAction) && (
                 <ReadonlyTagBar session={activeSession} />
@@ -407,17 +451,86 @@ function CallerContent() {
       )}
 
       {isReadonly && (
-        <div className="readonly-status-bar flex items-center justify-center py-3 shrink-0" style={{ color: activeSession?.status === "cancelled" ? "#ef4444" : "var(--color-text-muted)", fontSize: 12 }}>
-          {activeSession?.status === "cancelled" ? (
-            <Icon name="close" size={14} color="#ef4444" strokeWidth={2.5} style={{ display: "inline", verticalAlign: "middle", marginRight: 4 }} />
-          ) : (
-            <Icon name="check" size={14} color="var(--color-success)" strokeWidth={2.5} style={{ display: "inline", verticalAlign: "middle", marginRight: 4 }} />
-          )}
-          {activeSession?.status === "cancelled"
-            ? t("session.cancelled", "Client disconnected — session cancelled")
-            : "Feedback already submitted (read-only)"}
-        </div>
+        <>
+          <div className="resize-handle" onMouseDown={handleDraftResizeMouseDown} />
+          <QueuedDraftComposer callerId={activeSession.callerId} callerColor={callerColor} sessionStatus={activeSession.status as "responded" | "cancelled"} height={queuedDraftHeight} />
+        </>
       )}
+    </div>
+  );
+}
+
+function ReadonlyStatusBadge({ status }: { status: "responded" | "cancelled" }) {
+  const { t } = useTranslation();
+  const isCancelled = status === "cancelled";
+
+  return (
+    <div
+      style={{
+        position: "absolute",
+        top: 8,
+        right: 10,
+        zIndex: 5,
+        display: "inline-flex",
+        alignItems: "center",
+        gap: 5,
+        maxWidth: "calc(100% - 20px)",
+        padding: "4px 9px",
+        borderRadius: 6,
+        border: "1px solid var(--color-border)",
+        background: "color-mix(in srgb, var(--color-bg-surface) 92%, transparent)",
+        color: isCancelled ? "#ef4444" : "var(--color-text-muted)",
+        boxShadow: "0 3px 12px rgba(0,0,0,0.18)",
+        fontSize: 12,
+        lineHeight: 1.2,
+        pointerEvents: "none",
+      }}
+    >
+      {isCancelled ? (
+        <Icon name="close" size={13} color="#ef4444" strokeWidth={2.5} />
+      ) : (
+        <Icon name="check" size={13} color="var(--color-success)" strokeWidth={2.5} />
+      )}
+      <span className="truncate">
+        {isCancelled
+          ? t("session.cancelled", "Client disconnected — session cancelled")
+          : t("session.responded", "Feedback already submitted (read-only)")}
+      </span>
+    </div>
+  );
+}
+
+function QueuedDraftComposer({ callerId, callerColor, height }: { callerId: string; callerColor: string; sessionStatus: "responded" | "cancelled"; height: number }) {
+  const [showTestLog, setShowTestLog] = useState(false);
+  const [showGitPanel, setShowGitPanel] = useState(false);
+  const testLogRef = useRef<HTMLTextAreaElement>(null);
+
+  return (
+    <div className="flex flex-col shrink-0" style={{ background: "var(--color-bg-input)", height, minHeight: 136 }}>
+      <div className="flex flex-col flex-1 min-h-0">
+        <ImageAttachmentWidget queuedCallerId={callerId} renderLayout={({ controls, fileInput, dropProps }) => (
+          <div
+            className="flex flex-col flex-1 min-h-0"
+            onDragOver={dropProps.onDragOver}
+            onDragLeave={dropProps.onDragLeave}
+            onDrop={dropProps.onDrop}
+            style={dropProps.isDragOver ? { outline: "2px dashed var(--color-primary)", outlineOffset: -2 } : undefined}
+          >
+            <AttachmentTagBar
+              controls={controls}
+              fileInput={fileInput}
+              showTestLog={showTestLog}
+              setShowTestLog={setShowTestLog}
+              testLogRef={testLogRef}
+              callerColor={callerColor}
+              showGitPanel={showGitPanel}
+              setShowGitPanel={setShowGitPanel}
+              queuedCallerId={callerId}
+            />
+            <FeedbackInput queuedCallerId={callerId} />
+          </div>
+        )} />
+      </div>
     </div>
   );
 }

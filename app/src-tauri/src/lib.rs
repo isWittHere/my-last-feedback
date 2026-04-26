@@ -2,6 +2,8 @@ mod ipc;
 mod remote;
 mod session;
 
+use std::collections::HashSet;
+use std::path::PathBuf;
 use std::sync::Mutex;
 use tauri::{Manager, State};
 use serde::{Deserialize, Serialize};
@@ -12,34 +14,43 @@ use session::{
 };
 use ipc::SharedMlraWriter;
 
-/// Running mode: legacy (CLI args + output file) or persistent (IPC)
-#[derive(Debug, Clone, PartialEq)]
-pub enum AppMode {
-    Legacy,
-    Persistent,
-}
-
-/// App arguments passed from CLI or MCP server (legacy mode)
-#[derive(Debug, Clone, Serialize, Deserialize, Default)]
-pub struct AppArgs {
-    pub summary: String,
-    pub request_name: String,
-    pub project_directory: String,
-    pub output_file: String,
-    pub command_logs: String,
-}
-
-/// Global app state holding CLI arguments and mode
+/// Global app state shared by persistent-mode commands
 pub struct AppState {
-    pub args: Mutex<AppArgs>,
-    pub mode: AppMode,
+    pub auto_focus_new_request: Mutex<bool>,
+    pub data_dir: PathBuf,
 }
 
-/// Image data for submission
-#[derive(Debug, Deserialize)]
-pub struct ImageData {
-    pub path: String,
-    pub data_url: Option<String>,
+#[derive(Debug, Clone, Serialize, Deserialize)]
+struct AppSettings {
+    #[serde(default = "default_true")]
+    auto_focus_new_request: bool,
+}
+
+fn default_true() -> bool { true }
+
+impl Default for AppSettings {
+    fn default() -> Self {
+        Self { auto_focus_new_request: true }
+    }
+}
+
+fn settings_path(data_dir: &std::path::Path) -> PathBuf {
+    data_dir.join("settings.json")
+}
+
+fn load_app_settings(data_dir: &std::path::Path) -> AppSettings {
+    let path = settings_path(data_dir);
+    std::fs::read_to_string(path)
+        .ok()
+        .and_then(|content| serde_json::from_str::<AppSettings>(&content).ok())
+        .unwrap_or_default()
+}
+
+fn save_app_settings(data_dir: &std::path::Path, settings: &AppSettings) {
+    let _ = std::fs::create_dir_all(data_dir);
+    if let Ok(json) = serde_json::to_string_pretty(settings) {
+        let _ = std::fs::write(settings_path(data_dir), json);
+    }
 }
 
 /// Prompt template loaded from mcp_prompts/ folder
@@ -51,19 +62,146 @@ pub struct PromptItem {
     pub icon: String,
 }
 
-/// Return the app args to the frontend (legacy mode compatibility)
-#[tauri::command]
-fn get_app_args(state: State<AppState>) -> AppArgs {
-    state.args.lock().unwrap().clone()
+#[derive(Debug, Deserialize)]
+pub struct ImageData {
+    pub path: String,
+    pub data_url: Option<String>,
 }
 
-/// Return the current app mode to the frontend
 #[tauri::command]
-fn get_app_mode(state: State<AppState>) -> String {
-    match state.mode {
-        AppMode::Legacy => "legacy".to_string(),
-        AppMode::Persistent => "persistent".to_string(),
+fn set_auto_focus_new_request(state: State<AppState>, enabled: bool) {
+    if let Ok(mut value) = state.auto_focus_new_request.lock() {
+        *value = enabled;
     }
+    save_app_settings(&state.data_dir, &AppSettings { auto_focus_new_request: enabled });
+}
+
+#[tauri::command]
+fn get_auto_focus_new_request(state: State<AppState>) -> bool {
+    state.auto_focus_new_request.lock().map(|value| *value).unwrap_or(true)
+}
+
+fn queued_drafts_path(data_dir: &std::path::Path) -> PathBuf {
+    data_dir.join("queued-drafts.json")
+}
+
+fn draft_images_dir(data_dir: &std::path::Path) -> PathBuf {
+    data_dir.join("draft-images")
+}
+
+fn sanitize_file_part(input: &str) -> String {
+    let sanitized: String = input
+        .chars()
+        .map(|ch| if ch.is_ascii_alphanumeric() || ch == '-' || ch == '_' { ch } else { '_' })
+        .collect();
+    if sanitized.is_empty() { "draft".to_string() } else { sanitized }
+}
+
+fn draft_mime_to_ext(mime: &str) -> &str {
+    match mime {
+        "image/jpeg" => "jpg",
+        "image/gif" => "gif",
+        "image/webp" => "webp",
+        "image/bmp" => "bmp",
+        _ => "png",
+    }
+}
+
+fn split_data_url(data_url: &str) -> Option<(String, String)> {
+    let (header, data) = data_url.split_once(',')?;
+    let mime = header
+        .trim_start_matches("data:")
+        .split(';')
+        .next()
+        .filter(|s| !s.is_empty())
+        .unwrap_or("image/png")
+        .to_string();
+    Some((mime, data.to_string()))
+}
+
+fn normalize_queued_drafts_for_save(data_dir: &std::path::Path, drafts: &mut serde_json::Value) -> Result<(), String> {
+    let images_dir = draft_images_dir(data_dir);
+    std::fs::create_dir_all(&images_dir).map_err(|e| e.to_string())?;
+    let mut referenced_files = HashSet::new();
+
+    if let Some(draft_map) = drafts.as_object_mut() {
+        for (caller_id, draft) in draft_map.iter_mut() {
+            let caller_part = sanitize_file_part(caller_id);
+            let Some(images) = draft.get_mut("images").and_then(|value| value.as_array_mut()) else { continue; };
+
+            for (index, image) in images.iter_mut().enumerate() {
+                let Some(image_map) = image.as_object_mut() else { continue; };
+
+                if let Some(data_url) = image_map
+                    .remove("dataUrl")
+                    .and_then(|value| value.as_str().map(|s| s.to_string()))
+                {
+                    if let Some((mime, data)) = split_data_url(&data_url) {
+                        let file_name = format!("{}_{}.{}", caller_part, index, draft_mime_to_ext(&mime));
+                        std::fs::write(images_dir.join(&file_name), data).map_err(|e| e.to_string())?;
+                        referenced_files.insert(file_name.clone());
+                        image_map.insert("draft_file".to_string(), serde_json::Value::String(file_name));
+                        image_map.insert("draft_mime".to_string(), serde_json::Value::String(mime));
+                    }
+                } else if let Some(file_name) = image_map.get("draft_file").and_then(|value| value.as_str()) {
+                    referenced_files.insert(file_name.to_string());
+                }
+            }
+        }
+    }
+
+    if let Ok(entries) = std::fs::read_dir(&images_dir) {
+        for entry in entries.flatten() {
+            let file_name = entry.file_name().to_string_lossy().to_string();
+            if !referenced_files.contains(&file_name) {
+                let _ = std::fs::remove_file(entry.path());
+            }
+        }
+    }
+
+    Ok(())
+}
+
+fn hydrate_queued_drafts_from_files(data_dir: &std::path::Path, drafts: &mut serde_json::Value) {
+    let images_dir = draft_images_dir(data_dir);
+    let Some(draft_map) = drafts.as_object_mut() else { return; };
+
+    for draft in draft_map.values_mut() {
+        let Some(images) = draft.get_mut("images").and_then(|value| value.as_array_mut()) else { continue; };
+        for image in images {
+            let Some(image_map) = image.as_object_mut() else { continue; };
+            if image_map.contains_key("dataUrl") {
+                continue;
+            }
+            let Some(file_name) = image_map.get("draft_file").and_then(|value| value.as_str()) else { continue; };
+            let mime = image_map
+                .get("draft_mime")
+                .and_then(|value| value.as_str())
+                .unwrap_or("image/png");
+            if let Ok(data) = std::fs::read_to_string(images_dir.join(file_name)) {
+                image_map.insert("dataUrl".to_string(), serde_json::Value::String(format!("data:{};base64,{}", mime, data)));
+            }
+        }
+    }
+}
+
+#[tauri::command]
+fn load_queued_drafts(state: State<AppState>) -> serde_json::Value {
+    let path = queued_drafts_path(&state.data_dir);
+    let mut drafts = std::fs::read_to_string(path)
+        .ok()
+        .and_then(|content| serde_json::from_str::<serde_json::Value>(&content).ok())
+        .unwrap_or_else(|| serde_json::json!({}));
+    hydrate_queued_drafts_from_files(&state.data_dir, &mut drafts);
+    drafts
+}
+
+#[tauri::command]
+fn save_queued_drafts(state: State<AppState>, mut drafts: serde_json::Value) -> Result<(), String> {
+    std::fs::create_dir_all(&state.data_dir).map_err(|e| e.to_string())?;
+    normalize_queued_drafts_for_save(&state.data_dir, &mut drafts)?;
+    let json = serde_json::to_string_pretty(&drafts).map_err(|e| e.to_string())?;
+    std::fs::write(queued_drafts_path(&state.data_dir), json).map_err(|e| e.to_string())
 }
 
 // ── Persistent-mode Tauri Commands ──
@@ -414,57 +552,6 @@ fn parse_prompt_file(content: &str, path: &std::path::Path) -> Option<PromptItem
     Some(PromptItem { name, description, content: body, icon })
 }
 
-/// Submit user feedback and write result to output file (legacy mode)
-#[tauri::command]
-fn submit_feedback(
-    state: State<AppState>,
-    output_file: String,
-    feedback_text: String,
-    command_logs: String,
-    images: Vec<ImageData>,
-    app_handle: tauri::AppHandle,
-) -> Result<(), String> {
-    let out_path = if output_file.is_empty() {
-        state.args.lock().unwrap().output_file.clone()
-    } else {
-        output_file
-    };
-
-    if out_path.is_empty() {
-        return Err("No output file specified".to_string());
-    }
-
-    let result = serde_json::json!({
-        "interactive_feedback": feedback_text,
-        "command_logs": command_logs,
-        "images": images.iter().filter_map(|img| {
-            img.data_url.as_ref().map(|data| {
-                let parts: Vec<&str> = data.splitn(2, ',').collect();
-                if parts.len() == 2 {
-                    let mime_part = parts[0];
-                    let mime = mime_part.trim_start_matches("data:").split(';').next().unwrap_or("image/png");
-                    serde_json::json!({
-                        "type": mime,
-                        "data": parts[1],
-                        "path": img.path
-                    })
-                } else {
-                    serde_json::Value::Null
-                }
-            })
-        }).filter(|v| !v.is_null()).collect::<Vec<_>>()
-    });
-
-    std::fs::write(&out_path, serde_json::to_string_pretty(&result).unwrap())
-        .map_err(|e| format!("Failed to write output: {e}"))?;
-
-    if let Some(window) = app_handle.get_webview_window("main") {
-        let _ = window.close().ok();
-    }
-
-    Ok(())
-}
-
 /// Send a JSON message to the MLRA daemon via its stored TCP writer
 #[tauri::command]
 async fn send_to_mlra_daemon(
@@ -492,47 +579,6 @@ async fn send_to_mlra_daemon(
 
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
 pub fn run() {
-    let args: Vec<String> = std::env::args().collect();
-    let mut app_args = AppArgs::default();
-
-    let mut i = 1;
-    while i < args.len() {
-        match args[i].as_str() {
-            "--prompt" | "--summary" => {
-                if i + 1 < args.len() {
-                    app_args.summary = args[i + 1].clone();
-                    i += 2;
-                } else { i += 1; }
-            }
-            "--request-name" => {
-                if i + 1 < args.len() {
-                    app_args.request_name = args[i + 1].clone();
-                    i += 2;
-                } else { i += 1; }
-            }
-            "--project-directory" => {
-                if i + 1 < args.len() {
-                    app_args.project_directory = args[i + 1].clone();
-                    i += 2;
-                } else { i += 1; }
-            }
-            "--output-file" => {
-                if i + 1 < args.len() {
-                    app_args.output_file = args[i + 1].clone();
-                    i += 2;
-                } else { i += 1; }
-            }
-            _ => { i += 1; }
-        }
-    }
-
-    // Determine mode: legacy if --output-file is provided, persistent otherwise
-    let mode = if app_args.output_file.is_empty() {
-        AppMode::Persistent
-    } else {
-        AppMode::Legacy
-    };
-
     // Determine data directory for history persistence.
     // Debug builds use a separate directory to avoid conflicting with installed release builds.
     #[cfg(debug_assertions)]
@@ -570,7 +616,8 @@ pub fn run() {
         }
     };
 
-    let session_mgr = session::create_session_manager(data_dir);
+    let settings = load_app_settings(&data_dir);
+    let session_mgr = session::create_session_manager(data_dir.clone());
     let mlra_writer: SharedMlraWriter = std::sync::Arc::new(tokio::sync::Mutex::new(None));
 
     let builder = tauri::Builder::default();
@@ -588,15 +635,16 @@ pub fn run() {
         .plugin(tauri_plugin_clipboard_manager::init())
         .plugin(tauri_plugin_autostart::init(MacosLauncher::LaunchAgent, None))
         .manage(AppState {
-            args: Mutex::new(app_args),
-            mode: mode.clone(),
+            auto_focus_new_request: Mutex::new(settings.auto_focus_new_request),
+            data_dir: data_dir.clone(),
         })
         .manage(session_mgr.clone())
         .manage(mlra_writer.clone())
         .invoke_handler(tauri::generate_handler![
-            get_app_args,
-            get_app_mode,
-            submit_feedback,
+            set_auto_focus_new_request,
+            get_auto_focus_new_request,
+            load_queued_drafts,
+            save_queued_drafts,
             load_prompts,
             get_autostart,
             set_autostart,
@@ -624,81 +672,77 @@ pub fn run() {
         .setup(move |app| {
             let app_handle = app.handle().clone();
 
-            if mode == AppMode::Persistent {
-                // Start IPC server in persistent mode
-                let mgr = session_mgr.clone();
-                let handle = app_handle.clone();
-                let mlra_w = mlra_writer.clone();
+            let mgr = session_mgr.clone();
+            let handle = app_handle.clone();
+            let mlra_w = mlra_writer.clone();
+            tauri::async_runtime::spawn(async move {
+                match ipc::start_ipc_server(mgr, handle, mlra_w).await {
+                    Ok(port) => eprintln!("[App] IPC server started on port {}", port),
+                    Err(e) => eprintln!("[App] Failed to start IPC server: {}", e),
+                }
+            });
+
+            // Start remote HTTP+WS server (Phase 0 skeleton; opt-in via env).
+            // See MLC_MLFB远程反馈_方案B_v0.2_*.md §3.1
+            if remote::is_enabled() {
                 tauri::async_runtime::spawn(async move {
-                    match ipc::start_ipc_server(mgr, handle, mlra_w).await {
-                        Ok(port) => eprintln!("[App] IPC server started on port {}", port),
-                        Err(e) => eprintln!("[App] Failed to start IPC server: {}", e),
+                    match remote::start_remote_server().await {
+                        Ok(port) => eprintln!("[Remote] server listening on 0.0.0.0:{}", port),
+                        Err(e) => eprintln!("[Remote] failed to start: {}", e),
                     }
                 });
+            }
 
-                // Start remote HTTP+WS server (Phase 0 skeleton; opt-in via env).
-                // See MLC_MLFB远程反馈_方案B_v0.2_*.md §3.1
-                if remote::is_enabled() {
-                    tauri::async_runtime::spawn(async move {
-                        match remote::start_remote_server().await {
-                            Ok(port) => eprintln!("[Remote] server listening on 0.0.0.0:{}", port),
-                            Err(e) => eprintln!("[Remote] failed to start: {}", e),
-                        }
-                    });
-                }
+            use tauri::menu::{MenuBuilder, MenuItemBuilder};
+            use tauri::tray::TrayIconBuilder;
 
-                // In persistent mode, set up system tray
-                use tauri::tray::TrayIconBuilder;
-                use tauri::menu::{MenuBuilder, MenuItemBuilder};
+            let show_item = MenuItemBuilder::with_id("show", "Show Window")
+                .build(app)?;
+            let quit_item = MenuItemBuilder::with_id("quit", "Quit")
+                .build(app)?;
+            let menu = MenuBuilder::new(app)
+                .item(&show_item)
+                .separator()
+                .item(&quit_item)
+                .build()?;
 
-                let show_item = MenuItemBuilder::with_id("show", "Show Window")
-                    .build(app)?;
-                let quit_item = MenuItemBuilder::with_id("quit", "Quit")
-                    .build(app)?;
-                let menu = MenuBuilder::new(app)
-                    .item(&show_item)
-                    .separator()
-                    .item(&quit_item)
-                    .build()?;
+            let tray_icon_bytes = include_bytes!("../icons/tray-icon.png");
+            let tray_image = tauri::image::Image::from_bytes(tray_icon_bytes)
+                .expect("failed to load tray icon");
 
-                let tray_icon_bytes = include_bytes!("../icons/tray-icon.png");
-                let tray_image = tauri::image::Image::from_bytes(tray_icon_bytes)
-                    .expect("failed to load tray icon");
-
-                let _tray = TrayIconBuilder::new()
-                    .icon(tray_image)
-                    .tooltip("My Last Feedback")
-                    .menu(&menu)
-                    .on_menu_event(move |app_handle, event| {
-                        match event.id().as_ref() {
-                            "show" => {
-                                if let Some(window) = app_handle.get_webview_window("main") {
-                                    let _ = window.show();
-                                    let _ = window.set_focus();
-                                }
-                            }
-                            "quit" => {
-                                ipc::cleanup_lock_file();
-                                std::process::exit(0);
-                            }
-                            _ => {}
-                        }
-                    })
-                    .on_tray_icon_event(|tray, event| {
-                        if let tauri::tray::TrayIconEvent::Click {
-                            button: tauri::tray::MouseButton::Left,
-                            ..
-                        } = event
-                        {
-                            let app = tray.app_handle();
-                            if let Some(window) = app.get_webview_window("main") {
+            let _tray = TrayIconBuilder::new()
+                .icon(tray_image)
+                .tooltip("My Last Feedback")
+                .menu(&menu)
+                .on_menu_event(move |app_handle, event| {
+                    match event.id().as_ref() {
+                        "show" => {
+                            if let Some(window) = app_handle.get_webview_window("main") {
                                 let _ = window.show();
                                 let _ = window.set_focus();
                             }
                         }
-                    })
-                    .build(app)?;
-            }
+                        "quit" => {
+                            ipc::cleanup_lock_file();
+                            std::process::exit(0);
+                        }
+                        _ => {}
+                    }
+                })
+                .on_tray_icon_event(|tray, event| {
+                    if let tauri::tray::TrayIconEvent::Click {
+                        button: tauri::tray::MouseButton::Left,
+                        ..
+                    } = event
+                    {
+                        let app = tray.app_handle();
+                        if let Some(window) = app.get_webview_window("main") {
+                            let _ = window.show();
+                            let _ = window.set_focus();
+                        }
+                    }
+                })
+                .build(app)?;
 
             // Show window
             if let Some(window) = app.get_webview_window("main") {
@@ -716,16 +760,13 @@ pub fn run() {
 
                 let _ = window.show().ok();
 
-                // In persistent mode, intercept close to hide instead of quit
-                if mode == AppMode::Persistent {
-                    let window_clone = window.clone();
-                    window.on_window_event(move |event| {
-                        if let tauri::WindowEvent::CloseRequested { api, .. } = event {
-                            api.prevent_close();
-                            let _ = window_clone.hide();
-                        }
-                    });
-                }
+                let window_clone = window.clone();
+                window.on_window_event(move |event| {
+                    if let tauri::WindowEvent::CloseRequested { api, .. } = event {
+                        api.prevent_close();
+                        let _ = window_clone.hide();
+                    }
+                });
             }
 
             Ok(())

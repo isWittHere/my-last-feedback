@@ -8,7 +8,6 @@ import {
   ensureAppRunning,
   requestFeedbackViaIpc,
 } from "../app-ipc.mjs";
-import { launchFeedbackUILegacy } from "../legacy-mode.mjs";
 
 const MIME_BY_EXT = {
   png: "image/png",
@@ -79,8 +78,8 @@ export function registerInteractiveFeedback(server) {
         console.error("[MLFB] IPC socket connected, sending request...");
         result = await requestFeedbackViaIpc(socket, projectDir, summary, request_name, callerInfo, questions);
       } catch (ipcErr) {
-        console.error("[MLFB] IPC failed, falling back to legacy mode:", ipcErr.message);
-        result = launchFeedbackUILegacy(projectDir, summary, request_name);
+        console.error("[MLFB] IPC failed:", ipcErr.message);
+        throw new Error(`MLFB persistent IPC failed: ${ipcErr.message}. Please start or restart the My Last Feedback app and try again.`);
       }
 
       console.error("[MLFB] Got result, returning. feedback length:", result?.interactive_feedback?.length || 0);

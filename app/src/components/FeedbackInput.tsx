@@ -5,22 +5,23 @@ import { useShallow } from "zustand/react/shallow";
 import { useActiveCallerSession } from "./useActiveCallerSession";
 import { useFriendlyName } from "./useFriendlyName";
 
-export function FeedbackInput({ minHeight }: { minHeight?: number } = {}) {
+export function FeedbackInput({ minHeight, queuedCallerId }: { minHeight?: number; queuedCallerId?: string } = {}) {
   const { t } = useTranslation();
   const friendlyName = useFriendlyName();
-  const appMode = useFeedbackStore((s) => s.appMode);
   const { session: activeSession, caller } = useActiveCallerSession();
-  const { feedbackText, setFeedbackText, updateSessionField, addSessionImage } = useFeedbackStore(useShallow((s) => ({
-    feedbackText: s.feedbackText,
-    setFeedbackText: s.setFeedbackText,
+  const queuedDraft = useFeedbackStore((s) => queuedCallerId ? s.queuedDraftsByCallerId[queuedCallerId] : null);
+  const { updateSessionField, addSessionImage, updateQueuedDraftField, addQueuedDraftImage } = useFeedbackStore(useShallow((s) => ({
     updateSessionField: s.updateSessionField,
     addSessionImage: s.addSessionImage,
+    updateQueuedDraftField: s.updateQueuedDraftField,
+    addQueuedDraftImage: s.addQueuedDraftImage,
   })));
   const textareaRef = useRef<HTMLTextAreaElement>(null);
+  const historyIndexRef = useRef<number | null>(null);
+  const historyScratchRef = useRef("");
 
-  const isPersistent = appMode === "persistent";
-  const value = isPersistent ? (activeSession?.feedbackText || "") : feedbackText;
-  const isReadonly = isPersistent && (activeSession?.status === "responded" || activeSession?.status === "cancelled");
+  const value = queuedCallerId ? (queuedDraft?.feedbackText || "") : (activeSession?.feedbackText || "");
+  const isReadonly = !queuedCallerId && (activeSession?.status === "responded" || activeSession?.status === "cancelled");
 
   useEffect(() => {
     textareaRef.current?.focus();
@@ -36,12 +37,70 @@ export function FeedbackInput({ minHeight }: { minHeight?: number } = {}) {
   }, [value, minHeight]);
 
   const handleChange = (e: React.ChangeEvent<HTMLTextAreaElement>) => {
-    if (isPersistent && activeSession) {
+    historyIndexRef.current = null;
+    if (queuedCallerId) {
+      updateQueuedDraftField(queuedCallerId, "feedbackText", e.target.value);
+    } else if (activeSession) {
       updateSessionField(activeSession.id, "feedbackText", e.target.value);
-    } else {
-      setFeedbackText(e.target.value);
     }
   };
+
+  const setCurrentValue = useCallback((nextValue: string) => {
+    if (queuedCallerId) {
+      updateQueuedDraftField(queuedCallerId, "feedbackText", nextValue);
+    } else if (activeSession) {
+      updateSessionField(activeSession.id, "feedbackText", nextValue);
+    }
+    requestAnimationFrame(() => {
+      const el = textareaRef.current;
+      if (!el) return;
+      const pos = nextValue.length;
+      el.setSelectionRange(pos, pos);
+    });
+  }, [activeSession, queuedCallerId, updateQueuedDraftField, updateSessionField]);
+
+  const handleKeyDown = useCallback((e: React.KeyboardEvent<HTMLTextAreaElement>) => {
+    if (isReadonly || (e.key !== "ArrowUp" && e.key !== "ArrowDown" && e.key !== "Escape")) return;
+    const el = e.currentTarget;
+    const callerId = queuedCallerId || activeSession?.callerId || caller?.id;
+    if (!callerId) return;
+
+    if (e.key === "Escape" && historyIndexRef.current !== null) {
+      e.preventDefault();
+      setCurrentValue(historyScratchRef.current);
+      historyIndexRef.current = null;
+      return;
+    }
+
+    if (el.selectionStart !== el.selectionEnd) return;
+    const before = value.slice(0, el.selectionStart);
+    const after = value.slice(el.selectionEnd);
+    const atFirstLine = !before.includes("\n");
+    const atLastLine = !after.includes("\n");
+    const history = useFeedbackStore.getState().getMessageHistory(callerId);
+    if (history.length === 0) return;
+
+    if (e.key === "ArrowUp" && atFirstLine) {
+      e.preventDefault();
+      if (historyIndexRef.current === null) {
+        historyScratchRef.current = value;
+        historyIndexRef.current = history.length - 1;
+      } else {
+        historyIndexRef.current = Math.max(0, historyIndexRef.current - 1);
+      }
+      setCurrentValue(history[historyIndexRef.current] || "");
+    } else if (e.key === "ArrowDown" && historyIndexRef.current !== null && atLastLine) {
+      e.preventDefault();
+      const nextIndex = historyIndexRef.current + 1;
+      if (nextIndex >= history.length) {
+        setCurrentValue(historyScratchRef.current);
+        historyIndexRef.current = null;
+      } else {
+        historyIndexRef.current = nextIndex;
+        setCurrentValue(history[nextIndex] || "");
+      }
+    }
+  }, [activeSession, caller, isReadonly, queuedCallerId, setCurrentValue, value]);
 
   const handlePaste = useCallback(
     (e: React.ClipboardEvent<HTMLTextAreaElement>) => {
@@ -60,10 +119,10 @@ export function FeedbackInput({ minHeight }: { minHeight?: number } = {}) {
                 sizeKB: namedFile.size / 1024,
                 dataUrl: ev.target?.result as string,
               };
-              if (isPersistent && activeSession) {
+              if (queuedCallerId) {
+                addQueuedDraftImage(queuedCallerId, imgData);
+              } else if (activeSession) {
                 addSessionImage(activeSession.id, imgData);
-              } else {
-                useFeedbackStore.getState().addImage(imgData);
               }
             };
             reader.readAsDataURL(namedFile);
@@ -72,18 +131,27 @@ export function FeedbackInput({ minHeight }: { minHeight?: number } = {}) {
         }
       }
     },
-    [isPersistent, activeSession, addSessionImage]
+    [activeSession, addSessionImage, queuedCallerId, addQueuedDraftImage]
   );
 
-  const placeholderText = isPersistent && caller?.alias
-    ? t("feedback.placeholderWithAlias", { alias: `${friendlyName(caller.alias)} (${caller.alias})`, defaultValue: "Send feedback to {{alias}}...\nCtrl+Enter to submit, Ctrl+V to paste images" })
-    : t("feedback.placeholder");
+  const aliasLabel = caller?.alias ? `${friendlyName(caller.alias)} (${caller.alias})` : caller?.name || "AI";
+  const placeholderText = queuedCallerId
+    ? ""
+    : caller?.alias
+      ? t("feedback.placeholderWithAlias", { alias: aliasLabel, defaultValue: "Send feedback to {{alias}}...\nCtrl+Enter to submit, Ctrl+V to paste images" })
+      : t("feedback.placeholder");
+  const draftPlaceholderLine = t("feedback.draftPlaceholderLine", {
+    alias: aliasLabel,
+    defaultValue: "Prepare feedback for {{alias}} (draft)...",
+  });
+  const draftPasteHint = t("feedback.draftPasteHint", "Ctrl+V to paste images");
 
-  return (
+  const textarea = (
     <textarea
       ref={textareaRef}
       value={value}
       onChange={handleChange}
+      onKeyDown={handleKeyDown}
       onPaste={handlePaste}
       readOnly={isReadonly}
       placeholder={placeholderText}
@@ -100,4 +168,32 @@ export function FeedbackInput({ minHeight }: { minHeight?: number } = {}) {
       }}
     />
   );
+
+  if (queuedCallerId) {
+    return (
+      <div className={minHeight === undefined ? "relative flex-1 min-h-0" : "relative"} style={{ width: "100%" }}>
+        {textarea}
+        {!value && (
+          <div
+            style={{
+              position: "absolute",
+              top: 8,
+              left: 10,
+              right: 10,
+              pointerEvents: "none",
+              color: "var(--color-text-muted)",
+              fontSize: 13,
+              lineHeight: 1.6,
+              zoom: "var(--zoom-input, 1)",
+            }}
+          >
+            <div style={{ fontWeight: 700 }}>{draftPlaceholderLine}</div>
+            <div>{draftPasteHint}</div>
+          </div>
+        )}
+      </div>
+    );
+  }
+
+  return textarea;
 }

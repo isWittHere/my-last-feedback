@@ -7,15 +7,8 @@ import { useMLRAStore } from "./store/mlraStore";
 import { FeedbackApp } from "./components/FeedbackApp";
 import { AppTooltipProvider } from "./components/AppTooltip";
 import type { Session } from "./store/feedbackStore";
-
-/** Read notification settings from localStorage */
-function getNotificationSettings() {
-  try {
-    const raw = localStorage.getItem("mlf-notification-settings");
-    if (raw) return JSON.parse(raw) as { taskbarFlash?: boolean; systemNotification?: boolean; persistentUnread?: boolean };
-  } catch {}
-  return { taskbarFlash: true, systemNotification: true, persistentUnread: true };
-}
+import { getNotificationSettings, hasStoredNotificationSettings, saveNotificationSettings, syncAutoFocusNewRequest } from "./notificationSettings";
+import type { FeedbackDraft } from "./store/feedbackStore";
 
 /** Fire taskbar flash + system notification for a new session */
 function notifyNewSession(requestName: string, callerName: string) {
@@ -59,94 +52,70 @@ interface NewSessionEvent {
 
 function App() {
   useEffect(() => {
-    const store = useFeedbackStore.getState();
+    if (hasStoredNotificationSettings()) {
+      syncAutoFocusNewRequest(getNotificationSettings().autoFocusNewRequest);
+    } else {
+      invoke<boolean>("get_auto_focus_new_request")
+        .then((enabled) => saveNotificationSettings({ ...getNotificationSettings(), autoFocusNewRequest: enabled }))
+        .catch(() => syncAutoFocusNewRequest(getNotificationSettings().autoFocusNewRequest));
+    }
+    invoke<Record<string, FeedbackDraft>>("load_queued_drafts")
+      .then((drafts) => useFeedbackStore.getState().setQueuedDrafts(drafts || {}))
+      .catch(() => {});
 
-    // Determine app mode from Rust backend
-    invoke<string>("get_app_mode")
-      .then((mode) => {
-        store.setAppMode(mode as "legacy" | "persistent");
-
-        if (mode === "legacy") {
-          invoke<{
-            summary: string;
-            request_name: string;
-            project_directory: string;
-            output_file: string;
-            command_logs: string;
-          }>("get_app_args")
-            .then((args) => {
-              const s = useFeedbackStore.getState();
-              s.setSummary(args.summary || "");
-              s.setRequestName(args.request_name || "");
-              s.setProjectDirectory(args.project_directory || "");
-              s.setOutputFile(args.output_file || "");
-              s.setCommandLogs(args.command_logs || "");
-            })
-            .catch((e) => console.error("Failed to get app args:", e));
-        } else {
-          // Persistent mode: load persisted history (callers + sessions)
-          invoke<{
-            callers: Array<{ id: string; name: string; version: string; color: string; client_name?: string; alias?: string }>;
-            sessions: Array<{
-              id: string;
-              caller_id: string;
-              request_name: string;
-              summary: string;
-              project_directory: string;
-              status: string;
-              created_at: string;
-              feedback_text: string | null;
-              command_logs: string | null;
-              images: unknown[];
-              questions?: Array<{ label: string; options?: string[] }>;
-            }>;
-          }>("load_history")
-            .then((history) => {
-              const s = useFeedbackStore.getState();
-              for (const c of history.callers) {
-                s.addCaller({ ...c, pendingCount: 0, clientName: c.client_name || "", alias: c.alias || "" });
-              }
-              for (const sess of history.sessions) {
-                s.addSession({
-                  id: sess.id,
-                  callerId: sess.caller_id,
-                  requestName: sess.request_name,
-                  summary: sess.summary,
-                  projectDirectory: sess.project_directory,
-                  status: (sess.status === "pending" ? "pending" : sess.status === "cancelled" ? "cancelled" : "responded") as Session["status"],
-                  createdAt: sess.created_at,
-                  feedbackText: sess.feedback_text || "",
-                  testLogText: "",
-                  images: [],
-                  commandLogs: sess.command_logs || "",
-                  questions: (sess.questions || []).map((q: any) => ({
-                    label: q.label,
-                    options: q.options,
-                    selectedOptions: q.selectedOptions || [],
-                    answer: q.answer || "",
-                  })),
-                  gitAction: null,
-                });
-              }
-              // Update pending counts for each caller
-              for (const c of history.callers) {
-                s.updateCallerPendingCount(c.id);
-              }
-              // Auto-select first caller and its latest session
-              if (history.callers.length > 0) {
-                const firstCallerId = history.callers[0].id;
-                s.setActiveCaller(firstCallerId);
-              }
-            })
-            .catch((e) => console.error("Failed to load history:", e));
+    invoke<{
+      callers: Array<{ id: string; name: string; version: string; color: string; client_name?: string; alias?: string }>;
+      sessions: Array<{
+        id: string;
+        caller_id: string;
+        request_name: string;
+        summary: string;
+        project_directory: string;
+        status: string;
+        created_at: string;
+        feedback_text: string | null;
+        command_logs: string | null;
+        images: unknown[];
+        questions?: Array<{ label: string; options?: string[] }>;
+      }>;
+    }>("load_history")
+      .then((history) => {
+        const s = useFeedbackStore.getState();
+        for (const c of history.callers) {
+          s.addCaller({ ...c, pendingCount: 0, clientName: c.client_name || "", alias: c.alias || "" });
+        }
+        for (const sess of history.sessions) {
+          s.addSession({
+            id: sess.id,
+            callerId: sess.caller_id,
+            requestName: sess.request_name,
+            summary: sess.summary,
+            projectDirectory: sess.project_directory,
+            status: (sess.status === "pending" ? "pending" : sess.status === "cancelled" ? "cancelled" : "responded") as Session["status"],
+            createdAt: sess.created_at,
+            feedbackText: sess.feedback_text || "",
+            testLogText: "",
+            images: [],
+            commandLogs: sess.command_logs || "",
+            questions: (sess.questions || []).map((q: any) => ({
+              label: q.label,
+              options: q.options,
+              selectedOptions: q.selectedOptions || [],
+              answer: q.answer || "",
+            })),
+            gitAction: null,
+          }, { attentionMode: "passive", applyQueuedDraft: false });
+        }
+        for (const c of history.callers) {
+          s.updateCallerPendingCount(c.id);
+        }
+        if (history.callers.length > 0) {
+          s.setActiveCaller(history.callers[0].id);
         }
       })
-      .catch((e) => {
-        console.error("Failed to get app mode:", e);
-        useFeedbackStore.getState().setAppMode("legacy");
-      });
+      .catch((e) => console.error("Failed to load history:", e));
 
-    // Load prompt templates (both modes)
+    // Load prompt templates
     const reloadPrompts = () => {
       invoke<Array<{ name: string; description: string; content: string; icon: string }>>("load_prompts")
         .then((prompts) => useFeedbackStore.getState().setPrompts(prompts || []))
@@ -192,9 +161,12 @@ function App() {
         })),
         gitAction: null,
       };
-      s.addSession(session);
-      s.setActiveCaller(data.caller_id);
-      s.setActiveSession(data.session_id);
+      const attentionMode = getNotificationSettings().autoFocusNewRequest ? "interrupt" : "passive";
+      s.addSession(session, { attentionMode });
+      if (attentionMode === "interrupt") {
+        s.setActiveCaller(data.caller_id);
+        s.setActiveSession(data.session_id);
+      }
 
       // Notify user of new session
       notifyNewSession(data.request_name, data.caller_name);

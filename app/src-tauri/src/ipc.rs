@@ -271,10 +271,16 @@ async fn handle_connection(
                     eprintln!("[IPC] Failed to emit event: {}", e);
                 }
 
-                // Show and focus window
-                if let Some(window) = app_handle.get_webview_window("main") {
-                    let _ = window.show();
-                    let _ = window.set_focus();
+                let should_focus = app_handle
+                    .try_state::<crate::AppState>()
+                    .and_then(|state| state.auto_focus_new_request.lock().ok().map(|value| *value))
+                    .unwrap_or(true);
+
+                if should_focus {
+                    if let Some(window) = app_handle.get_webview_window("main") {
+                        let _ = window.show();
+                        let _ = window.set_focus();
+                    }
                 }
 
                 // Wait for EITHER user response OR TCP disconnect.

@@ -10,6 +10,8 @@
   "feedback": {
     "placeholder": "Enter your feedback here...\nCtrl+Enter to submit, Ctrl+V to paste images",
     "placeholderWithAlias": "Send feedback to {{alias}}...\nCtrl+Enter to submit, Ctrl+V to paste images",
+    "draftPlaceholderLine": "Prepare feedback for {{alias}} (draft)...",
+    "draftPasteHint": "Ctrl+V to paste images",
     "submit": "Send Feedback (Ctrl+Enter)",
     "submitting": "Submitting...",
     "hint": "Ctrl+Enter to submit"
@@ -77,6 +79,10 @@
     "responded": "Feedback already submitted (read-only)",
     "cancelled": "Client disconnected — session cancelled"
   },
+  "queue": {
+    "nextDraft": "Next reply draft",
+    "clear": "Clear queue"
+  },
   "settings": {
     "title": "Settings",
     "general": "General",
@@ -110,12 +116,16 @@
     "systemNotification": "System notification",
     "systemNotificationDesc": "Show a system notification when a new request arrives while the window is not focused",
     "persistentUnread": "Persistent unread indicator",
-    "persistentUnreadDesc": "Keep the unread badge blinking until you view the caller"
+    "persistentUnreadDesc": "Keep the unread badge blinking until you view the caller",
+    "autoFocusNewRequest": "Auto-focus new requests",
+    "autoFocusNewRequestDesc": "Switch to the caller and latest session when a new request arrives. When disabled, only unread indicators are updated."
   },
   "titlebar": {
     "sortByWorkspace": "Sort tabs by workspace",
     "layoutMode": "Layout: {{mode}}",
-    "layoutAuto": "Auto"
+    "layoutAuto": "Auto",
+    "toggleLightTheme": "Switch to light theme",
+    "toggleDarkTheme": "Switch to dark theme"
   },
   "tooltip": {
     "alias": "Agent ID",

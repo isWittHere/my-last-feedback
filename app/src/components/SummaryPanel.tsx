@@ -329,22 +329,13 @@ function HeadingNavBar({
 export function SummaryPanel() {
   const { t } = useTranslation();
   const friendlyName = useFriendlyName();
-  const appMode = useFeedbackStore((s) => s.appMode);
-  const legacySummary = useFeedbackStore((s) => s.summary);
   const { session: activeSession, caller } = useActiveCallerSession();
   const updateSessionAnswer = useFeedbackStore((s) => s.updateSessionAnswer);
   const toggleSessionOption = useFeedbackStore((s) => s.toggleSessionOption);
   const updateSessionField = useFeedbackStore((s) => s.updateSessionField);
 
-  const legacyProjectDirectory = useFeedbackStore((s) => s.projectDirectory);
-
-  const summary = appMode === "persistent"
-    ? (activeSession?.summary || "")
-    : legacySummary;
-
-  const projectDirectory = appMode === "persistent"
-    ? (activeSession?.projectDirectory || "")
-    : legacyProjectDirectory;
+  const summary = activeSession?.summary || "";
+  const projectDirectory = activeSession?.projectDirectory || "";
 
   const questions = activeSession?.questions || [];
   const isReadonly = activeSession?.status === "responded" || activeSession?.status === "cancelled";
@@ -413,7 +404,7 @@ export function SummaryPanel() {
         {summary ? (
           <>
             {/* Agent identity header */}
-            {appMode === "persistent" && caller && (
+            {caller && (
               <div style={{ display: "flex", alignItems: "center", gap: 6, padding: "6px 0 4px" }}>
                 <IdenticonAvatar alias={caller.alias || caller.name} color={caller.color} size={22} />
                 <span style={{ fontSize: 14, lineHeight: "22px", color: "var(--color-text-muted)" }}>

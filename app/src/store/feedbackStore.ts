@@ -43,6 +43,21 @@ export interface GitAction {
   branchName?: string;
 }
 
+export type NewRequestAttentionMode = "interrupt" | "passive";
+
+export interface AddSessionOptions {
+  attentionMode?: NewRequestAttentionMode;
+  applyQueuedDraft?: boolean;
+}
+
+export interface FeedbackDraft {
+  feedbackText: string;
+  testLogText: string;
+  images: ImageAttachment[];
+  gitAction: GitAction | null;
+  updatedAt: string;
+}
+
 export interface Session {
   id: string;
   callerId: string;
@@ -62,42 +77,10 @@ export interface Session {
   gitAction: GitAction | null;
 }
 
-export type AppMode = "legacy" | "persistent";
-
 export interface FeedbackState {
-  // App mode
-  appMode: AppMode;
-  setAppMode: (mode: AppMode) => void;
-
-  // ── Legacy mode fields (backward compatible) ──
-  summary: string;
-  requestName: string;
-  projectDirectory: string;
-  outputFile: string;
-  feedbackText: string;
-  testLogText: string;
-  images: ImageAttachment[];
-  commandLogs: string;
-  enableEnhancement: boolean;
   prompts: PromptItem[];
-  isSubmitting: boolean;
-  isSubmitted: boolean;
 
-  // Legacy actions
-  setSummary: (summary: string) => void;
-  setRequestName: (name: string) => void;
-  setProjectDirectory: (dir: string) => void;
-  setOutputFile: (file: string) => void;
-  setFeedbackText: (text: string) => void;
-  setTestLogText: (text: string) => void;
-  addImage: (img: ImageAttachment) => void;
-  removeImage: (path: string) => void;
-  clearImages: () => void;
-  setCommandLogs: (logs: string) => void;
-  setEnableEnhancement: (value: boolean) => void;
   setPrompts: (prompts: PromptItem[]) => void;
-  setSubmitting: (value: boolean) => void;
-  setSubmitted: (value: boolean) => void;
 
   // Prompt visibility
   disabledPrompts: string[];
@@ -113,6 +96,8 @@ export interface FeedbackState {
   sessions: Session[];
   activeCallerId: string | null;
   activeSessionId: string | null;
+  queuedDraftsByCallerId: Record<string, FeedbackDraft>;
+  messageHistoryByCallerId: Record<string, string[]>;
 
   // Persistent mode actions
   addCaller: (caller: Caller) => void;
@@ -123,7 +108,7 @@ export interface FeedbackState {
   renameCaller: (callerId: string, newName: string) => Promise<void>;
   mergeCallers: (sourceId: string, targetId: string) => Promise<void>;
   clearAllHistory: () => Promise<void>;
-  addSession: (session: Session) => void;
+  addSession: (session: Session, options?: AddSessionOptions) => void;
   setActiveSession: (id: string) => void;
   updateSessionField: (sessionId: string, field: keyof Pick<Session, "feedbackText" | "testLogText" | "commandLogs">, value: string) => void;
   addSessionImage: (sessionId: string, img: ImageAttachment) => void;
@@ -151,6 +136,19 @@ export interface FeedbackState {
   unhideCaller: (callerId: string) => void;
   trimCallerSessions: (callerId: string) => Promise<void>;
   setVisibleColumnCount: (count: number) => void;
+  setQueuedDrafts: (drafts: Record<string, FeedbackDraft>) => void;
+  getQueuedDraft: (callerId: string) => FeedbackDraft;
+  updateQueuedDraftField: (callerId: string, field: "feedbackText" | "testLogText", value: string) => void;
+  addQueuedDraftImage: (callerId: string, img: ImageAttachment) => void;
+  removeQueuedDraftImage: (callerId: string, path: string) => void;
+  clearQueuedDraftImages: (callerId: string) => void;
+  setQueuedDraftGitAction: (callerId: string, action: GitAction | null) => void;
+  updateQueuedDraftGitBranchName: (callerId: string, branchName: string) => void;
+  clearQueuedDraft: (callerId: string) => void;
+  applyQueuedDraftToSession: (callerId: string, sessionId: string) => void;
+  pushMessageHistory: (callerId: string, text: string) => void;
+  getMessageHistory: (callerId: string) => string[];
+  clearMessageHistory: (callerId?: string) => void;
 
   // Derived getters
   getActiveCaller: () => Caller | null;
@@ -161,57 +159,43 @@ export interface FeedbackState {
 const IMAGE_MAX_COUNT = 5;
 const IMAGE_MAX_SIZE_MB = 5;
 const IMAGE_MAX_TOTAL_MB = 20;
+const MESSAGE_HISTORY_MAX = 50;
+
+function emptyDraft(): FeedbackDraft {
+  return {
+    feedbackText: "",
+    testLogText: "",
+    images: [],
+    gitAction: null,
+    updatedAt: new Date().toISOString(),
+  };
+}
+
+function isDraftEmpty(draft: FeedbackDraft): boolean {
+  return !draft.feedbackText.trim() && !draft.testLogText.trim() && draft.images.length === 0 && !draft.gitAction;
+}
+
+function loadMessageHistory(): Record<string, string[]> {
+  try {
+    const raw = localStorage.getItem("mlf-message-history-by-caller");
+    return raw ? JSON.parse(raw) : {};
+  } catch { return {}; }
+}
+
+function saveMessageHistory(history: Record<string, string[]>) {
+  try { localStorage.setItem("mlf-message-history-by-caller", JSON.stringify(history)); } catch {}
+}
+
+function persistQueuedDrafts(drafts: Record<string, FeedbackDraft>) {
+  invoke("save_queued_drafts", { drafts }).catch((e: unknown) =>
+    console.error("Failed to persist queued drafts:", e)
+  );
+}
 
 export const useFeedbackStore = create<FeedbackState>((set, get) => ({
-  // App mode
-  appMode: "legacy",
-  setAppMode: (mode) => set({ appMode: mode }),
-
-  // ── Legacy mode defaults ──
-  summary: "",
-  requestName: "",
-  projectDirectory: "",
-  outputFile: "",
-  feedbackText: "",
-  testLogText: "",
-  images: [],
-  commandLogs: "",
-  enableEnhancement: true,
+  // Prompt templates
   prompts: [],
-  isSubmitting: false,
-  isSubmitted: false,
-
-  setSummary: (summary) => set({ summary }),
-  setRequestName: (name) => set({ requestName: name }),
-  setProjectDirectory: (dir) => set({ projectDirectory: dir }),
-  setOutputFile: (file) => set({ outputFile: file }),
-  setFeedbackText: (text) => set({ feedbackText: text }),
-  setTestLogText: (text) => set({ testLogText: text }),
-
-  addImage: (img) => {
-    const { images } = get();
-    if (images.length >= IMAGE_MAX_COUNT) return;
-    if (img.sizeKB / 1024 > IMAGE_MAX_SIZE_MB) return;
-    const totalMB = images.reduce((acc, i) => acc + i.sizeKB / 1024, 0);
-    if (totalMB + img.sizeKB / 1024 > IMAGE_MAX_TOTAL_MB) return;
-    if (images.find((i) => i.path === img.path)) return;
-    set({ images: [...images, img] });
-  },
-
-  removeImage: (path) =>
-    set((state) => ({ images: state.images.filter((i) => i.path !== path) })),
-
-  clearImages: () => set({ images: [] }),
-
-  setCommandLogs: (logs) => set({ commandLogs: logs }),
-  setEnableEnhancement: (value) => {
-    set({ enableEnhancement: value });
-    try { localStorage.setItem("mlf-enhancement", String(value)); } catch {}
-  },
   setPrompts: (prompts) => set({ prompts }),
-
-  setSubmitting: (value) => set({ isSubmitting: value }),
-  setSubmitted: (value) => set({ isSubmitted: value }),
 
   // Prompt visibility
   disabledPrompts: (() => {
@@ -265,6 +249,8 @@ export const useFeedbackStore = create<FeedbackState>((set, get) => ({
   sessions: [],
   activeCallerId: null,
   activeSessionId: null,
+  queuedDraftsByCallerId: {},
+  messageHistoryByCallerId: loadMessageHistory(),
 
   addCaller: (caller) => {
     const { callers, callerOrder } = get();
@@ -348,7 +334,7 @@ export const useFeedbackStore = create<FeedbackState>((set, get) => ({
 
   mergeCallers: async (sourceId, targetId) => {
     await invoke("merge_callers", { sourceId, targetId });
-    const { callers, callerOrder, hiddenCallerIds, sessions, activeCallerId, activeSessionId } = get();
+    const { callers, callerOrder, hiddenCallerIds, sessions, activeCallerId, activeSessionId, queuedDraftsByCallerId } = get();
     const targetCaller = callers.find((c) => c.id === targetId);
     const targetAlias = targetCaller?.alias || "";
     // Move all sessions from source to target; inject [System] notice into pending sessions
@@ -367,6 +353,24 @@ export const useFeedbackStore = create<FeedbackState>((set, get) => ({
     try { localStorage.setItem("mlf-hidden-callers", JSON.stringify(newHiddenCallerIds)); } catch {}
     const newActiveCallerId = activeCallerId === sourceId ? targetId : activeCallerId;
     let newActiveSessionId = activeSessionId;
+    const newQueuedDrafts = { ...queuedDraftsByCallerId };
+    const sourceDraft = newQueuedDrafts[sourceId];
+    if (sourceDraft) {
+      const targetDraft = newQueuedDrafts[targetId];
+      if (targetDraft) {
+        newQueuedDrafts[targetId] = {
+          feedbackText: [targetDraft.feedbackText.trim(), sourceDraft.feedbackText.trim()].filter(Boolean).join("\n\n"),
+          testLogText: [targetDraft.testLogText.trim(), sourceDraft.testLogText.trim()].filter(Boolean).join("\n\n"),
+          images: [...targetDraft.images, ...sourceDraft.images].slice(0, IMAGE_MAX_COUNT),
+          gitAction: targetDraft.gitAction || sourceDraft.gitAction,
+          updatedAt: new Date().toISOString(),
+        };
+      } else {
+        newQueuedDrafts[targetId] = sourceDraft;
+      }
+      delete newQueuedDrafts[sourceId];
+    }
+    persistQueuedDrafts(newQueuedDrafts);
     // If active session belonged to source, keep it (it's now under target)
     set({
       callers: newCallers,
@@ -375,6 +379,7 @@ export const useFeedbackStore = create<FeedbackState>((set, get) => ({
       sessions: updatedSessions,
       activeCallerId: newActiveCallerId,
       activeSessionId: newActiveSessionId,
+      queuedDraftsByCallerId: newQueuedDrafts,
     });
   },
 
@@ -382,6 +387,8 @@ export const useFeedbackStore = create<FeedbackState>((set, get) => ({
     const { invoke } = await import("@tauri-apps/api/core");
     await invoke("clear_all_history");
     try { localStorage.removeItem("mlf-hidden-callers"); } catch {}
+    saveMessageHistory({});
+    persistQueuedDrafts({});
     set({
       callers: [],
       callerOrder: [],
@@ -390,11 +397,16 @@ export const useFeedbackStore = create<FeedbackState>((set, get) => ({
       activeCallerId: null,
       activeSessionId: null,
       unreadCallerIds: [],
+      queuedDraftsByCallerId: {},
+      messageHistoryByCallerId: {},
     });
   },
 
-  addSession: (session) => {
+  addSession: (session, options) => {
+    const attentionMode = options?.attentionMode ?? "interrupt";
+    const shouldInterrupt = attentionMode !== "passive";
     const wasHidden = get().hiddenCallerIds.includes(session.callerId);
+    let inserted = false;
     set((state) => {
       // Idempotent upsert: if a session with the same id already exists,
       // replace it (covers StrictMode double-invoke of load_history and any
@@ -405,14 +417,18 @@ export const useFeedbackStore = create<FeedbackState>((set, get) => ({
         next[idx] = session;
         return { sessions: next };
       }
+      inserted = true;
       return { sessions: [...state.sessions, session] };
     });
+    if (inserted && session.status === "pending" && options?.applyQueuedDraft !== false) {
+      get().applyQueuedDraftToSession(session.callerId, session.id);
+    }
     // Auto-unhide caller when a new pending session arrives
-    if (session.status === "pending") {
+    if (shouldInterrupt && session.status === "pending") {
       get().unhideCaller(session.callerId);
     }
     // Move caller to visible columns' last position if it was outside the visible window
-    if (session.status === "pending") {
+    if (shouldInterrupt && session.status === "pending") {
       const { callerOrder, hiddenCallerIds, visibleColumnCount, callers } = get();
       if (visibleColumnCount > 0) {
         const order = callerOrder.length > 0 ? callerOrder : callers.map(c => c.id);
@@ -618,11 +634,14 @@ export const useFeedbackStore = create<FeedbackState>((set, get) => ({
           ? nextCallerSessions[nextCallerSessions.length - 1].id
           : null;
       }
+      const newQueuedDrafts = Object.fromEntries(Object.entries(get().queuedDraftsByCallerId).filter(([id]) => id !== session.callerId));
+      persistQueuedDrafts(newQueuedDrafts);
       set({
         callers: newCallers,
         callerOrder: newCallerOrder,
         activeCallerId: newActiveCallerId,
         activeSessionId: newActiveSessionId,
+        queuedDraftsByCallerId: newQueuedDrafts,
       });
     } else {
       // Update pending count
@@ -683,7 +702,7 @@ export const useFeedbackStore = create<FeedbackState>((set, get) => ({
 
   removeCaller: async (callerId) => {
     await invoke("remove_caller", { callerId });
-    const { callers, callerOrder, hiddenCallerIds, sessions, activeCallerId } = get();
+    const { callers, callerOrder, hiddenCallerIds, sessions, activeCallerId, queuedDraftsByCallerId, messageHistoryByCallerId } = get();
     const remaining = sessions.filter((s) => s.callerId !== callerId);
     const newCallers = callers.filter((c) => c.id !== callerId);
     const newCallerOrder = callerOrder.filter((id) => id !== callerId);
@@ -702,6 +721,8 @@ export const useFeedbackStore = create<FeedbackState>((set, get) => ({
     } else if (wasActive) {
       newActiveSessionId = null;
     }
+    const newQueuedDrafts = Object.fromEntries(Object.entries(queuedDraftsByCallerId).filter(([id]) => id !== callerId));
+    persistQueuedDrafts(newQueuedDrafts);
     set({
       callers: newCallers,
       callerOrder: newCallerOrder,
@@ -709,13 +730,16 @@ export const useFeedbackStore = create<FeedbackState>((set, get) => ({
       sessions: remaining,
       activeCallerId: newActiveCallerId,
       activeSessionId: newActiveSessionId,
+      queuedDraftsByCallerId: newQueuedDrafts,
+      messageHistoryByCallerId: Object.fromEntries(Object.entries(messageHistoryByCallerId).filter(([id]) => id !== callerId)),
     });
+    saveMessageHistory(get().messageHistoryByCallerId);
   },
 
   removeEmptyCallers: async () => {
     const removedIds: string[] = await invoke("remove_empty_callers");
     if (removedIds.length === 0) return removedIds;
-    const { callers, callerOrder, hiddenCallerIds, activeCallerId } = get();
+    const { callers, callerOrder, hiddenCallerIds, activeCallerId, queuedDraftsByCallerId, messageHistoryByCallerId } = get();
     const removedSet = new Set(removedIds);
     const newCallers = callers.filter((c) => !removedSet.has(c.id));
     const newCallerOrder = callerOrder.filter((id) => !removedSet.has(id));
@@ -724,12 +748,17 @@ export const useFeedbackStore = create<FeedbackState>((set, get) => ({
     const newActiveCallerId = activeCallerId && removedSet.has(activeCallerId)
       ? (newCallerOrder.length > 0 ? newCallerOrder[0] : null)
       : activeCallerId;
+    const newQueuedDrafts = Object.fromEntries(Object.entries(queuedDraftsByCallerId).filter(([id]) => !removedSet.has(id)));
+    persistQueuedDrafts(newQueuedDrafts);
     set({
       callers: newCallers,
       callerOrder: newCallerOrder,
       hiddenCallerIds: newHiddenCallerIds,
       activeCallerId: newActiveCallerId,
+      queuedDraftsByCallerId: newQueuedDrafts,
+      messageHistoryByCallerId: Object.fromEntries(Object.entries(messageHistoryByCallerId).filter(([id]) => !removedSet.has(id))),
     });
+    saveMessageHistory(get().messageHistoryByCallerId);
     return removedIds;
   },
 
@@ -792,6 +821,143 @@ export const useFeedbackStore = create<FeedbackState>((set, get) => ({
   },
 
   setVisibleColumnCount: (count) => set({ visibleColumnCount: count }),
+
+  setQueuedDrafts: (drafts) => set({ queuedDraftsByCallerId: drafts || {} }),
+
+  getQueuedDraft: (callerId) => get().queuedDraftsByCallerId[callerId] || emptyDraft(),
+
+  updateQueuedDraftField: (callerId, field, value) => {
+    set((state) => {
+      const draft = state.queuedDraftsByCallerId[callerId] || emptyDraft();
+      const next = {
+        queuedDraftsByCallerId: {
+          ...state.queuedDraftsByCallerId,
+          [callerId]: { ...draft, [field]: value, updatedAt: new Date().toISOString() },
+        },
+      };
+      persistQueuedDrafts(next.queuedDraftsByCallerId);
+      return next;
+    });
+  },
+
+  addQueuedDraftImage: (callerId, img) => {
+    const draft = get().getQueuedDraft(callerId);
+    if (draft.images.length >= IMAGE_MAX_COUNT) return;
+    if (img.sizeKB / 1024 > IMAGE_MAX_SIZE_MB) return;
+    const totalMB = draft.images.reduce((acc, i) => acc + i.sizeKB / 1024, 0);
+    if (totalMB + img.sizeKB / 1024 > IMAGE_MAX_TOTAL_MB) return;
+    if (draft.images.find((i) => i.path === img.path)) return;
+    set((state) => {
+      const next = {
+        ...state.queuedDraftsByCallerId,
+        [callerId]: { ...draft, images: [...draft.images, img], updatedAt: new Date().toISOString() },
+      };
+      persistQueuedDrafts(next);
+      return { queuedDraftsByCallerId: next };
+    });
+  },
+
+  removeQueuedDraftImage: (callerId, path) => {
+    const draft = get().getQueuedDraft(callerId);
+    set((state) => {
+      const next = {
+        ...state.queuedDraftsByCallerId,
+        [callerId]: { ...draft, images: draft.images.filter((i) => i.path !== path), updatedAt: new Date().toISOString() },
+      };
+      persistQueuedDrafts(next);
+      return { queuedDraftsByCallerId: next };
+    });
+  },
+
+  clearQueuedDraftImages: (callerId) => {
+    const draft = get().getQueuedDraft(callerId);
+    set((state) => {
+      const next = {
+        ...state.queuedDraftsByCallerId,
+        [callerId]: { ...draft, images: [], updatedAt: new Date().toISOString() },
+      };
+      persistQueuedDrafts(next);
+      return { queuedDraftsByCallerId: next };
+    });
+  },
+
+  setQueuedDraftGitAction: (callerId, action) => {
+    const draft = get().getQueuedDraft(callerId);
+    set((state) => {
+      const next = {
+        ...state.queuedDraftsByCallerId,
+        [callerId]: { ...draft, gitAction: action, updatedAt: new Date().toISOString() },
+      };
+      persistQueuedDrafts(next);
+      return { queuedDraftsByCallerId: next };
+    });
+  },
+
+  updateQueuedDraftGitBranchName: (callerId, branchName) => {
+    const draft = get().getQueuedDraft(callerId);
+    if (draft.gitAction?.type !== "create-branch") return;
+    set((state) => {
+      const next = {
+        ...state.queuedDraftsByCallerId,
+        [callerId]: { ...draft, gitAction: { ...draft.gitAction!, branchName }, updatedAt: new Date().toISOString() },
+      };
+      persistQueuedDrafts(next);
+      return { queuedDraftsByCallerId: next };
+    });
+  },
+
+  clearQueuedDraft: (callerId) => {
+    set((state) => {
+      const next = { ...state.queuedDraftsByCallerId };
+      delete next[callerId];
+      persistQueuedDrafts(next);
+      return { queuedDraftsByCallerId: next };
+    });
+  },
+
+  applyQueuedDraftToSession: (callerId, sessionId) => {
+    const draft = get().queuedDraftsByCallerId[callerId];
+    if (!draft || isDraftEmpty(draft)) return;
+    set((state) => ({
+      sessions: state.sessions.map((s) =>
+        s.id === sessionId && s.status === "pending"
+          ? {
+              ...s,
+              feedbackText: draft.feedbackText,
+              testLogText: draft.testLogText,
+              images: draft.images,
+              gitAction: draft.gitAction,
+            }
+          : s
+      ),
+    }));
+    get().clearQueuedDraft(callerId);
+  },
+
+  pushMessageHistory: (callerId, text) => {
+    const trimmed = text.trim();
+    if (!trimmed) return;
+    set((state) => {
+      const current = state.messageHistoryByCallerId[callerId] || [];
+      const withoutSame = current.filter((item) => item !== trimmed);
+      const nextForCaller = [...withoutSame, trimmed].slice(-MESSAGE_HISTORY_MAX);
+      const next = { ...state.messageHistoryByCallerId, [callerId]: nextForCaller };
+      saveMessageHistory(next);
+      return { messageHistoryByCallerId: next };
+    });
+  },
+
+  getMessageHistory: (callerId) => get().messageHistoryByCallerId[callerId] || [],
+
+  clearMessageHistory: (callerId) => {
+    set((state) => {
+      const next = { ...state.messageHistoryByCallerId };
+      if (callerId) delete next[callerId];
+      else for (const key of Object.keys(next)) delete next[key];
+      saveMessageHistory(next);
+      return { messageHistoryByCallerId: next };
+    });
+  },
 
   // Derived getters
   getActiveCaller: () => {

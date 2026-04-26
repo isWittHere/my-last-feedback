@@ -10,6 +10,8 @@
   "feedback": {
     "placeholder": "在此输入您的反馈...\nCtrl+Enter 提交，Ctrl+V 粘贴图片",
     "placeholderWithAlias": "向 {{alias}} 发送反馈...\nCtrl+Enter 提交，Ctrl+V 粘贴图片",
+    "draftPlaceholderLine": "准备为 {{alias}} 发送反馈（草稿）...",
+    "draftPasteHint": "Ctrl+V 粘贴图片",
     "submit": "发送反馈 (Ctrl+Enter)",
     "submitting": "提交中...",
     "hint": "Ctrl+Enter 提交"
@@ -77,6 +79,10 @@
     "responded": "反馈已提交（只读）",
     "cancelled": "客户端已断开连接 — 会话已取消"
   },
+  "queue": {
+    "nextDraft": "下一次回复草稿",
+    "clear": "清空队列"
+  },
   "settings": {
     "title": "设置",
     "general": "通用",
@@ -110,12 +116,16 @@
     "systemNotification": "系统通知",
     "systemNotificationDesc": "当窗口未聚焦时，新请求到达会显示系统通知",
     "persistentUnread": "持久未读标记",
-    "persistentUnreadDesc": "未读徽标持续闪烁，直到你查看该 Caller"
+    "persistentUnreadDesc": "未读徽标持续闪烁，直到你查看该 Caller",
+    "autoFocusNewRequest": "新请求自动切换",
+    "autoFocusNewRequestDesc": "新请求到达时自动切换到对应 Caller 和最新会话。关闭后只更新未读标记，不打断当前操作。"
   },
   "titlebar": {
     "sortByWorkspace": "按工作区整理排序",
     "layoutMode": "布局：{{mode}}",
-    "layoutAuto": "自动"
+    "layoutAuto": "自动",
+    "toggleLightTheme": "切换到浅色主题",
+    "toggleDarkTheme": "切换到深色主题"
   },
   "tooltip": {
     "alias": "Agent 假名",

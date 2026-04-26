@@ -7,30 +7,10 @@ import { McpConfigHelper } from "./McpConfigHelper";
 import { CallerManager } from "./CallerManager";
 import { Icon } from "./Icons";
 import { invoke } from "@tauri-apps/api/core";
+import { applyTheme, getStoredTheme, type Theme } from "../theme";
+import { getNotificationSettings, saveNotificationSettings, syncAutoFocusNewRequest, type NotificationSettings } from "../notificationSettings";
 
 type Tab = "general" | "callers" | "display" | "notification" | "prompts" | "about";
-type Theme = "dark" | "light";
-
-interface NotificationSettings {
-  taskbarFlash: boolean;
-  systemNotification: boolean;
-  persistentUnread: boolean;
-}
-
-function getNotificationSettings(): NotificationSettings {
-  try {
-    const raw = localStorage.getItem("mlf-notification-settings");
-    if (raw) {
-      const parsed = JSON.parse(raw);
-      return { taskbarFlash: parsed.taskbarFlash !== false, systemNotification: parsed.systemNotification !== false, persistentUnread: parsed.persistentUnread !== false };
-    }
-  } catch {}
-  return { taskbarFlash: true, systemNotification: true, persistentUnread: true };
-}
-
-function saveNotificationSettings(settings: NotificationSettings) {
-  try { localStorage.setItem("mlf-notification-settings", JSON.stringify(settings)); } catch {}
-}
 
 export interface ZoomSettings {
   global: number;
@@ -67,18 +47,6 @@ export function applyZoomSettings(settings?: ZoomSettings) {
 // Initialize zoom on module load
 applyZoomSettings();
 
-function getStoredTheme(): Theme {
-  return (localStorage.getItem("mlf-theme") as Theme) || "dark";
-}
-
-function applyTheme(theme: Theme) {
-  document.documentElement.setAttribute("data-theme", theme);
-  localStorage.setItem("mlf-theme", theme);
-}
-
-// Initialize theme on module load
-applyTheme(getStoredTheme());
-
 export function SettingsDialog({ open, onClose }: { open: boolean; onClose: () => void }) {
   const { t } = useTranslation();
   const [tab, setTab] = useState<Tab>("general");
@@ -94,6 +62,8 @@ export function SettingsDialog({ open, onClose }: { open: boolean; onClose: () =
   // Load autostart state
   useEffect(() => {
     if (!open) return;
+    setTheme(getStoredTheme());
+    setNotifSettings(getNotificationSettings());
     invoke<boolean>("get_autostart").then(setAutostart).catch(() => {});
   }, [open]);
 
@@ -128,6 +98,9 @@ export function SettingsDialog({ open, onClose }: { open: boolean; onClose: () =
     setNotifSettings((prev) => {
       const next = { ...prev, [key]: !prev[key] };
       saveNotificationSettings(next);
+      if (key === "autoFocusNewRequest") {
+        syncAutoFocusNewRequest(next.autoFocusNewRequest);
+      }
       return next;
     });
   }, []);
@@ -340,6 +313,18 @@ export function SettingsDialog({ open, onClose }: { open: boolean; onClose: () =
 
             {tab === "notification" && (
               <div className="settings-section">
+                <div className="settings-row">
+                  <div className="settings-row-info">
+                    <span className="settings-label">{t("settings.autoFocusNewRequest")}</span>
+                    <span className="settings-sublabel">{t("settings.autoFocusNewRequestDesc")}</span>
+                  </div>
+                  <button
+                    className={`settings-toggle${notifSettings.autoFocusNewRequest ? " settings-toggle-on" : ""}`}
+                    onClick={() => handleNotifToggle("autoFocusNewRequest")}
+                  >
+                    <span className="settings-toggle-knob" />
+                  </button>
+                </div>
                 <div className="settings-row">
                   <div className="settings-row-info">
                     <span className="settings-label">{t("settings.taskbarFlash")}</span>

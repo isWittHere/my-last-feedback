@@ -46,39 +46,38 @@ interface RenderParts {
   };
 }
 
-export function ImageAttachmentWidget({ children, renderLayout }: {
+export function ImageAttachmentWidget({ children, renderLayout, queuedCallerId }: {
   children?: React.ReactNode;
   renderLayout?: (parts: RenderParts) => React.ReactNode;
+  queuedCallerId?: string;
 }) {
   const { t } = useTranslation();
-  const appMode = useFeedbackStore((s) => s.appMode);
   const { session: activeSession } = useActiveCallerSession();
-  const { images: legacyImages, addImage, removeImage, addSessionImage, removeSessionImage } = useFeedbackStore(useShallow((s) => ({
-    images: s.images,
-    addImage: s.addImage,
-    removeImage: s.removeImage,
+  const queuedDraft = useFeedbackStore((s) => queuedCallerId ? s.queuedDraftsByCallerId[queuedCallerId] : null);
+  const { addSessionImage, removeSessionImage, addQueuedDraftImage, removeQueuedDraftImage } = useFeedbackStore(useShallow((s) => ({
     addSessionImage: s.addSessionImage,
     removeSessionImage: s.removeSessionImage,
+    addQueuedDraftImage: s.addQueuedDraftImage,
+    removeQueuedDraftImage: s.removeQueuedDraftImage,
   })));
   const fileInputRef = useRef<HTMLInputElement>(null);
   const [dragOver, setDragOver] = useState(false);
 
-  const isPersistent = appMode === "persistent";
-  const images = isPersistent ? (activeSession?.images || []) : legacyImages;
+  const images = queuedCallerId ? (queuedDraft?.images || []) : (activeSession?.images || []);
 
   const handleRemove = (path: string) => {
-    if (isPersistent && activeSession) {
+    if (queuedCallerId) {
+      removeQueuedDraftImage(queuedCallerId, path);
+    } else if (activeSession) {
       removeSessionImage(activeSession.id, path);
-    } else {
-      removeImage(path);
     }
   };
 
   const handleAdd = (img: ImageAttachment) => {
-    if (isPersistent && activeSession) {
+    if (queuedCallerId) {
+      addQueuedDraftImage(queuedCallerId, img);
+    } else if (activeSession) {
       addSessionImage(activeSession.id, img);
-    } else {
-      addImage(img);
     }
   };
 
