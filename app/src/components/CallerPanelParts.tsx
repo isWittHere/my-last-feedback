@@ -4,7 +4,7 @@ import { useTranslation } from "react-i18next";
 import { useFeedbackStore } from "../store/feedbackStore";
 import type { GitActionType, MlcAttachment } from "../store/feedbackStore";
 import { useShallow } from "zustand/react/shallow";
-import { Icon } from "./Icons";
+import { Icon, MlcLogoIcon } from "./Icons";
 import { useActiveCallerSession } from "./useActiveCallerSession";
 import { readText as readClipboardText } from "@tauri-apps/plugin-clipboard-manager";
 
@@ -46,6 +46,8 @@ export function AttachmentTagBar({
   const removeSessionMlcAttachment = useFeedbackStore((s) => s.removeSessionMlcAttachment);
   const removeQueuedDraftMlcAttachment = useFeedbackStore((s) => s.removeQueuedDraftMlcAttachment);
   const setFocusedComposer = useFeedbackStore((s) => s.setFocusedComposer);
+  const mlcPanelVisible = useFeedbackStore((s) => s.mlcPanelVisible);
+  const mlcActiveWorkspacePath = useFeedbackStore((s) => s.mlcActiveWorkspacePath);
   const setMlcPanelVisible = useFeedbackStore((s) => s.setMlcPanelVisible);
   const setMlcActiveWorkspacePath = useFeedbackStore((s) => s.setMlcActiveWorkspacePath);
   const targetImages = queuedCallerId ? (queuedDraft?.images || []) : (activeSession?.images || []);
@@ -56,6 +58,7 @@ export function AttachmentTagBar({
   const hasTestLog = !!targetTestLogText.trim();
   const hasGitAction = !!targetGitAction;
   const hasMlcAttachments = targetMlcAttachments.length > 0;
+  const isMlcButtonActive = mlcPanelVisible && !!activeSession?.projectDirectory && mlcActiveWorkspacePath === activeSession.projectDirectory;
   const hasTags = images.length > 0 || hasTestLog || showTestLog || hasGitAction || hasMlcAttachments;
   const tagAreaRef = useRef<HTMLDivElement>(null);
   const branchInputRef = useRef<HTMLInputElement>(null);
@@ -79,6 +82,10 @@ export function AttachmentTagBar({
   };
 
   const handleMlcClick = () => {
+    if (isMlcButtonActive) {
+      setMlcPanelVisible(false);
+      return;
+    }
     if (queuedCallerId) {
       if (!caller) return;
       setFocusedComposer({
@@ -146,18 +153,18 @@ export function AttachmentTagBar({
           style={{
             fontSize: 11,
             padding: "3px 10px",
-            background: hasMlcAttachments ? callerColor : undefined,
-            borderColor: hasMlcAttachments ? callerColor : undefined,
-            color: hasMlcAttachments ? "#fff" : undefined,
+            background: isMlcButtonActive ? callerColor : undefined,
+            borderColor: isMlcButtonActive ? callerColor : undefined,
+            color: isMlcButtonActive ? "#fff" : undefined,
           }}
           disabled={!queuedCallerId && (!activeSession || activeSession.status !== "pending")}
           onClick={handleMlcClick}
           title={t("mlc.openPanel", "Open My Last Chat references")}
         >
-          <Icon name="book" size={12} />
+          <MlcLogoIcon size={12} />
           {t("mlc.button", "MLC")}
           {hasMlcAttachments && (
-            <span style={{ color: hasMlcAttachments ? "rgba(255,255,255,0.7)" : "var(--color-text-muted)", marginLeft: 2 }}>
+            <span style={{ color: isMlcButtonActive ? "rgba(255,255,255,0.7)" : "var(--color-text-muted)", marginLeft: 2 }}>
               {targetMlcAttachments.length}
             </span>
           )}
@@ -228,7 +235,7 @@ export function AttachmentTagBar({
             className="rounded-lg"
             style={{
               border: "1px solid var(--color-border)",
-              background: "var(--color-bg-input)",
+              background: "var(--color-bg-input-raised)",
               maxHeight: 125,
               overflowY: "auto",
             }}
@@ -245,7 +252,7 @@ export function AttachmentTagBar({
             className="rounded-lg flex flex-wrap items-center gap-1.5 p-2"
             style={{
               border: "1px solid var(--color-border)",
-              background: "var(--color-bg-input)",
+              background: "var(--color-bg-input-raised)",
             }}
           >
             {(["commit", "commit-push", "create-branch"] as GitActionType[]).map((type) => {
@@ -296,7 +303,7 @@ export function AttachmentTagBar({
                   maxWidth: 200,
                   borderRadius: 6,
                   border: "1px solid var(--color-border)",
-                  background: "var(--color-bg-base)",
+                  background: "var(--color-bg-input-raised)",
                 }}
               />
             )}
@@ -548,11 +555,27 @@ function GitActionTag({
 
 function MlcAttachmentTag({ attachment, onRemove, readonly }: { attachment: MlcAttachment; onRemove: () => void; readonly?: boolean }) {
   const cleanPath = attachment.filePath.replace(/^\\\\\?\\UNC\\/i, "\\\\").replace(/^\\\\\?\\/i, "");
+  const tagRef = useRef<HTMLDivElement>(null);
+  const [showPreview, setShowPreview] = useState(false);
+  const [previewPos, setPreviewPos] = useState<{ top: number; left: number } | null>(null);
   const title = attachment.title || cleanPath;
-  const preview = [title, attachment.description, cleanPath].filter(Boolean).join("\n");
+
+  const handleMouseEnter = () => {
+    if (tagRef.current) {
+      const rect = tagRef.current.getBoundingClientRect();
+      setPreviewPos({ top: rect.top - 6, left: rect.left });
+    }
+    setShowPreview(true);
+  };
 
   return (
-    <div className="attachment-tag" title={preview} style={{ cursor: readonly ? "default" : "pointer" }}>
+    <div
+      ref={tagRef}
+      className="attachment-tag"
+      style={{ cursor: readonly ? "default" : "pointer" }}
+      onMouseEnter={handleMouseEnter}
+      onMouseLeave={() => setShowPreview(false)}
+    >
       {!readonly && (
         <button
           className="attachment-tag-remove"
@@ -572,6 +595,32 @@ function MlcAttachmentTag({ attachment, onRemove, readonly }: { attachment: MlcA
         >
           <Icon name="copy" size={10} />
         </button>
+      )}
+      {showPreview && previewPos && createPortal(
+        <div
+          className="mlc-custom-tooltip"
+          ref={(el) => {
+            if (!el || !tagRef.current) return;
+            const rect = tagRef.current.getBoundingClientRect();
+            const tooltipHeight = el.offsetHeight;
+            const tooltipWidth = el.offsetWidth;
+            let top = rect.top - tooltipHeight - 2;
+            let left = rect.left;
+            if (top < 4) top = rect.bottom + 2;
+            if (left + tooltipWidth > window.innerWidth - 4) left = window.innerWidth - tooltipWidth - 4;
+            if (left < 4) left = 4;
+            el.style.top = `${top}px`;
+            el.style.left = `${left}px`;
+          }}
+          style={{ top: previewPos.top, left: previewPos.left, zIndex: 9999 }}
+        >
+          <div className="mlc-tooltip-doc">
+            <div className="mlc-tooltip-title">{title}</div>
+            {attachment.description ? <div className="mlc-tooltip-desc">{attachment.description}</div> : null}
+            <div className="mlc-tooltip-path">{cleanPath}</div>
+          </div>
+        </div>,
+        document.body
       )}
     </div>
   );
@@ -624,14 +673,14 @@ export function ReadonlyTagBar({ session }: { session: import("../store/feedback
             className="rounded-lg"
             style={{
               border: "1px solid var(--color-border)",
-              background: "var(--color-bg-input)",
+              background: "var(--color-bg-readonly, var(--color-bg-input))",
               maxHeight: 200,
               overflowY: "auto",
             }}
           >
             <pre
               className="text-xs px-2 py-1.5 m-0"
-              style={{ color: "var(--color-text-secondary)", whiteSpace: "pre-wrap", wordBreak: "break-all", opacity: 0.7 }}
+              style={{ color: "var(--color-text-muted)", whiteSpace: "pre-wrap", wordBreak: "break-all", opacity: 0.9 }}
             >
               <RichText text={session.testLogText} />
             </pre>

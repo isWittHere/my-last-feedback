@@ -4,11 +4,13 @@ import { invoke } from "@tauri-apps/api/core";
 import { openPath } from "@tauri-apps/plugin-opener";
 import { useFeedbackStore, type MlcAttachment } from "../store/feedbackStore";
 import { AppSelect, type AppSelectOption } from "./AppSelect";
-import { Icon } from "./Icons";
+import { Icon, MlcLogoIcon } from "./Icons";
 import { useIsLightTheme } from "./useIsLightTheme";
 
 type SortBy = "updated-desc" | "created-desc" | "created-asc" | "title-asc" | "title-desc";
 type ViewMode = "detail" | "compact";
+type TabBarPosition = "top" | "bottom";
+type TooltipPlacement = "auto" | "below" | "above";
 
 interface MlcDocument {
   filePath: string;
@@ -126,7 +128,6 @@ export function MlcSidePanel() {
   const width = useFeedbackStore((state) => state.mlcPanelWidth);
   const activeWorkspacePath = useFeedbackStore((state) => state.mlcActiveWorkspacePath);
   const setWidth = useFeedbackStore((state) => state.setMlcPanelWidth);
-  const setVisible = useFeedbackStore((state) => state.setMlcPanelVisible);
   const setActiveWorkspacePath = useFeedbackStore((state) => state.setMlcActiveWorkspacePath);
   const addSessionMlcAttachment = useFeedbackStore((state) => state.addSessionMlcAttachment);
   const addQueuedDraftMlcAttachment = useFeedbackStore((state) => state.addQueuedDraftMlcAttachment);
@@ -142,8 +143,17 @@ export function MlcSidePanel() {
   const [error, setError] = useState<string | null>(null);
   const [collapsedGroups, setCollapsedGroups] = useState<Set<string>>(() => new Set());
   const [tooltip, setTooltip] = useState<{ content: MlcTooltipContent; left: number; top: number } | null>(null);
+  const [tabBarPosition, setTabBarPosition] = useState<TabBarPosition>(() => {
+    try {
+      return localStorage.getItem("mlfb-mlc-tab-bar-position") === "bottom" ? "bottom" : "top";
+    } catch {
+      return "top";
+    }
+  });
+  const [tabBarMenu, setTabBarMenu] = useState<{ left: number; top: number } | null>(null);
   const resizeRef = useRef<{ startX: number; startWidth: number } | null>(null);
   const tooltipTimerRef = useRef<number | null>(null);
+  const tabBarMenuRef = useRef<HTMLDivElement>(null);
 
   const sortOptions = useMemo<Array<AppSelectOption<SortBy>>>(() => [
     { value: "updated-desc", label: t("mlc.sortUpdated", "Recently Updated"), icon: "clock" },
@@ -233,6 +243,23 @@ export function MlcSidePanel() {
 
   const canAttach = Boolean(focusedComposer);
 
+  useEffect(() => {
+    if (!tabBarMenu) return;
+    const handlePointerDown = (event: MouseEvent) => {
+      if (tabBarMenuRef.current?.contains(event.target as Node)) return;
+      setTabBarMenu(null);
+    };
+    const handleKeyDown = (event: KeyboardEvent) => {
+      if (event.key === "Escape") setTabBarMenu(null);
+    };
+    document.addEventListener("mousedown", handlePointerDown);
+    document.addEventListener("keydown", handleKeyDown);
+    return () => {
+      document.removeEventListener("mousedown", handlePointerDown);
+      document.removeEventListener("keydown", handleKeyDown);
+    };
+  }, [tabBarMenu]);
+
   const handleResizeMouseDown = useCallback((event: React.MouseEvent) => {
     event.preventDefault();
     resizeRef.current = { startX: event.clientX, startWidth: width };
@@ -297,16 +324,40 @@ export function MlcSidePanel() {
     setTooltip(null);
   }, []);
 
-  const tooltipProps = useCallback((content: MlcTooltipContent | string | null) => {
+  const tooltipProps = useCallback((content: MlcTooltipContent | string | null, placement: TooltipPlacement = "auto") => {
     const tooltipContent = typeof content === "string" ? { kind: "text" as const, text: content } : content;
+    const estimateHeight = (value: MlcTooltipContent): number => {
+      if (value.kind === "text") return Math.min(72, 26 + Math.ceil(value.text.length / 52) * 16);
+      const document = value.document;
+      const titleRows = Math.min(2, Math.max(1, Math.ceil(document.title.length / 46)));
+      const descRows = document.description ? Math.min(4, Math.ceil(document.description.length / 54)) : 0;
+      const pathRows = Math.min(3, Math.max(1, Math.ceil(cleanDisplayPath(document.filePath).length / 58)));
+      return Math.min(260, 74 + titleRows * 18 + descRows * 17 + pathRows * 16);
+    };
+    const getPosition = (rect: DOMRect) => ({
+      left: Math.min(Math.max(8, rect.left), Math.max(8, window.innerWidth - 368)),
+      top: (() => {
+        if (!tooltipContent) return rect.bottom + 6;
+        const gap = 6;
+        const viewportPadding = 8;
+        const estimatedHeight = estimateHeight(tooltipContent);
+        const fitsBelow = rect.bottom + gap + estimatedHeight <= window.innerHeight - viewportPadding;
+        const fitsAbove = rect.top - gap - estimatedHeight >= viewportPadding;
+        const placeAbove = placement === "above" || (placement === "auto" && !fitsBelow && fitsAbove);
+        const preferredTop = placeAbove ? rect.top - gap - estimatedHeight : rect.bottom + gap;
+        return Math.min(
+          Math.max(viewportPadding, preferredTop),
+          Math.max(viewportPadding, window.innerHeight - viewportPadding - estimatedHeight),
+        );
+      })(),
+    });
     return {
     onMouseEnter: (event: React.MouseEvent<HTMLElement>) => {
       clearTooltip();
       if (!tooltipContent) return;
       const rect = event.currentTarget.getBoundingClientRect();
       tooltipTimerRef.current = window.setTimeout(() => {
-        const left = Math.min(Math.max(8, rect.left), Math.max(8, window.innerWidth - 368));
-        const top = Math.min(rect.bottom + 4, Math.max(8, window.innerHeight - 80));
+        const { left, top } = getPosition(rect);
         setTooltip({ content: tooltipContent, left, top });
       }, 400);
     },
@@ -314,7 +365,8 @@ export function MlcSidePanel() {
     onFocus: (event: React.FocusEvent<HTMLElement>) => {
       if (!tooltipContent) return;
       const rect = event.currentTarget.getBoundingClientRect();
-      setTooltip({ content: tooltipContent, left: Math.min(Math.max(8, rect.left), Math.max(8, window.innerWidth - 368)), top: Math.min(rect.bottom + 4, Math.max(8, window.innerHeight - 80)) });
+      const { left, top } = getPosition(rect);
+      setTooltip({ content: tooltipContent, left, top });
     },
     onBlur: clearTooltip,
   };
@@ -356,20 +408,36 @@ export function MlcSidePanel() {
     </div>
   );
 
-  return (
-    <aside className="mlc-panel" data-position={position} style={{ width }}>
-      <div className="mlc-resize-handle" onMouseDown={handleResizeMouseDown} />
-      <div className="mlc-panel-header mlc-panel-tabs-row">
-        <div className="mlc-panel-tabs">
-          <button type="button" className="mlc-panel-tab active">
-            <Icon name="book" size={13} />
-            <span>MLC</span>
-          </button>
-        </div>
-        <button className="mlc-icon-btn" onClick={() => setVisible(false)} title={t("mlc.close", "Close My Last Chat")}>
-          <Icon name="close-sm" size={10} />
+  const handleTabBarContextMenu = useCallback((event: React.MouseEvent) => {
+    event.preventDefault();
+    clearTooltip();
+    setTabBarMenu({
+      left: Math.min(Math.max(8, event.clientX), Math.max(8, window.innerWidth - 176)),
+      top: Math.min(Math.max(8, event.clientY), Math.max(8, window.innerHeight - 44)),
+    });
+  }, [clearTooltip]);
+
+  const setPanelTabBarPosition = useCallback((nextPosition: TabBarPosition) => {
+    setTabBarPosition(nextPosition);
+    setTabBarMenu(null);
+    try { localStorage.setItem("mlfb-mlc-tab-bar-position", nextPosition); } catch {}
+  }, []);
+
+  const renderPanelTabBar = () => (
+    <div className={`mlc-panel-header mlc-panel-icon-tabs-row ${tabBarPosition}`} onContextMenu={handleTabBarContextMenu}>
+      <div className="mlc-panel-icon-tabs" role="tablist" aria-label={t("mlc.panelTabs", "Side panel tabs")}>
+        <button type="button" className="mlc-panel-icon-tab active" role="tab" aria-selected="true" aria-label={t("mlc.title", "My Last Chat")} onContextMenu={handleTabBarContextMenu}>
+          <MlcLogoIcon size={16} />
+          <span className="mlc-panel-tab-hover-tip" role="tooltip">{t("mlc.title", "My Last Chat")}</span>
         </button>
       </div>
+    </div>
+  );
+
+  return (
+    <aside className="mlc-panel" data-position={position} data-tab-bar-position={tabBarPosition} style={{ width }}>
+      <div className="mlc-resize-handle" onMouseDown={handleResizeMouseDown} />
+      {tabBarPosition === "top" ? renderPanelTabBar() : null}
 
       <div className="mlc-search-row">
         <Icon name="search" size={13} />
@@ -416,7 +484,7 @@ export function MlcSidePanel() {
         ) : error ? (
           <div className="mlc-list-empty"><Icon name="circle-x" size={24} /><div>{error}</div></div>
         ) : groupedDocuments.length === 0 ? (
-          <div className="mlc-list-empty"><Icon name="inbox" size={26} /><div>{t("mlc.empty", "No MLC references loaded")}</div></div>
+          <div className="mlc-list-empty"><MlcLogoIcon size={26} /><div>{t("mlc.empty", "No MLC references loaded")}</div></div>
         ) : groupedDocuments.map(([label, items]) => {
           const isCollapsed = collapsedGroups.has(label);
           return (
@@ -451,6 +519,15 @@ export function MlcSidePanel() {
           );
         })}
       </div>
+      {tabBarPosition === "bottom" ? renderPanelTabBar() : null}
+      {tabBarMenu ? (
+        <div ref={tabBarMenuRef} className="mlc-panel-tab-menu" style={{ left: tabBarMenu.left, top: tabBarMenu.top }} role="menu" onContextMenu={(event) => event.preventDefault()}>
+          <button type="button" role="menuitem" onClick={() => setPanelTabBarPosition(tabBarPosition === "top" ? "bottom" : "top")}>
+            <Icon name="arrow-down" size={12} style={tabBarPosition === "bottom" ? { transform: "rotate(180deg)" } : undefined} />
+            <span>{tabBarPosition === "top" ? t("mlc.moveTabsToBottom", "Move tabs to bottom") : t("mlc.moveTabsToTop", "Move tabs to top")}</span>
+          </button>
+        </div>
+      ) : null}
       {tooltip ? <div className="mlc-custom-tooltip" style={{ left: tooltip.left, top: tooltip.top }}>{renderTooltipContent(tooltip.content)}</div> : null}
     </aside>
   );

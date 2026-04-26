@@ -30,6 +30,9 @@
   "mlc": {
     "title": "My Last Chat",
     "button": "MLC",
+    "panelTabs": "侧边面板标签",
+    "moveTabsToBottom": "将标签栏移到底部",
+    "moveTabsToTop": "将标签栏移到顶部",
     "openPanel": "打开 My Last Chat 资料栏",
     "expand": "展开 My Last Chat",
     "collapse": "折叠 My Last Chat",

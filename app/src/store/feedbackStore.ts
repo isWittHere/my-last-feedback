@@ -441,6 +441,7 @@ export const useFeedbackStore = create<FeedbackState>((set, get) => ({
           testLogText: [targetDraft.testLogText.trim(), sourceDraft.testLogText.trim()].filter(Boolean).join("\n\n"),
           images: [...targetDraft.images, ...sourceDraft.images].slice(0, IMAGE_MAX_COUNT),
           gitAction: targetDraft.gitAction || sourceDraft.gitAction,
+          mlcAttachments: [...(targetDraft.mlcAttachments || []), ...(sourceDraft.mlcAttachments || [])],
           updatedAt: new Date().toISOString(),
         };
       } else {

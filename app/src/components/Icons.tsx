@@ -1,3 +1,5 @@
+import mlcLogoSvg from "../assets/my-last-chat.svg?raw";
+
 /**
  * Unified SVG icon library for the entire UI.
  * All icons use a 24×24 viewBox with stroke-based rendering (Lucide-style)
@@ -260,6 +262,33 @@ export function Icon({ name, size = 16, color, strokeWidth, className, style, fi
       className={className}
       style={style}
       dangerouslySetInnerHTML={{ __html: def.paths }}
+    />
+  );
+}
+
+export interface MlcLogoIconProps {
+  size?: number;
+  color?: string;
+  className?: string;
+  style?: React.CSSProperties;
+}
+
+export function MlcLogoIcon({ size = 16, color, className, style }: MlcLogoIconProps) {
+  return (
+    <span
+      aria-hidden="true"
+      className={className}
+      style={{
+        width: size,
+        height: size,
+        color,
+        display: "inline-flex",
+        alignItems: "center",
+        justifyContent: "center",
+        flexShrink: 0,
+        ...style,
+      }}
+      dangerouslySetInnerHTML={{ __html: mlcLogoSvg }}
     />
   );
 }

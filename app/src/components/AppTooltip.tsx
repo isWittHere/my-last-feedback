@@ -7,6 +7,8 @@ interface TooltipState {
   placement: "top" | "bottom";
 }
 
+type TooltipPlacementPreference = "auto" | "top" | "bottom";
+
 const TOOLTIP_MARGIN = 8;
 const TOOLTIP_OFFSET = 8;
 
@@ -16,12 +18,19 @@ function clamp(value: number, min: number, max: number): number {
 }
 
 function findTooltipElement(target: EventTarget | null): HTMLElement | null {
-  if (!(target instanceof HTMLElement)) return null;
-  return target.closest<HTMLElement>("[data-tooltip], [title]");
+  if (!(target instanceof Element)) return null;
+  const element = target.closest("[data-tooltip], [title]");
+  return element instanceof HTMLElement ? element : null;
 }
 
 function getTooltipText(element: HTMLElement): string {
   return element.getAttribute("data-tooltip") || element.getAttribute("title") || "";
+}
+
+function getTooltipPlacementPreference(element: HTMLElement): TooltipPlacementPreference {
+  const placementElement = element.closest("[data-tooltip-placement]");
+  const placement = placementElement?.getAttribute("data-tooltip-placement");
+  return placement === "top" || placement === "bottom" ? placement : "auto";
 }
 
 function silenceNativeTitle(element: HTMLElement) {
@@ -41,12 +50,23 @@ function createTooltipState(element: HTMLElement, text: string, tooltipWidth = 0
   const rect = element.getBoundingClientRect();
   const viewportWidth = window.innerWidth;
   const viewportHeight = window.innerHeight;
+  const placementPreference = getTooltipPlacementPreference(element);
   const targetCenterX = rect.left + rect.width / 2;
   const halfWidth = tooltipWidth > 0 ? tooltipWidth / 2 : 0;
   const x = halfWidth > 0
     ? clamp(targetCenterX, TOOLTIP_MARGIN + halfWidth, viewportWidth - TOOLTIP_MARGIN - halfWidth)
     : targetCenterX;
-  const showTop = tooltipHeight > 0
+  const fitsTop = tooltipHeight > 0
+    ? rect.top - TOOLTIP_OFFSET - tooltipHeight - TOOLTIP_MARGIN > 0
+    : rect.top > 52;
+  const fitsBottom = tooltipHeight > 0
+    ? rect.bottom + TOOLTIP_OFFSET + tooltipHeight + TOOLTIP_MARGIN <= viewportHeight
+    : rect.bottom + 52 <= viewportHeight;
+  const showTop = placementPreference === "top"
+    ? fitsTop || !fitsBottom
+    : placementPreference === "bottom"
+      ? !(fitsBottom || !fitsTop)
+      : tooltipHeight > 0
     ? rect.bottom + TOOLTIP_OFFSET + tooltipHeight + TOOLTIP_MARGIN > viewportHeight && rect.top - TOOLTIP_OFFSET - tooltipHeight - TOOLTIP_MARGIN > 0
     : rect.bottom + 52 > viewportHeight && rect.top > 52;
   return {

@@ -399,7 +399,7 @@ function CallerContent() {
         </div>
         <div className="resize-handle" onMouseDown={(e) => handleMouseDown(0, e)} />
         {/* Input area: attachments + feedback */}
-        <div ref={feedbackPanelRef} className="flex flex-col panel-card panel-feedback" style={{ flex: `0 0 ${panelSizes[1] * 100}%`, minHeight: 48, position: "relative" }}>
+        <div ref={feedbackPanelRef} className={`flex flex-col panel-card panel-feedback${isReadonly ? "" : " panel-feedback-editable"}`} data-tooltip-placement="top" style={{ flex: `0 0 ${panelSizes[1] * 100}%`, minHeight: 48, position: "relative" }}>
           {isReadonly ? (
             <>
               <ReadonlyStatusBadge status={activeSession.status as "responded" | "cancelled"} />
@@ -411,7 +411,7 @@ function CallerContent() {
               {activeSession.feedbackText && (
                 <div className="flex-1 overflow-y-auto min-h-0 px-3 pb-2">
                   <div
-                    style={{ fontSize: 13, color: "var(--color-text-primary)", whiteSpace: "pre-wrap", wordBreak: "break-all", opacity: 0.7, userSelect: "text", cursor: "text" }}
+                    style={{ fontSize: 13, color: "var(--color-text-muted)", whiteSpace: "pre-wrap", wordBreak: "break-all", opacity: 0.9, userSelect: "text", cursor: "text" }}
                   >
                     <RichText text={activeSession.feedbackText} />
                   </div>
@@ -448,7 +448,7 @@ function CallerContent() {
 
       {/* Bottom fused area: buttons only */}
       {!isReadonly && (
-        <div className="flex flex-col gap-1.5 px-3 pb-2 pt-2 shrink-0" style={{ background: "var(--color-bg-input)" }}>
+        <div className="flex flex-col gap-1.5 px-3 pb-2 pt-2 shrink-0" data-tooltip-placement="top" style={{ background: "var(--color-bg-input-raised)" }}>
           <PromptButtons onAction={handleSubmit} />
           <div className="flex items-center gap-2">
             <QuickActions onAction={handleSubmit} />
@@ -507,7 +507,7 @@ function ReadonlyStatusBadge({ status }: { status: "responded" | "cancelled" }) 
         border: "1px solid var(--color-border)",
         background: "color-mix(in srgb, var(--color-bg-surface) 92%, transparent)",
         color: isCancelled ? "#ef4444" : "var(--color-text-muted)",
-        boxShadow: "0 3px 12px rgba(0,0,0,0.18)",
+        boxShadow: "none",
         fontSize: 12,
         lineHeight: 1.2,
         pointerEvents: "none",
@@ -533,7 +533,7 @@ function QueuedDraftComposer({ callerId, callerColor, height }: { callerId: stri
   const testLogRef = useRef<HTMLTextAreaElement>(null);
 
   return (
-    <div className="flex flex-col shrink-0" style={{ background: "var(--color-bg-input)", height, minHeight: 136 }}>
+    <div className="flex flex-col shrink-0" data-tooltip-placement="top" style={{ background: "var(--color-bg-input-raised)", height, minHeight: 136 }}>
       <div className="flex flex-col flex-1 min-h-0">
         <ImageAttachmentWidget queuedCallerId={callerId} renderLayout={({ controls, fileInput, dropProps }) => (
           <div

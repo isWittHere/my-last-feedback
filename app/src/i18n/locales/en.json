@@ -30,6 +30,9 @@
   "mlc": {
     "title": "My Last Chat",
     "button": "MLC",
+    "panelTabs": "Side panel tabs",
+    "moveTabsToBottom": "Move tabs to bottom",
+    "moveTabsToTop": "Move tabs to top",
     "openPanel": "Open My Last Chat references",
     "expand": "Expand My Last Chat",
     "collapse": "Collapse My Last Chat",
