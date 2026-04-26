@@ -21,6 +21,7 @@ import {
   ROLE_COLORS,
   type OrchestrationPresetId,
   type RoundRecord,
+  type StageBlueprint,
 } from "../store/mlraStore";
 
 /** Format milliseconds to MM:SS or H:MM:SS */
@@ -41,13 +42,84 @@ const ROLE_LABEL_MAP: Record<string, string> = {
   worker: "Worker",
 };
 
+function StageFlowPopover({ stages, currentStageId }: { stages: StageBlueprint[]; currentStageId: string | null }) {
+  const currentIndex = stages.findIndex((stage) => stage.id === currentStageId);
+
+  if (stages.length === 0) {
+    return (
+      <div className="mlra-stage-flow-popover">
+        <div className="mlra-stage-flow-empty">暂无阶段</div>
+      </div>
+    );
+  }
+
+  return (
+    <div className="mlra-stage-flow-popover">
+      <div className="mlra-stage-flow-list">
+        {stages.map((stage, index) => {
+          const isCurrent = stage.id === currentStageId;
+          const isDone = currentIndex >= 0 && index < currentIndex;
+          return (
+            <React.Fragment key={stage.id}>
+              <div className={`mlra-stage-flow-item${isCurrent ? " current" : ""}${isDone ? " done" : ""}${stage.isClosing ? " closing" : ""}`}>
+                <span className="mlra-stage-flow-node">
+                  <Icon name={stage.icon || "flag"} size={12} />
+                </span>
+                <span className="mlra-stage-flow-copy">
+                  <span className="mlra-stage-flow-name">{stage.name || `阶段 ${index + 1}`}</span>
+                  <span className="mlra-stage-flow-meta">
+                    {index + 1}/{stages.length}{stage.exitGateEnabled ? " · Gate" : ""}
+                  </span>
+                </span>
+              </div>
+              {index < stages.length - 1 ? <span className={`mlra-stage-flow-connector${isDone ? " done" : ""}`} /> : null}
+            </React.Fragment>
+          );
+        })}
+      </div>
+    </div>
+  );
+}
+
 /** Stats popover shown on timer hover */
-function TimerStatsPopover({ rounds }: { rounds: RoundRecord[] }) {
+function TimerStatsPopover({ rounds, stages }: { rounds: RoundRecord[]; stages: StageBlueprint[] }) {
+  const [stageFilter, setStageFilter] = useState<string>("all");
+  const roundDuration = (round: RoundRecord) => {
+    const end = round.endedAt ? new Date(round.endedAt).getTime() : Date.now();
+    return Math.max(0, end - new Date(round.startedAt).getTime());
+  };
+  const stageStats = stages.map((stage, index) => {
+    const stageRounds = rounds.filter((round) => round.stageId === stage.id);
+    return {
+      id: stage.id,
+      icon: stage.icon || "flag",
+      name: stage.name || `阶段 ${index + 1}`,
+      index,
+      count: stageRounds.length,
+      totalMs: stageRounds.reduce((sum, round) => sum + roundDuration(round), 0),
+    };
+  });
+  const unassignedRounds = rounds.filter((round) => !round.stageId || !stages.some((stage) => stage.id === round.stageId));
+  if (unassignedRounds.length > 0) {
+    stageStats.push({
+      id: "__unassigned",
+      icon: "info",
+      name: "未归属",
+      index: stageStats.length,
+      count: unassignedRounds.length,
+      totalMs: unassignedRounds.reduce((sum, round) => sum + roundDuration(round), 0),
+    });
+  }
+  const visibleRounds = stageFilter === "all"
+    ? rounds
+    : stageFilter === "__unassigned"
+      ? unassignedRounds
+      : rounds.filter((round) => round.stageId === stageFilter);
+
   // Aggregate per-role stats
   const roleStats: Record<string, { count: number; totalMs: number }> = {};
-  for (const r of rounds) {
-    const end = r.endedAt ? new Date(r.endedAt).getTime() : Date.now();
-    const dur = end - new Date(r.startedAt).getTime();
+  for (const r of visibleRounds) {
+    const dur = roundDuration(r);
     if (!roleStats[r.role]) roleStats[r.role] = { count: 0, totalMs: 0 };
     roleStats[r.role].count++;
     roleStats[r.role].totalMs += dur;
@@ -59,11 +131,11 @@ function TimerStatsPopover({ rounds }: { rounds: RoundRecord[] }) {
   const CANVAS_W = 300; // base canvas width
   const GAP_PX = 0; // no gap between merged segments
 
-  const starts = rounds.map((r) => new Date(r.startedAt).getTime());
-  const ends = rounds.map((r) => (r.endedAt ? new Date(r.endedAt).getTime() : Date.now()));
+  const starts = visibleRounds.map((r) => new Date(r.startedAt).getTime());
+  const ends = visibleRounds.map((r) => (r.endedAt ? new Date(r.endedAt).getTime() : Date.now()));
 
   // Build merged active segments (union of all round intervals)
-  const intervals = rounds.map((_r, i) => ({ s: starts[i], e: ends[i] }));
+  const intervals = visibleRounds.map((_r, i) => ({ s: starts[i], e: ends[i] }));
   intervals.sort((a, b) => a.s - b.s);
   const merged: { s: number; e: number }[] = [];
   for (const iv of intervals) {
@@ -76,7 +148,7 @@ function TimerStatsPopover({ rounds }: { rounds: RoundRecord[] }) {
 
   // Compact time mapping: total active ms determines canvas scale
   const totalActiveMs = merged.reduce((s, seg) => s + (seg.e - seg.s), 0) || 1;
-  const shortestDur = Math.max(1, Math.min(...rounds.map((_r, i) => ends[i] - starts[i])));
+  const shortestDur = visibleRounds.length > 0 ? Math.max(1, Math.min(...visibleRounds.map((_r, i) => ends[i] - starts[i]))) : 1;
   const totalGapPx = Math.max(0, (merged.length - 1) * GAP_PX);
   const pxPerMs = Math.max((CANVAS_W - totalGapPx) / totalActiveMs, MIN_BAR_W / shortestDur);
   const totalW = Math.ceil(totalActiveMs * pxPerMs + totalGapPx);
@@ -95,8 +167,8 @@ function TimerStatsPopover({ rounds }: { rounds: RoundRecord[] }) {
   };
 
   // Split into tracks & compute per-track average for dynamic height
-  const mainRounds = rounds.filter((r) => r.role !== "worker");
-  const workerRounds = rounds.filter((r) => r.role === "worker");
+  const mainRounds = visibleRounds.filter((r) => r.role !== "worker");
+  const workerRounds = visibleRounds.filter((r) => r.role === "worker");
 
   const avgDur = (arr: RoundRecord[]) => {
     if (arr.length === 0) return 1;
@@ -180,9 +252,29 @@ function TimerStatsPopover({ rounds }: { rounds: RoundRecord[] }) {
 
   return (
     <div className="timer-stats-popover">
+      {stageStats.length > 0 ? (
+        <div className="timer-stats-stage-strip">
+          <button className={`timer-stats-stage-chip${stageFilter === "all" ? " active" : ""}`} onClick={() => setStageFilter("all")}>
+            全部
+            <span>{formatDuration(stageStats.reduce((sum, stage) => sum + stage.totalMs, 0))}</span>
+          </button>
+          {stageStats.map((stage) => (
+            <button
+              key={stage.id}
+              className={`timer-stats-stage-chip${stageFilter === stage.id ? " active" : ""}`}
+              onClick={() => setStageFilter(stage.id)}
+            >
+              <Icon name={stage.icon} size={10} />
+              <span className="timer-stats-stage-chip-name">{stage.index + 1}. {stage.name}</span>
+              <span>{formatDuration(stage.totalMs)}</span>
+            </button>
+          ))}
+        </div>
+      ) : null}
+
       {/* Dual-track Gantt timeline */}
       <div className="timer-stats-dual" ref={timelineRef} onWheel={onWheel}>
-        {rounds.length === 0 ? (
+        {visibleRounds.length === 0 ? (
           <div className="timer-stats-empty">暂无回合记录</div>
         ) : (
           <div style={{ width: totalW, flexShrink: 0 }}>
@@ -320,7 +412,7 @@ function RunningTimer() {
         <Icon name="clock" size={10} />
         {display}
       </span>
-      <TimerStatsPopover rounds={rounds} />
+      <TimerStatsPopover rounds={rounds} stages={launcher?.blueprint.stages ?? []} />
     </span>
   );
 }
@@ -329,7 +421,20 @@ function RunningTimer() {
 function MLRARow2() {
   const launcher = useMLRAStore((s) => s.getActiveLauncher());
   const isActive = launcher?.status === "running" || launcher?.status === "paused" || launcher?.status === "awaiting-user";
-  const currentStageName = launcher?.blueprintRuntime?.currentStage?.name;
+  const runtime = launcher?.blueprintRuntime;
+  const fallbackStage = launcher?.blueprint.stages.find((stage) => stage.id === launcher.selectedStageId) ?? launcher?.blueprint.stages[0] ?? null;
+  const currentStage = runtime?.currentStage ?? fallbackStage;
+  const currentStageBlueprint = currentStage && launcher
+    ? launcher.blueprint.stages.find((stage) => stage.id === currentStage.id) ?? fallbackStage
+    : fallbackStage;
+  const currentStageIcon = currentStageBlueprint?.icon ?? "flag";
+  const currentStageIndex = runtime?.currentStage
+    ? runtime.currentStageIndex
+    : currentStage && launcher
+      ? launcher.blueprint.stages.findIndex((stage) => stage.id === currentStage.id)
+      : -1;
+  const totalStages = runtime?.totalStages || launcher?.blueprint.stages.length || 0;
+  const currentStageNo = totalStages > 0 && currentStageIndex >= 0 ? `${currentStageIndex + 1}/${totalStages}` : null;
 
   return (
     <div data-tauri-drag-region className="flex items-center gap-2 px-3" style={{ height: 26 }}>
@@ -342,7 +447,7 @@ function MLRARow2() {
       </button>
       {isActive && launcher && (
         <div className="mlra-control-mode-switcher">
-          {ORCHESTRATION_PRESETS.map(({ id, label, icon, policy }) => (
+          {ORCHESTRATION_PRESETS.map(({ id, label, description, icon, policy }) => (
             <button
               key={id}
               className={`mlra-control-mode-btn${launcher.orchestrationPolicy.preset === id ? " active" : ""}`}
@@ -351,27 +456,13 @@ function MLRARow2() {
                 useMLRAStore.getState().setOrchestrationPolicy(launcher.id, nextPolicy);
                 useMLRAStore.getState().daemonSetOrchestrationPolicy(nextPolicy);
               }}
-              title={label}
+              title={description}
             >
               <Icon name={icon} size={11} />
               {label}
             </button>
           ))}
         </div>
-      )}
-      {isActive && currentStageName && (
-        <span
-          style={{
-            fontSize: 11,
-            color: "var(--color-text-secondary)",
-            border: "1px solid var(--color-border)",
-            borderRadius: 999,
-            padding: "2px 8px",
-            background: "var(--color-surface-2)",
-          }}
-        >
-          阶段: {currentStageName}
-        </span>
       )}
       {isActive && launcher?.humanGate?.active && (
         <span
@@ -402,6 +493,16 @@ function MLRARow2() {
         </span>
       )}
       <div style={{ flex: 1 }} />
+      {isActive && currentStage && (
+        <span className="mlra-stage-indicator-wrapper">
+          <span className={`mlra-stage-indicator${currentStage.isClosing ? " closing" : ""}`}>
+            <Icon name={currentStageIcon} size={10} />
+            {currentStageNo ? <span className="mlra-stage-indicator-index">{currentStageNo}</span> : null}
+            <span className="mlra-stage-indicator-name">{currentStage.name}</span>
+          </span>
+          <StageFlowPopover stages={launcher?.blueprint.stages ?? []} currentStageId={currentStage.id} />
+        </span>
+      )}
       {isActive && <RunningTimer />}
     </div>
   );

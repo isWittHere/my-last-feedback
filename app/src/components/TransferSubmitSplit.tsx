@@ -161,7 +161,7 @@ export function TransferSubmitSplit(props: TransferSubmitSplitProps) {
             cursor: submitting ? "not-allowed" : "pointer",
           }}
         >
-          <Icon name="chevron-down" size={10} />
+          <Icon name="chevron-down" size={10} className="app-disclosure-icon" />
         </button>
       )}
 

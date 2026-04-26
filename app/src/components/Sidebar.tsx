@@ -43,7 +43,7 @@ function SessionGroup({
         className="session-group-header"
         onClick={() => setCollapsed(prev => !prev)}
       >
-        <Icon name="chevron-down" size={8} style={{ transition: "transform 0.15s", transform: collapsed ? "rotate(-90deg)" : "rotate(0deg)", flexShrink: 0 }} />
+        <Icon name="chevron-down" size={8} className="app-disclosure-icon" style={{ transform: collapsed ? "rotate(-90deg)" : "rotate(0deg)" }} />
         <span>{label}</span>
         <span className="session-group-count">{sessions.length}</span>
       </button>

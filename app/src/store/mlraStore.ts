@@ -245,6 +245,7 @@ export interface WorkerSlot {
 export interface RoundRecord {
   id: string;
   role: string;
+  stageId?: string | null;
   startedAt: string;
   endedAt: string | null;
 }
@@ -373,28 +374,28 @@ export const ORCHESTRATION_PRESETS: Array<{ id: OrchestrationPresetId; label: st
   {
     id: "autopilot",
     label: "全自动",
-    description: "主 agent handoff 与 CEO verdict 都自动释放。",
+    description: "Expert、Inspector 与 CEO 全部自动流转。适合低风险、目标明确、希望尽快完成的任务。",
     icon: "play",
     policy: { preset: "autopilot", expertSubmit: "auto", inspectorSubmit: "auto", ceoGateTrigger: "auto-to-ceo", ceoVerdict: "auto-release" },
   },
   {
     id: "ceo-review",
     label: "审核CEO",
-    description: "CEO 先审核，verdict 由人工确认后释放。",
+    description: "Expert 与 Inspector 自动流转，CEO 先做门控审核，审核结论再由人工确认释放。适合需要最终把关但不想频繁介入的任务。",
     icon: "eye",
     policy: { preset: "ceo-review", expertSubmit: "auto", inspectorSubmit: "auto", ceoGateTrigger: "auto-to-ceo", ceoVerdict: "user-review" },
   },
   {
     id: "ceo-user",
     label: "接管CEO",
-    description: "主 agent 自动流转，阶段门控由人工直接裁定。",
+    description: "Expert 与 Inspector 自动流转，阶段门控不交给 CEO 自动裁定，而由人工直接接管。适合关键节点需要你亲自判断的任务。",
     icon: "users",
     policy: { preset: "ceo-user", expertSubmit: "auto", inspectorSubmit: "auto", ceoGateTrigger: "user-replaces-ceo", ceoVerdict: "auto-release" },
   },
   {
     id: "full-review",
     label: "全面接管",
-    description: "每次主 agent handoff 与阶段门控都经过用户。",
+    description: "Expert、Inspector 的 handoff 与 CEO 阶段门控都需要人工确认。适合高风险、需要逐步审查和强控制的任务。",
     icon: "lock",
     policy: { preset: "full-review", expertSubmit: "user-review", inspectorSubmit: "user-review", ceoGateTrigger: "user-replaces-ceo", ceoVerdict: "auto-release" },
   },
@@ -1111,6 +1112,15 @@ export const useMLRAStore = create<MLRAState>((set, get) => ({
                 stageExitReadiness: state.stageExitReadiness || l.stageExitReadiness,
                 blueprintRuntime: state.blueprintRuntime || l.blueprintRuntime,
                 selectedStageId: state.blueprintRuntime?.currentStageId || l.selectedStageId,
+                roundHistory: Array.isArray(state.rounds)
+                  ? state.rounds.map((round: RoundRecord) => ({
+                      id: round.id,
+                      role: round.role,
+                      stageId: round.stageId ?? null,
+                      startedAt: round.startedAt,
+                      endedAt: round.endedAt ?? null,
+                    }))
+                  : l.roundHistory,
                 agents,
                 updatedAt: new Date().toISOString(),
               };
@@ -1141,14 +1151,14 @@ export const useMLRAStore = create<MLRAState>((set, get) => ({
         case "mlra_round_event": {
           const launcher = get().getActiveLauncher();
           if (!launcher || !msg.round) break;
-          const round = msg.round as { id: string; role: string; startedAt: string; endedAt: string | null };
+          const round = msg.round as { id: string; role: string; stageId?: string | null; startedAt: string; endedAt: string | null };
           if (msg.event === "start") {
             set((s) => ({
               launchers: s.launchers.map((l) => {
                 if (l.id !== launcher.id) return l;
                 const exists = l.roundHistory.some((r) => r.id === round.id);
                 if (exists) return l;
-                return { ...l, roundHistory: [...l.roundHistory, { id: round.id, role: round.role, startedAt: round.startedAt, endedAt: null }] };
+                return { ...l, roundHistory: [...l.roundHistory, { id: round.id, role: round.role, stageId: round.stageId ?? null, startedAt: round.startedAt, endedAt: null }] };
               }),
             }));
           } else if (msg.event === "end") {
@@ -1157,7 +1167,7 @@ export const useMLRAStore = create<MLRAState>((set, get) => ({
                 if (l.id !== launcher.id) return l;
                 return {
                   ...l,
-                  roundHistory: l.roundHistory.map((r) => (r.id === round.id ? { ...r, endedAt: round.endedAt || new Date().toISOString() } : r)),
+                  roundHistory: l.roundHistory.map((r) => (r.id === round.id ? { ...r, stageId: round.stageId ?? r.stageId ?? null, endedAt: round.endedAt || new Date().toISOString() } : r)),
                 };
               }),
             }));

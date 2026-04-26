@@ -13,6 +13,7 @@ import {
 import { StandbyPlaceholder } from "./StandbyPlaceholder";
 import { MLRARoleIcon } from "./MLRARoleIcon";
 import { Icon } from "./Icons";
+import { AppSelect, type AppSelectOption } from "./AppSelect";
 
 interface AgentColumnProps {
   role: "expert" | "inspector" | "ceo";
@@ -43,15 +44,15 @@ const STATUS_LABELS: Record<string, string> = {
   broken: "断线",
 };
 
-const SUBMIT_POLICY_OPTIONS: Array<{ value: SubmitReleasePolicy; label: string }> = [
-  { value: "auto", label: "自动" },
-  { value: "user-review", label: "人工" },
+const SUBMIT_POLICY_OPTIONS: Array<AppSelectOption<SubmitReleasePolicy>> = [
+  { value: "auto", label: "自动", icon: "play", description: "该角色完成提交后自动释放给下一环节。" },
+  { value: "user-review", label: "人工", icon: "users", description: "该角色提交后先阻塞，等待人工确认、编辑或退回。" },
 ];
 
-const CEO_POLICY_OPTIONS: Array<{ value: CeoGateMode; label: string }> = [
-  { value: "auto", label: "自动" },
-  { value: "user", label: "人工" },
-  { value: "review", label: "半自动" },
+const CEO_POLICY_OPTIONS: Array<AppSelectOption<CeoGateMode>> = [
+  { value: "auto", label: "自动", icon: "play", description: "CEO 自动审核并自动释放 verdict。" },
+  { value: "user", label: "人工", icon: "users", description: "跳过 CEO 自动裁定，由人工直接完成阶段门控。" },
+  { value: "review", label: "半自动", icon: "eye", description: "CEO 先产出 verdict，再由人工确认后释放。" },
 ];
 
 function AgentPolicySelect({ role }: { role: "expert" | "inspector" | "ceo" }) {
@@ -81,17 +82,13 @@ function AgentPolicySelect({ role }: { role: "expert" | "inspector" | "ceo" }) {
   };
 
   return (
-    <select
+    <AppSelect
       className="agent-column-policy-select"
       value={value}
-      onChange={(event) => handleChange(event.target.value)}
-      aria-label={`${ROLE_LABELS[role]} 自动程度`}
-      title={`${ROLE_LABELS[role]} 自动程度`}
-    >
-      {options.map((option) => (
-        <option key={option.value} value={option.value}>{option.label}</option>
-      ))}
-    </select>
+      options={options}
+      onChange={handleChange}
+      ariaLabel={`${ROLE_LABELS[role]} 自动程度`}
+    />
   );
 }
 

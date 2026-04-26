@@ -5,6 +5,7 @@ import { getCurrentWindow } from "@tauri-apps/api/window";
 import { useFeedbackStore } from "./store/feedbackStore";
 import { useMLRAStore } from "./store/mlraStore";
 import { FeedbackApp } from "./components/FeedbackApp";
+import { AppTooltipProvider } from "./components/AppTooltip";
 import type { Session } from "./store/feedbackStore";
 
 /** Read notification settings from localStorage */
@@ -223,7 +224,11 @@ function App() {
     };
   }, []);
 
-  return <FeedbackApp />;
+  return (
+    <AppTooltipProvider>
+      <FeedbackApp />
+    </AppTooltipProvider>
+  );
 }
 
 export default App;

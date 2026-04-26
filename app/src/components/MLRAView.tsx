@@ -3,6 +3,8 @@ import { useMLRAStore, type HumanGateState } from "../store/mlraStore";
 import { LauncherHome } from "./LauncherHome";
 import { LauncherSidebar } from "./LauncherSidebar";
 import { AgentColumn } from "./AgentColumn";
+import { AppSelect } from "./AppSelect";
+import { Icon } from "./Icons";
 
 type MainAgentRole = "expert" | "inspector" | "ceo";
 
@@ -14,6 +16,12 @@ const HUMAN_GATE_KIND_LABELS: Record<HumanGateState["kind"], string> = {
   ceo_verdict_review: "CEO verdict 确认",
   closing_feedback: "结束反馈",
 };
+
+const VERDICT_OPTIONS = [
+  { value: "approved", label: "approved" },
+  { value: "rejected", label: "rejected" },
+  { value: "arbitration", label: "arbitration" },
+];
 
 function HumanGatePanel({ gate }: { gate: HumanGateState }) {
   const daemonApproveHumanGate = useMLRAStore((s) => s.daemonApproveHumanGate);
@@ -49,11 +57,13 @@ function HumanGatePanel({ gate }: { gate: HumanGateState }) {
         <div className="mlra-human-gate-verdict-grid">
           <label className="mlra-human-gate-field">
             <span>Verdict</span>
-            <select value={verdict} onChange={(event) => setVerdict(event.target.value)}>
-              <option value="approved">approved</option>
-              <option value="rejected">rejected</option>
-              <option value="arbitration">arbitration</option>
-            </select>
+            <AppSelect
+              className="mlra-human-gate-select"
+              value={verdict}
+              options={VERDICT_OPTIONS}
+              onChange={setVerdict}
+              ariaLabel="Verdict"
+            />
           </label>
           <label className="mlra-human-gate-field mlra-human-gate-field-wide">
             <span>Reason</span>
@@ -85,7 +95,10 @@ function HumanGatePanel({ gate }: { gate: HumanGateState }) {
       )}
 
       <details className="mlra-human-gate-original">
-        <summary>原始内容</summary>
+        <summary>
+          <Icon name="chevron-down" size={11} className="app-disclosure-icon mlra-human-gate-summary-icon" />
+          <span>原始内容</span>
+        </summary>
         <pre>{gate.originalContent || "(空)"}</pre>
       </details>
 

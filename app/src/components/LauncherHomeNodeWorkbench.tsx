@@ -176,11 +176,15 @@ function InspectorTabButton({
 function PolicyOptionButton<T extends string>({
   active,
   label,
+  description,
+  icon,
   value,
   onSelect,
 }: {
   active: boolean;
   label: string;
+  description?: string;
+  icon?: string;
   value: T;
   onSelect: (value: T) => void;
 }) {
@@ -188,9 +192,11 @@ function PolicyOptionButton<T extends string>({
     <button
       type="button"
       className={`mlra-policy-option${active ? " active" : ""}`}
+      title={description || label}
       onClick={() => onSelect(value)}
     >
-      {label}
+      {icon ? <Icon name={icon} size={12} /> : null}
+      <span className="mlra-policy-option-label">{label}</span>
     </button>
   );
 }
@@ -203,7 +209,7 @@ function PolicyControlRow<T extends string>({
 }: {
   label: string;
   value: T;
-  options: Array<{ value: T; label: string }>;
+  options: Array<{ value: T; label: string; description?: string; icon?: string }>;
   onChange: (value: T) => void;
 }) {
   return (
@@ -215,6 +221,8 @@ function PolicyControlRow<T extends string>({
             key={option.value}
             active={option.value === value}
             label={option.label}
+            description={option.description}
+            icon={option.icon}
             value={option.value}
             onSelect={onChange}
           />
@@ -273,7 +281,7 @@ function CustomSelect<T extends string>({
             {currentOption?.icon ? <Icon name={currentOption.icon} size={13} /> : null}
             {currentOption?.label ?? "—"}
           </span>
-          <Icon name="chevron-down" size={11} />
+          <Icon name="chevron-down" size={11} className="app-disclosure-icon" />
         </button>
       )}
       {open && (
@@ -824,19 +832,29 @@ export function LauncherHome({ launcher }: LauncherHomeProps) {
                     <PolicyControlRow
                       label="Expert submit"
                       value={currentOrchestrationPolicy.expertSubmit}
-                      options={[{ value: "auto", label: "自动" }, { value: "user-review", label: "人工" }]}
+                      options={[
+                        { value: "auto", label: "自动", icon: "play", description: "Expert 提交后自动进入下一环节。" },
+                        { value: "user-review", label: "人工", icon: "users", description: "Expert 提交后等待人工确认、编辑或退回。" },
+                      ]}
                       onChange={(value) => updateSubmitPolicy("expertSubmit", value)}
                     />
                     <PolicyControlRow
                       label="Inspector submit"
                       value={currentOrchestrationPolicy.inspectorSubmit}
-                      options={[{ value: "auto", label: "自动" }, { value: "user-review", label: "人工" }]}
+                      options={[
+                        { value: "auto", label: "自动", icon: "play", description: "Inspector 提交后自动进入下一环节。" },
+                        { value: "user-review", label: "人工", icon: "users", description: "Inspector 提交后等待人工确认、编辑或退回。" },
+                      ]}
                       onChange={(value) => updateSubmitPolicy("inspectorSubmit", value)}
                     />
                     <PolicyControlRow
                       label="CEO gate"
                       value={getCeoGateMode(currentOrchestrationPolicy)}
-                      options={[{ value: "auto", label: "自动" }, { value: "user", label: "人工" }, { value: "review", label: "半自动" }]}
+                      options={[
+                        { value: "auto", label: "自动", icon: "play", description: "CEO 自动审核并自动释放 verdict。" },
+                        { value: "user", label: "人工", icon: "users", description: "阶段门控由人工直接裁定，不等待 CEO 自动 verdict。" },
+                        { value: "review", label: "半自动", icon: "eye", description: "CEO 先审核，verdict 再由人工确认后释放。" },
+                      ]}
                       onChange={updateCeoPolicy}
                     />
                   </div>
