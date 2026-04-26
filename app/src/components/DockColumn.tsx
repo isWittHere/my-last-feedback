@@ -210,10 +210,11 @@ export function DockColumn({ columnId }: { columnId: DockColumnId }) {
   const renderTab = (tabId: DockTabId) => {
     const isActive = column.activeTabId === tabId;
     const label = dockTabLabel(tabId, t);
+    const showFullLabel = column.tabIds.length === 1;
     return (
       <div
         key={tabId}
-        className={`dock-tab-drag-host${draggingDockTab?.tabId === tabId ? " dock-tab-dragging" : ""}`}
+        className={`dock-tab-drag-host${showFullLabel ? " full-label" : ""}${draggingDockTab?.tabId === tabId ? " dock-tab-dragging" : ""}`}
         onPointerDown={(event) => handleTabPointerDown(event, tabId)}
         onPointerMove={handleTabPointerMove}
         onPointerUp={handleTabPointerUp}
@@ -222,7 +223,7 @@ export function DockColumn({ columnId }: { columnId: DockColumnId }) {
         <button
           type="button"
           draggable={false}
-          className={`mlc-panel-icon-tab${isActive ? " active" : ""}`}
+          className={`mlc-panel-icon-tab${showFullLabel ? " full-label" : ""}${isActive ? " active" : ""}`}
           role="tab"
           aria-selected={isActive}
           aria-label={label}
@@ -233,7 +234,8 @@ export function DockColumn({ columnId }: { columnId: DockColumnId }) {
           onContextMenu={(event) => handleTabContextMenu(event, tabId)}
         >
           {dockTabIcon(tabId)}
-          <span className="mlc-panel-tab-hover-tip" role="tooltip">{label}</span>
+          {showFullLabel ? <span className="mlc-panel-tab-label">{label}</span> : null}
+          {!showFullLabel ? <span className="mlc-panel-tab-hover-tip" role="tooltip">{label}</span> : null}
         </button>
       </div>
     );

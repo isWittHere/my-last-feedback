@@ -1,7 +1,6 @@
 import { useCallback, useEffect, useMemo, useRef, useState, type CSSProperties } from "react";
 import { useTranslation } from "react-i18next";
 import { invoke } from "@tauri-apps/api/core";
-import { openPath } from "@tauri-apps/plugin-opener";
 import { useFeedbackStore, type MlcAttachment } from "../store/feedbackStore";
 import { Icon, MlcLogoIcon } from "./Icons";
 import { MarkdownHeadingNav, parseMarkdownHeadings } from "./MarkdownHeadingNav";
@@ -91,11 +90,6 @@ export function MlcPreviewPanel() {
     return () => container.removeEventListener("scroll", onScroll);
   }, [headings]);
 
-  const handleOpen = useCallback(() => {
-    if (!selectedDocument) return;
-    openPath(selectedDocument.filePath).catch(() => navigator.clipboard.writeText(selectedDocument.filePath));
-  }, [selectedDocument]);
-
   const handleCopyPath = useCallback(() => {
     if (selectedDocument) navigator.clipboard.writeText(cleanDisplayPath(selectedDocument.filePath));
   }, [selectedDocument]);
@@ -143,7 +137,6 @@ export function MlcPreviewPanel() {
           </div>
         </div>
         <div className="mlc-preview-actions">
-          <button type="button" onClick={handleOpen} title={t("mlc.open", "Open")}> <Icon name="file-text" size={13} /> </button>
           <button type="button" onClick={handleCopyPath} title={t("mlc.copyPath", "Copy link")}> <Icon name="copy" size={13} /> </button>
           <button type="button" onClick={handleAttach} disabled={!focusedComposer} title={t("mlc.insertToChat", "Insert to chat")}> <Icon name="arrow-bend-down-right" size={13} /> </button>
           <button type="button" onClick={loadDocument} title={t("mlcPreview.refresh", "Refresh")}> <Icon name="spinner" size={13} /> </button>

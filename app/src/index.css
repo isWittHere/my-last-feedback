@@ -1688,8 +1688,12 @@ body,
 .dock-tab-drag-host {
   align-self: stretch;
   display: inline-flex;
+  min-width: 0;
   touch-action: none;
   user-select: none;
+}
+.dock-tab-drag-host.full-label {
+  max-width: 100%;
 }
 .dock-tab-drag-host.dock-tab-dragging,
 .dock-tab-drag-host.dock-tab-dragging .mlc-panel-icon-tab {
@@ -1709,6 +1713,21 @@ body,
   color: var(--color-text-muted);
   cursor: pointer;
   transition: color 0.15s ease, opacity 0.15s ease;
+}
+.mlc-panel-icon-tab.full-label {
+  width: auto;
+  max-width: 100%;
+  gap: 6px;
+  justify-content: flex-start;
+  padding: 0 8px;
+}
+.mlc-panel-tab-label {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  font-size: 12px;
+  line-height: 1;
 }
 .mlc-panel-icon-tab:hover,
 .mlc-panel-icon-tab.active {
@@ -2039,8 +2058,13 @@ body,
   cursor: pointer;
   transition: background 0.1s ease, color 0.1s ease;
 }
-.mlc-group-header:hover {
-  background: var(--color-bg-card);
+.mlc-group-header:hover,
+.mlc-group-header:focus-visible {
+  background: color-mix(in srgb, var(--color-bg-elevated) 70%, transparent);
+  color: var(--color-text-primary);
+}
+.mlc-group-header:hover .mlc-group-count,
+.mlc-group-header:focus-visible .mlc-group-count {
   color: var(--color-text-primary);
 }
 .mlc-group-header svg {
@@ -2077,9 +2101,11 @@ body,
   min-height: 28px;
   padding: 4px 6px;
 }
-.mlc-doc-item:hover {
-  background: var(--color-bg-card);
-  border-color: var(--color-border-subtle);
+.mlc-doc-item:hover,
+.mlc-doc-item:focus-within {
+  background: color-mix(in srgb, var(--color-bg-elevated) 70%, transparent);
+  color: var(--color-text-primary);
+  border-color: transparent;
 }
 .mlc-doc-item.selected {
   background: color-mix(in srgb, var(--color-primary) 10%, var(--color-bg-card));
@@ -2096,10 +2122,10 @@ body,
 }
 .mlc-doc-item.compact:hover .mlc-doc-content,
 .mlc-doc-item.compact:focus-within .mlc-doc-content {
-  padding-right: 96px;
+  padding-right: 78px;
 }
 .mlc-doc-title {
-  color: color-mix(in srgb, var(--color-text-primary) 84%, var(--color-text-muted));
+  color: var(--color-text-secondary);
   font-size: 13px;
   font-weight: 400;
   line-height: 1.35;
@@ -2108,9 +2134,9 @@ body,
   white-space: nowrap;
   cursor: pointer;
 }
-.mlc-doc-title:hover {
-  color: var(--color-primary);
-  text-decoration: underline;
+.mlc-doc-item:hover .mlc-doc-title,
+.mlc-doc-item:focus-within .mlc-doc-title {
+  color: var(--color-text-primary);
 }
 .mlc-doc-desc {
   margin-top: 2px;
@@ -2176,7 +2202,7 @@ body,
   pointer-events: none;
   transition: opacity 0.12s ease;
   padding-left: 10px;
-  background: linear-gradient(90deg, transparent, var(--color-bg-card) 18%);
+  background: linear-gradient(90deg, transparent, color-mix(in srgb, var(--color-bg-elevated) 70%, transparent) 18%);
 }
 .mlc-doc-item.compact:hover .mlc-doc-actions,
 .mlc-doc-item.compact .mlc-doc-actions:focus-within {

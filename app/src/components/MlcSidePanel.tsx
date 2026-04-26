@@ -1,7 +1,6 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { useTranslation } from "react-i18next";
 import { invoke } from "@tauri-apps/api/core";
-import { openPath } from "@tauri-apps/plugin-opener";
 import { useFeedbackStore, type MlcAttachment, type SelectedMlcDocument } from "../store/feedbackStore";
 import { AppSelect, type AppSelectOption } from "./AppSelect";
 import { Icon, MlcLogoIcon } from "./Icons";
@@ -234,10 +233,6 @@ export function MlcSidePanel() {
     else if (focusedComposer.sessionId) addSessionMlcAttachment(focusedComposer.sessionId, attachment);
   }, [addQueuedDraftMlcAttachment, addSessionMlcAttachment, focusedComposer]);
 
-  const handleOpen = useCallback((filePath: string) => {
-    openPath(filePath).catch(() => navigator.clipboard.writeText(filePath));
-  }, []);
-
   const handleSelectDocument = useCallback((document: MlcDocument) => {
     setSelectedMlcDocument(toSelectedDocument(document));
     openDockTab("mlcPreview", "leftPage");
@@ -347,9 +342,6 @@ export function MlcSidePanel() {
 
   const renderDocumentActions = (document: MlcDocument) => (
     <div className="mlc-doc-actions">
-      <button className="mlc-doc-action-open" onClick={(event) => { event.stopPropagation(); handleOpen(document.filePath); }} title={t("mlc.open", "Open")}> 
-        <Icon name="file-text" size={12} />
-      </button>
       <button className="mlc-doc-action-del" onClick={(event) => { event.stopPropagation(); handleDelete(document); }} title={t("mlc.delete", "Delete")}>
         <Icon name="trash" size={12} />
       </button>
