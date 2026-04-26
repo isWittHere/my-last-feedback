@@ -70,8 +70,11 @@ export function LauncherSidebar({ onClose }: LauncherSidebarProps) {
       <div className="launcher-sidebar">
         {/* Header */}
         <div className="launcher-sidebar-header">
-          <span className="launcher-sidebar-title">Launcher 管理</span>
-          <button onClick={onClose} className="titlebar-btn" style={{ width: 24, height: 24 }}>
+          <span className="launcher-sidebar-title">
+            <Icon name="sidebar" size={13} />
+            Launcher 管理
+          </span>
+          <button onClick={onClose} className="settings-close-btn">
             <Icon name="win-close" size={10} />
           </button>
         </div>
@@ -83,8 +86,7 @@ export function LauncherSidebar({ onClose }: LauncherSidebarProps) {
             placeholder="搜索..."
             value={searchQuery}
             onChange={(e) => setSearchQuery(e.target.value)}
-            className="mlra-home-input"
-            style={{ fontSize: 12, padding: "4px 8px" }}
+            className="launcher-sidebar-input"
           />
         </div>
 
@@ -117,22 +119,22 @@ export function LauncherSidebar({ onClose }: LauncherSidebarProps) {
                 value={newName}
                 onChange={(e) => setNewName(e.target.value)}
                 onKeyDown={(e) => e.key === "Enter" && handleCreate()}
-                className="mlra-home-input"
-                style={{ fontSize: 12, padding: "4px 8px" }}
+                className="launcher-sidebar-input"
                 autoFocus
               />
-              <div className="flex gap-1 mt-1">
-                <button className="btn btn-primary" style={{ fontSize: 11, padding: "3px 8px" }} onClick={handleCreate} disabled={!newName.trim()}>
+              <div className="launcher-sidebar-create-actions">
+                <button className="btn btn-primary" onClick={handleCreate} disabled={!newName.trim()}>
                   创建
                 </button>
-                <button className="btn" style={{ fontSize: 11, padding: "3px 8px" }} onClick={() => setShowCreate(false)}>
+                <button className="btn" onClick={() => setShowCreate(false)}>
                   取消
                 </button>
               </div>
             </div>
           ) : (
             <button className="btn launcher-sidebar-create-btn" onClick={() => setShowCreate(true)}>
-              + 新建 Launcher
+              <Icon name="plus" size={12} />
+              新建 Launcher
             </button>
           )}
         </div>

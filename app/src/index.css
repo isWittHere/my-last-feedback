@@ -4902,7 +4902,7 @@ button.mlra-inspector-gate-pill {
 .launcher-sidebar-overlay {
   position: absolute;
   inset: 0;
-  background: rgba(0, 0, 0, 0.35);
+  background: rgba(0, 0, 0, 0.45);
   z-index: 90;
   animation: mlra-fade-in 0.15s ease-out;
 }
@@ -4915,15 +4915,15 @@ button.mlra-inspector-gate-pill {
   top: 0;
   left: 0;
   bottom: 0;
-  width: 320px;
-  max-width: 85%;
-  background: var(--color-bg-card);
-  border-right: 1px solid var(--color-border);
+  width: 336px;
+  max-width: min(90vw, 360px);
+  background: var(--color-bg-surface);
+  border-right: 1px solid var(--color-border-subtle);
   z-index: 91;
   display: flex;
   flex-direction: column;
   animation: mlra-slide-in 0.2s ease-out;
-  box-shadow: 4px 0 16px rgba(0, 0, 0, 0.15);
+  box-shadow: 0 8px 32px rgba(0, 0, 0, 0.35);
 }
 @keyframes mlra-slide-in {
   from { transform: translateX(-100%); }
@@ -4933,24 +4933,45 @@ button.mlra-inspector-gate-pill {
   display: flex;
   align-items: center;
   justify-content: space-between;
-  padding: 12px 14px;
-  border-bottom: 1px solid var(--color-border);
+  min-height: 42px;
+  padding: 8px 12px;
+  border-bottom: 1px solid var(--color-border-subtle);
   flex-shrink: 0;
 }
 .launcher-sidebar-title {
+  display: inline-flex;
+  align-items: center;
+  gap: 7px;
   font-size: 13px;
   font-weight: 600;
   color: var(--color-text-primary);
 }
 .launcher-sidebar-search {
-  padding: 8px 14px;
+  padding: 8px 10px;
+  border-bottom: 1px solid var(--color-border-subtle);
   flex-shrink: 0;
+}
+.launcher-sidebar-input {
+  width: 100%;
+  padding: 6px 8px;
+  border: 1px solid var(--color-border);
+  border-radius: 5px;
+  background: var(--color-bg-base);
+  color: var(--color-text-primary);
+  font-size: 12px;
+  outline: none;
+}
+.launcher-sidebar-input:focus {
+  border-color: var(--color-accent);
+}
+.launcher-sidebar-input::placeholder {
+  color: var(--color-text-muted);
 }
 .launcher-sidebar-list {
   flex: 1;
   min-height: 0;
   overflow-y: auto;
-  padding: 4px 8px;
+  padding: 8px;
 }
 .launcher-sidebar-empty {
   display: flex;
@@ -4962,18 +4983,29 @@ button.mlra-inspector-gate-pill {
 }
 .launcher-sidebar-footer {
   flex-shrink: 0;
-  padding: 12px 14px;
-  border-top: 1px solid var(--color-border);
+  padding: 10px;
+  border-top: 1px solid var(--color-border-subtle);
 }
 .launcher-sidebar-create-btn {
   width: 100%;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 6px;
   font-size: 12px;
-  text-align: center;
 }
 .launcher-sidebar-create-form {
   display: flex;
   flex-direction: column;
-  gap: 4px;
+  gap: 6px;
+}
+.launcher-sidebar-create-actions {
+  display: flex;
+  gap: 6px;
+}
+.launcher-sidebar-create-actions .btn {
+  font-size: 11px;
+  padding: 4px 9px;
 }
 
 /* Sidebar item */
@@ -4981,37 +5013,54 @@ button.mlra-inspector-gate-pill {
   display: flex;
   flex-direction: column;
   gap: 4px;
-  padding: 10px 12px;
-  border-radius: var(--radius);
+  padding: 8px 10px;
+  border: 1px solid transparent;
+  border-radius: 6px;
+  background: transparent;
   cursor: pointer;
-  transition: background 0.12s;
+  transition: background 0.12s, border-color 0.12s;
   position: relative;
 }
 .launcher-sidebar-item:hover {
-  background: rgba(255, 255, 255, 0.04);
+  background: var(--color-bg-base);
 }
 .launcher-sidebar-item-active {
-  background: rgba(77, 182, 172, 0.08);
-  border: 1px solid rgba(77, 182, 172, 0.2);
+  background: color-mix(in srgb, var(--color-primary) 10%, var(--color-bg-base));
+  border-color: color-mix(in srgb, var(--color-primary) 30%, var(--color-border));
 }
 .launcher-sidebar-item-name {
   display: flex;
   align-items: center;
   gap: 6px;
+  min-width: 0;
   font-size: 12px;
   font-weight: 600;
   color: var(--color-text-primary);
 }
+.launcher-sidebar-item-name > span:last-child {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
 .launcher-sidebar-item-indicator {
-  font-size: 8px;
+  width: 16px;
+  height: 16px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  flex: 0 0 auto;
+  border-radius: 4px;
+  background: var(--color-bg-base);
   color: var(--color-text-muted);
 }
 .launcher-sidebar-item-indicator.active {
-  color: var(--color-accent);
+  background: color-mix(in srgb, var(--color-primary) 18%, var(--color-bg-base));
+  color: var(--color-primary);
 }
 .launcher-sidebar-item-meta {
   display: flex;
   align-items: center;
+  flex-wrap: wrap;
   gap: 4px;
   font-size: 10px;
   color: var(--color-text-muted);
@@ -5039,31 +5088,17 @@ button.mlra-inspector-gate-pill {
   position: absolute;
   right: 8px;
   top: 8px;
-  background: var(--color-bg-card);
+  background: var(--color-bg-surface);
   border: 1px solid var(--color-border);
-  border-radius: var(--radius);
-  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.15);
+  border-radius: 6px;
+  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.3);
   z-index: 10;
-}
-.launcher-sidebar-item-menu button {
-  display: block;
-  width: 100%;
-  padding: 6px 16px;
-  text-align: left;
-  border: none;
-  background: transparent;
-  color: #EF4444;
-  font-size: 11px;
-  cursor: pointer;
-  border-radius: var(--radius);
-}
-.launcher-sidebar-item-menu button:hover {
-  background: rgba(239, 68, 68, 0.08);
+  overflow: hidden;
 }
 
 /* ── Light theme overrides for MLRA ── */
 [data-theme="light"] .launcher-sidebar-item:hover {
-  background: rgba(0, 0, 0, 0.03);
+  background: var(--color-bg-base);
 }
 [data-theme="light"] .launcher-sidebar-overlay {
   background: rgba(0, 0, 0, 0.18);
