@@ -1,6 +1,6 @@
 import { create } from "zustand";
 import { invoke } from "@tauri-apps/api/core";
-import { useFeedbackStore, type PickedElement, type WebAttachment, type WebConsoleEntry } from "./feedbackStore";
+import { useFeedbackStore, type ElementScreenshotRef, type ImageAttachment, type PickedElement, type WebAttachment, type WebConsoleEntry } from "./feedbackStore";
 
 export type PreviewLoadStatus = "idle" | "loading" | "loaded" | "error";
 export type PreviewPickerMode = "off" | "arming" | "active";
@@ -38,6 +38,7 @@ interface PreviewTabPayload {
 
 interface PreviewBrowserState {
   tabs: PreviewBrowserTab[];
+  boundsByTab: Record<string, PreviewBounds>;
   activeTabId: string | null;
   pickerMode: PreviewPickerMode;
   inspectorMode: PreviewInspectorMode;
@@ -54,6 +55,7 @@ interface PreviewBrowserState {
   startPicker: (tabId: string) => Promise<void>;
   stopPicker: (tabId: string) => Promise<void>;
   clearConsole: (tabId: string) => void;
+  captureElementScreenshot: (tabId: string, element: PickedElement) => Promise<void>;
   setInspectorMode: (mode: PreviewInspectorMode) => void;
   setConsoleFilter: (filter: "all" | "warnings-errors" | "errors") => void;
   handleTabUpdated: (payload: Partial<PreviewBrowserTab> & { id: string }) => void;
@@ -103,8 +105,22 @@ function addAttachmentToFocusedTarget(attachment: WebAttachment): boolean {
   return true;
 }
 
+function addImageToFocusedTarget(image: ImageAttachment): boolean {
+  const feedback = useFeedbackStore.getState();
+  const target = feedback.focusedComposer;
+  if (!target) return false;
+  if (target.kind === "queuedDraft") {
+    feedback.addQueuedDraftImage(target.callerId, image);
+    return true;
+  }
+  if (!target.sessionId) return false;
+  feedback.addSessionImage(target.sessionId, image);
+  return true;
+}
+
 export const usePreviewBrowserStore = create<PreviewBrowserState>((set, get) => ({
   tabs: [],
+  boundsByTab: {},
   activeTabId: null,
   pickerMode: "off",
   inspectorMode: "selected",
@@ -125,7 +141,9 @@ export const usePreviewBrowserStore = create<PreviewBrowserState>((set, get) => 
       const activeTabId = state.activeTabId === tabId
         ? (tabs[Math.min(index, tabs.length - 1)]?.id || tabs[tabs.length - 1]?.id || null)
         : state.activeTabId;
-      return { tabs, activeTabId };
+      const boundsByTab = { ...state.boundsByTab };
+      delete boundsByTab[tabId];
+      return { tabs, activeTabId, boundsByTab };
     });
   },
 
@@ -139,7 +157,10 @@ export const usePreviewBrowserStore = create<PreviewBrowserState>((set, get) => 
   reload: async (tabId) => { await invoke("preview_reload", { tabId }); },
   goBack: async (tabId) => { await invoke("preview_go_back", { tabId }); },
   goForward: async (tabId) => { await invoke("preview_go_forward", { tabId }); },
-  setBounds: async (tabId, bounds, visible) => { await invoke("preview_set_bounds", { tabId, bounds, visible }); },
+  setBounds: async (tabId, bounds, visible) => {
+    await invoke("preview_set_bounds", { tabId, bounds, visible });
+    set((state) => ({ boundsByTab: { ...state.boundsByTab, [tabId]: bounds } }));
+  },
   hideTab: async (tabId) => { await invoke("preview_hide_tab", { tabId }); },
 
   startPicker: async (tabId) => {
@@ -153,6 +174,44 @@ export const usePreviewBrowserStore = create<PreviewBrowserState>((set, get) => 
   },
 
   clearConsole: (tabId) => set((state) => ({ tabs: updateTab(state.tabs, tabId, { consoleEntries: [] }) })),
+  captureElementScreenshot: async (tabId, element) => {
+    if (!element.rect) return;
+    const bounds = get().boundsByTab[tabId];
+    if (!bounds) return;
+    try {
+      const screenshot = await invoke<ElementScreenshotRef>("preview_capture_element", {
+        request: {
+          tabId,
+          rect: element.rect,
+          bounds,
+          devicePixelRatio: window.devicePixelRatio || 1,
+        },
+      });
+      set((state) => ({
+        tabs: state.tabs.map((item) => item.id === tabId && item.selectedElement
+          ? { ...item, selectedElement: { ...item.selectedElement, screenshot }, updatedAt: new Date().toISOString() }
+          : item),
+      }));
+    } catch (error) {
+      const screenshot: ElementScreenshotRef = {
+        id: `element-shot-failed-${Date.now()}`,
+        kind: "element",
+        mimeType: "image/png",
+        width: 0,
+        height: 0,
+        devicePixelRatio: window.devicePixelRatio || 1,
+        rect: element.rect,
+        capturedAt: new Date().toISOString(),
+        status: "failed",
+        error: error instanceof Error ? error.message : String(error),
+      };
+      set((state) => ({
+        tabs: state.tabs.map((item) => item.id === tabId && item.selectedElement
+          ? { ...item, selectedElement: { ...item.selectedElement, screenshot }, updatedAt: new Date().toISOString() }
+          : item),
+      }));
+    }
+  },
   setInspectorMode: (inspectorMode) => set({ inspectorMode }),
   setConsoleFilter: (consoleFilter) => set({ consoleFilter }),
 
@@ -182,6 +241,7 @@ export const usePreviewBrowserStore = create<PreviewBrowserState>((set, get) => 
 
   handleElementPicked: ({ tabId, element }) => {
     set((state) => ({ tabs: updateTab(state.tabs, tabId, { selectedElement: element }), pickerMode: "off", inspectorMode: "selected" }));
+    void get().captureElementScreenshot(tabId, element);
   },
 
   handleConsoleEntry: ({ tabId, entry }) => {
@@ -203,7 +263,17 @@ export const usePreviewBrowserStore = create<PreviewBrowserState>((set, get) => 
       capturedAt: new Date().toISOString(),
       element: tab.selectedElement,
     };
-    return addAttachmentToFocusedTarget(attachment);
+    const attached = addAttachmentToFocusedTarget(attachment);
+    const screenshot = tab.selectedElement.screenshot;
+    if (attached && screenshot?.status === "ready" && screenshot.filePath && screenshot.dataUrl) {
+      addImageToFocusedTarget({
+        path: screenshot.filePath,
+        name: screenshot.fileName || "element-screenshot.png",
+        sizeKB: screenshot.sizeKB || 0,
+        dataUrl: screenshot.dataUrl,
+      });
+    }
+    return attached;
   },
 
   attachConsoleSnapshot: (tabId) => {

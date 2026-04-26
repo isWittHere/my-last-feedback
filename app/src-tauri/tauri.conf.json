@@ -28,7 +28,11 @@
       }
     ],
     "security": {
-      "csp": null
+      "csp": null,
+      "assetProtocol": {
+        "enable": true,
+        "scope": ["$TEMP/my-last-feedback/preview-screenshots/**"]
+      }
     }
   },
   "bundle": {

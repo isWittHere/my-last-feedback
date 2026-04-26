@@ -221,6 +221,7 @@
   },
   "previewBrowser": {
     "title": "Preview Browser",
+    "infoTitle": "Preview Info",
     "button": "Preview",
     "openPanel": "Open preview browser",
     "tabs": "Browser tabs",
@@ -242,6 +243,7 @@
     "targetReady": "Target ready",
     "attachElement": "Attach element",
     "attachConsole": "Attach console",
+    "screenshotUnavailable": "Screenshot unavailable",
     "pickerArming": "Starting picker...",
     "pickHint": "Click an element in the page",
     "noSelection": "No element selected",

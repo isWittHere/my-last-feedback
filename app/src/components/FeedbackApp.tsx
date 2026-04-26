@@ -6,6 +6,7 @@ import { CallerPanel } from "./CallerPanel";
 import { SettingsDialog } from "./SettingsDialog";
 import { WelcomeHome } from "./WelcomeHome";
 import { DockColumn } from "./DockColumn";
+import { PreviewBrowserEventBridge } from "./PreviewBrowserEventBridge";
 import { MLRAView } from "./MLRAView";
 import { MLRACallerTabs } from "./MLRACallerTabs";
 import { Icon, MlcLogoIcon } from "./Icons";
@@ -43,7 +44,15 @@ function dockTabTitle(tabId: DockTabId, translate: (key: string, defaultValue: s
   if (tabId === "mlc") return translate("mlc.title", "My Last Chat");
   if (tabId === "mlcPreview") return translate("mlcPreview.title", "MLC Preview");
   if (tabId === "previewBrowser") return translate("previewBrowser.title", "Preview Browser");
+  if (tabId === "previewInfo") return translate("previewBrowser.infoTitle", "Preview Info");
   return translate("resources.title", "Project resources");
+}
+
+function dockTabDragIcon(tabId: DockTabId) {
+  if (tabId === "mlcPreview") return "file-text";
+  if (tabId === "previewBrowser") return "globe";
+  if (tabId === "previewInfo") return "terminal";
+  return "folder";
 }
 
 function DockDragPreview() {
@@ -53,7 +62,7 @@ function DockDragPreview() {
   const label = dockTabTitle(draggingDockTab.tabId, t);
   return (
     <div className="dock-tab-drag-preview" style={{ left: draggingDockTab.pointerX + 12, top: draggingDockTab.pointerY + 10 }}>
-      {draggingDockTab.tabId === "mlc" ? <MlcLogoIcon size={15} /> : <Icon name={draggingDockTab.tabId === "mlcPreview" ? "file-text" : draggingDockTab.tabId === "previewBrowser" ? "globe" : "folder"} size={15} />}
+      {draggingDockTab.tabId === "mlc" ? <MlcLogoIcon size={15} /> : <Icon name={dockTabDragIcon(draggingDockTab.tabId)} size={15} />}
       <span>{label}</span>
     </div>
   );
@@ -636,6 +645,7 @@ export function FeedbackApp() {
 
   return (
     <div className="flex flex-col h-screen select-none" data-app-view={appView} style={{ background: "var(--color-bg-base)" }}>
+      <PreviewBrowserEventBridge />
       {/* Content wrapper – blurred when settings overlay is open */}
       <div className={`flex flex-col flex-1 min-h-0${settingsOpen ? " content-blurred" : ""}`}>
       {/* Custom title bar */}

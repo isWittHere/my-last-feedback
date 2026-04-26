@@ -74,14 +74,45 @@ export interface PickedElement {
   selector: string;
   selectorType: "id" | "testid" | "data-testid" | "data-test" | "data-cy" | "aria-label" | "name" | "placeholder" | "class" | "role" | "aria" | "css" | "nth";
   locatorCandidates: LocatorCandidate[];
+  attributes?: Record<string, string>;
+  domPath?: string;
+  xpath?: string;
+  styleSummary?: Record<string, string>;
   rect?: {
     x: number;
     y: number;
     width: number;
     height: number;
   };
+  viewport?: {
+    width: number;
+    height: number;
+  };
+  screenshot?: ElementScreenshotRef;
   htmlSnippet?: string;
   capturedAt: string;
+}
+
+export interface ElementScreenshotRef {
+  id: string;
+  kind: "element" | "context";
+  fileName?: string;
+  filePath?: string;
+  dataUrl?: string;
+  mimeType: "image/png" | "image/jpeg";
+  width: number;
+  height: number;
+  sizeKB?: number;
+  devicePixelRatio: number;
+  rect: {
+    x: number;
+    y: number;
+    width: number;
+    height: number;
+  };
+  capturedAt: string;
+  status: "ready" | "failed";
+  error?: string;
 }
 
 export interface WebConsoleEntry {
@@ -117,7 +148,7 @@ export interface FocusedComposer {
 }
 
 export type MlcPanelPosition = "left" | "right";
-export type SidePanelTab = "mlc" | "resources" | "mlcPreview" | "previewBrowser";
+export type SidePanelTab = "mlc" | "resources" | "mlcPreview" | "previewBrowser" | "previewInfo";
 export type DockColumnId = "leftSidebar" | "leftPage" | "rightSidebar";
 export type DockTabId = SidePanelTab;
 export type DockTabBarPosition = "top" | "bottom";
@@ -313,8 +344,8 @@ const MLC_PANEL_MAX_WIDTH = 520;
 const DOCK_LAYOUT_STORAGE_KEY = "mlfb-dock-layout-v1";
 
 const DOCK_COLUMN_IDS: DockColumnId[] = ["leftSidebar", "leftPage", "rightSidebar"];
-const KNOWN_DOCK_TABS: DockTabId[] = ["mlc", "resources", "mlcPreview", "previewBrowser"];
-const DEFAULT_DOCK_TABS: DockTabId[] = ["mlc", "mlcPreview", "resources", "previewBrowser"];
+const KNOWN_DOCK_TABS: DockTabId[] = ["mlc", "resources", "mlcPreview", "previewBrowser", "previewInfo"];
+const DEFAULT_DOCK_TABS: DockTabId[] = ["mlc", "mlcPreview", "resources", "previewBrowser", "previewInfo"];
 
 function isDockTabId(value: unknown): value is DockTabId {
   return typeof value === "string" && KNOWN_DOCK_TABS.includes(value as DockTabId);
@@ -392,7 +423,7 @@ function migrateLegacyDockLayout(): DockLayoutState {
     rightSidebar: createDockColumn(),
   };
   columns[targetColumnId] = createDockColumn({
-    tabIds: ["mlc", "mlcPreview", "resources", "previewBrowser"],
+    tabIds: ["mlc", "mlcPreview", "resources", "previewBrowser", "previewInfo"],
     activeTabId: legacyActiveTab,
     width: legacyWidth,
     tabBarPosition: legacyTabBarPosition,
@@ -426,6 +457,8 @@ function loadDockLayout(): DockLayoutState {
         if (seen.has(tabId)) continue;
         const fallbackColumnId = tabId === "mlcPreview" || tabId === "previewBrowser"
           ? DOCK_COLUMN_IDS.find((columnId) => columns[columnId].tabIds.includes("mlc")) || "rightSidebar"
+          : tabId === "previewInfo"
+            ? "rightSidebar"
           : "rightSidebar";
         columns[fallbackColumnId].tabIds.push(tabId);
       }

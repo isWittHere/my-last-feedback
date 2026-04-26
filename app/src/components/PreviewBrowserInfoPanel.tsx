@@ -1,14 +1,9 @@
-import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { useMemo, useState, useEffect } from "react";
 import { convertFileSrc } from "@tauri-apps/api/core";
-import { listen } from "@tauri-apps/api/event";
 import { useTranslation } from "react-i18next";
 import { usePreviewBrowserStore, type PreviewBrowserTab } from "../store/previewBrowserStore";
 import { useFeedbackStore } from "../store/feedbackStore";
 import { Icon } from "./Icons";
-
-function displayUrl(url: string): string {
-  return url === "about:blank" ? "" : url;
-}
 
 function consoleVisible(tab: PreviewBrowserTab, filter: "all" | "warnings-errors" | "errors") {
   if (filter === "errors") return tab.consoleEntries.filter((entry) => entry.level === "error");
@@ -48,41 +43,19 @@ function screenshotSrc(filePath: string | undefined): string | null {
   return convertFileSrc(filePath);
 }
 
-export function PreviewBrowserPanel() {
+export function PreviewBrowserInfoPanel() {
   const { t } = useTranslation();
-  const viewportRef = useRef<HTMLDivElement>(null);
-  const previousActiveTabRef = useRef<string | null>(null);
   const tabs = usePreviewBrowserStore((state) => state.tabs);
   const activeTabId = usePreviewBrowserStore((state) => state.activeTabId);
   const pickerMode = usePreviewBrowserStore((state) => state.pickerMode);
   const inspectorMode = usePreviewBrowserStore((state) => state.inspectorMode);
   const consoleFilter = usePreviewBrowserStore((state) => state.consoleFilter);
-  const createTab = usePreviewBrowserStore((state) => state.createTab);
-  const closeTab = usePreviewBrowserStore((state) => state.closeTab);
-  const setActiveTab = usePreviewBrowserStore((state) => state.setActiveTab);
-  const navigate = usePreviewBrowserStore((state) => state.navigate);
-  const reload = usePreviewBrowserStore((state) => state.reload);
-  const goBack = usePreviewBrowserStore((state) => state.goBack);
-  const goForward = usePreviewBrowserStore((state) => state.goForward);
-  const setBounds = usePreviewBrowserStore((state) => state.setBounds);
-  const hideTab = usePreviewBrowserStore((state) => state.hideTab);
-  const startPicker = usePreviewBrowserStore((state) => state.startPicker);
-  const stopPicker = usePreviewBrowserStore((state) => state.stopPicker);
-  const clearConsole = usePreviewBrowserStore((state) => state.clearConsole);
   const setInspectorMode = usePreviewBrowserStore((state) => state.setInspectorMode);
   const setConsoleFilter = usePreviewBrowserStore((state) => state.setConsoleFilter);
+  const clearConsole = usePreviewBrowserStore((state) => state.clearConsole);
   const attachSelectedElement = usePreviewBrowserStore((state) => state.attachSelectedElement);
   const attachConsoleSnapshot = usePreviewBrowserStore((state) => state.attachConsoleSnapshot);
-  const handleTabUpdated = usePreviewBrowserStore((state) => state.handleTabUpdated);
-  const handleLoadStarted = usePreviewBrowserStore((state) => state.handleLoadStarted);
-  const handleLoadFinished = usePreviewBrowserStore((state) => state.handleLoadFinished);
-  const handleLoadError = usePreviewBrowserStore((state) => state.handleLoadError);
-  const handlePickerReady = usePreviewBrowserStore((state) => state.handlePickerReady);
-  const handlePickerCancelled = usePreviewBrowserStore((state) => state.handlePickerCancelled);
-  const handleElementPicked = usePreviewBrowserStore((state) => state.handleElementPicked);
-  const handleConsoleEntry = usePreviewBrowserStore((state) => state.handleConsoleEntry);
   const focusedComposer = useFeedbackStore((state) => state.focusedComposer);
-  const [addressDraft, setAddressDraft] = useState("");
   const [attachNotice, setAttachNotice] = useState<string | null>(null);
 
   const activeTab = useMemo(() => tabs.find((tab) => tab.id === activeTabId) || null, [activeTabId, tabs]);
@@ -97,163 +70,26 @@ export function PreviewBrowserPanel() {
   }, [activeTab?.consoleEntries]);
 
   useEffect(() => {
-    if (tabs.length === 0) void createTab();
-  }, [createTab, tabs.length]);
+    if (!attachNotice) return;
+    const timer = window.setTimeout(() => setAttachNotice(null), 2200);
+    return () => window.clearTimeout(timer);
+  }, [attachNotice]);
 
-  useEffect(() => {
-    setAddressDraft(displayUrl(activeTab?.pendingUrl || activeTab?.url || ""));
-  }, [activeTab?.id, activeTab?.pendingUrl, activeTab?.url]);
-
-  useEffect(() => {
-    const subscriptions = [
-      listen<any>("preview-tab-updated", (event) => handleTabUpdated(event.payload)),
-      listen<any>("preview-load-started", (event) => handleLoadStarted(event.payload)),
-      listen<any>("preview-load-finished", (event) => handleLoadFinished(event.payload)),
-      listen<any>("preview-load-error", (event) => handleLoadError(event.payload)),
-      listen<any>("preview-picker-ready", (event) => handlePickerReady(event.payload)),
-      listen<any>("preview-picker-cancelled", (event) => handlePickerCancelled(event.payload)),
-      listen<any>("preview-element-picked", (event) => handleElementPicked(event.payload)),
-      listen<any>("preview-console-entry", (event) => handleConsoleEntry(event.payload)),
-    ];
-    let disposed = false;
-    let unlistenFns: Array<() => void> = [];
-    void Promise.all(subscriptions).then((resolved) => {
-      if (disposed) resolved.forEach((dispose) => dispose());
-      else unlistenFns = resolved;
-    });
-    return () => {
-      disposed = true;
-      unlistenFns.forEach((dispose) => dispose());
-    };
-  }, [handleConsoleEntry, handleElementPicked, handleLoadError, handleLoadFinished, handleLoadStarted, handlePickerCancelled, handlePickerReady, handleTabUpdated]);
-
-  const syncBounds = useCallback((visible = true) => {
-    if (!activeTab || !viewportRef.current) return;
-    const rect = viewportRef.current.getBoundingClientRect();
-    const isVisible = visible && rect.width > 20 && rect.height > 20;
-    void setBounds(activeTab.id, {
-      x: Math.round(rect.left),
-      y: Math.round(rect.top),
-      width: Math.round(rect.width),
-      height: Math.round(rect.height),
-    }, isVisible);
-  }, [activeTab, setBounds]);
-
-  useEffect(() => {
-    const previous = previousActiveTabRef.current;
-    if (previous && previous !== activeTabId) void hideTab(previous);
-    previousActiveTabRef.current = activeTabId;
-    syncBounds(true);
-  }, [activeTabId, hideTab, syncBounds]);
-
-  useEffect(() => {
-    const element = viewportRef.current;
-    if (!element) return;
-    const observer = new ResizeObserver(() => syncBounds(true));
-    observer.observe(element);
-    const handleWindowResize = () => syncBounds(true);
-    window.addEventListener("resize", handleWindowResize);
-    const frame = window.requestAnimationFrame(() => syncBounds(true));
-    return () => {
-      observer.disconnect();
-      window.removeEventListener("resize", handleWindowResize);
-      window.cancelAnimationFrame(frame);
-    };
-  }, [syncBounds]);
-
-  useEffect(() => {
-    return () => {
-      for (const tab of usePreviewBrowserStore.getState().tabs) void usePreviewBrowserStore.getState().hideTab(tab.id);
-    };
-  }, []);
-
-  const submitAddress = (event: React.FormEvent) => {
-    event.preventDefault();
-    if (!activeTab || !addressDraft.trim()) return;
-    void navigate(activeTab.id, addressDraft.trim());
-  };
-
-  const handleCreateTab = () => { void createTab(); };
-  const handleCloseTab = (tabId: string, event: React.MouseEvent) => {
-    event.stopPropagation();
-    void closeTab(tabId);
-  };
   const handleAttachElement = () => {
     if (!activeTab) return;
     const ok = attachSelectedElement(activeTab.id);
     setAttachNotice(ok ? t("previewBrowser.attachedElement", "Element attached") : t("previewBrowser.noTarget", "Focus a feedback input first"));
   };
+
   const handleAttachConsole = () => {
     if (!activeTab) return;
     const ok = attachConsoleSnapshot(activeTab.id);
     setAttachNotice(ok ? t("previewBrowser.attachedConsole", "Console attached") : t("previewBrowser.noTarget", "Focus a feedback input first"));
   };
 
-  useEffect(() => {
-    if (!attachNotice) return;
-    const timer = window.setTimeout(() => setAttachNotice(null), 2200);
-    return () => window.clearTimeout(timer);
-  }, [attachNotice]);
-
   return (
-    <div className="preview-browser-panel">
-      <div className="preview-browser-tab-strip" role="tablist" aria-label={t("previewBrowser.tabs", "Browser tabs")}>
-        {tabs.map((tab) => {
-          const isActive = tab.id === activeTabId;
-          return (
-            <button key={tab.id} type="button" className={`preview-browser-tab${isActive ? " active" : ""}`} onClick={() => setActiveTab(tab.id)} role="tab" aria-selected={isActive}>
-              <Icon name="globe" size={13} />
-              <span>{tab.title || tab.url || t("previewBrowser.newTab", "New tab")}</span>
-              <span className={`preview-browser-tab-status ${tab.status}`} />
-              <span className="preview-browser-tab-close" onClick={(event) => handleCloseTab(tab.id, event)} aria-label={t("previewBrowser.closeTab", "Close tab")}>
-                <Icon name="close-sm" size={9} />
-              </span>
-            </button>
-          );
-        })}
-        <button type="button" className="preview-browser-new-tab" onClick={handleCreateTab} aria-label={t("previewBrowser.newTab", "New tab")}>
-          <Icon name="plus" size={13} />
-        </button>
-      </div>
-
-      <div className="preview-browser-toolbar">
-        <button type="button" className="preview-browser-icon-button" onClick={() => activeTab && void goBack(activeTab.id)} disabled={!activeTab?.canGoBack} title={t("previewBrowser.back", "Back")}>
-          <Icon name="chevron-left" size={15} />
-        </button>
-        <button type="button" className="preview-browser-icon-button" onClick={() => activeTab && void goForward(activeTab.id)} disabled={!activeTab?.canGoForward} title={t("previewBrowser.forward", "Forward")}>
-          <Icon name="chevron-right" size={15} />
-        </button>
-        <button type="button" className="preview-browser-icon-button" onClick={() => activeTab && void reload(activeTab.id)} disabled={!activeTab} title={t("previewBrowser.reload", "Reload")}>
-          <Icon name="refresh" size={14} />
-        </button>
-        <form className="preview-browser-address-form" onSubmit={submitAddress}>
-          <Icon name="globe" size={13} />
-          <input value={addressDraft} onChange={(event) => setAddressDraft(event.target.value)} placeholder={t("previewBrowser.addressPlaceholder", "Enter URL...")} />
-        </form>
-        <button type="button" className={`preview-browser-icon-button${pickerMode !== "off" ? " active" : ""}`} onClick={() => activeTab && (pickerMode === "off" ? void startPicker(activeTab.id) : void stopPicker(activeTab.id))} disabled={!activeTab || activeTab.url === "about:blank"} title={t("previewBrowser.pickElement", "Pick element")}>
-          <Icon name="aim" size={14} />
-        </button>
-        <button type="button" className={`preview-browser-icon-button${inspectorMode === "console" ? " active" : ""}`} onClick={() => setInspectorMode(inspectorMode === "console" ? "selected" : "console")} title={t("previewBrowser.console", "Console")}>
-          <Icon name="terminal" size={14} />
-        </button>
-      </div>
-
-      <div ref={viewportRef} className="preview-browser-viewport">
-        {!activeTab ? (
-          <div className="preview-browser-empty"><Icon name="globe" size={28} /><span>{t("previewBrowser.empty", "Open a preview tab")}</span></div>
-        ) : activeTab.status === "error" ? (
-          <div className="preview-browser-error">
-            <Icon name="globe" size={32} />
-            <h3>{t("previewBrowser.loadFailed", "Unable to load page")}</h3>
-            <p>{activeTab.errorMessage}</p>
-            <code>{activeTab.url}</code>
-          </div>
-        ) : activeTab.url === "about:blank" ? (
-          <div className="preview-browser-empty"><Icon name="globe" size={28} /><span>{t("previewBrowser.blank", "Enter a URL to start previewing")}</span></div>
-        ) : null}
-      </div>
-
-      <div className="preview-browser-inspector">
+    <div className="preview-browser-info-panel">
+      <div className="preview-browser-inspector standalone">
         <div className="preview-browser-inspector-tabs">
           <button type="button" className={inspectorMode === "selected" ? "active" : ""} onClick={() => setInspectorMode("selected")}>
             <Icon name="aim" size={12} />
@@ -281,7 +117,7 @@ export function PreviewBrowserPanel() {
                 <div className="preview-browser-selected-details">
                   {activeTab.selectedElement.screenshot?.status === "ready" ? (
                     <div className="preview-browser-screenshot">
-                      {screenshotSrc(activeTab.selectedElement.screenshot.filePath) ? <img src={screenshotSrc(activeTab.selectedElement.screenshot.filePath) || undefined} alt="" /> : null}
+                      {activeTab.selectedElement.screenshot.dataUrl || screenshotSrc(activeTab.selectedElement.screenshot.filePath) ? <img src={activeTab.selectedElement.screenshot.dataUrl || screenshotSrc(activeTab.selectedElement.screenshot.filePath) || undefined} alt="" /> : null}
                       <span>{activeTab.selectedElement.screenshot.width}x{activeTab.selectedElement.screenshot.height}</span>
                     </div>
                   ) : activeTab.selectedElement.screenshot?.status === "failed" ? (

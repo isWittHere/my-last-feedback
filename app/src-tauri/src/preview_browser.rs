@@ -1,5 +1,7 @@
 use serde::{Deserialize, Serialize};
+use base64::{engine::general_purpose, Engine as _};
 use std::collections::HashMap;
+use std::fs;
 use std::sync::Mutex;
 use tauri::{AppHandle, Emitter, Manager, Webview, WebviewBuilder, WebviewUrl};
 use tauri::{LogicalPosition, LogicalSize, Rect};
@@ -29,12 +31,49 @@ pub struct PreviewTabPayload {
     pub title: String,
 }
 
-#[derive(Debug, Clone, Deserialize)]
+#[derive(Debug, Clone, Deserialize, Serialize)]
 pub struct PreviewBounds {
     pub x: f64,
     pub y: f64,
     pub width: f64,
     pub height: f64,
+}
+
+#[derive(Debug, Clone, Deserialize, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct ElementRect {
+  pub x: f64,
+  pub y: f64,
+  pub width: f64,
+  pub height: f64,
+}
+
+#[derive(Debug, Clone, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct PreviewCaptureRequest {
+  pub tab_id: String,
+  pub rect: ElementRect,
+  pub bounds: PreviewBounds,
+  pub device_pixel_ratio: f64,
+}
+
+#[derive(Debug, Clone, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct ElementScreenshotRef {
+  pub id: String,
+  pub kind: String,
+  pub file_name: Option<String>,
+  pub file_path: Option<String>,
+  pub data_url: Option<String>,
+  pub mime_type: String,
+  pub width: u32,
+  pub height: u32,
+  pub size_kb: Option<u64>,
+  pub device_pixel_ratio: f64,
+  pub rect: ElementRect,
+  pub captured_at: String,
+  pub status: String,
+  pub error: Option<String>,
 }
 
 fn normalize_preview_url(input: Option<String>) -> Result<tauri::Url, String> {
@@ -292,6 +331,44 @@ const PICKER_SCRIPT: &str = r#"
     }
     return '/' + parts.join('/');
   }
+  function domPathFor(el) {
+    var parts = [];
+    var node = el;
+    while (node && node.nodeType === 1 && node !== document.documentElement) {
+      var part = node.tagName.toLowerCase();
+      if (node.id) { part += '#' + cssEscape(node.id); parts.unshift(part); break; }
+      if (typeof node.className === 'string') {
+        var classes = node.className.split(/\s+/).filter(Boolean).slice(0, 3);
+        if (classes.length) part += '.' + classes.map(cssEscape).join('.');
+      }
+      parts.unshift(part);
+      node = node.parentElement;
+    }
+    return parts.join(' > ');
+  }
+  function selectedAttributes(el) {
+    var keep = {};
+    var names = ['id', 'class', 'href', 'src', 'name', 'type', 'role', 'aria-label', 'aria-labelledby', 'data-testid', 'data-test', 'data-cy', 'target', 'disabled', 'checked', 'selected', 'placeholder', 'title', 'alt'];
+    names.forEach(function (name) {
+      var value = el.getAttribute(name);
+      if (value != null && value !== '') keep[name] = String(value).slice(0, 500);
+    });
+    return keep;
+  }
+  function styleSummary(el) {
+    var computed = window.getComputedStyle ? window.getComputedStyle(el) : null;
+    if (!computed) return {};
+    var names = ['display', 'position', 'z-index', 'overflow', 'visibility', 'opacity', 'pointer-events', 'box-sizing', 'width', 'height', 'margin', 'padding', 'border', 'border-radius', 'font-family', 'font-size', 'font-weight', 'line-height', 'color', 'text-align', 'background-color', 'background-image', 'cursor', 'user-select', 'transform'];
+    var lowValue = { '': true, normal: true, none: true, auto: true, '0px': true, static: true };
+    var result = {};
+    names.forEach(function (name) {
+      var value = computed.getPropertyValue(name);
+      if (!value || lowValue[value]) return;
+      if (name === 'background-color' && value === 'rgba(0, 0, 0, 0)') return;
+      result[name] = value;
+    });
+    return result;
+  }
   function candidates(el, selector, text) {
     var list = [{ kind: 'css', value: selector, confidence: selector.indexOf(':nth-of-type') >= 0 ? 'medium' : 'high', reason: 'CSS selector' }];
     var testAttrs = ['data-testid', 'data-test', 'data-cy'];
@@ -311,6 +388,7 @@ const PICKER_SCRIPT: &str = r#"
     var selected = selectorFor(el);
     var text = textOf(el);
     var rect = el.getBoundingClientRect();
+    var xpath = xpathFor(el);
     return {
       sourceUrl: location.href,
       frameUrl: location.href,
@@ -329,7 +407,12 @@ const PICKER_SCRIPT: &str = r#"
       selector: selected.selector,
       selectorType: selected.type,
       locatorCandidates: candidates(el, selected.selector, text),
+      attributes: selectedAttributes(el),
+      domPath: domPathFor(el),
+      xpath: xpath,
+      styleSummary: styleSummary(el),
       rect: { x: rect.x, y: rect.y, width: rect.width, height: rect.height },
+      viewport: { width: window.innerWidth, height: window.innerHeight },
       htmlSnippet: el.outerHTML ? el.outerHTML.slice(0, 1000) : undefined,
       capturedAt: new Date().toISOString()
     };
@@ -497,6 +580,59 @@ pub async fn preview_hide_tab(state: tauri::State<'_, PreviewBrowserState>, tab_
     let tabs = state.tabs.lock().map_err(|_| "Preview state is poisoned".to_string())?;
     let runtime = tabs.get(&tab_id).ok_or_else(|| "Preview tab not found".to_string())?;
     runtime.webview.hide().map_err(|e| e.to_string())
+}
+
+#[tauri::command]
+pub async fn preview_capture_element(
+  app: AppHandle,
+  state: tauri::State<'_, PreviewBrowserState>,
+  request: PreviewCaptureRequest,
+) -> Result<ElementScreenshotRef, String> {
+  {
+    let tabs = state.tabs.lock().map_err(|_| "Preview state is poisoned".to_string())?;
+    if !tabs.contains_key(&request.tab_id) {
+      return Err("Preview tab not found".to_string());
+    }
+  }
+
+  let captured_at = chrono::Utc::now().to_rfc3339();
+  let id = format!("element-shot-{}", Uuid::new_v4());
+  let main_window = app.get_window("main").ok_or_else(|| "Main window not found".to_string())?;
+  let outer_position = main_window.outer_position().map_err(|e| e.to_string())?;
+  let scale_factor = main_window.scale_factor().unwrap_or(request.device_pixel_ratio.max(1.0));
+  let padding = 6.0;
+  let x = outer_position.x + ((request.bounds.x + request.rect.x - padding) * scale_factor).round() as i32;
+  let y = outer_position.y + ((request.bounds.y + request.rect.y - padding) * scale_factor).round() as i32;
+  let width = ((request.rect.width + padding * 2.0) * scale_factor).round().max(1.0) as u32;
+  let height = ((request.rect.height + padding * 2.0) * scale_factor).round().max(1.0) as u32;
+
+  let screen = screenshots::Screen::from_point(x, y).map_err(|e| e.to_string())?;
+  let image = screen.capture_area(x, y, width, height).map_err(|e| e.to_string())?;
+  let dir = std::env::temp_dir().join("my-last-feedback").join("preview-screenshots");
+  fs::create_dir_all(&dir).map_err(|e| e.to_string())?;
+  let file_name = format!("{}.png", id);
+  let path = dir.join(&file_name);
+  image.save(&path).map_err(|e| e.to_string())?;
+  let bytes = fs::read(&path).map_err(|e| e.to_string())?;
+  let size_kb = Some((bytes.len() as u64 + 1023) / 1024);
+  let data_url = Some(format!("data:image/png;base64,{}", general_purpose::STANDARD.encode(bytes)));
+
+  Ok(ElementScreenshotRef {
+    id,
+    kind: "element".to_string(),
+    file_name: Some(file_name),
+    file_path: Some(path.to_string_lossy().to_string()),
+    data_url,
+    mime_type: "image/png".to_string(),
+    width,
+    height,
+    size_kb,
+    device_pixel_ratio: scale_factor,
+    rect: request.rect,
+    captured_at,
+    status: "ready".to_string(),
+    error: None,
+  })
 }
 
 #[tauri::command]

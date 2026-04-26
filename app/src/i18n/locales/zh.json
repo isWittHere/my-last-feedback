@@ -221,6 +221,7 @@
   },
   "previewBrowser": {
     "title": "开发预览",
+    "infoTitle": "预览信息",
     "button": "预览",
     "openPanel": "打开开发预览浏览器",
     "tabs": "浏览器标签页",
@@ -242,6 +243,7 @@
     "targetReady": "目标已就绪",
     "attachElement": "附加元素",
     "attachConsole": "附加控制台",
+    "screenshotUnavailable": "截图不可用",
     "pickerArming": "正在启动选择器...",
     "pickHint": "在页面中点击一个元素",
     "noSelection": "尚未选择元素",

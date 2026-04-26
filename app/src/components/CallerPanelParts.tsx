@@ -70,6 +70,7 @@ export function AttachmentTagBar({
   const mlcDockColumnId = findDockColumnForTab("mlc");
   const resourcesDockColumnId = findDockColumnForTab("resources");
   const previewDockColumnId = findDockColumnForTab("previewBrowser");
+  const previewInfoDockColumnId = findDockColumnForTab("previewInfo");
   const isMlcButtonActive = !!mlcDockColumnId && !dockLayout.columns[mlcDockColumnId].collapsed && dockLayout.columns[mlcDockColumnId].activeTabId === "mlc" && !!activeSession?.projectDirectory && mlcActiveWorkspacePath === activeSession.projectDirectory;
   const isResourceButtonActive = !!resourcesDockColumnId && !dockLayout.columns[resourcesDockColumnId].collapsed && dockLayout.columns[resourcesDockColumnId].activeTabId === "resources" && !!activeSession?.projectDirectory && mlcActiveWorkspacePath === activeSession.projectDirectory;
   const isPreviewButtonActive = !!previewDockColumnId && !dockLayout.columns[previewDockColumnId].collapsed && dockLayout.columns[previewDockColumnId].activeTabId === "previewBrowser";
@@ -155,6 +156,7 @@ export function AttachmentTagBar({
   const handlePreviewClick = () => {
     if (isPreviewButtonActive) {
       if (previewDockColumnId) setDockColumnCollapsed(previewDockColumnId, true);
+      if (previewInfoDockColumnId && previewInfoDockColumnId !== previewDockColumnId) setDockColumnCollapsed(previewInfoDockColumnId, true);
       return;
     }
     if (queuedCallerId) {
@@ -175,10 +177,14 @@ export function AttachmentTagBar({
         focusedAt: new Date().toISOString(),
       });
     }
-    const targetColumnId = previewDockColumnId || "leftPage";
-    if (!previewDockColumnId) moveDockTabToColumn("previewBrowser", targetColumnId);
+    const targetColumnId = previewDockColumnId && previewDockColumnId !== previewInfoDockColumnId ? previewDockColumnId : "leftPage";
+    if (previewDockColumnId !== targetColumnId) moveDockTabToColumn("previewBrowser", targetColumnId);
+    const infoTargetColumnId = previewInfoDockColumnId && previewInfoDockColumnId !== targetColumnId ? previewInfoDockColumnId : "rightSidebar";
+    if (previewInfoDockColumnId !== infoTargetColumnId) moveDockTabToColumn("previewInfo", infoTargetColumnId);
     setDockColumnCollapsed(targetColumnId, false);
+    setDockColumnCollapsed(infoTargetColumnId, false);
     setDockActiveTab(targetColumnId, "previewBrowser");
+    if (infoTargetColumnId !== targetColumnId) setDockActiveTab(infoTargetColumnId, "previewInfo");
   };
 
   return (
