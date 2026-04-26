@@ -1,14 +1,14 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { useTranslation } from "react-i18next";
-import { useFeedbackStore } from "../store/feedbackStore";
+import { useFeedbackStore, type DockColumnId, type DockTabId } from "../store/feedbackStore";
 import { CallerTabs } from "./CallerTabs";
 import { CallerPanel } from "./CallerPanel";
 import { SettingsDialog } from "./SettingsDialog";
 import { WelcomeHome } from "./WelcomeHome";
-import { ContextSidePanel } from "./ContextSidePanel";
+import { DockColumn } from "./DockColumn";
 import { MLRAView } from "./MLRAView";
 import { MLRACallerTabs } from "./MLRACallerTabs";
-import { Icon } from "./Icons";
+import { Icon, MlcLogoIcon } from "./Icons";
 import { toggleTheme } from "../theme";
 import { useIsLightTheme } from "./useIsLightTheme";
 import React from "react";
@@ -38,6 +38,25 @@ const ROLE_LABEL_MAP: Record<string, string> = {
   ceo: "CEO",
   worker: "Worker",
 };
+
+function dockTabTitle(tabId: DockTabId, translate: (key: string, defaultValue: string) => string): string {
+  return tabId === "mlc"
+    ? translate("mlc.title", "My Last Chat")
+    : translate("resources.title", "Project resources");
+}
+
+function DockDragPreview() {
+  const { t } = useTranslation();
+  const draggingDockTab = useFeedbackStore((s) => s.draggingDockTab);
+  if (!draggingDockTab) return null;
+  const label = dockTabTitle(draggingDockTab.tabId, t);
+  return (
+    <div className="dock-tab-drag-preview" style={{ left: draggingDockTab.pointerX + 12, top: draggingDockTab.pointerY + 10 }}>
+      {draggingDockTab.tabId === "mlc" ? <MlcLogoIcon size={15} /> : <Icon name="folder" size={15} />}
+      <span>{label}</span>
+    </div>
+  );
+}
 
 function StageFlowPopover({ stages, currentStageId }: { stages: StageBlueprint[]; currentStageId: string | null }) {
   const currentIndex = stages.findIndex((stage) => stage.id === currentStageId);
@@ -543,10 +562,11 @@ export function FeedbackApp() {
   const callerOrder = useFeedbackStore((s) => s.callerOrder);
   const hiddenCallerIds = useFeedbackStore((s) => s.hiddenCallerIds);
   const activeCallerId = useFeedbackStore((s) => s.activeCallerId);
-  const mlcPanelVisible = useFeedbackStore((s) => s.mlcPanelVisible);
-  const mlcPanelPosition = useFeedbackStore((s) => s.mlcPanelPosition);
-  const setMlcPanelVisible = useFeedbackStore((s) => s.setMlcPanelVisible);
-  const setMlcPanelPosition = useFeedbackStore((s) => s.setMlcPanelPosition);
+  const dockColumns = useFeedbackStore((s) => s.dockLayout.columns);
+  const leftSidebarColumn = dockColumns.leftSidebar;
+  const leftPageColumn = dockColumns.leftPage;
+  const rightSidebarColumn = dockColumns.rightSidebar;
+  const setDockColumnCollapsed = useFeedbackStore((s) => s.setDockColumnCollapsed);
 
   // Caller workspace width tracking for responsive multi-column layout
   const callerWorkspaceRef = useRef<HTMLDivElement>(null);
@@ -604,14 +624,11 @@ export function FeedbackApp() {
     setAlwaysOnTop(next);
   }, [alwaysOnTop]);
 
-  const toggleMlcPanelAt = useCallback((panelPosition: "left" | "right") => {
-    if (!mlcPanelVisible || mlcPanelPosition !== panelPosition) {
-      setMlcPanelPosition(panelPosition);
-      setMlcPanelVisible(true);
-      return;
-    }
-    setMlcPanelVisible(false);
-  }, [mlcPanelPosition, mlcPanelVisible, setMlcPanelPosition, setMlcPanelVisible]);
+  const toggleDockColumn = useCallback((columnId: DockColumnId) => {
+    const column = dockColumns[columnId];
+    if (column.tabIds.length === 0) return;
+    setDockColumnCollapsed(columnId, !column.collapsed);
+  }, [dockColumns, setDockColumnCollapsed]);
 
   const [settingsOpen, setSettingsOpen] = useState(false);
   const isLightTheme = useIsLightTheme();
@@ -659,14 +676,27 @@ export function FeedbackApp() {
               MLRA
             </button>
           </div>
-          {appView === "MLFB" && (
-            <button
-              onClick={() => toggleMlcPanelAt("left")}
-              className={`titlebar-btn titlebar-side-toggle titlebar-side-toggle-left${mlcPanelVisible && mlcPanelPosition === "left" ? " titlebar-btn-active" : ""}`}
-              title={mlcPanelVisible && mlcPanelPosition === "left" ? t("mlc.close", "Close My Last Chat") : t("mlc.open", "Open My Last Chat")}
-            >
-              <Icon name="sidebar" size={13} />
-            </button>
+          {appView === "MLFB" && (leftSidebarColumn.tabIds.length > 0 || leftPageColumn.tabIds.length > 0) && (
+            <div className="titlebar-dock-group">
+              {leftSidebarColumn.tabIds.length > 0 && (
+                <button
+                  onClick={() => toggleDockColumn("leftSidebar")}
+                  className={`titlebar-btn titlebar-side-toggle titlebar-side-toggle-left${!leftSidebarColumn.collapsed ? " titlebar-btn-active" : ""}`}
+                  title={!leftSidebarColumn.collapsed ? t("mlc.close", "Close My Last Chat") : t("mlc.open", "Open My Last Chat")}
+                >
+                  <Icon name="sidebar" size={13} />
+                </button>
+              )}
+              {leftPageColumn.tabIds.length > 0 && (
+                <button
+                  onClick={() => toggleDockColumn("leftPage")}
+                  className={`titlebar-btn titlebar-side-toggle titlebar-side-toggle-left-page${!leftPageColumn.collapsed ? " titlebar-btn-active" : ""}`}
+                  title={!leftPageColumn.collapsed ? t("dock.closeLeftPage", "Close left page panel") : t("dock.openLeftPage", "Open left page panel")}
+                >
+                  <Icon name="page-sidebar" size={13} />
+                </button>
+              )}
+            </div>
           )}
         </div>
 
@@ -699,11 +729,11 @@ export function FeedbackApp() {
             <LayoutModeButton layoutMode={layoutMode} onCycle={cycleLayoutMode} onSelect={setLayoutMode} />
             </>
           )}
-          {appView === "MLFB" && (
+          {appView === "MLFB" && rightSidebarColumn.tabIds.length > 0 && (
             <button
-              onClick={() => toggleMlcPanelAt("right")}
-              className={`titlebar-btn titlebar-side-toggle titlebar-side-toggle-right${mlcPanelVisible && mlcPanelPosition === "right" ? " titlebar-btn-active" : ""}`}
-              title={mlcPanelVisible && mlcPanelPosition === "right" ? t("mlc.close", "Close My Last Chat") : t("mlc.open", "Open My Last Chat")}
+              onClick={() => toggleDockColumn("rightSidebar")}
+              className={`titlebar-btn titlebar-side-toggle titlebar-side-toggle-right${rightSidebarColumn.tabIds.length > 0 && !rightSidebarColumn.collapsed ? " titlebar-btn-active" : ""}`}
+              title={rightSidebarColumn.tabIds.length > 0 && !rightSidebarColumn.collapsed ? t("mlc.close", "Close My Last Chat") : t("mlc.open", "Open My Last Chat")}
             >
               <Icon name="sidebar" size={13} />
             </button>
@@ -757,7 +787,8 @@ export function FeedbackApp() {
           </MLRAErrorBoundary>
         ) : (
           <>
-            {mlcPanelVisible && mlcPanelPosition === "left" && <ContextSidePanel />}
+            <DockColumn columnId="leftSidebar" />
+            <DockColumn columnId="leftPage" />
             <div ref={callerWorkspaceRef} className="caller-workspace">
               {useMultiColumn ? (
                 /* Multi-column: parallel CallerPanels for column callers */
@@ -775,12 +806,13 @@ export function FeedbackApp() {
                 <WelcomeHome />
               )}
             </div>
-            {mlcPanelVisible && mlcPanelPosition === "right" && <ContextSidePanel />}
+            <DockColumn columnId="rightSidebar" />
           </>
         )}
       </div>
       </div>{/* end content-blurred wrapper */}
 
+      <DockDragPreview />
       <SettingsDialog open={settingsOpen} onClose={() => setSettingsOpen(false)} />
     </div>
   );

@@ -2,11 +2,13 @@ import { forwardRef, useCallback, useEffect, useMemo, useRef, useState } from "r
 import { createPortal } from "react-dom";
 import { useTranslation } from "react-i18next";
 import { useFeedbackStore } from "../store/feedbackStore";
-import type { GitActionType, MlcAttachment } from "../store/feedbackStore";
+import type { DockColumnId, DockTabId, GitActionType, MlcAttachment } from "../store/feedbackStore";
 import { useShallow } from "zustand/react/shallow";
 import { Icon, MlcLogoIcon } from "./Icons";
 import { useActiveCallerSession } from "./useActiveCallerSession";
 import { readText as readClipboardText } from "@tauri-apps/plugin-clipboard-manager";
+
+const DOCK_COLUMN_IDS: DockColumnId[] = ["leftSidebar", "leftPage", "rightSidebar"];
 
 /** Attachment tag bar: images + test log + git actions as compact tags */
 export function AttachmentTagBar({
@@ -46,12 +48,12 @@ export function AttachmentTagBar({
   const removeSessionMlcAttachment = useFeedbackStore((s) => s.removeSessionMlcAttachment);
   const removeQueuedDraftMlcAttachment = useFeedbackStore((s) => s.removeQueuedDraftMlcAttachment);
   const setFocusedComposer = useFeedbackStore((s) => s.setFocusedComposer);
-  const mlcPanelVisible = useFeedbackStore((s) => s.mlcPanelVisible);
   const mlcActiveWorkspacePath = useFeedbackStore((s) => s.mlcActiveWorkspacePath);
-  const sidePanelActiveTab = useFeedbackStore((s) => s.sidePanelActiveTab);
-  const setMlcPanelVisible = useFeedbackStore((s) => s.setMlcPanelVisible);
+  const dockLayout = useFeedbackStore((s) => s.dockLayout);
+  const setDockActiveTab = useFeedbackStore((s) => s.setDockActiveTab);
+  const setDockColumnCollapsed = useFeedbackStore((s) => s.setDockColumnCollapsed);
+  const moveDockTabToColumn = useFeedbackStore((s) => s.moveDockTabToColumn);
   const setMlcActiveWorkspacePath = useFeedbackStore((s) => s.setMlcActiveWorkspacePath);
-  const setSidePanelActiveTab = useFeedbackStore((s) => s.setSidePanelActiveTab);
   const targetImages = queuedCallerId ? (queuedDraft?.images || []) : (activeSession?.images || []);
   const targetTestLogText = queuedCallerId ? (queuedDraft?.testLogText || "") : (activeSession?.testLogText || "");
   const targetGitAction = queuedCallerId ? (queuedDraft?.gitAction || null) : (activeSession?.gitAction || null);
@@ -60,8 +62,11 @@ export function AttachmentTagBar({
   const hasTestLog = !!targetTestLogText.trim();
   const hasGitAction = !!targetGitAction;
   const hasMlcAttachments = targetMlcAttachments.length > 0;
-  const isMlcButtonActive = mlcPanelVisible && sidePanelActiveTab === "mlc" && !!activeSession?.projectDirectory && mlcActiveWorkspacePath === activeSession.projectDirectory;
-  const isResourceButtonActive = mlcPanelVisible && sidePanelActiveTab === "resources" && !!activeSession?.projectDirectory && mlcActiveWorkspacePath === activeSession.projectDirectory;
+  const findDockColumnForTab = (tabId: DockTabId): DockColumnId | null => DOCK_COLUMN_IDS.find((columnId) => dockLayout.columns[columnId].tabIds.includes(tabId)) || null;
+  const mlcDockColumnId = findDockColumnForTab("mlc");
+  const resourcesDockColumnId = findDockColumnForTab("resources");
+  const isMlcButtonActive = !!mlcDockColumnId && !dockLayout.columns[mlcDockColumnId].collapsed && dockLayout.columns[mlcDockColumnId].activeTabId === "mlc" && !!activeSession?.projectDirectory && mlcActiveWorkspacePath === activeSession.projectDirectory;
+  const isResourceButtonActive = !!resourcesDockColumnId && !dockLayout.columns[resourcesDockColumnId].collapsed && dockLayout.columns[resourcesDockColumnId].activeTabId === "resources" && !!activeSession?.projectDirectory && mlcActiveWorkspacePath === activeSession.projectDirectory;
   const hasTags = images.length > 0 || hasTestLog || showTestLog || hasGitAction || hasMlcAttachments;
   const tagAreaRef = useRef<HTMLDivElement>(null);
   const branchInputRef = useRef<HTMLInputElement>(null);
@@ -86,7 +91,7 @@ export function AttachmentTagBar({
 
   const handleResourceClick = () => {
     if (isResourceButtonActive) {
-      setMlcPanelVisible(false);
+      if (resourcesDockColumnId) setDockColumnCollapsed(resourcesDockColumnId, true);
       return;
     }
     const projectDirectory = activeSession?.projectDirectory || "";
@@ -99,13 +104,15 @@ export function AttachmentTagBar({
       focusedAt: new Date().toISOString(),
     });
     setMlcActiveWorkspacePath(projectDirectory);
-    setSidePanelActiveTab("resources");
-    setMlcPanelVisible(true);
+    const targetColumnId = resourcesDockColumnId || "rightSidebar";
+    if (!resourcesDockColumnId) moveDockTabToColumn("resources", targetColumnId);
+    setDockColumnCollapsed(targetColumnId, false);
+    setDockActiveTab(targetColumnId, "resources");
   };
 
   const handleMlcClick = () => {
     if (isMlcButtonActive) {
-      setMlcPanelVisible(false);
+      if (mlcDockColumnId) setDockColumnCollapsed(mlcDockColumnId, true);
       return;
     }
     if (queuedCallerId) {
@@ -117,8 +124,10 @@ export function AttachmentTagBar({
         focusedAt: new Date().toISOString(),
       });
       setMlcActiveWorkspacePath(activeSession?.projectDirectory || null);
-      setSidePanelActiveTab("mlc");
-      setMlcPanelVisible(true);
+      const targetColumnId = mlcDockColumnId || "rightSidebar";
+      if (!mlcDockColumnId) moveDockTabToColumn("mlc", targetColumnId);
+      setDockColumnCollapsed(targetColumnId, false);
+      setDockActiveTab(targetColumnId, "mlc");
       return;
     }
     if (!activeSession || activeSession.status !== "pending" || !caller) return;
@@ -130,8 +139,10 @@ export function AttachmentTagBar({
       focusedAt: new Date().toISOString(),
     });
     setMlcActiveWorkspacePath(activeSession.projectDirectory);
-    setSidePanelActiveTab("mlc");
-    setMlcPanelVisible(true);
+    const targetColumnId = mlcDockColumnId || "rightSidebar";
+    if (!mlcDockColumnId) moveDockTabToColumn("mlc", targetColumnId);
+    setDockColumnCollapsed(targetColumnId, false);
+    setDockActiveTab(targetColumnId, "mlc");
   };
 
   return (

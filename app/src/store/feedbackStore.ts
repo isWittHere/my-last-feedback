@@ -61,6 +61,29 @@ export interface FocusedComposer {
 
 export type MlcPanelPosition = "left" | "right";
 export type SidePanelTab = "mlc" | "resources";
+export type DockColumnId = "leftSidebar" | "leftPage" | "rightSidebar";
+export type DockTabId = SidePanelTab;
+export type DockTabBarPosition = "top" | "bottom";
+
+export interface DockColumnState {
+  tabIds: DockTabId[];
+  activeTabId: DockTabId | null;
+  width: number;
+  tabBarPosition: DockTabBarPosition;
+  collapsed: boolean;
+}
+
+export interface DockLayoutState {
+  columns: Record<DockColumnId, DockColumnState>;
+}
+
+export interface DraggingDockTabState {
+  tabId: DockTabId;
+  sourceColumnId: DockColumnId;
+  pointerX: number;
+  pointerY: number;
+  targetColumnId: DockColumnId | null;
+}
 
 export type NewRequestAttentionMode = "interrupt" | "passive";
 
@@ -120,12 +143,9 @@ export interface FeedbackState {
   queuedDraftsByCallerId: Record<string, FeedbackDraft>;
   messageHistoryByCallerId: Record<string, string[]>;
   focusedComposer: FocusedComposer | null;
-  mlcPanelVisible: boolean;
-  mlcPanelCollapsed: boolean;
-  mlcPanelPosition: MlcPanelPosition;
-  mlcPanelWidth: number;
   mlcActiveWorkspacePath: string | null;
-  sidePanelActiveTab: SidePanelTab;
+  dockLayout: DockLayoutState;
+  draggingDockTab: DraggingDockTabState | null;
 
   // Persistent mode actions
   addCaller: (caller: Caller) => void;
@@ -185,12 +205,15 @@ export interface FeedbackState {
   clearMessageHistory: (callerId?: string) => void;
   setFocusedComposer: (focus: FocusedComposer) => void;
   clearFocusedComposer: (sessionId?: string) => void;
-  setMlcPanelVisible: (visible: boolean) => void;
-  setMlcPanelCollapsed: (collapsed: boolean) => void;
-  setMlcPanelPosition: (position: MlcPanelPosition) => void;
-  setMlcPanelWidth: (width: number) => void;
   setMlcActiveWorkspacePath: (path: string | null) => void;
-  setSidePanelActiveTab: (tab: SidePanelTab) => void;
+  setDockColumnWidth: (columnId: DockColumnId, width: number) => void;
+  setDockColumnCollapsed: (columnId: DockColumnId, collapsed: boolean) => void;
+  setDockColumnTabBarPosition: (columnId: DockColumnId, position: DockTabBarPosition) => void;
+  setDockActiveTab: (columnId: DockColumnId, tabId: DockTabId | null) => void;
+  moveDockTabToColumn: (tabId: DockTabId, targetColumnId: DockColumnId) => void;
+  startDraggingDockTab: (tabId: DockTabId, sourceColumnId: DockColumnId, pointerX: number, pointerY: number, targetColumnId?: DockColumnId | null) => void;
+  updateDraggingDockTab: (pointerX: number, pointerY: number, targetColumnId: DockColumnId | null) => void;
+  finishDraggingDockTab: () => void;
 
   // Derived getters
   getActiveCaller: () => Caller | null;
@@ -205,6 +228,129 @@ const MESSAGE_HISTORY_MAX = 50;
 const MLC_PANEL_DEFAULT_WIDTH = 320;
 const MLC_PANEL_MIN_WIDTH = 240;
 const MLC_PANEL_MAX_WIDTH = 520;
+const DOCK_LAYOUT_STORAGE_KEY = "mlfb-dock-layout-v1";
+
+const DOCK_COLUMN_IDS: DockColumnId[] = ["leftSidebar", "leftPage", "rightSidebar"];
+
+function clampDockWidth(width: number): number {
+  return Math.min(MLC_PANEL_MAX_WIDTH, Math.max(MLC_PANEL_MIN_WIDTH, width));
+}
+
+function createDockColumn(overrides: Partial<DockColumnState> = {}): DockColumnState {
+  return {
+    tabIds: [],
+    activeTabId: null,
+    width: MLC_PANEL_DEFAULT_WIDTH,
+    tabBarPosition: "top",
+    collapsed: false,
+    ...overrides,
+  };
+}
+
+function normalizeDockColumn(value: Partial<DockColumnState> | null | undefined): DockColumnState {
+  const tabIds = Array.isArray(value?.tabIds)
+    ? value.tabIds.filter((tab): tab is DockTabId => tab === "mlc" || tab === "resources")
+    : [];
+  const activeTabId = value?.activeTabId && tabIds.includes(value.activeTabId) ? value.activeTabId : tabIds[0] || null;
+  return createDockColumn({
+    tabIds,
+    activeTabId,
+    width: clampDockWidth(Number(value?.width) || MLC_PANEL_DEFAULT_WIDTH),
+    tabBarPosition: value?.tabBarPosition === "bottom" ? "bottom" : "top",
+    collapsed: Boolean(value?.collapsed),
+  });
+}
+
+function normalizeLeftDockColumns(columns: DockLayoutState["columns"]): void {
+  if (columns.leftSidebar.tabIds.length > 0 || columns.leftPage.tabIds.length === 0) return;
+  columns.leftSidebar = {
+    ...columns.leftSidebar,
+    tabIds: [...columns.leftPage.tabIds],
+    activeTabId: columns.leftPage.activeTabId || columns.leftPage.tabIds[0] || null,
+    width: columns.leftPage.width,
+    collapsed: columns.leftPage.collapsed,
+  };
+  columns.leftPage = {
+    ...columns.leftPage,
+    tabIds: [],
+    activeTabId: null,
+    collapsed: false,
+  };
+}
+
+function persistDockLayout(layout: DockLayoutState): void {
+  try { localStorage.setItem(DOCK_LAYOUT_STORAGE_KEY, JSON.stringify(layout)); } catch {}
+}
+
+function migrateLegacyDockLayout(): DockLayoutState {
+  let legacyPosition: MlcPanelPosition = "right";
+  let legacyVisible = false;
+  let legacyWidth = MLC_PANEL_DEFAULT_WIDTH;
+  let legacyActiveTab: DockTabId = "mlc";
+  let legacyTabBarPosition: DockTabBarPosition = "top";
+  try {
+    legacyPosition = localStorage.getItem("mlfb-mlc-panel-position") === "left" ? "left" : "right";
+    legacyVisible = localStorage.getItem("mlfb-mlc-panel-visible") === "true";
+    const storedWidth = Number(localStorage.getItem("mlfb-mlc-panel-width"));
+    if (Number.isFinite(storedWidth) && storedWidth > 0) legacyWidth = clampDockWidth(storedWidth);
+    legacyActiveTab = localStorage.getItem("mlfb-side-panel-active-tab") === "resources" ? "resources" : "mlc";
+    legacyTabBarPosition = localStorage.getItem("mlfb-mlc-tab-bar-position") === "bottom" ? "bottom" : "top";
+  } catch {}
+
+  const targetColumnId: DockColumnId = legacyPosition === "left" ? "leftSidebar" : "rightSidebar";
+  const columns: DockLayoutState["columns"] = {
+    leftSidebar: createDockColumn(),
+    leftPage: createDockColumn(),
+    rightSidebar: createDockColumn(),
+  };
+  columns[targetColumnId] = createDockColumn({
+    tabIds: ["mlc", "resources"],
+    activeTabId: legacyActiveTab,
+    width: legacyWidth,
+    tabBarPosition: legacyTabBarPosition,
+    collapsed: !legacyVisible,
+  });
+  for (const columnId of DOCK_COLUMN_IDS) columns[columnId].tabBarPosition = legacyTabBarPosition;
+  return { columns };
+}
+
+function loadDockLayout(): DockLayoutState {
+  try {
+    const stored = localStorage.getItem(DOCK_LAYOUT_STORAGE_KEY);
+    if (stored) {
+      const parsed = JSON.parse(stored) as Partial<DockLayoutState>;
+      const columns: DockLayoutState["columns"] = {
+        leftSidebar: normalizeDockColumn(parsed.columns?.leftSidebar),
+        leftPage: normalizeDockColumn(parsed.columns?.leftPage),
+        rightSidebar: normalizeDockColumn(parsed.columns?.rightSidebar),
+      };
+      const seen = new Set<DockTabId>();
+      for (const columnId of DOCK_COLUMN_IDS) {
+        const column = columns[columnId];
+        column.tabIds = column.tabIds.filter((tabId) => {
+          if (seen.has(tabId)) return false;
+          seen.add(tabId);
+          return true;
+        });
+        if (column.activeTabId && !column.tabIds.includes(column.activeTabId)) column.activeTabId = column.tabIds[0] || null;
+      }
+      for (const tabId of ["mlc", "resources"] satisfies DockTabId[]) {
+        if (!seen.has(tabId)) columns.rightSidebar.tabIds.push(tabId);
+      }
+      normalizeLeftDockColumns(columns);
+      for (const columnId of DOCK_COLUMN_IDS) {
+        const column = columns[columnId];
+        if (!column.activeTabId || !column.tabIds.includes(column.activeTabId)) column.activeTabId = column.tabIds[0] || null;
+      }
+      const tabBarPosition: DockTabBarPosition = DOCK_COLUMN_IDS.some((columnId) => columns[columnId].tabBarPosition === "bottom")
+        ? "bottom"
+        : "top";
+      for (const columnId of DOCK_COLUMN_IDS) columns[columnId].tabBarPosition = tabBarPosition;
+      return { columns };
+    }
+  } catch {}
+  return migrateLegacyDockLayout();
+}
 
 function emptyDraft(): FeedbackDraft {
   return {
@@ -311,33 +457,9 @@ export const useFeedbackStore = create<FeedbackState>((set, get) => ({
   queuedDraftsByCallerId: {},
   messageHistoryByCallerId: loadMessageHistory(),
   focusedComposer: null,
-  mlcPanelVisible: (() => {
-    try { return localStorage.getItem("mlfb-mlc-panel-visible") === "true"; } catch { return false; }
-  })(),
-  mlcPanelCollapsed: (() => {
-    try { return localStorage.getItem("mlfb-mlc-panel-collapsed") === "true"; } catch { return false; }
-  })(),
-  mlcPanelPosition: (() => {
-    try {
-      const stored = localStorage.getItem("mlfb-mlc-panel-position");
-      return stored === "left" ? "left" : "right";
-    } catch { return "right"; }
-  })(),
-  mlcPanelWidth: (() => {
-    try {
-      const stored = Number(localStorage.getItem("mlfb-mlc-panel-width"));
-      return Number.isFinite(stored) && stored > 0
-        ? Math.min(MLC_PANEL_MAX_WIDTH, Math.max(MLC_PANEL_MIN_WIDTH, stored))
-        : MLC_PANEL_DEFAULT_WIDTH;
-    } catch { return MLC_PANEL_DEFAULT_WIDTH; }
-  })(),
   mlcActiveWorkspacePath: null,
-  sidePanelActiveTab: (() => {
-    try {
-      const stored = localStorage.getItem("mlfb-side-panel-active-tab");
-      return stored === "resources" ? "resources" : "mlc";
-    } catch { return "mlc"; }
-  })(),
+  dockLayout: loadDockLayout(),
+  draggingDockTab: null,
 
   addCaller: (caller) => {
     const { callers, callerOrder } = get();
@@ -1143,33 +1265,116 @@ export const useFeedbackStore = create<FeedbackState>((set, get) => ({
     }));
   },
 
-  setMlcPanelVisible: (visible) => {
-    set({ mlcPanelVisible: visible });
-    try { localStorage.setItem("mlfb-mlc-panel-visible", String(visible)); } catch {}
-  },
-
-  setMlcPanelCollapsed: (collapsed) => {
-    set({ mlcPanelCollapsed: collapsed });
-    try { localStorage.setItem("mlfb-mlc-panel-collapsed", String(collapsed)); } catch {}
-  },
-
-  setMlcPanelPosition: (position) => {
-    set({ mlcPanelPosition: position });
-    try { localStorage.setItem("mlfb-mlc-panel-position", position); } catch {}
-  },
-
-  setMlcPanelWidth: (width) => {
-    const nextWidth = Math.min(MLC_PANEL_MAX_WIDTH, Math.max(MLC_PANEL_MIN_WIDTH, width));
-    set({ mlcPanelWidth: nextWidth });
-    try { localStorage.setItem("mlfb-mlc-panel-width", String(nextWidth)); } catch {}
-  },
-
   setMlcActiveWorkspacePath: (path) => set({ mlcActiveWorkspacePath: path }),
 
-  setSidePanelActiveTab: (tab) => {
-    set({ sidePanelActiveTab: tab });
-    try { localStorage.setItem("mlfb-side-panel-active-tab", tab); } catch {}
+  setDockColumnWidth: (columnId, width) => {
+    set((state) => {
+      const dockLayout: DockLayoutState = {
+        columns: {
+          ...state.dockLayout.columns,
+          [columnId]: {
+            ...state.dockLayout.columns[columnId],
+            width: clampDockWidth(width),
+          },
+        },
+      };
+      persistDockLayout(dockLayout);
+      return { dockLayout };
+    });
   },
+
+  setDockColumnCollapsed: (columnId, collapsed) => {
+    set((state) => {
+      const dockLayout: DockLayoutState = {
+        columns: {
+          ...state.dockLayout.columns,
+          [columnId]: {
+            ...state.dockLayout.columns[columnId],
+            collapsed,
+          },
+        },
+      };
+      persistDockLayout(dockLayout);
+      return { dockLayout };
+    });
+  },
+
+  setDockColumnTabBarPosition: (columnId, position) => {
+    set((state) => {
+      void columnId;
+      const dockLayout: DockLayoutState = {
+        columns: {
+          leftSidebar: {
+            ...state.dockLayout.columns.leftSidebar,
+            tabBarPosition: position,
+          },
+          leftPage: {
+            ...state.dockLayout.columns.leftPage,
+            tabBarPosition: position,
+          },
+          rightSidebar: {
+            ...state.dockLayout.columns.rightSidebar,
+            tabBarPosition: position,
+          },
+        },
+      };
+      persistDockLayout(dockLayout);
+      return { dockLayout };
+    });
+  },
+
+  setDockActiveTab: (columnId, tabId) => {
+    set((state) => {
+      const column = state.dockLayout.columns[columnId];
+      const activeTabId = tabId && column.tabIds.includes(tabId) ? tabId : column.tabIds[0] || null;
+      const dockLayout: DockLayoutState = {
+        columns: {
+          ...state.dockLayout.columns,
+          [columnId]: { ...column, activeTabId },
+        },
+      };
+      persistDockLayout(dockLayout);
+      return { dockLayout };
+    });
+  },
+
+  moveDockTabToColumn: (tabId, targetColumnId) => {
+    set((state) => {
+      const nextColumns: DockLayoutState["columns"] = {
+        leftSidebar: { ...state.dockLayout.columns.leftSidebar, tabIds: [...state.dockLayout.columns.leftSidebar.tabIds] },
+        leftPage: { ...state.dockLayout.columns.leftPage, tabIds: [...state.dockLayout.columns.leftPage.tabIds] },
+        rightSidebar: { ...state.dockLayout.columns.rightSidebar, tabIds: [...state.dockLayout.columns.rightSidebar.tabIds] },
+      };
+
+      for (const columnId of DOCK_COLUMN_IDS) {
+        const column = nextColumns[columnId];
+        const existingIndex = column.tabIds.indexOf(tabId);
+        if (existingIndex === -1) continue;
+        column.tabIds.splice(existingIndex, 1);
+        if (column.activeTabId === tabId) {
+          column.activeTabId = column.tabIds[existingIndex] || column.tabIds[existingIndex - 1] || column.tabIds[0] || null;
+        }
+      }
+
+      const targetColumn = nextColumns[targetColumnId];
+      targetColumn.tabIds.push(tabId);
+      targetColumn.activeTabId = tabId;
+      targetColumn.collapsed = false;
+      normalizeLeftDockColumns(nextColumns);
+
+      const dockLayout = { columns: nextColumns };
+      persistDockLayout(dockLayout);
+      return {
+        dockLayout,
+      };
+    });
+  },
+
+  startDraggingDockTab: (tabId, sourceColumnId, pointerX, pointerY, targetColumnId = null) => set({ draggingDockTab: { tabId, sourceColumnId, pointerX, pointerY, targetColumnId } }),
+  updateDraggingDockTab: (pointerX, pointerY, targetColumnId) => set((state) => state.draggingDockTab
+    ? { draggingDockTab: { ...state.draggingDockTab, pointerX, pointerY, targetColumnId } }
+    : {}),
+  finishDraggingDockTab: () => set({ draggingDockTab: null }),
 
   // Derived getters
   getActiveCaller: () => {
