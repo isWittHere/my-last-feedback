@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useMemo, useState, type ReactNode } from "react";
+import { useCallback, useEffect, useMemo, useState, type CSSProperties, type ReactNode } from "react";
 import { useTranslation } from "react-i18next";
 import { invoke } from "@tauri-apps/api/core";
 import { useFeedbackStore } from "../store/feedbackStore";
@@ -70,6 +70,24 @@ function insertResourceLink(text: string) {
       text,
     },
   }));
+}
+
+const TREE_BASE_INDENT = 4;
+const TREE_INDENT_STEP = 12;
+const TREE_GUIDE_OFFSET = 10;
+
+function resourceTreeRowStyle(depth: number): CSSProperties {
+  return { paddingLeft: TREE_BASE_INDENT + depth * TREE_INDENT_STEP };
+}
+
+function resourceTreeChildrenStyle(depth: number): CSSProperties {
+  return { marginLeft: TREE_GUIDE_OFFSET + depth * TREE_INDENT_STEP };
+}
+
+function resourceTreeChildrenContentStyle(depth: number): CSSProperties {
+  return {
+    marginLeft: -(TREE_GUIDE_OFFSET + depth * TREE_INDENT_STEP),
+  };
 }
 
 export function ProjectResourcePanel() {
@@ -156,9 +174,10 @@ export function ProjectResourcePanel() {
     const isExpanded = expanded.has(key);
     const children = childrenByPath[key] || [];
     const isLoading = loadingByPath.has(entry.absolutePath);
+    const rowStyle = resourceTreeRowStyle(depth);
     return (
       <div key={entry.absolutePath}>
-        <div className="resource-tree-row" style={{ paddingLeft: 8 + depth * 14 }}>
+        <div className="resource-tree-row" style={rowStyle}>
           <button
             type="button"
             className="resource-tree-disclosure"
@@ -166,9 +185,9 @@ export function ProjectResourcePanel() {
             disabled={!isFolder}
             aria-label={isExpanded ? t("resources.collapse", "Collapse") : t("resources.expand", "Expand")}
           >
-            {isFolder ? <Icon name={isExpanded ? "chevron-down" : "chevron-right"} size={12} /> : null}
+            {isFolder ? <Icon name={isExpanded ? "chevron-down" : "chevron-right"} size={14} /> : null}
           </button>
-          {resourceIconTheme === "catppuccin-mocha" ? (
+          {resourceIconTheme === "catppuccin" ? (
             <CatppuccinResourceIcon entry={entry} expanded={isExpanded} size={14} className="resource-tree-icon" />
           ) : (
             <Icon name={isFolder ? (isExpanded ? "folder-open" : "folder") : "file-text"} size={14} className="resource-tree-icon" />
@@ -181,7 +200,13 @@ export function ProjectResourcePanel() {
             <Icon name="arrow-bend-down-right" size={12} />
           </button>
         </div>
-        {isFolder && isExpanded && children.length > 0 ? renderRows(children, depth + 1) : null}
+        {isFolder && isExpanded && children.length > 0 ? (
+          <div className="resource-tree-children" style={resourceTreeChildrenStyle(depth)}>
+            <div className="resource-tree-children-content" style={resourceTreeChildrenContentStyle(depth)}>
+              {renderRows(children, depth + 1)}
+            </div>
+          </div>
+        ) : null}
       </div>
     );
   });

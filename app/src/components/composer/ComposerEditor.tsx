@@ -14,6 +14,9 @@ import {
 } from "react";
 import { parseComposerTextTokens } from "../../composer/composerTokens";
 import type { PromptCommandOption } from "../../composer/promptCommands";
+import { useFeedbackStore, type ResourceIconTheme } from "../../store/feedbackStore";
+import { resolveCatppuccinResourceIcon, type CatppuccinIconFlavor } from "../CatppuccinResourceIcon";
+import { useIsLightTheme } from "../useIsLightTheme";
 import { PromptIcon } from "../PromptIcons";
 import { Icon } from "../Icons";
 
@@ -228,12 +231,25 @@ function createChipIcon(kind: "file" | "folder" | "terminal"): SVGSVGElement {
   return svg;
 }
 
-function renderComposerDom(root: HTMLElement, tokens: ReturnType<typeof parseComposerTextTokens>) {
+function createResourceChipIcon(token: Extract<ReturnType<typeof parseComposerTextTokens>[number], { type: "resourceLink" }>, resourceIconTheme: ResourceIconTheme, catppuccinFlavor: CatppuccinIconFlavor): Element {
+  if (resourceIconTheme === "catppuccin") {
+    const image = document.createElement("img");
+    image.src = resolveCatppuccinResourceIcon({ name: token.label, relativePath: token.href, kind: token.kind }, false, catppuccinFlavor);
+    image.alt = "";
+    image.draggable = false;
+    image.className = "composer-token-chip-svg composer-token-chip-img";
+    image.setAttribute("aria-hidden", "true");
+    return image;
+  }
+  return createChipIcon(token.kind === "folder" ? "folder" : "file");
+}
+
+function renderComposerDom(root: HTMLElement, tokens: ReturnType<typeof parseComposerTextTokens>, resourceIconTheme: ResourceIconTheme, catppuccinFlavor: CatppuccinIconFlavor) {
   const fragment = document.createDocumentFragment();
   for (const token of tokens) {
     if (token.type === "resourceLink") {
       const chip = createTokenChip("composer-token-chip composer-token-chip-resource", "resourceLink", token.raw, token.href);
-      chip.appendChild(createChipIcon(token.kind === "folder" ? "folder" : "file"));
+      chip.appendChild(createResourceChipIcon(token, resourceIconTheme, catppuccinFlavor));
       appendTokenLabel(chip, displayResourceLabel(token.label));
       fragment.appendChild(chip);
     } else if (token.type === "slashCommand" && token.matched) {
@@ -296,6 +312,8 @@ export const ComposerEditor = forwardRef<ComposerEditorHandle, ComposerEditorPro
   const lastHistoryValueRef = useRef(value);
   const [slashMenu, setSlashMenu] = useState<SlashMenuState | null>(null);
   const [activeCommandIndex, setActiveCommandIndex] = useState(0);
+  const resourceIconTheme = useFeedbackStore((state) => state.resourceIconTheme);
+  const catppuccinFlavor: CatppuccinIconFlavor = useIsLightTheme() ? "latte" : "mocha";
   valueRef.current = value;
 
   const commandSet = useMemo(() => new Set(commands.map((command) => command.id)), [commands]);
@@ -378,11 +396,11 @@ export const ComposerEditor = forwardRef<ComposerEditorHandle, ComposerEditorPro
     const nextCaret = safeStart + text.length;
     commitValue(nextValue, { start: nextCaret, end: nextCaret });
     if (root) {
-      renderComposerDom(root, parseComposerTextTokens(nextValue, { knownCommands: commandSet, projectDirectory }));
+      renderComposerDom(root, parseComposerTextTokens(nextValue, { knownCommands: commandSet, projectDirectory }), resourceIconTheme, catppuccinFlavor);
       restoreSelection(root, { start: nextCaret, end: nextCaret });
     }
     if (root && currentSelection.start === currentSelection.end) requestAnimationFrame(updateSlashMenu);
-  }, [commandSet, commitValue, projectDirectory, updateSlashMenu]);
+  }, [catppuccinFlavor, commandSet, commitValue, projectDirectory, resourceIconTheme, updateSlashMenu]);
 
   const applyHistory = useCallback((direction: -1 | 1) => {
     const nextIndex = historyIndexRef.current + direction;
@@ -392,12 +410,12 @@ export const ComposerEditor = forwardRef<ComposerEditorHandle, ComposerEditorPro
     commitValue(entry.value, entry.selection, false);
     const root = rootRef.current;
     if (root) {
-      renderComposerDom(root, parseComposerTextTokens(entry.value, { knownCommands: commandSet, projectDirectory }));
+      renderComposerDom(root, parseComposerTextTokens(entry.value, { knownCommands: commandSet, projectDirectory }), resourceIconTheme, catppuccinFlavor);
       restoreSelection(root, entry.selection);
     }
     requestAnimationFrame(updateSlashMenu);
     return true;
-  }, [commandSet, commitValue, projectDirectory, updateSlashMenu]);
+  }, [catppuccinFlavor, commandSet, commitValue, projectDirectory, resourceIconTheme, updateSlashMenu]);
 
   const insertText = useCallback((text: string) => {
     const root = rootRef.current;
@@ -494,25 +512,25 @@ export const ComposerEditor = forwardRef<ComposerEditorHandle, ComposerEditorPro
       pendingSelectionRef.current = selection;
       const root = rootRef.current;
       if (!root) return;
-      renderComposerDom(root, parseComposerTextTokens(nextValue, { knownCommands: commandSet, projectDirectory }));
+      renderComposerDom(root, parseComposerTextTokens(nextValue, { knownCommands: commandSet, projectDirectory }), resourceIconTheme, catppuccinFlavor);
       if (document.activeElement !== root) root.focus();
       restoreSelection(root, selection);
       requestAnimationFrame(updateSlashMenu);
     },
     getSelectionRange: () => rootRef.current ? getSelectionRange(rootRef.current) : { start: 0, end: 0 },
     getElement: () => rootRef.current,
-  }), [commandSet, insertText, projectDirectory, updateSlashMenu]);
+  }), [catppuccinFlavor, commandSet, insertText, projectDirectory, resourceIconTheme, updateSlashMenu]);
 
   useLayoutEffect(() => {
     const root = rootRef.current;
     if (!root) return;
-    renderComposerDom(root, tokens);
+    renderComposerDom(root, tokens, resourceIconTheme, catppuccinFlavor);
     const pending = pendingSelectionRef.current;
     if (!pending) return;
     pendingSelectionRef.current = null;
     if (document.activeElement !== root) root.focus();
     restoreSelection(root, pending);
-  }, [tokens]);
+  }, [catppuccinFlavor, resourceIconTheme, tokens]);
 
   const handleInput = useCallback(() => {
     const root = rootRef.current;

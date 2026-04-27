@@ -9,6 +9,7 @@ import { useActiveCallerSession } from "./useActiveCallerSession";
 import { readText as readClipboardText } from "@tauri-apps/plugin-clipboard-manager";
 import { webAttachmentLabel } from "../browser/webAttachmentFormat";
 import { collectSubmittedResourceLinks, type SubmittedResourceLink } from "../composer/submittedFeedback";
+import { CatppuccinResourceIcon } from "./CatppuccinResourceIcon";
 
 const DOCK_COLUMN_IDS: DockColumnId[] = ["leftSidebar", "leftPage", "rightSidebar"];
 const GIT_ACTION_TYPES: GitActionType[] = ["commit-before", "commit", "commit-push", "create-branch"];
@@ -997,6 +998,7 @@ export function ReadonlyTagBar({ session }: { session: import("../store/feedback
 
 function ResourceAttachmentTag({ link }: { link: SubmittedResourceLink }) {
   const { t } = useTranslation();
+  const resourceIconTheme = useFeedbackStore((state) => state.resourceIconTheme);
   const openResource = () => {
     import("@tauri-apps/plugin-opener")
       .then(({ openPath }) => openPath(link.href))
@@ -1010,7 +1012,11 @@ function ResourceAttachmentTag({ link }: { link: SubmittedResourceLink }) {
       title={link.href}
       onClick={openResource}
     >
-      <Icon name={link.kind === "folder" ? "folder" : "file-text"} size={10} />
+      {resourceIconTheme === "catppuccin" ? (
+        <CatppuccinResourceIcon entry={{ name: link.label, relativePath: link.href, kind: link.kind }} size={12} className="attachment-resource-icon" />
+      ) : (
+        <Icon name={link.kind === "folder" ? "folder" : "file-text"} size={10} />
+      )}
       <span className="truncate" style={{ maxWidth: 160 }}>{link.label}</span>
       <button
         className="attachment-tag-copy"
@@ -1141,6 +1147,7 @@ function resourceKind(label: string, href: string): "file" | "folder" {
 
 /** Render text with clickable links, color swatches and readonly resource tags */
 export function RichText({ text, style, className }: { text: string; style?: React.CSSProperties; className?: string }) {
+  const resourceIconTheme = useFeedbackStore((state) => state.resourceIconTheme);
   const parts = useMemo(() => {
     const RESOURCE_LINK_RE = /\[([^\]\n]+)\]\(([^)\n]+)\)/g;
     const URL_RE = /https?:\/\/[^\s<>"')\]]+/g;
@@ -1243,7 +1250,11 @@ export function RichText({ text, style, className }: { text: string; style?: Rea
                 }
               }}
             >
-              <Icon name={part.kind === "folder" ? "folder" : "file-text"} size={11} />
+              {resourceIconTheme === "catppuccin" ? (
+                <CatppuccinResourceIcon entry={{ name: part.label, relativePath: part.href, kind: part.kind }} size={12} className="readonly-resource-icon" />
+              ) : (
+                <Icon name={part.kind === "folder" ? "folder" : "file-text"} size={11} />
+              )}
               <span>{part.label}</span>
             </span>
           );

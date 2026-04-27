@@ -1,0 +1,5 @@
+Catppuccin Icons for VSCode
+Source: https://github.com/catppuccin/vscode-icons
+Version used: 1.26.0
+Flavor: Latte
+License: MIT (see LICENSE.txt)

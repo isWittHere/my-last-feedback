@@ -308,7 +308,7 @@ export function SettingsDialog({ open, onClose }: { open: boolean; onClose: () =
                 <div className="settings-row">
                   <div className="settings-row-info" style={{ flex: 1 }}>
                     <span className="settings-label">{t("settings.resourceIconTheme", "Resource icon theme")}</span>
-                    <span className="settings-sublabel">{t("settings.resourceIconThemeDesc", "Choose the file icon theme used by the project resources panel.")}</span>
+                    <span className="settings-sublabel">{t("settings.resourceIconThemeDesc", "Choose the file icon theme used by project resources and resource links.")}</span>
                   </div>
                   <div className="settings-btn-group">
                     <button
@@ -319,11 +319,11 @@ export function SettingsDialog({ open, onClose }: { open: boolean; onClose: () =
                       {t("settings.resourceIconThemeDefault", "Default")}
                     </button>
                     <button
-                      className={`settings-btn-option${resourceIconTheme === "catppuccin-mocha" ? " active" : ""}`}
-                      onClick={() => setResourceIconTheme("catppuccin-mocha")}
+                      className={`settings-btn-option${resourceIconTheme === "catppuccin" ? " active" : ""}`}
+                      onClick={() => setResourceIconTheme("catppuccin")}
                     >
-                      <Icon name="moon" size={12} />
-                      {t("settings.resourceIconThemeCatppuccinMocha", "Catppuccin Mocha")}
+                      <Icon name="folder" size={12} />
+                      {t("settings.resourceIconThemeCatppuccin", "Catppuccin")}
                     </button>
                   </div>
                 </div>

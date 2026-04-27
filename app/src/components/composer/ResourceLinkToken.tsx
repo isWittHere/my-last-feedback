@@ -1,8 +1,11 @@
 import { useCallback } from "react";
 import { Icon } from "../Icons";
+import { useFeedbackStore } from "../../store/feedbackStore";
 import type { ResourceKind } from "../../composer/resourceLinks";
+import { CatppuccinResourceIcon } from "../CatppuccinResourceIcon";
 
 export function ResourceLinkToken({ label, href, kind }: { label: string; href: string; kind: ResourceKind }) {
+  const resourceIconTheme = useFeedbackStore((state) => state.resourceIconTheme);
   const openResource = useCallback(() => {
     import("@tauri-apps/plugin-opener")
       .then(({ openPath }) => openPath(href))
@@ -24,7 +27,11 @@ export function ResourceLinkToken({ label, href, kind }: { label: string; href: 
         }
       }}
     >
-      <Icon name={kind === "folder" ? "folder" : "file-text"} size={11} />
+      {resourceIconTheme === "catppuccin" ? (
+        <CatppuccinResourceIcon entry={{ name: label, relativePath: href, kind }} size={12} className="readonly-resource-icon" />
+      ) : (
+        <Icon name={kind === "folder" ? "folder" : "file-text"} size={11} />
+      )}
       <span>{label}</span>
     </span>
   );

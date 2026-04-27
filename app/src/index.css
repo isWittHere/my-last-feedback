@@ -3219,6 +3219,7 @@ body,
 }
 .resource-tree-row {
   display: flex;
+  position: relative;
   align-items: center;
   gap: 4px;
   min-height: 24px;
@@ -3227,9 +3228,15 @@ body,
   font-size: 12px;
   min-width: 0;
 }
+.resource-tree-children {
+  border-left: 1px solid color-mix(in srgb, var(--color-text-muted) 42%, transparent);
+}
+.resource-tree-children-content {
+  min-width: 0;
+}
 .resource-tree-row:hover,
 .resource-tree-row:focus-within {
-  background: color-mix(in srgb, var(--color-bg-elevated) 70%, transparent);
+  background-color: color-mix(in srgb, var(--color-bg-elevated) 70%, transparent);
   color: var(--color-text-primary);
 }
 .resource-tree-disclosure,
@@ -3237,7 +3244,7 @@ body,
   display: inline-flex;
   align-items: center;
   justify-content: center;
-  width: 20px;
+  width: 16px;
   height: 20px;
   flex-shrink: 0;
   border: 1px solid transparent;
@@ -3261,8 +3268,10 @@ body,
 .resource-tree-row:focus-within .resource-tree-insert {
   opacity: 1;
 }
-.resource-tree-insert:hover,
 .resource-tree-disclosure:not(:disabled):hover {
+  color: var(--color-text-primary);
+}
+.resource-tree-insert:hover {
   border-color: var(--color-border);
   background: var(--color-bg-elevated);
 }
@@ -3278,6 +3287,9 @@ body,
 .resource-tree-icon-img {
   display: block;
   object-fit: contain;
+}
+.attachment-resource-icon {
+  flex-shrink: 0;
 }
 .resource-tree-name {
   flex: 1;
@@ -3500,6 +3512,10 @@ body,
   color: var(--color-text-muted);
   width: 11px;
   height: 11px;
+}
+.composer-token-chip-img {
+  display: block;
+  object-fit: contain;
 }
 .composer-token-chip-resource {
   border-color: color-mix(in srgb, var(--color-border) 78%, transparent);

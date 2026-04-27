@@ -352,12 +352,13 @@ const MLC_PANEL_MIN_WIDTH = 240;
 const MLC_PANEL_MAX_WIDTH = 520;
 const DOCK_LAYOUT_STORAGE_KEY = "mlfb-dock-layout-v1";
 
-export type ResourceIconTheme = "default" | "catppuccin-mocha";
+export type ResourceIconTheme = "default" | "catppuccin";
 
 function loadResourceIconTheme(): ResourceIconTheme {
   try {
     const stored = localStorage.getItem("mlfb-resource-icon-theme");
-    return stored === "catppuccin-mocha" ? "catppuccin-mocha" : "default";
+    if (stored === "catppuccin" || stored === "catppuccin-mocha") return "catppuccin";
+    return "default";
   } catch { return "default"; }
 }
 
