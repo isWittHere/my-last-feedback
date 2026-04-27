@@ -276,6 +276,7 @@ export interface FeedbackState {
   clearSessionWebAttachments: (sessionId: string) => void;
   setSessionGitAction: (sessionId: string, action: GitAction | null) => void;
   updateSessionGitBranchName: (sessionId: string, branchName: string) => void;
+  completeSessionWithSubmittedFeedback: (sessionId: string, feedbackText: string) => void;
   markSessionResponded: (sessionId: string) => void;
   markSessionCancelled: (sessionId: string) => void;
   removeSession: (sessionId: string) => void;
@@ -951,6 +952,19 @@ export const useFeedbackStore = create<FeedbackState>((set, get) => ({
           : s
       ),
     }));
+  },
+
+  completeSessionWithSubmittedFeedback: (sessionId, feedbackText) => {
+    set((state) => ({
+      sessions: state.sessions.map((s) =>
+        s.id === sessionId ? { ...s, feedbackText, status: "responded" as const } : s
+      ),
+      focusedComposer: state.focusedComposer?.sessionId === sessionId ? null : state.focusedComposer,
+    }));
+    const session = get().sessions.find((s) => s.id === sessionId);
+    if (session) {
+      get().updateCallerPendingCount(session.callerId);
+    }
   },
 
   markSessionResponded: (sessionId) => {

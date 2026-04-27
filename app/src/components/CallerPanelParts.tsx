@@ -8,6 +8,7 @@ import { Icon, MlcLogoIcon } from "./Icons";
 import { useActiveCallerSession } from "./useActiveCallerSession";
 import { readText as readClipboardText } from "@tauri-apps/plugin-clipboard-manager";
 import { webAttachmentLabel } from "../browser/webAttachmentFormat";
+import { collectSubmittedResourceLinks, type SubmittedResourceLink } from "../composer/submittedFeedback";
 
 const DOCK_COLUMN_IDS: DockColumnId[] = ["leftSidebar", "leftPage", "rightSidebar"];
 
@@ -854,10 +855,14 @@ function WebAttachmentTag({ attachment, onRemove, readonly }: { attachment: WebA
 export function ReadonlyTagBar({ session }: { session: import("../store/feedbackStore").Session }) {
   const { t } = useTranslation();
   const [showLog, setShowLog] = useState(false);
+  const [showCommandLogs, setShowCommandLogs] = useState(false);
   const hasLog = session.testLogText.trim().length > 0;
+  const hasCommandLogs = session.commandLogs.trim().length > 0;
   const hasGitAction = !!session.gitAction;
   const mlcAttachments = session.mlcAttachments || [];
   const webAttachments = session.webAttachments || [];
+  const resourceLinks = collectSubmittedResourceLinks(session.feedbackText, session.projectDirectory);
+  const hasTags = session.images.length > 0 || hasLog || hasCommandLogs || hasGitAction || mlcAttachments.length > 0 || webAttachments.length > 0 || resourceLinks.length > 0;
 
   const gitLabel = hasGitAction ? ({
     commit: t("gitAction.commit"),
@@ -866,6 +871,8 @@ export function ReadonlyTagBar({ session }: { session: import("../store/feedback
   } as Record<string, string>)[session.gitAction!.type] || session.gitAction!.type : "";
   const gitDetail = hasGitAction && session.gitAction!.type === "create-branch" && session.gitAction!.branchName
     ? `: ${session.gitAction!.branchName}` : "";
+
+  if (!hasTags) return null;
 
   return (
     <div className="shrink-0">
@@ -881,6 +888,13 @@ export function ReadonlyTagBar({ session }: { session: import("../store/feedback
             onToggle={() => setShowLog((v) => !v)}
           />
         )}
+        {hasCommandLogs && (
+          <ReadonlyCommandLogsTag
+            commandLogs={session.commandLogs}
+            expanded={showCommandLogs}
+            onToggle={() => setShowCommandLogs((v) => !v)}
+          />
+        )}
         {hasGitAction && (
           <div className="attachment-tag" data-preview-overlay style={{ cursor: "default" }}>
             <Icon name="git-branch" size={10} />
@@ -892,6 +906,9 @@ export function ReadonlyTagBar({ session }: { session: import("../store/feedback
         ))}
         {webAttachments.map((attachment) => (
           <WebAttachmentTag key={attachment.id} attachment={attachment} onRemove={() => {}} readonly />
+        ))}
+        {resourceLinks.map((link) => (
+          <ResourceAttachmentTag key={`${link.kind}:${link.href}:${link.label}`} link={link} />
         ))}
       </div>
       {/* Expanded test log readonly */}
@@ -915,7 +932,72 @@ export function ReadonlyTagBar({ session }: { session: import("../store/feedback
           </div>
         </div>
       )}
+      {showCommandLogs && hasCommandLogs && (
+        <div className="px-3 pb-1">
+          <div
+            className="rounded-lg"
+            style={{
+              border: "1px solid var(--color-border)",
+              background: "var(--color-bg-readonly, var(--color-bg-input))",
+              maxHeight: 200,
+              overflowY: "auto",
+            }}
+          >
+            <pre
+              className="text-xs px-2 py-1.5 m-0"
+              style={{ color: "var(--color-text-muted)", whiteSpace: "pre-wrap", wordBreak: "break-all", opacity: 0.9 }}
+            >
+              <RichText text={session.commandLogs} />
+            </pre>
+          </div>
+        </div>
+      )}
     </div>
+  );
+}
+
+function ResourceAttachmentTag({ link }: { link: SubmittedResourceLink }) {
+  const { t } = useTranslation();
+  const openResource = () => {
+    import("@tauri-apps/plugin-opener")
+      .then(({ openPath }) => openPath(link.href))
+      .catch(() => navigator.clipboard.writeText(link.href).catch(() => {}));
+  };
+  return (
+    <div
+      className="attachment-tag"
+      data-preview-overlay
+      style={{ cursor: "pointer" }}
+      title={link.href}
+      onClick={openResource}
+    >
+      <Icon name={link.kind === "folder" ? "folder" : "file-text"} size={10} />
+      <span className="truncate" style={{ maxWidth: 160 }}>{link.label}</span>
+      <button
+        className="attachment-tag-copy"
+        onClick={(event) => {
+          event.stopPropagation();
+          navigator.clipboard.writeText(link.href);
+        }}
+        title={t("resources.copyPath", "Copy path")}
+      >
+        <Icon name="copy" size={10} />
+      </button>
+    </div>
+  );
+}
+
+function ReadonlyCommandLogsTag({ commandLogs, expanded, onToggle }: { commandLogs: string; expanded: boolean; onToggle: () => void }) {
+  const { t } = useTranslation();
+  return (
+    <button className="attachment-tag" data-preview-overlay onClick={onToggle}>
+      <Icon name="terminal" size={10} />
+      {t("commandLogs.attach", "Command Logs")}
+      <span style={{ fontSize: 9, color: "var(--color-text-muted)" }}>
+        {commandLogs.length}
+      </span>
+      <Icon name="chevron-down" size={8} style={{ transform: expanded ? "rotate(180deg)" : undefined }} />
+    </button>
   );
 }
 

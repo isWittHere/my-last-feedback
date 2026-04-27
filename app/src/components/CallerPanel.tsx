@@ -253,8 +253,7 @@ function CallerContent() {
   const [transferAlias, setTransferAlias] = useState<string | null>(null);
   const [transferPopoverOpen, setTransferPopoverOpen] = useState(false);
   const [transferDraft, setTransferDraft] = useState("");
-  const markSessionResponded = useFeedbackStore((s) => s.markSessionResponded);
-  const updateSessionField = useFeedbackStore((s) => s.updateSessionField);
+  const completeSessionWithSubmittedFeedback = useFeedbackStore((s) => s.completeSessionWithSubmittedFeedback);
   const pushMessageHistory = useFeedbackStore((s) => s.pushMessageHistory);
 
   // Reset transfer state when the active session changes
@@ -279,13 +278,6 @@ function CallerContent() {
       const historyText = submittedFeedback.historyText;
       const imageList = submittedFeedback.imageList;
 
-      // Save the quick action text into feedbackText for history display
-      if (quickAction && !activeSession.feedbackText.trim()) {
-        updateSessionField(activeSession.id, "feedbackText", quickAction);
-      } else if (quickAction) {
-        updateSessionField(activeSession.id, "feedbackText", activeSession.feedbackText.trim() + "\n\n" + quickAction);
-      }
-
       try {
         await invoke("submit_session_feedback", {
           sessionId: activeSession.id,
@@ -297,8 +289,7 @@ function CallerContent() {
           transferToAlias: transferAlias,
         });
         pushMessageHistory(activeSession.callerId, historyText);
-        updateSessionField(activeSession.id, "feedbackText", finalFeedback);
-        markSessionResponded(activeSession.id);
+        completeSessionWithSubmittedFeedback(activeSession.id, finalFeedback);
         // Clear transfer state after successful submit
         setTransferAlias(null);
         setTransferPopoverOpen(false);
@@ -309,7 +300,7 @@ function CallerContent() {
         setSessionSubmitting(false);
       }
     },
-    [activeSession, caller?.alias, sessionSubmitting, markSessionResponded, updateSessionField, pushMessageHistory, transferAlias, visiblePrompts]
+    [activeSession, caller?.alias, sessionSubmitting, completeSessionWithSubmittedFeedback, pushMessageHistory, transferAlias, visiblePrompts]
   );
 
   // Ctrl+Enter shortcut — scoped to this panel
@@ -349,11 +340,9 @@ function CallerContent() {
             <>
               <ReadonlyStatusBadge status={activeSession.status as "responded" | "cancelled"} />
               {/* Readonly tag bar: fixed, not scrollable */}
-              {(activeSession.images.length > 0 || activeSession.testLogText.trim() || activeSession.gitAction || (activeSession.mlcAttachments || []).length > 0 || (activeSession.webAttachments || []).length > 0) && (
-                <ReadonlyTagBar session={activeSession} />
-              )}
+              <ReadonlyTagBar session={activeSession} />
               {/* Scrollable feedback text */}
-              {activeSession.feedbackText && (
+              {hasContent && (
                 <div className="flex-1 overflow-y-auto min-h-0 px-3 pb-2">
                   <ReadonlyComposerContent session={activeSession} />
                 </div>

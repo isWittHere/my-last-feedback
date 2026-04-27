@@ -8,6 +8,7 @@ import { useActiveCallerSession } from "./useActiveCallerSession";
 import { useCallerOverride } from "./CallerContext";
 import { IdenticonAvatar } from "./IdenticonAvatar";
 import { Icon } from "./Icons";
+import { collectSubmittedResourceLinks } from "../composer/submittedFeedback";
 import { useCopyToClipboard } from "./useCopyToClipboard";
 import { useFriendlyName } from "./useFriendlyName";
 import { useIsLightTheme } from "./useIsLightTheme";
@@ -51,6 +52,7 @@ function SessionGroup({
         const isActive = session.id === activeSessionId;
         const isPending = session.status === "pending";
         const isCancelled = session.status === "cancelled";
+        const resourceLinks = collectSubmittedResourceLinks(session.feedbackText, session.projectDirectory);
         return (
           <button
             key={session.id}
@@ -93,6 +95,26 @@ function SessionGroup({
                 {session.gitAction && (
                   <span title={t("gitAction.button")}>
                     <Icon name="git-branch" size={10} color="var(--color-text-muted)" />
+                  </span>
+                )}
+                {session.commandLogs.trim().length > 0 && (
+                  <span title={t("commandLogs.attach", { defaultValue: "Command logs" })}>
+                    <Icon name="terminal" size={10} color="var(--color-text-muted)" />
+                  </span>
+                )}
+                {(session.mlcAttachments || []).length > 0 && (
+                  <span title={t("mlc.button", { defaultValue: "MLC" })}>
+                    <Icon name="book" size={10} color="var(--color-text-muted)" />
+                  </span>
+                )}
+                {(session.webAttachments || []).length > 0 && (
+                  <span title={t("previewBrowser.button", { defaultValue: "Preview" })}>
+                    <Icon name="globe" size={10} color="var(--color-text-muted)" />
+                  </span>
+                )}
+                {resourceLinks.length > 0 && (
+                  <span title={t("resources.button", { defaultValue: "Resources" })}>
+                    <Icon name="file-text" size={10} color="var(--color-text-muted)" />
                   </span>
                 )}
               </span>
@@ -199,6 +221,7 @@ export function Sidebar() {
         commandLogs: "",
         images: [],
         mlcAttachments: [],
+        webAttachments: [],
       });
       markSessionResponded(pendingDeleteId);
     } catch (e) {
@@ -423,6 +446,18 @@ export function Sidebar() {
             )}
             {hoveredItem.session.gitAction && (
               <Icon name="git-branch" size={10} />
+            )}
+            {hoveredItem.session.commandLogs.trim().length > 0 && (
+              <Icon name="terminal" size={10} />
+            )}
+            {(hoveredItem.session.mlcAttachments || []).length > 0 && (
+              <Icon name="book" size={10} />
+            )}
+            {(hoveredItem.session.webAttachments || []).length > 0 && (
+              <Icon name="globe" size={10} />
+            )}
+            {collectSubmittedResourceLinks(hoveredItem.session.feedbackText, hoveredItem.session.projectDirectory).length > 0 && (
+              <Icon name="file-text" size={10} />
             )}
           </div>
         </div>,
