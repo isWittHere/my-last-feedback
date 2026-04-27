@@ -58,7 +58,6 @@ function SessionGroup({
             key={session.id}
             className={`session-item${isActive ? " session-item-active" : ""}`}
             onClick={() => onSelect(session.id)}
-            title={session.requestName}
             style={isActive && activeCallerColor ? { background: `${activeCallerColor}${isLight ? "0d" : "1a"}` } : undefined}
           >
             {/* Row 1: icon + title */}
