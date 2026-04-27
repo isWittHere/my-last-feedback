@@ -1,4 +1,4 @@
-import { useCallback, type ComponentProps } from "react";
+import { Children, useCallback, type ComponentProps, type ReactNode } from "react";
 import ReactMarkdown from "react-markdown";
 import remarkGfm from "remark-gfm";
 import remarkBreaks from "remark-breaks";
@@ -20,6 +20,11 @@ import tsx from "react-syntax-highlighter/dist/esm/languages/prism/tsx";
 import { Icon } from "./Icons";
 import { useCopyToClipboard } from "./useCopyToClipboard";
 import { useIsLightTheme } from "./useIsLightTheme";
+import { parseComposerInlineTokens } from "../composer/composerTokens";
+import { resourceLinkInfo } from "../composer/resourceLinks";
+import { ColorToken } from "./composer/ColorToken";
+import { ResourceLinkToken } from "./composer/ResourceLinkToken";
+import { SlashCommandToken } from "./composer/SlashCommandToken";
 
 SyntaxHighlighter.registerLanguage("typescript", typescript);
 SyntaxHighlighter.registerLanguage("ts", typescript);
@@ -45,6 +50,20 @@ export interface MarkdownContentProps {
   markdown: string;
   projectDirectory?: string;
   className?: string;
+  variant?: "summary" | "mlcPreview" | "feedback";
+  enableComposerTokens?: boolean;
+  composerCommands?: ReadonlySet<string>;
+}
+
+type MarkdownAnchorProps = ComponentProps<"a"> & { node?: unknown };
+type MarkdownParagraphProps = ComponentProps<"p"> & { node?: unknown };
+type MarkdownListItemProps = ComponentProps<"li"> & { node?: unknown };
+type MarkdownTableCellProps = ComponentProps<"td"> & { node?: unknown };
+type MarkdownTableHeaderProps = ComponentProps<"th"> & { node?: unknown };
+
+function stripMarkdownNodeProp<T extends Record<string, unknown>>(props: T): Omit<T, "node"> {
+  const { node: _node, ...rest } = props;
+  return rest;
 }
 
 function CopyButton({ text }: { text: string }) {
@@ -104,9 +123,12 @@ function LinkRenderer({
   href,
   children,
   projectDirectory,
+  enableComposerTokens,
   ...rest
-}: ComponentProps<"a"> & { node?: unknown; projectDirectory?: string }) {
-  const { node: _node, ...filteredRest } = rest as Record<string, unknown>;
+}: MarkdownAnchorProps & { projectDirectory?: string; enableComposerTokens?: boolean }) {
+  const filteredRest = stripMarkdownNodeProp(rest as Record<string, unknown>);
+  const label = Children.toArray(children).map((child) => typeof child === "string" ? child : "").join("") || href || "resource";
+  const resource = href && enableComposerTokens ? resourceLinkInfo(label, href, projectDirectory) : null;
 
   const handleClick = useCallback(
     (event: React.MouseEvent<HTMLAnchorElement>) => {
@@ -139,6 +161,10 @@ function LinkRenderer({
     [href, projectDirectory],
   );
 
+  if (resource) {
+    return <ResourceLinkToken label={resource.label} href={resource.normalizedHref} kind={resource.kind} />;
+  }
+
   return (
     <a href={href} onClick={handleClick} style={{ cursor: "pointer" }} {...filteredRest}>
       {children}
@@ -146,19 +172,63 @@ function LinkRenderer({
   );
 }
 
-export function MarkdownContent({ markdown, projectDirectory, className }: MarkdownContentProps) {
+function renderComposerInlineText(text: string, commands?: ReadonlySet<string>): ReactNode[] {
+  return parseComposerInlineTokens(text, commands).map((token, index) => {
+    if (token.type === "url") {
+      return <a key={index} href={token.value}>{token.value}</a>;
+    }
+    if (token.type === "color") {
+      return <ColorToken key={index} value={token.value} />;
+    }
+    if (token.type === "slashCommand") {
+      return <SlashCommandToken key={index} raw={token.raw} matched={token.matched} />;
+    }
+    return token.value;
+  });
+}
+
+function renderComposerChildren(children: ReactNode, commands?: ReadonlySet<string>): ReactNode {
+  return Children.toArray(children).flatMap((child, index) => {
+    if (typeof child === "string") return renderComposerInlineText(child, commands).map((node, childIndex) => <span key={`${index}-${childIndex}`}>{node}</span>);
+    return child;
+  });
+}
+
+export function MarkdownContent({ markdown, projectDirectory, className, variant, enableComposerTokens, composerCommands }: MarkdownContentProps) {
   const LinkRendererWithDir = useCallback(
     (props: ComponentProps<"a"> & { node?: unknown }) => (
-      <LinkRenderer {...props} projectDirectory={projectDirectory} />
+      <LinkRenderer {...props} projectDirectory={projectDirectory} enableComposerTokens={enableComposerTokens} />
     ),
-    [projectDirectory],
+    [enableComposerTokens, projectDirectory],
   );
 
+  const ParagraphRenderer = useCallback(
+    ({ children, ...rest }: MarkdownParagraphProps) => <p {...stripMarkdownNodeProp(rest as Record<string, unknown>)}>{enableComposerTokens ? renderComposerChildren(children, composerCommands) : children}</p>,
+    [composerCommands, enableComposerTokens],
+  );
+
+  const ListItemRenderer = useCallback(
+    ({ children, ...rest }: MarkdownListItemProps) => <li {...stripMarkdownNodeProp(rest as Record<string, unknown>)}>{enableComposerTokens ? renderComposerChildren(children, composerCommands) : children}</li>,
+    [composerCommands, enableComposerTokens],
+  );
+
+  const TableCellRenderer = useCallback(
+    ({ children, ...rest }: MarkdownTableCellProps) => <td {...stripMarkdownNodeProp(rest as Record<string, unknown>)}>{enableComposerTokens ? renderComposerChildren(children, composerCommands) : children}</td>,
+    [composerCommands, enableComposerTokens],
+  );
+
+  const TableHeaderRenderer = useCallback(
+    ({ children, ...rest }: MarkdownTableHeaderProps) => <th {...stripMarkdownNodeProp(rest as Record<string, unknown>)}>{enableComposerTokens ? renderComposerChildren(children, composerCommands) : children}</th>,
+    [composerCommands, enableComposerTokens],
+  );
+
+  const rootClassName = ["prose", className, variant ? `prose-${variant}` : null].filter(Boolean).join(" ");
+
   return (
-    <div className={className ? `prose ${className}` : "prose"} style={{ userSelect: "text" }}>
+    <div className={rootClassName} style={{ userSelect: "text" }}>
       <ReactMarkdown
         remarkPlugins={[remarkGfm, remarkBreaks]}
-        components={{ code: CodeBlock, a: LinkRendererWithDir }}
+        components={{ code: CodeBlock, a: LinkRendererWithDir, p: ParagraphRenderer, li: ListItemRenderer, td: TableCellRenderer, th: TableHeaderRenderer }}
       >
         {markdown}
       </ReactMarkdown>

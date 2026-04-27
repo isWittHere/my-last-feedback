@@ -13,7 +13,8 @@ import { invoke } from "@tauri-apps/api/core";
 import { useActiveCallerSession } from "./useActiveCallerSession";
 import { Icon } from "./Icons";
 import { TransferSubmitSplit } from "./TransferSubmitSplit";
-import { AttachmentTagBar, ReadonlyTagBar, RichText } from "./CallerPanelParts";
+import { AttachmentTagBar, ReadonlyTagBar } from "./CallerPanelParts";
+import { ReadonlyComposerContent } from "./ReadonlyComposerContent";
 import { getNotificationSettings } from "../notificationSettings";
 import { formatWebAttachments } from "../browser/webAttachmentFormat";
 
@@ -410,17 +411,13 @@ function CallerContent() {
             <>
               <ReadonlyStatusBadge status={activeSession.status as "responded" | "cancelled"} />
               {/* Readonly tag bar: fixed, not scrollable */}
-              {(activeSession.images.length > 0 || activeSession.testLogText.trim() || activeSession.gitAction || (activeSession.mlcAttachments || []).length > 0) && (
+              {(activeSession.images.length > 0 || activeSession.testLogText.trim() || activeSession.gitAction || (activeSession.mlcAttachments || []).length > 0 || (activeSession.webAttachments || []).length > 0) && (
                 <ReadonlyTagBar session={activeSession} />
               )}
               {/* Scrollable feedback text */}
               {activeSession.feedbackText && (
                 <div className="flex-1 overflow-y-auto min-h-0 px-3 pb-2">
-                  <div
-                    style={{ fontSize: 13, color: "var(--color-text-muted)", whiteSpace: "pre-wrap", wordBreak: "break-all", opacity: 0.9, userSelect: "text", cursor: "text" }}
-                  >
-                    <RichText text={activeSession.feedbackText} />
-                  </div>
+                  <ReadonlyComposerContent session={activeSession} />
                 </div>
               )}
             </>
