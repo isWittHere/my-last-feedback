@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
 import { useTranslation } from "react-i18next";
 import { useFeedbackStore } from "../store/feedbackStore";
 import { CallerContext } from "./CallerContext";
@@ -99,6 +99,8 @@ function CallerContent() {
   const containerRef = useRef<HTMLDivElement>(null);
   const contentRootRef = useRef<HTMLDivElement>(null);
   const feedbackPanelRef = useRef<HTMLDivElement>(null);
+  const readonlyTagsRef = useRef<HTMLDivElement>(null);
+  const readonlyMarkdownRef = useRef<HTMLDivElement>(null);
   const INPUT_DEFAULT = 0.25;
   const INPUT_AUTO_MAX = 0.55;
   const [panelSizes, setPanelSizes] = useState([1 - INPUT_DEFAULT, INPUT_DEFAULT]);
@@ -196,12 +198,50 @@ function CallerContent() {
   ));
   const hasContent = !!(sessionFeedback.trim() || sessionTestLog.trim() || sessionImageCount > 0 || sessionMlcAttachmentCount > 0 || sessionWebAttachmentCount > 0 || hasQuestionAnswers || activeSession?.gitAction);
   const feedbackText = sessionFeedback;
+  const [readonlyContentAtTop, setReadonlyContentAtTop] = useState(true);
+  const [readonlyPanelMaxHeight, setReadonlyPanelMaxHeight] = useState<number | null>(null);
   const prompts = useFeedbackStore((state) => state.prompts);
   const disabledPrompts = useFeedbackStore((state) => state.disabledPrompts);
   const visiblePrompts = useMemo(
     () => prompts.filter((prompt) => !disabledPrompts.includes(prompt.name)),
     [disabledPrompts, prompts],
   );
+
+  useEffect(() => {
+    setReadonlyContentAtTop(true);
+  }, [activeSession?.id, isReadonly]);
+
+  const handleReadonlyContentScroll = useCallback((event: React.UIEvent<HTMLDivElement>) => {
+    const atTop = event.currentTarget.scrollTop <= 2;
+    setReadonlyContentAtTop((current) => current === atTop ? current : atTop);
+  }, []);
+
+  useLayoutEffect(() => {
+    if (!isReadonly) {
+      setReadonlyPanelMaxHeight(null);
+      return;
+    }
+
+    const measureReadonlyContent = () => {
+      const tagsHeight = readonlyTagsRef.current?.getBoundingClientRect().height ?? 0;
+      const markdownHeight = readonlyMarkdownRef.current?.scrollHeight ?? 0;
+      const bottomPadding = 8;
+      const nextHeight = Math.max(48, Math.ceil(tagsHeight + markdownHeight + bottomPadding));
+      setReadonlyPanelMaxHeight((current) => current === nextHeight ? current : nextHeight);
+    };
+
+    measureReadonlyContent();
+
+    const observer = new ResizeObserver(measureReadonlyContent);
+    if (readonlyTagsRef.current) observer.observe(readonlyTagsRef.current);
+    if (readonlyMarkdownRef.current) observer.observe(readonlyMarkdownRef.current);
+    window.addEventListener("resize", measureReadonlyContent);
+    return () => {
+      observer.disconnect();
+      window.removeEventListener("resize", measureReadonlyContent);
+    };
+  }, [activeSession?.id, isReadonly, hasContent, sessionFeedback, sessionTestLog, sessionImageCount, sessionMlcAttachmentCount, sessionWebAttachmentCount, hasQuestionAnswers, activeSession?.gitAction]);
+
   useEffect(() => {
     if (userResizedRef.current || isReadonly) return;
     const panel = feedbackPanelRef.current;
@@ -330,23 +370,27 @@ function CallerContent() {
       {/* 2 resizable panels: summary (top) + input area (bottom) */}
       <div ref={containerRef} className="flex-1 flex flex-col min-h-0 min-w-0 overflow-hidden" style={{ gap: 0 }}>
         {/* Summary panel */}
-        <div className="overflow-hidden flex flex-col panel-card" style={{ flex: `0 0 calc(${panelSizes[0] * 100}% - 1px)`, minHeight: 48 }}>
+        <div className="overflow-hidden flex flex-col panel-card" style={{ flex: isReadonly ? `1 1 calc(${panelSizes[0] * 100}% - 1px)` : `0 0 calc(${panelSizes[0] * 100}% - 1px)`, minHeight: 48 }}>
           <SummaryPanel />
         </div>
         <div className="resize-handle" onMouseDown={(e) => handleMouseDown(0, e)} />
         {/* Input area: attachments + feedback */}
-        <div ref={feedbackPanelRef} className={`flex flex-col panel-card panel-feedback${isReadonly ? "" : " panel-feedback-editable"}`} data-tooltip-placement="top" style={{ flex: `0 0 ${panelSizes[1] * 100}%`, minHeight: 48, position: "relative" }}>
+        <div ref={feedbackPanelRef} className={`flex flex-col panel-card panel-feedback${isReadonly ? "" : " panel-feedback-editable"}`} data-tooltip-placement="top" style={{ flex: isReadonly ? `0 1 ${panelSizes[1] * 100}%` : `0 0 ${panelSizes[1] * 100}%`, minHeight: 48, maxHeight: isReadonly && readonlyPanelMaxHeight ? readonlyPanelMaxHeight : undefined, position: "relative" }}>
           {isReadonly ? (
             <>
-              <ReadonlyStatusBadge status={activeSession.status as "responded" | "cancelled"} />
               {/* Readonly tag bar: fixed, not scrollable */}
-              <ReadonlyTagBar session={activeSession} />
+              <div ref={readonlyTagsRef} className="shrink-0">
+                <ReadonlyTagBar session={activeSession} />
+              </div>
               {/* Scrollable feedback text */}
-              {hasContent && (
-                <div className="flex-1 overflow-y-auto min-h-0 px-3 pb-2">
-                  <ReadonlyComposerContent session={activeSession} />
+              <div className="flex-1 min-h-0" style={{ position: "relative" }}>
+                <ReadonlyStatusBadge status={activeSession.status as "responded" | "cancelled"} compact={!readonlyContentAtTop} />
+                <div className="h-full overflow-y-auto px-3 pb-2" onScroll={handleReadonlyContentScroll}>
+                  <div ref={readonlyMarkdownRef}>
+                    {hasContent && <ReadonlyComposerContent session={activeSession} />}
+                  </div>
                 </div>
-              )}
+              </div>
             </>
           ) : (
             <ImageAttachmentWidget renderLayout={({ controls, fileInput, dropProps }) => (
@@ -416,12 +460,19 @@ function CallerContent() {
   );
 }
 
-function ReadonlyStatusBadge({ status }: { status: "responded" | "cancelled" }) {
+function ReadonlyStatusBadge({ status, compact = false }: { status: "responded" | "cancelled"; compact?: boolean }) {
   const { t } = useTranslation();
   const isCancelled = status === "cancelled";
+  const label = isCancelled
+    ? t("session.cancelled", "Client disconnected — session cancelled")
+    : t("session.responded", "Feedback already submitted (read-only)");
+  const motion = "180ms cubic-bezier(0.2, 0.8, 0.2, 1)";
+  const textMotion = "320ms cubic-bezier(0.2, 0.8, 0.2, 1)";
 
   return (
     <div
+      aria-label={label}
+      title={label}
       style={{
         position: "absolute",
         top: 8,
@@ -429,9 +480,11 @@ function ReadonlyStatusBadge({ status }: { status: "responded" | "cancelled" }) 
         zIndex: 5,
         display: "inline-flex",
         alignItems: "center",
-        gap: 5,
+        gap: 0,
+        justifyContent: "center",
         maxWidth: "calc(100% - 20px)",
-        padding: "4px 9px",
+        minWidth: compact ? 50 : 0,
+        padding: compact ? "4px 8px" : "4px 9px",
         borderRadius: 6,
         border: "1px solid var(--color-border)",
         background: "color-mix(in srgb, var(--color-bg-surface) 92%, transparent)",
@@ -440,6 +493,7 @@ function ReadonlyStatusBadge({ status }: { status: "responded" | "cancelled" }) 
         fontSize: 12,
         lineHeight: 1.2,
         pointerEvents: "none",
+        transition: `min-width ${motion}, padding ${motion}, background-color ${motion}, border-color ${motion}`,
       }}
     >
       {isCancelled ? (
@@ -447,10 +501,41 @@ function ReadonlyStatusBadge({ status }: { status: "responded" | "cancelled" }) 
       ) : (
         <Icon name="check" size={13} color="var(--color-success)" strokeWidth={2.5} />
       )}
-      <span className="truncate">
-        {isCancelled
-          ? t("session.cancelled", "Client disconnected — session cancelled")
-          : t("session.responded", "Feedback already submitted (read-only)")}
+      {!isCancelled && (
+        <span
+          aria-hidden={!compact}
+          style={{
+            display: "inline-flex",
+            alignItems: "center",
+            justifyContent: "center",
+            width: compact ? 13 : 0,
+            maxWidth: compact ? 13 : 0,
+            marginLeft: compact ? 5 : 0,
+            opacity: compact ? 1 : 0,
+            overflow: "hidden",
+            transform: compact ? "translateX(0) scale(1)" : "translateX(-4px) scale(0.92)",
+            transition: `width ${motion}, max-width ${motion}, margin-left ${motion}, opacity 140ms ease, transform ${motion}`,
+            willChange: "width, opacity, transform",
+          }}
+        >
+          <Icon name="eye" size={13} color="var(--color-text-muted)" strokeWidth={2.2} />
+        </span>
+      )}
+      <span
+        className="truncate"
+        style={{
+          display: "inline-block",
+          maxWidth: compact ? 0 : 320,
+          marginLeft: compact ? 0 : 5,
+          opacity: compact ? 0 : 1,
+          overflow: "hidden",
+          whiteSpace: "nowrap",
+          transform: compact ? "translateX(4px)" : "translateX(0)",
+          transition: `max-width ${textMotion}, margin-left ${textMotion}, opacity 260ms ease, transform ${textMotion}`,
+          willChange: "max-width, opacity, transform",
+        }}
+      >
+        {label}
       </span>
     </div>
   );
