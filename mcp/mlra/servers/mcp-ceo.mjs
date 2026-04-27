@@ -31,7 +31,7 @@ Verdict semantics:
   before final passage.
 - \`rejected\`: send the material back with a reason.
 - \`arbitration\`: issue directives to unblock the user's task. Optionally
-  scope directives via \`targets\`.",
+  scope directives via \`targets\`.`,
       {
         verdict: z.enum(["approved", "rejected", "arbitration"]).describe(
           "approved / rejected / arbitration (see tool description for semantics)"

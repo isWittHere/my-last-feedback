@@ -370,12 +370,12 @@ body,
   display: inline-flex;
   align-items: center;
   justify-content: center;
-  gap: 2px;
+  gap: 4px;
   border: 1px solid var(--color-border);
   border-radius: var(--radius-md);
   padding: 6px 12px;
   font-size: 12px;
-  padding: 16px 18px 24px 18px;
+  cursor: pointer;
   transition: all 0.15s ease;
   background: var(--color-bg-elevated);
   color: var(--color-text-primary);
@@ -384,7 +384,7 @@ body,
 }
 .btn:hover {
   background: #292929;
-  padding: 16px 18px 24px 18px;
+  border-color: #3a3a3a;
 }
 .btn:active {
   transform: scale(0.97);
