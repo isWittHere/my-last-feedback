@@ -9,6 +9,7 @@ import { Icon } from "./Icons";
 import { invoke } from "@tauri-apps/api/core";
 import { applyTheme, getStoredTheme, type Theme } from "../theme";
 import { getNotificationSettings, saveNotificationSettings, syncAutoFocusNewRequest, type NotificationSettings } from "../notificationSettings";
+import { getSubmittedViewSettings, saveSubmittedViewSettings, SUBMITTED_VIEW_SECTION_CONFIGS, type SubmittedViewSectionId, type SubmittedViewSettings } from "../submittedViewSettings";
 
 type Tab = "general" | "callers" | "display" | "notification" | "prompts" | "about";
 
@@ -55,6 +56,7 @@ export function SettingsDialog({ open, onClose }: { open: boolean; onClose: () =
   const [confirmClear, setConfirmClear] = useState(false);
   const [notifSettings, setNotifSettings] = useState<NotificationSettings>(getNotificationSettings);
   const [zoomSettings, setZoomSettings] = useState<ZoomSettings>(getZoomSettings);
+  const [submittedViewSettings, setSubmittedViewSettings] = useState<SubmittedViewSettings>(getSubmittedViewSettings);
   const prompts = useFeedbackStore((s) => s.prompts);
   const disabledPrompts = useFeedbackStore((s) => s.disabledPrompts);
   const togglePromptDisabled = useFeedbackStore((s) => s.togglePromptDisabled);
@@ -64,6 +66,7 @@ export function SettingsDialog({ open, onClose }: { open: boolean; onClose: () =
     if (!open) return;
     setTheme(getStoredTheme());
     setNotifSettings(getNotificationSettings());
+    setSubmittedViewSettings(getSubmittedViewSettings());
     invoke<boolean>("get_autostart").then(setAutostart).catch(() => {});
   }, [open]);
 
@@ -113,6 +116,28 @@ export function SettingsDialog({ open, onClose }: { open: boolean; onClose: () =
       return next;
     });
   }, []);
+
+  const updateSubmittedViewSettings = useCallback((updater: (current: SubmittedViewSettings) => SubmittedViewSettings) => {
+    setSubmittedViewSettings((current) => {
+      const next = updater(current);
+      saveSubmittedViewSettings(next);
+      return next;
+    });
+  }, []);
+
+  const handleSubmittedSectionVisibleToggle = useCallback((id: SubmittedViewSectionId) => {
+    updateSubmittedViewSettings((current) => ({
+      ...current,
+      visibleSections: { ...current.visibleSections, [id]: !current.visibleSections[id] },
+    }));
+  }, [updateSubmittedViewSettings]);
+
+  const handleSubmittedSectionCollapsedToggle = useCallback((id: SubmittedViewSectionId) => {
+    updateSubmittedViewSettings((current) => ({
+      ...current,
+      collapsedSections: { ...current.collapsedSections, [id]: !current.collapsedSections[id] },
+    }));
+  }, [updateSubmittedViewSettings]);
 
   if (!open) return null;
 
@@ -306,6 +331,39 @@ export function SettingsDialog({ open, onClose }: { open: boolean; onClose: () =
                   <div className="settings-zoom-control">
                     <input type="range" min={70} max={140} step={5} value={zoomSettings.input} onChange={(e) => handleZoomChange("input", Number(e.target.value))} className="settings-range" />
                     <span className="settings-zoom-value">{zoomSettings.input}%</span>
+                  </div>
+                </div>
+
+                <div className="settings-row settings-row-stacked" style={{ borderTop: "1px solid var(--color-border)", paddingTop: 12, marginTop: 4 }}>
+                  <div className="settings-row-info">
+                    <span className="settings-label">{t("settings.submittedView", "Submitted feedback view")}</span>
+                    <span className="settings-sublabel">{t("settings.submittedViewDesc", "Choose which audit sections are shown and whether each section starts collapsed.")}</span>
+                  </div>
+                  <div className="settings-submitted-section-list">
+                    <div className="settings-submitted-section-head">
+                      <span>{t("settings.submittedSection", "Section")}</span>
+                      <span>{t("settings.submittedVisible", "Show")}</span>
+                      <span>{t("settings.submittedCollapsed", "Collapse")}</span>
+                    </div>
+                    {SUBMITTED_VIEW_SECTION_CONFIGS.map((section) => (
+                      <div key={section.id} className="settings-submitted-section-item">
+                        <span className="settings-submitted-section-name">{t(section.labelKey, section.defaultLabel)}</span>
+                        <button
+                          className={`settings-toggle settings-toggle-sm${submittedViewSettings.visibleSections[section.id] ? " settings-toggle-on" : ""}`}
+                          onClick={() => handleSubmittedSectionVisibleToggle(section.id)}
+                          title={submittedViewSettings.visibleSections[section.id] ? t("settings.submittedHide", "Hide") : t("settings.submittedShow", "Show")}
+                        >
+                          <span className="settings-toggle-knob" />
+                        </button>
+                        <button
+                          className={`settings-toggle settings-toggle-sm${submittedViewSettings.collapsedSections[section.id] ? " settings-toggle-on" : ""}`}
+                          onClick={() => handleSubmittedSectionCollapsedToggle(section.id)}
+                          title={submittedViewSettings.collapsedSections[section.id] ? t("settings.submittedStartCollapsed", "Starts collapsed") : t("settings.submittedStartExpanded", "Starts expanded")}
+                        >
+                          <span className="settings-toggle-knob" />
+                        </button>
+                      </div>
+                    ))}
                   </div>
                 </div>
               </div>

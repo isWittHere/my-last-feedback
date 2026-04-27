@@ -1477,9 +1477,11 @@ body,
   display: inline-flex;
   align-items: center;
   gap: 3px;
+  box-sizing: border-box;
+  min-height: 20px;
   padding: 2px 5px 2px 3px;
   font-size: 11px;
-  line-height: 1.2;
+  line-height: 14px;
   border-radius: 4px;
   border: 1px solid var(--color-border);
   background: rgba(255,255,255,0.06);
@@ -1493,7 +1495,7 @@ body,
   border-color: var(--color-border-strong);
 }
 .attachment-tag-remove {
-  display: none;
+  display: inline-flex;
   align-items: center;
   justify-content: center;
   width: 14px;
@@ -1505,6 +1507,9 @@ body,
   padding: 0;
   border-radius: 2px;
   flex-shrink: 0;
+  opacity: 0;
+  visibility: hidden;
+  pointer-events: none;
 }
 .attachment-tag-remove:hover {
   color: #ef4444;
@@ -1512,10 +1517,12 @@ body,
 }
 .attachment-tag:hover .attachment-tag-remove,
 .group:hover .attachment-tag-remove {
-  display: inline-flex;
+  opacity: 1;
+  visibility: visible;
+  pointer-events: auto;
 }
 .attachment-tag-copy {
-  display: none;
+  display: inline-flex;
   align-items: center;
   justify-content: center;
   width: 14px;
@@ -1527,13 +1534,18 @@ body,
   padding: 0;
   border-radius: 2px;
   flex-shrink: 0;
+  opacity: 0;
+  visibility: hidden;
+  pointer-events: none;
 }
 .attachment-tag-copy:hover {
   color: var(--color-primary);
   background: rgba(99,102,241,0.15);
 }
 .attachment-tag:hover .attachment-tag-copy {
-  display: inline-flex;
+  opacity: 1;
+  visibility: visible;
+  pointer-events: auto;
 }
 .attachment-tag-danger {
   background: rgba(239,68,68,0.08);
@@ -3277,6 +3289,59 @@ body,
 .readonly-feedback-markdown {
   font-size: 13px;
 }
+.submitted-md-view {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  min-width: 0;
+}
+.submitted-md-section {
+  border: 1px solid color-mix(in srgb, var(--color-border) 78%, transparent);
+  border-radius: var(--radius-sm);
+  background: color-mix(in srgb, var(--color-bg-elevated) 38%, transparent);
+  overflow: hidden;
+}
+.submitted-md-section-header {
+  display: flex;
+  align-items: center;
+  gap: 5px;
+  width: 100%;
+  min-height: 26px;
+  padding: 4px 7px;
+  border: 0;
+  background: transparent;
+  color: var(--color-text-secondary);
+  font: inherit;
+  font-size: 12px;
+  font-weight: 600;
+  text-align: left;
+  cursor: pointer;
+}
+.submitted-md-section-header:hover {
+  color: var(--color-text-primary);
+  background: color-mix(in srgb, var(--color-bg-elevated) 76%, transparent);
+}
+.submitted-md-section-title {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.submitted-md-section-body {
+  padding: 7px 9px 9px;
+  border-top: 1px solid color-mix(in srgb, var(--color-border) 68%, transparent);
+}
+.submitted-md-section-body.prose > :first-child {
+  margin-top: 0;
+}
+.submitted-md-section-body.prose > :last-child {
+  margin-bottom: 0;
+}
+.submitted-md-empty {
+  color: var(--color-text-muted);
+  font-size: 12px;
+  padding: 8px;
+}
 .composer-command-token {
   display: inline-flex;
   align-items: center;
@@ -3669,6 +3734,11 @@ body,
   justify-content: space-between;
   gap: 12px;
 }
+.settings-row-stacked {
+  align-items: stretch;
+  flex-direction: column;
+  gap: 8px;
+}
 .settings-row-info {
   display: flex;
   flex-direction: column;
@@ -3697,6 +3767,37 @@ body,
   min-width: 36px;
   text-align: right;
   font-variant-numeric: tabular-nums;
+}
+.settings-submitted-section-list {
+  display: grid;
+  gap: 4px;
+  width: 100%;
+}
+.settings-submitted-section-head,
+.settings-submitted-section-item {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) 52px 64px;
+  align-items: center;
+  gap: 8px;
+}
+.settings-submitted-section-head {
+  color: var(--color-text-muted);
+  font-size: 10px;
+  text-transform: uppercase;
+}
+.settings-submitted-section-item {
+  min-height: 30px;
+  padding: 4px 6px;
+  border-radius: var(--radius-sm);
+  background: color-mix(in srgb, var(--color-bg-elevated) 48%, transparent);
+}
+.settings-submitted-section-name {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  color: var(--color-text-secondary);
+  font-size: 12px;
 }
 .settings-range {
   -webkit-appearance: none;

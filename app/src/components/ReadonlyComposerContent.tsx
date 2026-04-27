@@ -2,7 +2,7 @@ import { useMemo } from "react";
 import { useFeedbackStore, type Session } from "../store/feedbackStore";
 import { promptCommandSet } from "../composer/promptCommands";
 import { augmentReadonlySubmittedFeedback } from "../composer/submittedFeedback";
-import { MarkdownContent } from "./MarkdownContent";
+import { SubmittedFeedbackMarkdownView } from "./SubmittedFeedbackMarkdownView";
 
 export function ReadonlyComposerContent({ session }: { session: Session }) {
   const prompts = useFeedbackStore((state) => state.prompts);
@@ -18,12 +18,9 @@ export function ReadonlyComposerContent({ session }: { session: Session }) {
   );
 
   return (
-    <MarkdownContent
+    <SubmittedFeedbackMarkdownView
       markdown={markdown}
       projectDirectory={session.projectDirectory}
-      className="readonly-feedback-markdown"
-      variant="feedback"
-      enableComposerTokens
       composerCommands={commandSet}
     />
   );
