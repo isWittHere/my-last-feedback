@@ -76,6 +76,7 @@ pub struct PromptItem {
 #[derive(Debug, Deserialize)]
 pub struct ImageData {
     pub path: String,
+    pub name: Option<String>,
     pub data_url: Option<String>,
 }
 
@@ -278,7 +279,8 @@ async fn submit_session_feedback(
                     serde_json::json!({
                         "type": mime,
                         "data": parts[1],
-                        "path": img.path
+                        "path": img.path,
+                        "name": img.name.as_deref().unwrap_or("")
                     })
                 } else {
                     serde_json::Value::Null

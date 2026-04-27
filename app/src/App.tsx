@@ -10,18 +10,25 @@ import type { ImageAttachment, Session } from "./store/feedbackStore";
 import { getNotificationSettings, hasStoredNotificationSettings, saveNotificationSettings, syncAutoFocusNewRequest } from "./notificationSettings";
 import type { FeedbackDraft } from "./store/feedbackStore";
 
+function basename(value: string): string {
+  return value.replace(/\\/g, "/").split("/").filter(Boolean).pop() || value;
+}
+
 function mapHistoryImage(value: unknown, index: number): ImageAttachment | null {
   if (!value || typeof value !== "object") return null;
   const image = value as Record<string, unknown>;
   const file = typeof image.file === "string" ? image.file : "";
-  const path = typeof image.path === "string" ? image.path : file;
+  const originalPath = typeof image.path === "string" ? image.path : "";
+  const originalName = typeof image.name === "string" ? image.name : "";
+  const path = originalPath || file;
   const type = typeof image.type === "string" ? image.type : "image/png";
   const data = typeof image.data === "string" ? image.data : "";
-  const name = file || path || `image-${index + 1}`;
+  const placeholder = image.placeholder === true;
+  const name = originalName || (originalPath ? basename(originalPath) : placeholder ? `Image ${index + 1}` : basename(file || `image-${index + 1}`));
   return {
     path: path || name,
     name,
-    sizeKB: 0,
+    sizeKB: typeof image.sizeKB === "number" ? image.sizeKB : 0,
     dataUrl: data ? `data:${type};base64,${data}` : undefined,
   };
 }

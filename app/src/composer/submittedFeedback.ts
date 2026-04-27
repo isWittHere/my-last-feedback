@@ -15,7 +15,7 @@ export interface SubmittedFeedbackOptions {
 export interface SubmittedFeedbackResult {
   markdown: string;
   historyText: string;
-  imageList: Array<{ path: string; data_url?: string }>;
+  imageList: Array<{ path: string; name: string; data_url?: string }>;
 }
 
 export interface SubmittedResourceLink {
@@ -260,6 +260,6 @@ export function buildSubmittedFeedback(session: Session, options: SubmittedFeedb
   return {
     markdown: sections.join("\n\n"),
     historyText: [trimmedFeedback, quickAction].filter(Boolean).join("\n\n"),
-    imageList: session.images.map((image) => ({ path: image.path, data_url: image.dataUrl })),
+    imageList: session.images.map((image) => ({ path: image.path, name: image.name, data_url: image.dataUrl })),
   };
 }

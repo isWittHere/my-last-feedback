@@ -153,6 +153,10 @@ struct PersistedSession {
 struct ImageRef {
     file_name: String,
     mime_type: String,
+    #[serde(default)]
+    original_name: Option<String>,
+    #[serde(default)]
+    original_path: Option<String>,
 }
 
 /// Internal session with response channel
@@ -390,6 +394,8 @@ impl SessionManager {
                             "placeholder": true,
                             "file": img.get("file").and_then(|v| v.as_str()).unwrap_or(""),
                             "type": img.get("type").and_then(|v| v.as_str()).unwrap_or("image/png"),
+                            "name": img.get("name").and_then(|v| v.as_str()).unwrap_or(""),
+                            "path": img.get("path").and_then(|v| v.as_str()).unwrap_or(""),
                             "index": index,
                         })
                     })
@@ -418,7 +424,13 @@ impl SessionManager {
                                     .get("type")
                                     .and_then(|v| v.as_str())
                                     .unwrap_or("image/png");
-                                serde_json::json!({ "type": mime, "data": data })
+                                serde_json::json!({
+                                    "type": mime,
+                                    "data": data,
+                                    "file": file_name,
+                                    "name": img.get("name").and_then(|v| v.as_str()).unwrap_or(""),
+                                    "path": img.get("path").and_then(|v| v.as_str()).unwrap_or(""),
+                                })
                             } else {
                                 img.clone()
                             }
@@ -477,6 +489,8 @@ impl SessionManager {
                 image_refs.push(serde_json::json!({
                     "type": mime,
                     "file": file_name,
+                    "name": img.get("name").and_then(|v| v.as_str()).unwrap_or(""),
+                    "path": img.get("path").and_then(|v| v.as_str()).unwrap_or(""),
                 }));
             }
         }
@@ -767,6 +781,16 @@ impl SessionManager {
                                 .and_then(|v| v.as_str())
                                 .unwrap_or("image/png")
                                 .to_string(),
+                            original_name: img
+                                .get("name")
+                                .and_then(|v| v.as_str())
+                                .filter(|value| !value.trim().is_empty())
+                                .map(|value| value.to_string()),
+                            original_path: img
+                                .get("path")
+                                .and_then(|v| v.as_str())
+                                .filter(|value| !value.trim().is_empty())
+                                .map(|value| value.to_string()),
                         })
                     })
                     .collect();
@@ -839,6 +863,8 @@ impl SessionManager {
                         serde_json::json!({
                             "type": r.mime_type,
                             "file": r.file_name,
+                            "name": r.original_name.clone().unwrap_or_default(),
+                            "path": r.original_path.clone().unwrap_or_default(),
                         })
                     })
                     .collect();

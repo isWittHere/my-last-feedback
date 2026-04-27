@@ -65,6 +65,10 @@ function SubmittedMarkdownSectionView({
   projectDirectory?: string;
   composerCommands?: ReadonlySet<string>;
 }) {
+  const renderedContent = section.id === "system"
+    ? section.content.replace(/^\[System\]\s*/gim, "")
+    : section.content;
+
   return (
     <section className={`submitted-md-section submitted-md-section-${section.id} submitted-md-section-${expanded ? "expanded" : "collapsed"}`}>
       <h2 className="submitted-md-section-heading">
@@ -75,7 +79,7 @@ function SubmittedMarkdownSectionView({
       </h2>
       {expanded && section.content && (
         <MarkdownContent
-          markdown={section.content}
+          markdown={renderedContent}
           projectDirectory={projectDirectory}
           className="readonly-feedback-markdown submitted-md-section-body"
           variant="feedback"
