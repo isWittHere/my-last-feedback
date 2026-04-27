@@ -1,9 +1,11 @@
-import { useEffect, useRef, useCallback } from "react";
+import { useEffect, useRef, useCallback, useMemo } from "react";
 import { useTranslation } from "react-i18next";
 import { useFeedbackStore } from "../store/feedbackStore";
 import { useShallow } from "zustand/react/shallow";
 import { useActiveCallerSession } from "./useActiveCallerSession";
 import { useFriendlyName } from "./useFriendlyName";
+import { promptCommandSet } from "../composer/promptCommands";
+import { TokenizedTextarea } from "./TokenizedTextarea";
 
 interface InsertFeedbackTextEventDetail {
   callerId: string;
@@ -17,6 +19,8 @@ export function FeedbackInput({ minHeight, queuedCallerId }: { minHeight?: numbe
   const friendlyName = useFriendlyName();
   const { session: activeSession, caller } = useActiveCallerSession();
   const queuedDraft = useFeedbackStore((s) => queuedCallerId ? s.queuedDraftsByCallerId[queuedCallerId] : null);
+  const prompts = useFeedbackStore((s) => s.prompts);
+  const disabledPrompts = useFeedbackStore((s) => s.disabledPrompts);
   const { updateSessionField, addSessionImage, updateQueuedDraftField, addQueuedDraftImage, setFocusedComposer } = useFeedbackStore(useShallow((s) => ({
     updateSessionField: s.updateSessionField,
     addSessionImage: s.addSessionImage,
@@ -30,6 +34,10 @@ export function FeedbackInput({ minHeight, queuedCallerId }: { minHeight?: numbe
 
   const value = queuedCallerId ? (queuedDraft?.feedbackText || "") : (activeSession?.feedbackText || "");
   const isReadonly = !queuedCallerId && (activeSession?.status === "responded" || activeSession?.status === "cancelled");
+  const composerCommands = useMemo(() => {
+    const visiblePrompts = prompts.filter((prompt) => !disabledPrompts.includes(prompt.name));
+    return promptCommandSet(visiblePrompts);
+  }, [disabledPrompts, prompts]);
 
   useEffect(() => {
     textareaRef.current?.focus();
@@ -208,7 +216,7 @@ export function FeedbackInput({ minHeight, queuedCallerId }: { minHeight?: numbe
   const draftPasteHint = t("feedback.draftPasteHint", "Ctrl+V to paste images");
 
   const textarea = (
-    <textarea
+    <TokenizedTextarea
       ref={textareaRef}
       value={value}
       onChange={handleChange}
@@ -217,7 +225,10 @@ export function FeedbackInput({ minHeight, queuedCallerId }: { minHeight?: numbe
       onFocus={handleFocus}
       readOnly={isReadonly}
       placeholder={placeholderText}
-      className={`input-area${minHeight === undefined ? " flex-1" : ""}`}
+      className="input-area"
+      containerClassName={minHeight === undefined ? "flex-1" : undefined}
+      projectDirectory={activeSession?.projectDirectory || ""}
+      composerCommands={composerCommands}
       style={{
         minHeight: minHeight ?? 0,
         height: minHeight === undefined ? "100%" : undefined,

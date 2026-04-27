@@ -37,7 +37,8 @@ function encodeMarkdownPath(path: string, kind: "file" | "folder"): string {
 
 function formatMarkdownLink(entry: ProjectResourceEntry): string {
   const label = escapeMarkdownLabel(entry.kind === "folder" ? ensureTrailingSlash(entry.name) : entry.name);
-  const href = encodeMarkdownPath(entry.absolutePath, entry.kind);
+  const sourcePath = entry.relativePath || entry.absolutePath;
+  const href = encodeMarkdownPath(sourcePath, entry.kind);
   return `[${label}](${href})`;
 }
 
