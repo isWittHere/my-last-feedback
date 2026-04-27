@@ -66,11 +66,13 @@ function SubmittedMarkdownSectionView({
   composerCommands?: ReadonlySet<string>;
 }) {
   return (
-    <section className={`submitted-md-section submitted-md-section-${section.id}`}>
-      <button className="submitted-md-section-header" type="button" onClick={onToggle} aria-expanded={expanded}>
-        <Icon name={expanded ? "chevron-down" : "chevron-right"} size={13} />
-        <span className="submitted-md-section-title">{section.title}</span>
-      </button>
+    <section className={`submitted-md-section submitted-md-section-${section.id} submitted-md-section-${expanded ? "expanded" : "collapsed"}`}>
+      <h2 className="submitted-md-section-heading">
+        <button className="submitted-md-section-header" type="button" onClick={onToggle} aria-expanded={expanded}>
+          <span className="submitted-md-section-title">{section.title}</span>
+          <Icon name={expanded ? "chevron-down" : "chevron-right"} size={16} />
+        </button>
+      </h2>
       {expanded && section.content && (
         <MarkdownContent
           markdown={section.content}
