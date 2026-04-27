@@ -1790,6 +1790,35 @@ body,
   gap: 2px;
   align-self: stretch;
 }
+.mlc-panel-tab-row-close {
+  width: 20px;
+  height: 20px;
+  flex: 0 0 auto;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  margin-left: auto;
+  padding: 0;
+  border: 0;
+  border-radius: var(--radius-sm);
+  background: transparent;
+  box-shadow: none;
+  color: var(--color-text-muted);
+  opacity: 0;
+  pointer-events: none;
+  cursor: pointer;
+  transition: opacity 0.14s ease, color 0.14s ease, background-color 0.14s ease;
+}
+.mlc-panel-icon-tabs-row:hover .mlc-panel-tab-row-close,
+.mlc-panel-icon-tabs-row:focus-within .mlc-panel-tab-row-close {
+  opacity: 1;
+  pointer-events: auto;
+}
+.mlc-panel-tab-row-close:hover {
+  background: var(--color-bg-elevated);
+  box-shadow: none;
+  color: var(--color-text-primary);
+}
 .dock-tab-drag-host {
   align-self: stretch;
   display: inline-flex;

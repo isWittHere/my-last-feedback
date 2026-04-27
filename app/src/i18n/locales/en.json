@@ -275,6 +275,7 @@
     "moveToLeftSidebar": "Move to left sidebar",
     "moveToLeftPage": "Move to left page",
     "moveToRightSidebar": "Move to right sidebar",
+    "collapsePanel": "Collapse panel",
     "closeLeftPage": "Close left page panel",
     "openLeftPage": "Open left page panel",
     "closeRightSidebar": "Close right sidebar",

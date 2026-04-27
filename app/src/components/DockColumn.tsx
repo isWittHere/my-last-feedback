@@ -73,6 +73,7 @@ export function DockColumn({ columnId }: { columnId: DockColumnId }) {
   const activeWorkspacePath = useFeedbackStore((state) => state.mlcActiveWorkspacePath);
   const setActiveWorkspacePath = useFeedbackStore((state) => state.setMlcActiveWorkspacePath);
   const setDockColumnWidth = useFeedbackStore((state) => state.setDockColumnWidth);
+  const setDockColumnCollapsed = useFeedbackStore((state) => state.setDockColumnCollapsed);
   const setDockColumnTabBarPosition = useFeedbackStore((state) => state.setDockColumnTabBarPosition);
   const setDockActiveTab = useFeedbackStore((state) => state.setDockActiveTab);
   const moveDockTabToColumn = useFeedbackStore((state) => state.moveDockTabToColumn);
@@ -271,6 +272,15 @@ export function DockColumn({ columnId }: { columnId: DockColumnId }) {
   const renderPanelTabBar = () => (
     <div className={`mlc-panel-header mlc-panel-icon-tabs-row ${column.tabBarPosition}`}>
       <div className="mlc-panel-icon-tabs" role="tablist" aria-label={t("mlc.panelTabs", "Side panel tabs")}>{column.tabIds.map(renderTab)}</div>
+      <button
+        type="button"
+        className="mlc-panel-tab-row-close"
+        onClick={() => setDockColumnCollapsed(columnId, true)}
+        aria-label={t("dock.collapsePanel", "Collapse panel")}
+        title={t("dock.collapsePanel", "Collapse panel")}
+      >
+        <Icon name={visualPosition === "right" ? "chevron-right" : "chevron-left"} size={14} />
+      </button>
     </div>
   );
 
