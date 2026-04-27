@@ -71,6 +71,11 @@ async function main() {
   console.log("Waiting for response (submit in the app to continue)...");
 
   const rl = createInterface({ input: socket });
+  rl.on("error", (err) => {
+    console.error("Readline error:", err.message);
+    socket.destroy();
+    process.exit(1);
+  });
   rl.on("line", (line) => {
     try {
       const msg = JSON.parse(line);

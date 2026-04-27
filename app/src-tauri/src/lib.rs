@@ -260,6 +260,7 @@ async fn submit_session_feedback(
     command_logs: String,
     images: Vec<ImageData>,
     mlc_attachments: Vec<MlcAttachment>,
+    web_attachments: Vec<serde_json::Value>,
     transfer_to_alias: Option<String>,
 ) -> Result<(), String> {
     let image_values: Vec<serde_json::Value> = images
@@ -298,7 +299,7 @@ async fn submit_session_feedback(
     };
 
     let mut mgr = session_mgr.lock().await;
-    mgr.submit_feedback(&session_id, payload, mlc_attachments)
+    mgr.submit_feedback(&session_id, payload, mlc_attachments, web_attachments)
 }
 
 /// Update caller tab color
@@ -503,13 +504,16 @@ fn load_prompts() -> Vec<PromptItem> {
     let mut dirs_to_check = Vec::new();
     if let Some(d) = &exe_dir {
         dirs_to_check.push(d.join("mcp_prompts"));
+        add_ancestor_prompt_dirs(d, &mut dirs_to_check);
     }
     // Also check current working directory
     if let Ok(cwd) = std::env::current_dir() {
         dirs_to_check.push(cwd.join("mcp_prompts"));
+        add_ancestor_prompt_dirs(&cwd, &mut dirs_to_check);
     }
 
     let mut results = Vec::new();
+    let mut seen_names = HashSet::new();
     for prompts_dir in dirs_to_check {
         if !prompts_dir.is_dir() {
             continue;
@@ -522,17 +526,25 @@ fn load_prompts() -> Vec<PromptItem> {
                 {
                     if let Ok(content) = std::fs::read_to_string(&path) {
                         if let Some(item) = parse_prompt_file(&content, &path) {
-                            results.push(item);
+                            if seen_names.insert(item.name.clone()) {
+                                results.push(item);
+                            }
                         }
                     }
                 }
             }
         }
-        if !results.is_empty() {
-            break;
-        }
     }
     results
+}
+
+fn add_ancestor_prompt_dirs(start: &std::path::Path, dirs: &mut Vec<std::path::PathBuf>) {
+    for ancestor in start.ancestors().skip(1) {
+        let candidate = ancestor.join("mcp_prompts");
+        if !dirs.iter().any(|existing| existing == &candidate) {
+            dirs.push(candidate);
+        }
+    }
 }
 
 fn parse_prompt_file(content: &str, path: &std::path::Path) -> Option<PromptItem> {

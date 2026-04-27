@@ -1,11 +1,11 @@
-import { useEffect, useRef, useCallback, useMemo } from "react";
+import { useEffect, useRef, useCallback, useMemo, type ClipboardEvent, type KeyboardEvent } from "react";
 import { useTranslation } from "react-i18next";
 import { useFeedbackStore } from "../store/feedbackStore";
 import { useShallow } from "zustand/react/shallow";
 import { useActiveCallerSession } from "./useActiveCallerSession";
 import { useFriendlyName } from "./useFriendlyName";
-import { promptCommandSet } from "../composer/promptCommands";
-import { TokenizedTextarea } from "./TokenizedTextarea";
+import { promptCommandOptions } from "../composer/promptCommands";
+import { ComposerEditor, type ComposerEditorHandle } from "./composer/ComposerEditor";
 
 interface InsertFeedbackTextEventDetail {
   callerId: string;
@@ -28,7 +28,7 @@ export function FeedbackInput({ minHeight, queuedCallerId }: { minHeight?: numbe
     addQueuedDraftImage: s.addQueuedDraftImage,
     setFocusedComposer: s.setFocusedComposer,
   })));
-  const textareaRef = useRef<HTMLTextAreaElement>(null);
+  const editorRef = useRef<ComposerEditorHandle>(null);
   const historyIndexRef = useRef<number | null>(null);
   const historyScratchRef = useRef("");
 
@@ -36,28 +36,29 @@ export function FeedbackInput({ minHeight, queuedCallerId }: { minHeight?: numbe
   const isReadonly = !queuedCallerId && (activeSession?.status === "responded" || activeSession?.status === "cancelled");
   const composerCommands = useMemo(() => {
     const visiblePrompts = prompts.filter((prompt) => !disabledPrompts.includes(prompt.name));
-    return promptCommandSet(visiblePrompts);
+    return promptCommandOptions(visiblePrompts);
   }, [disabledPrompts, prompts]);
 
   useEffect(() => {
-    textareaRef.current?.focus();
+    editorRef.current?.focus();
   }, []);
 
   // Auto-resize when in scroll mode (minHeight provided)
   useEffect(() => {
-    if (minHeight !== undefined && textareaRef.current) {
-      textareaRef.current.style.height = "auto";
-      const h = Math.max(textareaRef.current.scrollHeight, minHeight);
-      textareaRef.current.style.height = h + "px";
+    const editor = editorRef.current?.getElement();
+    if (minHeight !== undefined && editor) {
+      editor.style.height = "auto";
+      const h = Math.max(editor.scrollHeight, minHeight);
+      editor.style.height = h + "px";
     }
   }, [value, minHeight]);
 
-  const handleChange = (e: React.ChangeEvent<HTMLTextAreaElement>) => {
+  const handleChange = (nextValue: string) => {
     historyIndexRef.current = null;
     if (queuedCallerId) {
-      updateQueuedDraftField(queuedCallerId, "feedbackText", e.target.value);
+      updateQueuedDraftField(queuedCallerId, "feedbackText", nextValue);
     } else if (activeSession) {
-      updateSessionField(activeSession.id, "feedbackText", e.target.value);
+      updateSessionField(activeSession.id, "feedbackText", nextValue);
     }
   };
 
@@ -88,12 +89,8 @@ export function FeedbackInput({ minHeight, queuedCallerId }: { minHeight?: numbe
     } else if (activeSession) {
       updateSessionField(activeSession.id, "feedbackText", nextValue);
     }
-    requestAnimationFrame(() => {
-      const el = textareaRef.current;
-      if (!el) return;
-      const pos = nextValue.length;
-      el.setSelectionRange(pos, pos);
-    });
+    const pos = nextValue.length;
+    editorRef.current?.syncValue(nextValue, { start: pos, end: pos });
   }, [activeSession, queuedCallerId, updateQueuedDraftField, updateSessionField]);
 
   useEffect(() => {
@@ -104,33 +101,15 @@ export function FeedbackInput({ minHeight, queuedCallerId }: { minHeight?: numbe
       const matchesSession = !queuedCallerId && !!activeSession && detail.kind === "feedback" && detail.sessionId === activeSession.id;
       if (!matchesQueuedDraft && !matchesSession) return;
 
-      const textarea = textareaRef.current;
-      const start = textarea?.selectionStart ?? value.length;
-      const end = textarea?.selectionEnd ?? value.length;
-      const nextValue = value.slice(0, start) + detail.text + value.slice(end);
-      const nextCursor = start + detail.text.length;
-
-      if (queuedCallerId) {
-        updateQueuedDraftField(queuedCallerId, "feedbackText", nextValue);
-      } else if (activeSession) {
-        updateSessionField(activeSession.id, "feedbackText", nextValue);
-      }
-
-      requestAnimationFrame(() => {
-        const nextTextarea = textareaRef.current;
-        if (!nextTextarea) return;
-        nextTextarea.focus();
-        nextTextarea.setSelectionRange(nextCursor, nextCursor);
-      });
+      editorRef.current?.insertText(detail.text);
     };
 
     window.addEventListener("mlfb-insert-feedback-text", handleInsertText);
     return () => window.removeEventListener("mlfb-insert-feedback-text", handleInsertText);
-  }, [activeSession, queuedCallerId, updateQueuedDraftField, updateSessionField, value]);
+  }, [activeSession, queuedCallerId]);
 
-  const handleKeyDown = useCallback((e: React.KeyboardEvent<HTMLTextAreaElement>) => {
+  const handleKeyDown = useCallback((e: KeyboardEvent<HTMLDivElement>, selection: { start: number; end: number }) => {
     if (isReadonly || (e.key !== "ArrowUp" && e.key !== "ArrowDown" && e.key !== "Escape")) return;
-    const el = e.currentTarget;
     const callerId = queuedCallerId || activeSession?.callerId || caller?.id;
     if (!callerId) return;
 
@@ -141,9 +120,9 @@ export function FeedbackInput({ minHeight, queuedCallerId }: { minHeight?: numbe
       return;
     }
 
-    if (el.selectionStart !== el.selectionEnd) return;
-    const before = value.slice(0, el.selectionStart);
-    const after = value.slice(el.selectionEnd);
+    if (selection.start !== selection.end) return;
+    const before = value.slice(0, selection.start);
+    const after = value.slice(selection.end);
     const atFirstLine = !before.includes("\n");
     const atLastLine = !after.includes("\n");
     const history = useFeedbackStore.getState().getMessageHistory(callerId);
@@ -172,7 +151,7 @@ export function FeedbackInput({ minHeight, queuedCallerId }: { minHeight?: numbe
   }, [activeSession, caller, isReadonly, queuedCallerId, setCurrentValue, value]);
 
   const handlePaste = useCallback(
-    (e: React.ClipboardEvent<HTMLTextAreaElement>) => {
+    (e: ClipboardEvent<HTMLDivElement>) => {
       const items = e.clipboardData?.items;
       if (!items) return;
       for (const item of Array.from(items)) {
@@ -215,9 +194,9 @@ export function FeedbackInput({ minHeight, queuedCallerId }: { minHeight?: numbe
   });
   const draftPasteHint = t("feedback.draftPasteHint", "Ctrl+V to paste images");
 
-  const textarea = (
-    <TokenizedTextarea
-      ref={textareaRef}
+  const editor = (
+    <ComposerEditor
+      ref={editorRef}
       value={value}
       onChange={handleChange}
       onKeyDown={handleKeyDown}
@@ -228,7 +207,7 @@ export function FeedbackInput({ minHeight, queuedCallerId }: { minHeight?: numbe
       className="input-area"
       containerClassName={minHeight === undefined ? "flex-1" : undefined}
       projectDirectory={activeSession?.projectDirectory || ""}
-      composerCommands={composerCommands}
+      commands={composerCommands}
       style={{
         minHeight: minHeight ?? 0,
         height: minHeight === undefined ? "100%" : undefined,
@@ -245,7 +224,7 @@ export function FeedbackInput({ minHeight, queuedCallerId }: { minHeight?: numbe
   if (queuedCallerId) {
     return (
       <div className={minHeight === undefined ? "relative flex-1 min-h-0" : "relative"} style={{ width: "100%" }}>
-        {textarea}
+        {editor}
         {!value && (
           <div
             style={{
@@ -268,5 +247,5 @@ export function FeedbackInput({ minHeight, queuedCallerId }: { minHeight?: numbe
     );
   }
 
-  return textarea;
+  return editor;
 }

@@ -7,7 +7,6 @@ import { SummaryPanel } from "./SummaryPanel";
 import { FeedbackInput } from "./FeedbackInput";
 import { ImageAttachmentWidget } from "./ImageAttachmentWidget";
 import { QuickActions } from "./QuickActions";
-import { PromptButtons } from "./PromptButtons";
 import { Sidebar } from "./Sidebar";
 import { invoke } from "@tauri-apps/api/core";
 import { useActiveCallerSession } from "./useActiveCallerSession";
@@ -16,28 +15,7 @@ import { TransferSubmitSplit } from "./TransferSubmitSplit";
 import { AttachmentTagBar, ReadonlyTagBar } from "./CallerPanelParts";
 import { ReadonlyComposerContent } from "./ReadonlyComposerContent";
 import { getNotificationSettings } from "../notificationSettings";
-import { formatWebAttachments } from "../browser/webAttachmentFormat";
-
-function sanitizeMarkdownLine(value: string): string {
-  return value.replace(/[\r\n]+/g, " ").trim();
-}
-
-function cleanMlcDisplayPath(path: string): string {
-  return path.replace(/^\\\\\?\\UNC\\/i, "\\\\").replace(/^\\\\\?\\/i, "");
-}
-
-function formatMlcReferences(attachments: import("../store/feedbackStore").MlcAttachment[]): string | null {
-  if (attachments.length === 0) return null;
-  const blocks = attachments.map((item) => {
-    const filePath = cleanMlcDisplayPath(item.filePath);
-    return [
-    `### ${sanitizeMarkdownLine(item.title || filePath)}`,
-    `- ${sanitizeMarkdownLine(item.description || "")}`,
-    `- ${sanitizeMarkdownLine(filePath)}`,
-  ].join("\n");
-  });
-  return ["## Attachment: MLC References", ...blocks].join("\n\n");
-}
+import { buildSubmittedFeedback } from "../composer/submittedFeedback";
 
 /**
  * Self-contained panel for a single caller.
@@ -218,17 +196,23 @@ function CallerContent() {
   ));
   const hasContent = !!(sessionFeedback.trim() || sessionTestLog.trim() || sessionImageCount > 0 || sessionMlcAttachmentCount > 0 || sessionWebAttachmentCount > 0 || hasQuestionAnswers || activeSession?.gitAction);
   const feedbackText = sessionFeedback;
+  const prompts = useFeedbackStore((state) => state.prompts);
+  const disabledPrompts = useFeedbackStore((state) => state.disabledPrompts);
+  const visiblePrompts = useMemo(
+    () => prompts.filter((prompt) => !disabledPrompts.includes(prompt.name)),
+    [disabledPrompts, prompts],
+  );
   useEffect(() => {
     if (userResizedRef.current || isReadonly) return;
     const panel = feedbackPanelRef.current;
     const container = containerRef.current;
     if (!panel || !container) return;
-    const textarea = panel.querySelector("textarea");
-    if (!textarea) return;
+    const composerInput = panel.querySelector<HTMLElement>("[data-composer-input='true']");
+    if (!composerInput) return;
     const containerH = container.getBoundingClientRect().height;
     if (containerH <= 0) return;
-    const scrollH = textarea.scrollHeight;
-    const clientH = textarea.clientHeight;
+    const scrollH = composerInput.scrollHeight;
+    const clientH = composerInput.clientHeight;
     if (scrollH > clientH + 4) {
       const extraPx = scrollH - clientH;
       const extraRatio = extraPx / containerH;
@@ -285,63 +269,15 @@ function CallerContent() {
       if (!activeSession || activeSession.status !== "pending" || sessionSubmitting) return;
       setSessionSubmitting(true);
 
-      const sections: string[] = [];
-      if (activeSession.feedbackText.trim()) {
-        sections.push(`## User Feedback\n${activeSession.feedbackText.trim()}`);
-      }
-      if (quickAction) {
-        sections.push(`## User Requirement\n${quickAction}`);
-      }
-
-      // Agent questions response as Markdown table
-      const answeredQuestions = activeSession.questions?.filter(
-        (q) => q.answer.trim() || (q.selectedOptions && q.selectedOptions.length > 0)
-      );
-      if (answeredQuestions && answeredQuestions.length > 0) {
-        const tableRows = activeSession.questions.map((q, i) => {
-          const selected = q.selectedOptions && q.selectedOptions.length > 0 ? q.selectedOptions.join(", ") : "\u2014";
-          const answer = q.answer.trim() || "\u2014";
-          return `| ${i + 1} | ${q.label} | ${selected} | ${answer} |`;
-        });
-        sections.push(
-          `## Agent Questions Response\n\n| # | Question | Selected | Answer |\n|---|----------|----------|--------|\n${tableRows.join("\n")}`
-        );
-      }
-
-      // Git action instruction
-      if (activeSession.gitAction) {
-        const gitMessages: Record<string, string> = {
-          commit: "Please execute git add and git commit to backup the current changes.",
-          "commit-push": "Please execute git add, git commit, and git push to backup and push the current changes.",
-          "create-branch": activeSession.gitAction.branchName
-            ? `Please create a new branch "${activeSession.gitAction.branchName}" and switch to it.`
-            : "Please create a new branch and switch to it.",
-        };
-        sections.push(`## Git Action\n${gitMessages[activeSession.gitAction.type]}`);
-      }
-
-      if (activeSession.testLogText.trim()) {
-        sections.push(`## Attachment: Test Logs\n${activeSession.testLogText.trim()}`);
-      }
-      const imageList = activeSession.images.map((i) => ({ path: i.path, data_url: i.dataUrl }));
-      if (imageList.length > 0) {
-        sections.push(
-          `## Attachment: Images\n${imageList.length} image(s) attached, please review the accompanying image content.`
-        );
-      }
-      const mlcReferences = formatMlcReferences(activeSession.mlcAttachments || []);
-      if (mlcReferences) {
-        sections.push(mlcReferences);
-      }
-      const webReferences = formatWebAttachments(activeSession.webAttachments || []);
-      if (webReferences) {
-        sections.push(webReferences);
-      }
-      sections.push(
-        "[System] Reminder: You MUST call the interactive_feedback tool again after completing this operation. Do NOT end your turn without invoking interactive_feedback."
-      );
-      const finalFeedback = sections.join("\n\n");
-      const historyText = [activeSession.feedbackText.trim(), quickAction?.trim()].filter(Boolean).join("\n\n");
+      const submittedFeedback = buildSubmittedFeedback(activeSession, {
+        prompts: visiblePrompts,
+        quickAction,
+        callerAlias: caller?.alias || null,
+        transferAlias,
+      });
+      const finalFeedback = submittedFeedback.markdown;
+      const historyText = submittedFeedback.historyText;
+      const imageList = submittedFeedback.imageList;
 
       // Save the quick action text into feedbackText for history display
       if (quickAction && !activeSession.feedbackText.trim()) {
@@ -357,9 +293,11 @@ function CallerContent() {
           commandLogs: activeSession.commandLogs,
           images: imageList,
           mlcAttachments: activeSession.mlcAttachments || [],
+          webAttachments: activeSession.webAttachments || [],
           transferToAlias: transferAlias,
         });
         pushMessageHistory(activeSession.callerId, historyText);
+        updateSessionField(activeSession.id, "feedbackText", finalFeedback);
         markSessionResponded(activeSession.id);
         // Clear transfer state after successful submit
         setTransferAlias(null);
@@ -371,7 +309,7 @@ function CallerContent() {
         setSessionSubmitting(false);
       }
     },
-    [activeSession, sessionSubmitting, markSessionResponded, updateSessionField, pushMessageHistory, transferAlias]
+    [activeSession, caller?.alias, sessionSubmitting, markSessionResponded, updateSessionField, pushMessageHistory, transferAlias, visiblePrompts]
   );
 
   // Ctrl+Enter shortcut — scoped to this panel
@@ -452,7 +390,6 @@ function CallerContent() {
       {/* Bottom fused area: buttons only */}
       {!isReadonly && (
         <div className="flex flex-col gap-1.5 px-3 pb-2 pt-2 shrink-0" data-tooltip-placement="top" style={{ background: "var(--color-bg-input-raised)" }}>
-          <PromptButtons onAction={handleSubmit} />
           <div className="flex items-center gap-2">
             <QuickActions onAction={handleSubmit} />
             <div className="flex-1" />

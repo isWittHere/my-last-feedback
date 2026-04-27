@@ -6,9 +6,25 @@ import { useFeedbackStore } from "./store/feedbackStore";
 import { useMLRAStore } from "./store/mlraStore";
 import { FeedbackApp } from "./components/FeedbackApp";
 import { AppTooltipProvider } from "./components/AppTooltip";
-import type { Session } from "./store/feedbackStore";
+import type { ImageAttachment, Session } from "./store/feedbackStore";
 import { getNotificationSettings, hasStoredNotificationSettings, saveNotificationSettings, syncAutoFocusNewRequest } from "./notificationSettings";
 import type { FeedbackDraft } from "./store/feedbackStore";
+
+function mapHistoryImage(value: unknown, index: number): ImageAttachment | null {
+  if (!value || typeof value !== "object") return null;
+  const image = value as Record<string, unknown>;
+  const file = typeof image.file === "string" ? image.file : "";
+  const path = typeof image.path === "string" ? image.path : file;
+  const type = typeof image.type === "string" ? image.type : "image/png";
+  const data = typeof image.data === "string" ? image.data : "";
+  const name = file || path || `image-${index + 1}`;
+  return {
+    path: path || name,
+    name,
+    sizeKB: 0,
+    dataUrl: data ? `data:${type};base64,${data}` : undefined,
+  };
+}
 
 /** Fire taskbar flash + system notification for a new session */
 function notifyNewSession(requestName: string, callerName: string) {
@@ -97,7 +113,7 @@ function App() {
             createdAt: sess.created_at,
             feedbackText: sess.feedback_text || "",
             testLogText: "",
-            images: [],
+            images: (sess.images || []).map(mapHistoryImage).filter(Boolean) as ImageAttachment[],
             commandLogs: sess.command_logs || "",
             mlcAttachments: (sess.mlc_attachments || []).map((item) => ({
               filePath: item.file_path,

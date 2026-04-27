@@ -474,7 +474,10 @@ function ImageTag({ img, onRemove, readonly }: { img: import("../store/feedbackS
   const [showPreview, setShowPreview] = useState(false);
   const tagRef = useRef<HTMLDivElement>(null);
   const [previewPos, setPreviewPos] = useState<{ top: number; left: number } | null>(null);
-  const size = img.sizeKB >= 1024
+  const hasImageData = Boolean(img.dataUrl);
+  const size = img.sizeKB <= 0
+    ? t("images.stored", "stored")
+    : img.sizeKB >= 1024
     ? `${(img.sizeKB / 1024).toFixed(1)} MB`
     : `${img.sizeKB.toFixed(0)} KB`;
 
@@ -505,11 +508,15 @@ function ImageTag({ img, onRemove, readonly }: { img: import("../store/feedbackS
           <Icon name="close-sm" size={10} />
         </button>
       )}
-      <img
-        src={img.dataUrl}
-        alt=""
-        style={{ width: 14, height: 14, objectFit: "cover", borderRadius: 2, flexShrink: 0 }}
-      />
+      {hasImageData ? (
+        <img
+          src={img.dataUrl}
+          alt=""
+          style={{ width: 14, height: 14, objectFit: "cover", borderRadius: 2, flexShrink: 0 }}
+        />
+      ) : (
+        <Icon name="image" size={12} />
+      )}
       <span className="truncate" style={{ maxWidth: 80 }}>{img.name}</span>
       <span style={{ fontSize: 9, color: "var(--color-text-muted)", flexShrink: 0 }}>{size}</span>
       {readonly && (
@@ -517,7 +524,11 @@ function ImageTag({ img, onRemove, readonly }: { img: import("../store/feedbackS
           className="attachment-tag-copy"
           onClick={(e) => {
             e.stopPropagation();
-            fetch(img.dataUrl!)
+            if (!img.dataUrl) {
+              navigator.clipboard.writeText(img.name);
+              return;
+            }
+            fetch(img.dataUrl)
               .then((r) => r.blob())
               .then((blob) => {
                 const item = new ClipboardItem({ [blob.type]: blob });
@@ -532,7 +543,7 @@ function ImageTag({ img, onRemove, readonly }: { img: import("../store/feedbackS
       )}
 
       {/* Hover preview — fixed position to avoid overflow clipping */}
-      {showPreview && previewPos && createPortal(
+      {hasImageData && showPreview && previewPos && createPortal(
         <div
           className="attachment-preview"
           data-preview-overlay

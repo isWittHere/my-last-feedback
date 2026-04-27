@@ -89,6 +89,8 @@ pub struct SessionDetail {
     #[serde(default)]
     pub mlc_attachments: Vec<MlcAttachment>,
     #[serde(default)]
+    pub web_attachments: Vec<serde_json::Value>,
+    #[serde(default)]
     pub questions: Vec<serde_json::Value>,
 }
 
@@ -141,6 +143,8 @@ struct PersistedSession {
     image_refs: Vec<ImageRef>,
     #[serde(default)]
     mlc_attachments: Vec<MlcAttachment>,
+    #[serde(default)]
+    web_attachments: Vec<serde_json::Value>,
     #[serde(default)]
     questions: Vec<serde_json::Value>,
 }
@@ -301,6 +305,7 @@ impl SessionManager {
             command_logs: None,
             images: Vec::new(),
             mlc_attachments: Vec::new(),
+            web_attachments: Vec::new(),
             questions,
         };
         self.sessions.push(SessionEntry {
@@ -376,10 +381,18 @@ impl SessionManager {
             .iter()
             .map(|s| {
                 let mut detail = s.detail.clone();
-                // Count images but don't load actual data
-                let count = detail.images.len();
-                detail.images = (0..count)
-                    .map(|_| serde_json::json!({ "placeholder": true }))
+                detail.images = detail
+                    .images
+                    .iter()
+                    .enumerate()
+                    .map(|(index, img)| {
+                        serde_json::json!({
+                            "placeholder": true,
+                            "file": img.get("file").and_then(|v| v.as_str()).unwrap_or(""),
+                            "type": img.get("type").and_then(|v| v.as_str()).unwrap_or("image/png"),
+                            "index": index,
+                        })
+                    })
                     .collect();
                 detail
             })
@@ -424,6 +437,7 @@ impl SessionManager {
         session_id: &str,
         payload: FeedbackPayload,
         mlc_attachments: Vec<MlcAttachment>,
+        web_attachments: Vec<serde_json::Value>,
     ) -> Result<(), String> {
         let images_dir = self.images_dir();
         let _ = std::fs::create_dir_all(&images_dir);
@@ -447,6 +461,7 @@ impl SessionManager {
         entry.detail.feedback_text = Some(payload.interactive_feedback.clone());
         entry.detail.command_logs = Some(payload.command_logs.clone());
         entry.detail.mlc_attachments = mlc_attachments;
+        entry.detail.web_attachments = web_attachments;
 
         // Save images to separate files; store file references in detail
         let mut image_refs = Vec::new();
@@ -768,6 +783,7 @@ impl SessionManager {
                     command_logs: entry.detail.command_logs.clone(),
                     image_refs,
                     mlc_attachments: entry.detail.mlc_attachments.clone(),
+                    web_attachments: entry.detail.web_attachments.clone(),
                     questions: entry.detail.questions.clone(),
                 }
             })
@@ -840,6 +856,7 @@ impl SessionManager {
                         command_logs: ps.command_logs,
                         images,
                         mlc_attachments: ps.mlc_attachments,
+                        web_attachments: ps.web_attachments,
                         questions: ps.questions,
                     },
                     response_tx: None,

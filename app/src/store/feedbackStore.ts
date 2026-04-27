@@ -1460,7 +1460,17 @@ export const useFeedbackStore = create<FeedbackState>((set, get) => ({
     });
   },
 
-  setFocusedComposer: (focus) => set({ focusedComposer: focus, mlcActiveWorkspacePath: focus.projectDirectory || null }),
+  setFocusedComposer: (focus) => {
+    const current = get().focusedComposer;
+    const nextWorkspacePath = focus.projectDirectory || null;
+    const sameTarget = current
+      && current.callerId === focus.callerId
+      && current.sessionId === focus.sessionId
+      && current.projectDirectory === focus.projectDirectory
+      && current.kind === focus.kind;
+    if (sameTarget && get().mlcActiveWorkspacePath === nextWorkspacePath) return;
+    set({ focusedComposer: focus, mlcActiveWorkspacePath: nextWorkspacePath });
+  },
 
   clearFocusedComposer: (sessionId) => {
     set((state) => ({
