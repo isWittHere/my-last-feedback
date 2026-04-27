@@ -3275,6 +3275,10 @@ body,
   flex-shrink: 0;
   color: var(--color-text-muted);
 }
+.resource-tree-icon-img {
+  display: block;
+  object-fit: contain;
+}
 .resource-tree-name {
   flex: 1;
   min-width: 0;

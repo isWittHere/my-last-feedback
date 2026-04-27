@@ -19,7 +19,6 @@ impl Default for PreviewBrowserState {
 
 struct PreviewTabRuntime {
     webview: Webview,
-    token: String,
 }
 
 #[derive(Debug, Clone, Serialize)]
@@ -564,7 +563,7 @@ pub async fn preview_create_tab(
 
     state.tabs.lock().map_err(|_| "Preview state is poisoned".to_string())?.insert(
         tab_id.clone(),
-        PreviewTabRuntime { webview, token },
+        PreviewTabRuntime { webview },
     );
 
     Ok(PreviewTabPayload {

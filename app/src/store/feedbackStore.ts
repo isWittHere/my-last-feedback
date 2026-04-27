@@ -234,8 +234,10 @@ export interface FeedbackState {
   // Prompt visibility
   disabledPrompts: string[];
   showPromptButtons: boolean;
+  resourceIconTheme: ResourceIconTheme;
   setDisabledPrompts: (names: string[]) => void;
   setShowPromptButtons: (value: boolean) => void;
+  setResourceIconTheme: (theme: ResourceIconTheme) => void;
   togglePromptDisabled: (name: string) => void;
 
   // ── Persistent mode fields ──
@@ -349,6 +351,15 @@ const MLC_PANEL_DEFAULT_WIDTH = 320;
 const MLC_PANEL_MIN_WIDTH = 240;
 const MLC_PANEL_MAX_WIDTH = 520;
 const DOCK_LAYOUT_STORAGE_KEY = "mlfb-dock-layout-v1";
+
+export type ResourceIconTheme = "default" | "catppuccin-mocha";
+
+function loadResourceIconTheme(): ResourceIconTheme {
+  try {
+    const stored = localStorage.getItem("mlfb-resource-icon-theme");
+    return stored === "catppuccin-mocha" ? "catppuccin-mocha" : "default";
+  } catch { return "default"; }
+}
 
 const DOCK_COLUMN_IDS: DockColumnId[] = ["leftSidebar", "leftPage", "rightSidebar"];
 const KNOWN_DOCK_TABS: DockTabId[] = ["mlc", "resources", "mlcPreview", "previewBrowser", "previewInfo"];
@@ -549,6 +560,7 @@ export const useFeedbackStore = create<FeedbackState>((set, get) => ({
       return localStorage.getItem("mlf-show-prompt-buttons") === "true";
     } catch { return false; }
   })(),
+  resourceIconTheme: loadResourceIconTheme(),
   setDisabledPrompts: (names) => {
     set({ disabledPrompts: names });
     try { localStorage.setItem("mlf-disabled-prompts", JSON.stringify(names)); } catch {}
@@ -556,6 +568,10 @@ export const useFeedbackStore = create<FeedbackState>((set, get) => ({
   setShowPromptButtons: (value) => {
     set({ showPromptButtons: value });
     try { localStorage.setItem("mlf-show-prompt-buttons", String(value)); } catch {}
+  },
+  setResourceIconTheme: (theme) => {
+    set({ resourceIconTheme: theme });
+    try { localStorage.setItem("mlfb-resource-icon-theme", theme); } catch {}
   },
   togglePromptDisabled: (name) => {
     const { disabledPrompts } = get();

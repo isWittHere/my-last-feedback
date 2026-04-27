@@ -2,6 +2,7 @@ import { useCallback, useEffect, useMemo, useState, type ReactNode } from "react
 import { useTranslation } from "react-i18next";
 import { invoke } from "@tauri-apps/api/core";
 import { useFeedbackStore } from "../store/feedbackStore";
+import { CatppuccinResourceIcon } from "./CatppuccinResourceIcon";
 import { Icon } from "./Icons";
 
 interface ProjectResourceEntry {
@@ -76,6 +77,7 @@ export function ProjectResourcePanel() {
   const callers = useFeedbackStore((state) => state.callers);
   const sessions = useFeedbackStore((state) => state.sessions);
   const focusedComposer = useFeedbackStore((state) => state.focusedComposer);
+  const resourceIconTheme = useFeedbackStore((state) => state.resourceIconTheme);
   const activeWorkspacePath = useFeedbackStore((state) => state.mlcActiveWorkspacePath);
   const setActiveWorkspacePath = useFeedbackStore((state) => state.setMlcActiveWorkspacePath);
   const [workspaceFilterMode, setWorkspaceFilterMode] = useState<"target" | "workspace">("target");
@@ -166,7 +168,11 @@ export function ProjectResourcePanel() {
           >
             {isFolder ? <Icon name={isExpanded ? "chevron-down" : "chevron-right"} size={12} /> : null}
           </button>
-          <Icon name={isFolder ? (isExpanded ? "folder-open" : "folder") : "file-text"} size={14} className="resource-tree-icon" />
+          {resourceIconTheme === "catppuccin-mocha" ? (
+            <CatppuccinResourceIcon entry={entry} expanded={isExpanded} size={14} className="resource-tree-icon" />
+          ) : (
+            <Icon name={isFolder ? (isExpanded ? "folder-open" : "folder") : "file-text"} size={14} className="resource-tree-icon" />
+          )}
           <button type="button" className="resource-tree-name" onClick={() => isFolder ? toggleFolder(entry) : insertResourceLink(formatMarkdownLink(entry))}>
             {entry.name}
           </button>

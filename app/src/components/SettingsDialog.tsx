@@ -60,7 +60,9 @@ export function SettingsDialog({ open, onClose }: { open: boolean; onClose: () =
   const prompts = useFeedbackStore((s) => s.prompts);
   const disabledPrompts = useFeedbackStore((s) => s.disabledPrompts);
   const showPromptButtons = useFeedbackStore((s) => s.showPromptButtons);
+  const resourceIconTheme = useFeedbackStore((s) => s.resourceIconTheme);
   const setShowPromptButtons = useFeedbackStore((s) => s.setShowPromptButtons);
+  const setResourceIconTheme = useFeedbackStore((s) => s.setResourceIconTheme);
   const togglePromptDisabled = useFeedbackStore((s) => s.togglePromptDisabled);
 
   // Load autostart state
@@ -299,6 +301,29 @@ export function SettingsDialog({ open, onClose }: { open: boolean; onClose: () =
                       onClick={() => handleLangChange("en")}
                     >
                       English
+                    </button>
+                  </div>
+                </div>
+
+                <div className="settings-row">
+                  <div className="settings-row-info" style={{ flex: 1 }}>
+                    <span className="settings-label">{t("settings.resourceIconTheme", "Resource icon theme")}</span>
+                    <span className="settings-sublabel">{t("settings.resourceIconThemeDesc", "Choose the file icon theme used by the project resources panel.")}</span>
+                  </div>
+                  <div className="settings-btn-group">
+                    <button
+                      className={`settings-btn-option${resourceIconTheme === "default" ? " active" : ""}`}
+                      onClick={() => setResourceIconTheme("default")}
+                    >
+                      <Icon name="file-text" size={12} />
+                      {t("settings.resourceIconThemeDefault", "Default")}
+                    </button>
+                    <button
+                      className={`settings-btn-option${resourceIconTheme === "catppuccin-mocha" ? " active" : ""}`}
+                      onClick={() => setResourceIconTheme("catppuccin-mocha")}
+                    >
+                      <Icon name="moon" size={12} />
+                      {t("settings.resourceIconThemeCatppuccinMocha", "Catppuccin Mocha")}
                     </button>
                   </div>
                 </div>
