@@ -26,16 +26,21 @@
     "attach": "附加日志",
     "copy": "复制日志"
   },
+  "commandLogs": {
+    "attach": "命令日志"
+  },
   "gitAction": {
     "button": "Git 操作",
-    "commit": "提交git备份",
-    "commitPush": "提交git备份并推送",
-    "createBranch": "创建分支并进入",
+    "commitBefore": "立即提交git后再进行其他操作",
+    "commit": "完成本次操作后进行一次git提交",
+    "commitPush": "立即提交git并推送，之后再进行其他操作",
+    "createBranch": "立即创建分支并进入",
     "branchPlaceholder": "分支名称（可留空）"
   },
   "mlc": {
     "title": "My Last Chat",
     "button": "MLC",
+    "clearAll": "清除全部 MLC",
     "panelTabs": "侧边面板标签",
     "moveTabsToBottom": "将标签栏移到底部",
     "moveTabsToTop": "将标签栏移到顶部",
@@ -87,6 +92,8 @@
     "attachments": "附件",
     "copy": "复制图片",
     "clearAll": "清除全部",
+    "stored": "已存储",
+    "unknownSize": "未知大小",
     "limitCount": "最多只能附加 {{max}} 张图片。",
     "limitSize": "每张图片不能超过 {{max}}MB。当前: {{size}}MB",
     "limitTotal": "图片总大小不能超过 {{max}}MB。",
@@ -154,6 +161,8 @@
     "aboutDesc": "一个用于 MCP 交互式反馈的桌面应用",
     "prompts": "提示词",
     "promptsEmpty": "未找到 prompt 文件\n将 .prompt.md 文件放入 exe 同级的 mcp_prompts/ 目录",
+    "showPromptButtons": "显示提示词按钮",
+    "showPromptButtonsDesc": "在输入框下方显示旧版提示词按钮。点击后会把对应斜杠命令插入到反馈文本开头。",
     "promptEnable": "启用",
     "promptDisable": "禁用",
     "notification": "通知",
@@ -223,6 +232,7 @@
     "colQuestion": "问题",
     "colOptions": "选项",
     "colAnswer": "回答",
+    "noSelection": "未选择",
     "inputPlaceholder": "请输入您对「{{label}}」的决定",
     "fillTemplate": "填充模板到反馈框"
   },
@@ -273,6 +283,7 @@
     "collapse": "折叠",
     "expand": "展开",
     "insert": "插入链接",
+    "copyPath": "复制路径",
     "noWorkspace": "暂无工作区",
     "loading": "正在加载文件...",
     "empty": "暂无文件"

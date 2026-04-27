@@ -124,6 +124,14 @@ function addImageToFocusedTarget(image: ImageAttachment): boolean {
   return true;
 }
 
+function imageSizeKBFromDataUrl(dataUrl?: string): number {
+  if (!dataUrl) return 0;
+  const base64 = dataUrl.split(",", 2)[1]?.replace(/\s/g, "");
+  if (!base64) return 0;
+  const padding = base64.endsWith("==") ? 2 : base64.endsWith("=") ? 1 : 0;
+  return Math.max(1, Math.ceil(((base64.length * 3) / 4 - padding) / 1024));
+}
+
 export const usePreviewBrowserStore = create<PreviewBrowserState>((set, get) => ({
   tabs: [],
   boundsByTab: {},
@@ -305,7 +313,7 @@ export const usePreviewBrowserStore = create<PreviewBrowserState>((set, get) => 
       addImageToFocusedTarget({
         path: screenshot.filePath,
         name: screenshot.fileName || "element-screenshot.png",
-        sizeKB: screenshot.sizeKB || 0,
+        sizeKB: screenshot.sizeKB || screenshot.sizeKb || imageSizeKBFromDataUrl(screenshot.dataUrl),
         dataUrl: screenshot.dataUrl,
       });
     }

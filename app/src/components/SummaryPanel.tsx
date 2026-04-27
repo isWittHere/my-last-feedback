@@ -45,7 +45,7 @@ function QuestionsForm({
           <>
             <IdenticonAvatar alias={callerAlias} color={callerColor || "#888"} size={22} />
             <span style={{ fontSize: 14, lineHeight: "22px", color: "var(--color-text-muted)" }}>
-              <span style={{ fontWeight: 500, color: callerColor || "var(--color-text-primary)" }}>{friendlyName(callerAlias)} ({callerAlias})</span>
+              <span style={{ fontWeight: 400, color: callerColor || "var(--color-text-primary)" }}>{friendlyName(callerAlias)} ({callerAlias})</span>
               {" "}{t("questions.titleWithAlias_suffix", "asks you:")}
             </span>
           </>

@@ -14,6 +14,7 @@ import { Icon } from "./Icons";
 import { TransferSubmitSplit } from "./TransferSubmitSplit";
 import { AttachmentTagBar, ReadonlyTagBar } from "./CallerPanelParts";
 import { ReadonlyComposerContent } from "./ReadonlyComposerContent";
+import { PromptButtons } from "./PromptButtons";
 import { getNotificationSettings } from "../notificationSettings";
 import { buildSubmittedFeedback } from "../composer/submittedFeedback";
 
@@ -91,7 +92,7 @@ export function CallerPanel({ callerId }: { callerId: string }) {
 
 /** The right-side content area for one caller column */
 function CallerContent() {
-  const { t } = useTranslation();
+  const { t, i18n } = useTranslation();
   const { session: activeSession, caller } = useActiveCallerSession();
   const callerColor = caller?.color || 'var(--color-primary)';
 
@@ -202,6 +203,8 @@ function CallerContent() {
   const [readonlyPanelMaxHeight, setReadonlyPanelMaxHeight] = useState<number | null>(null);
   const prompts = useFeedbackStore((state) => state.prompts);
   const disabledPrompts = useFeedbackStore((state) => state.disabledPrompts);
+  const showPromptButtons = useFeedbackStore((state) => state.showPromptButtons);
+  const updateSessionField = useFeedbackStore((state) => state.updateSessionField);
   const visiblePrompts = useMemo(
     () => prompts.filter((prompt) => !disabledPrompts.includes(prompt.name)),
     [disabledPrompts, prompts],
@@ -215,6 +218,13 @@ function CallerContent() {
     const atTop = event.currentTarget.scrollTop <= 2;
     setReadonlyContentAtTop((current) => current === atTop ? current : atTop);
   }, []);
+
+  const handlePromptButtonCommand = useCallback((commandText: string) => {
+    if (!activeSession || activeSession.status !== "pending") return;
+    if (!commandText.trim()) return;
+    if (feedbackText.startsWith(commandText)) return;
+    updateSessionField(activeSession.id, "feedbackText", `${commandText}${feedbackText}`);
+  }, [activeSession, feedbackText, updateSessionField]);
 
   useLayoutEffect(() => {
     if (!isReadonly) {
@@ -313,6 +323,7 @@ function CallerContent() {
         quickAction,
         callerAlias: caller?.alias || null,
         transferAlias,
+        language: i18n.language,
       });
       const finalFeedback = submittedFeedback.markdown;
       const historyText = submittedFeedback.historyText;
@@ -340,7 +351,7 @@ function CallerContent() {
         setSessionSubmitting(false);
       }
     },
-    [activeSession, caller?.alias, sessionSubmitting, completeSessionWithSubmittedFeedback, pushMessageHistory, transferAlias, visiblePrompts]
+    [activeSession, caller?.alias, i18n.language, sessionSubmitting, completeSessionWithSubmittedFeedback, pushMessageHistory, transferAlias, visiblePrompts]
   );
 
   // Ctrl+Enter shortcut — scoped to this panel
@@ -423,6 +434,7 @@ function CallerContent() {
       {/* Bottom fused area: buttons only */}
       {!isReadonly && (
         <div className="flex flex-col gap-1.5 px-3 pb-2 pt-2 shrink-0" data-tooltip-placement="top" style={{ background: "var(--color-bg-input-raised)" }}>
+          {showPromptButtons ? <PromptButtons onAction={handlePromptButtonCommand} /> : null}
           <div className="flex items-center gap-2">
             <QuickActions onAction={handleSubmit} />
             <div className="flex-1" />

@@ -10,6 +10,7 @@ export interface SubmittedFeedbackOptions {
   callerAlias?: string | null;
   transferAlias?: string | null;
   includeSystemReminder?: boolean;
+  language?: string;
 }
 
 export interface SubmittedFeedbackResult {
@@ -26,6 +27,18 @@ export interface SubmittedResourceLink {
 
 const SYSTEM_REMINDER = "[System] Reminder: You MUST call the interactive_feedback tool again after completing this operation. Do NOT end your turn without invoking interactive_feedback.";
 const SYSTEM_MARKDOWN_IMPORTANT = "[System] IMPORTANT: In your summary parameter, use standard Markdown only. Do NOT use escape characters such as \\n, \\t, \\\\n, or any other backslash-escaped sequences. Write actual line breaks and formatting directly in Markdown.";
+
+function submittedLocale(language?: string): "en" | "zh" {
+  return language?.toLowerCase().startsWith("zh") ? "zh" : "en";
+}
+
+function submittedText(language: string | undefined, key: "notSelected" | "unknownSize"): string {
+  const labels = {
+    en: { notSelected: "Not selected", unknownSize: "unknown size" },
+    zh: { notSelected: "未选择", unknownSize: "未知大小" },
+  };
+  return labels[submittedLocale(language)][key];
+}
 
 function cleanLine(value: string | undefined | null): string {
   return (value || "").replace(/[\r\n]+/g, " ").trim();
@@ -57,12 +70,12 @@ function formatMlcReferences(attachments: MlcAttachment[]): string | null {
   return ["## Attachment: MLC References", ...blocks].join("\n\n");
 }
 
-function formatImageSummary(images: ImageAttachment[]): string | null {
+function formatImageSummary(images: ImageAttachment[], language?: string): string | null {
   if (images.length === 0) return null;
   const rows = images.map((image, index) => {
     const name = cleanLine(image.name || image.path || `image-${index + 1}`);
     const path = cleanLine(image.path);
-    const size = Number.isFinite(image.sizeKB) && image.sizeKB > 0 ? `${Math.round(image.sizeKB)} KB` : "unknown size";
+    const size = Number.isFinite(image.sizeKB) && image.sizeKB > 0 ? `${Math.round(image.sizeKB)} KB` : submittedText(language, "unknownSize");
     return `- ${name} (${size})${path && path !== name ? ` - ${path}` : ""}`;
   });
   return [
@@ -73,13 +86,13 @@ function formatImageSummary(images: ImageAttachment[]): string | null {
   ].join("\n");
 }
 
-function formatQuestionAnswers(session: Session): string | null {
+function formatQuestionAnswers(session: Session, language?: string): string | null {
   const answeredQuestions = session.questions?.filter(
     (question) => question.answer.trim() || (question.selectedOptions && question.selectedOptions.length > 0),
   );
   if (!answeredQuestions || answeredQuestions.length === 0) return null;
   const tableRows = session.questions.map((question, index) => {
-    const selected = question.selectedOptions && question.selectedOptions.length > 0 ? question.selectedOptions.join(", ") : "未选择";
+    const selected = question.selectedOptions && question.selectedOptions.length > 0 ? question.selectedOptions.join(", ") : submittedText(language, "notSelected");
     const answer = question.answer.trim() || "-";
     return `| ${index + 1} | ${tableCell(question.label)} | ${tableCell(selected)} | ${tableCell(answer)} |`;
   });
@@ -95,11 +108,12 @@ function formatQuestionAnswers(session: Session): string | null {
 function formatGitAction(session: Session): string | null {
   if (!session.gitAction) return null;
   const gitMessages: Record<string, string> = {
-    commit: "Please execute git add and git commit to backup the current changes.",
-    "commit-push": "Please execute git add, git commit, and git push to backup and push the current changes.",
+    "commit-before": "Please execute git add and git commit now before performing any other requested operation.",
+    commit: "Please complete the requested operation first, then execute git add and git commit once to back up the resulting changes.",
+    "commit-push": "Please execute git add, git commit, and git push now before performing any other requested operation.",
     "create-branch": session.gitAction.branchName
-      ? `Please create a new branch "${session.gitAction.branchName}" and switch to it.`
-      : "Please create a new branch and switch to it.",
+      ? `Please create a new branch "${session.gitAction.branchName}" and switch to it now before performing any other requested operation.`
+      : "Please create a new branch and switch to it now before performing any other requested operation.",
   };
   return `## Git Action\n${gitMessages[session.gitAction.type]}`;
 }
@@ -201,14 +215,14 @@ function appendMissingSection(sections: string[], markdown: string, heading: str
 export function augmentReadonlySubmittedFeedback(
   markdown: string,
   session: Session,
-  options: Pick<SubmittedFeedbackOptions, "callerAlias" | "transferAlias"> = {},
+  options: Pick<SubmittedFeedbackOptions, "callerAlias" | "transferAlias" | "language"> = {},
 ): string {
   const base = markdown.trim();
   const appendedSections: string[] = [];
 
   appendMissingSection(appendedSections, base, "Attachment: Test Logs", session.testLogText.trim() ? `## Attachment: Test Logs\n${fence(session.testLogText)}` : null);
   appendMissingSection(appendedSections, base, "Attachment: Command Logs", session.commandLogs.trim() ? `## Attachment: Command Logs\n${fence(session.commandLogs)}` : null);
-  appendMissingSection(appendedSections, base, "Attachment: Images", formatImageSummary(session.images));
+  appendMissingSection(appendedSections, base, "Attachment: Images", formatImageSummary(session.images, options.language));
   appendMissingSection(appendedSections, base, "Attachment: Resource Links", formatResourceLinks(base, session.projectDirectory));
   appendMissingSection(appendedSections, base, "Attachment: MLC References", formatMlcReferences(session.mlcAttachments || []));
   appendMissingSection(appendedSections, base, "Attachment: Web Preview", formatWebAttachments(session.webAttachments || []));
@@ -229,7 +243,7 @@ export function buildSubmittedFeedback(session: Session, options: SubmittedFeedb
   }
   if (quickAction) sections.push(`## User Requirement\n${quickAction}`);
 
-  const questionAnswers = formatQuestionAnswers(session);
+  const questionAnswers = formatQuestionAnswers(session, options.language);
   if (questionAnswers) sections.push(questionAnswers);
 
   const gitAction = formatGitAction(session);
@@ -238,7 +252,7 @@ export function buildSubmittedFeedback(session: Session, options: SubmittedFeedb
   if (session.testLogText.trim()) sections.push(`## Attachment: Test Logs\n${fence(session.testLogText)}`);
   if (session.commandLogs.trim()) sections.push(`## Attachment: Command Logs\n${fence(session.commandLogs)}`);
 
-  const imageSummary = formatImageSummary(session.images);
+  const imageSummary = formatImageSummary(session.images, options.language);
   if (imageSummary) sections.push(imageSummary);
 
   const resourceLinks = formatResourceLinks([trimmedFeedback, quickAction].filter(Boolean).join("\n\n"), session.projectDirectory);

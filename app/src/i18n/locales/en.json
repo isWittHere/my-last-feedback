@@ -26,16 +26,21 @@
     "attach": "Attach Log",
     "copy": "Copy log"
   },
+  "commandLogs": {
+    "attach": "Command Logs"
+  },
   "gitAction": {
     "button": "Git Action",
-    "commit": "Git commit backup",
-    "commitPush": "Git commit & push",
-    "createBranch": "Create branch & switch",
+    "commitBefore": "Commit git now, then continue",
+    "commit": "Commit git after this task",
+    "commitPush": "Commit and push git now, then continue",
+    "createBranch": "Create and switch branch now",
     "branchPlaceholder": "Branch name (optional)"
   },
   "mlc": {
     "title": "My Last Chat",
     "button": "MLC",
+    "clearAll": "Clear all MLC",
     "panelTabs": "Side panel tabs",
     "moveTabsToBottom": "Move tabs to bottom",
     "moveTabsToTop": "Move tabs to top",
@@ -87,6 +92,8 @@
     "attachments": "Attachments",
     "copy": "Copy image",
     "clearAll": "Clear All",
+    "stored": "stored",
+    "unknownSize": "unknown size",
     "limitCount": "You can attach up to {{max}} images.",
     "limitSize": "Each image must be under {{max}}MB. Current: {{size}}MB",
     "limitTotal": "Total size must be under {{max}}MB.",
@@ -154,6 +161,8 @@
     "aboutDesc": "A desktop app for MCP interactive feedback",
     "prompts": "Prompts",
     "promptsEmpty": "No prompt files found\nPlace .prompt.md files in mcp_prompts/ next to the exe",
+    "showPromptButtons": "Show prompt buttons",
+    "showPromptButtonsDesc": "Display legacy prompt buttons below the composer. Clicking one inserts its slash command at the start of the feedback text.",
     "promptEnable": "Enable",
     "promptDisable": "Disable",
     "notification": "Notification",
@@ -223,6 +232,7 @@
     "colQuestion": "Question",
     "colOptions": "Options",
     "colAnswer": "Answer",
+    "noSelection": "Not selected",
     "inputPlaceholder": "Your decision on \"{{label}}\"",
     "fillTemplate": "Fill template to feedback"
   },
@@ -273,6 +283,7 @@
     "collapse": "Collapse",
     "expand": "Expand",
     "insert": "Insert link",
+    "copyPath": "Copy path",
     "noWorkspace": "No workspace",
     "loading": "Loading files...",
     "empty": "No files"

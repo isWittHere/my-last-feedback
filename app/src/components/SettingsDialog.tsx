@@ -59,6 +59,8 @@ export function SettingsDialog({ open, onClose }: { open: boolean; onClose: () =
   const [submittedViewSettings, setSubmittedViewSettings] = useState<SubmittedViewSettings>(getSubmittedViewSettings);
   const prompts = useFeedbackStore((s) => s.prompts);
   const disabledPrompts = useFeedbackStore((s) => s.disabledPrompts);
+  const showPromptButtons = useFeedbackStore((s) => s.showPromptButtons);
+  const setShowPromptButtons = useFeedbackStore((s) => s.setShowPromptButtons);
   const togglePromptDisabled = useFeedbackStore((s) => s.togglePromptDisabled);
 
   // Load autostart state
@@ -424,6 +426,18 @@ export function SettingsDialog({ open, onClose }: { open: boolean; onClose: () =
 
             {tab === "prompts" && (
               <div className="settings-section">
+                <div className="settings-row">
+                  <div className="settings-row-info">
+                    <span className="settings-label">{t("settings.showPromptButtons", "Show prompt buttons")}</span>
+                    <span className="settings-sublabel">{t("settings.showPromptButtonsDesc", "Display legacy prompt buttons below the composer. Clicking one inserts its slash command at the start of the feedback text.")}</span>
+                  </div>
+                  <button
+                    className={`settings-toggle${showPromptButtons ? " settings-toggle-on" : ""}`}
+                    onClick={() => setShowPromptButtons(!showPromptButtons)}
+                  >
+                    <span className="settings-toggle-knob" />
+                  </button>
+                </div>
                 {prompts.length === 0 ? (
                   <div className="settings-prompt-empty">
                     {t("settings.promptsEmpty")}

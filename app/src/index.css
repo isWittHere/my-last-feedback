@@ -1450,6 +1450,18 @@ body,
   flex: 0 0 auto;
 }
 
+.git-action-icon-pair {
+  display: inline-flex;
+  align-items: center;
+  gap: 1px;
+  flex: 0 0 auto;
+  line-height: 1;
+}
+
+.git-action-icon-pair svg {
+  flex: 0 0 auto;
+}
+
 .attachment-action-label,
 .attachment-action-meta {
   display: inline-flex;

@@ -12,6 +12,7 @@ import { MlcPreviewPanel } from "./MlcPreviewPanel";
 import { ProjectResourcePanel } from "./ProjectResourcePanel";
 import { PreviewBrowserViewPanel } from "./PreviewBrowserViewPanel";
 import { PreviewBrowserInfoPanel } from "./PreviewBrowserInfoPanel";
+import { usePreviewBrowserStore } from "../store/previewBrowserStore";
 
 const DOCK_COLUMN_LABELS: Record<DockColumnId, string> = {
   leftSidebar: "Left sidebar",
@@ -80,6 +81,8 @@ export function DockColumn({ columnId }: { columnId: DockColumnId }) {
   const finishDraggingDockTab = useFeedbackStore((state) => state.finishDraggingDockTab);
   const pushNativeWebViewBlocker = useFeedbackStore((state) => state.pushNativeWebViewBlocker);
   const popNativeWebViewBlocker = useFeedbackStore((state) => state.popNativeWebViewBlocker);
+  const previewBrowserTabIds = usePreviewBrowserStore((state) => state.tabs.map((tab) => tab.id).join("\n"));
+  const hidePreviewBrowserTab = usePreviewBrowserStore((state) => state.hideTab);
   const resizeRef = useRef<{ startX: number; startWidth: number } | null>(null);
   const pointerDragRef = useRef<{ tabId: DockTabId; startX: number; startY: number; dragging: boolean } | null>(null);
   const suppressClickTabRef = useRef<DockTabId | null>(null);
@@ -111,6 +114,16 @@ export function DockColumn({ columnId }: { columnId: DockColumnId }) {
       document.removeEventListener("keydown", handleKeyDown);
     };
   }, [columnId, popNativeWebViewBlocker, pushNativeWebViewBlocker, tabBarMenu]);
+
+  useEffect(() => {
+    const ownsPreviewBrowser = column.tabIds.includes("previewBrowser");
+    if (!ownsPreviewBrowser) return;
+    const previewBrowserVisible = ownsPreviewBrowser && !column.collapsed && column.activeTabId === "previewBrowser";
+    if (previewBrowserVisible) return;
+    for (const tabId of previewBrowserTabIds.split("\n")) {
+      if (tabId) void hidePreviewBrowserTab(tabId);
+    }
+  }, [column.activeTabId, column.collapsed, column.tabIds, hidePreviewBrowserTab, previewBrowserTabIds]);
 
   const visualPosition = columnId === "rightSidebar" ? "right" : "left";
 
@@ -312,7 +325,7 @@ export function DockColumn({ columnId }: { columnId: DockColumnId }) {
           </button>
           <button type="button" role="menuitem" onClick={() => setPanelTabBarPosition(column.tabBarPosition === "top" ? "bottom" : "top")}>
             <Icon name="arrow-down" size={12} style={column.tabBarPosition === "bottom" ? { transform: "rotate(180deg)" } : undefined} />
-            <span>{column.tabBarPosition === "top" ? t("mlc.moveTabsBottom", "Move tabs to bottom") : t("mlc.moveTabsTop", "Move tabs to top")}</span>
+            <span>{column.tabBarPosition === "top" ? t("mlc.moveTabsToBottom", "Move tabs to bottom") : t("mlc.moveTabsToTop", "Move tabs to top")}</span>
           </button>
         </div>
       ) : null}

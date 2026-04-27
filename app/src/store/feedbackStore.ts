@@ -36,7 +36,7 @@ export interface Caller {
   alias?: string;
 }
 
-export type GitActionType = "commit" | "commit-push" | "create-branch";
+export type GitActionType = "commit-before" | "commit" | "commit-push" | "create-branch";
 
 export interface GitAction {
   type: GitActionType;
@@ -103,6 +103,7 @@ export interface ElementScreenshotRef {
   width: number;
   height: number;
   sizeKB?: number;
+  sizeKb?: number;
   devicePixelRatio: number;
   rect: {
     x: number;
@@ -232,7 +233,9 @@ export interface FeedbackState {
 
   // Prompt visibility
   disabledPrompts: string[];
+  showPromptButtons: boolean;
   setDisabledPrompts: (names: string[]) => void;
+  setShowPromptButtons: (value: boolean) => void;
   togglePromptDisabled: (name: string) => void;
 
   // ── Persistent mode fields ──
@@ -541,9 +544,18 @@ export const useFeedbackStore = create<FeedbackState>((set, get) => ({
       return stored ? JSON.parse(stored) : [];
     } catch { return []; }
   })(),
+  showPromptButtons: (() => {
+    try {
+      return localStorage.getItem("mlf-show-prompt-buttons") === "true";
+    } catch { return false; }
+  })(),
   setDisabledPrompts: (names) => {
     set({ disabledPrompts: names });
     try { localStorage.setItem("mlf-disabled-prompts", JSON.stringify(names)); } catch {}
+  },
+  setShowPromptButtons: (value) => {
+    set({ showPromptButtons: value });
+    try { localStorage.setItem("mlf-show-prompt-buttons", String(value)); } catch {}
   },
   togglePromptDisabled: (name) => {
     const { disabledPrompts } = get();

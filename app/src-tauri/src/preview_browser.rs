@@ -68,6 +68,7 @@ pub struct ElementScreenshotRef {
   pub mime_type: String,
   pub width: u32,
   pub height: u32,
+  #[serde(rename = "sizeKB")]
   pub size_kb: Option<u64>,
   pub device_pixel_ratio: f64,
   pub rect: ElementRect,

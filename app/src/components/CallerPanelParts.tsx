@@ -11,6 +11,30 @@ import { webAttachmentLabel } from "../browser/webAttachmentFormat";
 import { collectSubmittedResourceLinks, type SubmittedResourceLink } from "../composer/submittedFeedback";
 
 const DOCK_COLUMN_IDS: DockColumnId[] = ["leftSidebar", "leftPage", "rightSidebar"];
+const GIT_ACTION_TYPES: GitActionType[] = ["commit-before", "commit", "commit-push", "create-branch"];
+
+function gitActionLabelKey(type: GitActionType) {
+  if (type === "commit-before") return "commitBefore";
+  if (type === "commit-push") return "commitPush";
+  if (type === "create-branch") return "createBranch";
+  return "commit";
+}
+
+function GitActionOptionIcon({ type, size = 12 }: { type: GitActionType; size?: number }) {
+  const iconPairs: Record<GitActionType, [string, string]> = {
+    "commit-before": ["git-commit", "arrow-right"],
+    commit: ["clock", "git-commit"],
+    "commit-push": ["git-commit", "arrow-up"],
+    "create-branch": ["git-branch", "arrow-right"],
+  };
+  const [primaryIcon, secondaryIcon] = iconPairs[type];
+  return (
+    <span className="git-action-icon-pair" aria-hidden="true">
+      <Icon name={primaryIcon} size={size} />
+      <Icon name={secondaryIcon} size={Math.max(9, size - 2)} />
+    </span>
+  );
+}
 
 function clampFloatingValue(value: number, min: number, max: number) {
   return Math.min(Math.max(value, min), max);
@@ -80,6 +104,8 @@ export function AttachmentTagBar({
   const updateQueuedDraftGitBranchName = useFeedbackStore((s) => s.updateQueuedDraftGitBranchName);
   const removeSessionMlcAttachment = useFeedbackStore((s) => s.removeSessionMlcAttachment);
   const removeQueuedDraftMlcAttachment = useFeedbackStore((s) => s.removeQueuedDraftMlcAttachment);
+  const clearSessionMlcAttachments = useFeedbackStore((s) => s.clearSessionMlcAttachments);
+  const clearQueuedDraftMlcAttachments = useFeedbackStore((s) => s.clearQueuedDraftMlcAttachments);
   const removeSessionWebAttachment = useFeedbackStore((s) => s.removeSessionWebAttachment);
   const removeQueuedDraftWebAttachment = useFeedbackStore((s) => s.removeQueuedDraftWebAttachment);
   const setFocusedComposer = useFeedbackStore((s) => s.setFocusedComposer);
@@ -254,7 +280,7 @@ export function AttachmentTagBar({
           }}
           onClick={() => setShowGitPanel((v) => !v)}
         >
-          <Icon name="git-branch" size={12} />
+          <Icon name="git-commit" size={12} />
           <span className="attachment-action-label">{t("gitAction.button", "Git Action")}</span>
         </button>
         <button
@@ -360,6 +386,16 @@ export function AttachmentTagBar({
               onRemove={() => queuedCallerId ? setQueuedDraftGitAction(queuedCallerId, null) : activeSession && setSessionGitAction(activeSession.id, null)}
             />
           )}
+          {hasMlcAttachments && (
+            <div
+              className="attachment-tag attachment-tag-danger"
+              onClick={() => queuedCallerId ? clearQueuedDraftMlcAttachments(queuedCallerId) : activeSession && clearSessionMlcAttachments(activeSession.id)}
+              title={t("mlc.clearAll", "Clear all MLC")}
+            >
+              <Icon name="trash" size={10} />
+              <MlcLogoIcon size={10} />
+            </div>
+          )}
           {targetMlcAttachments.map((attachment) => (
             <MlcAttachmentTag
               key={attachment.filePath}
@@ -410,7 +446,7 @@ export function AttachmentTagBar({
               background: "var(--color-bg-input-raised)",
             }}
           >
-            {(["commit", "commit-push", "create-branch"] as GitActionType[]).map((type) => {
+            {GIT_ACTION_TYPES.map((type) => {
               const isSelected = targetGitAction?.type === type;
               return (
                 <button
@@ -438,7 +474,8 @@ export function AttachmentTagBar({
                     }
                   }}
                 >
-                  {t(`gitAction.${type === "commit" ? "commit" : type === "commit-push" ? "commitPush" : "createBranch"}`)}
+                  <GitActionOptionIcon type={type} />
+                  {t(`gitAction.${gitActionLabelKey(type)}`)}
                 </button>
               );
             })}
@@ -680,6 +717,7 @@ function GitActionTag({
 }) {
   const { t } = useTranslation();
   const labelMap: Record<string, string> = {
+    "commit-before": t("gitAction.commitBefore"),
     commit: t("gitAction.commit"),
     "commit-push": t("gitAction.commitPush"),
     "create-branch": t("gitAction.createBranch"),
@@ -711,7 +749,7 @@ function GitActionTag({
       >
         <Icon name="close-sm" size={10} />
       </button>
-      <Icon name="git-branch" size={10} />
+      <GitActionOptionIcon type={gitAction.type} size={11} />
       <span className="truncate" style={{ maxWidth: 140 }}>{label}{detail}</span>
     </div>
   );
@@ -865,6 +903,7 @@ export function ReadonlyTagBar({ session }: { session: import("../store/feedback
   const hasTags = session.images.length > 0 || hasLog || hasCommandLogs || hasGitAction || mlcAttachments.length > 0 || webAttachments.length > 0 || resourceLinks.length > 0;
 
   const gitLabel = hasGitAction ? ({
+    "commit-before": t("gitAction.commitBefore"),
     commit: t("gitAction.commit"),
     "commit-push": t("gitAction.commitPush"),
     "create-branch": t("gitAction.createBranch"),

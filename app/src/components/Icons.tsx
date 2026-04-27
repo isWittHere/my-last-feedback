@@ -97,6 +97,9 @@ const ICONS: Record<string, IconDef> = {
   "git-branch": {
     paths: '<circle cx="18" cy="18" r="3" /><circle cx="6" cy="6" r="3" /><path d="M13 6h3a2 2 0 0 1 2 2v7" /><line x1="6" y1="9" x2="6" y2="21" />',
   },
+  "git-commit": {
+    paths: '<circle cx="12" cy="12" r="3" /><line x1="3" y1="12" x2="9" y2="12" /><line x1="15" y1="12" x2="21" y2="12" />',
+  },
   merge: {
     paths: '<circle cx="18" cy="18" r="3" /><circle cx="6" cy="6" r="3" /><path d="M6 21V9a9 9 0 0 0 9 9" />',
   },
@@ -250,6 +253,9 @@ const ICONS: Record<string, IconDef> = {
   },
   "arrow-down": {
     paths: '<line x1="12" y1="5" x2="12" y2="19" /><polyline points="19 12 12 19 5 12" />',
+  },
+  "arrow-up": {
+    paths: '<line x1="12" y1="19" x2="12" y2="5" /><polyline points="5 12 12 5 19 12" />',
   },
 };
 
