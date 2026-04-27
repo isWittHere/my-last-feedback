@@ -45,7 +45,7 @@ function QuestionsForm({
           <>
             <IdenticonAvatar alias={callerAlias} color={callerColor || "#888"} size={22} />
             <span style={{ fontSize: 14, lineHeight: "22px", color: "var(--color-text-muted)" }}>
-              <span style={{ fontWeight: 600, color: callerColor || "var(--color-text-primary)", fontFamily: "'Cascadia Code', 'Consolas', 'SF Mono', 'Monaco', monospace" }}>{friendlyName(callerAlias)} ({callerAlias})</span>
+              <span style={{ fontWeight: 500, color: callerColor || "var(--color-text-primary)" }}>{friendlyName(callerAlias)} ({callerAlias})</span>
               {" "}{t("questions.titleWithAlias_suffix", "asks you:")}
             </span>
           </>
@@ -92,27 +92,34 @@ function QuestionsForm({
                       </button>
                     );
                   })}
+                  {isReadonly && (q.selectedOptions || []).length === 0 && (
+                    <span className="questions-no-selection">
+                      {t("questions.noSelection", "Not selected")}
+                    </span>
+                  )}
                 </div>
               )}
             </div>
             {/* Row 2: answer textarea (full width, auto-resizing) */}
-            <textarea
-              className="questions-input"
-              value={q.answer}
-              readOnly={isReadonly}
-              rows={1}
-              placeholder={isReadonly ? "" : t("questions.inputPlaceholder", { label: q.label })}
-              onChange={(e) => {
-                if (!isReadonly) {
-                  onAnswerChange(sessionId, i, e.target.value);
-                }
-              }}
-              onInput={(e) => {
-                const el = e.currentTarget;
-                el.style.height = "auto";
-                el.style.height = Math.max(el.scrollHeight, 28) + "px";
-              }}
-            />
+            {(!isReadonly || q.answer.trim()) && (
+              <textarea
+                className="questions-input"
+                value={q.answer}
+                readOnly={isReadonly}
+                rows={1}
+                placeholder={isReadonly ? "" : t("questions.inputPlaceholder", { label: q.label })}
+                onChange={(e) => {
+                  if (!isReadonly) {
+                    onAnswerChange(sessionId, i, e.target.value);
+                  }
+                }}
+                onInput={(e) => {
+                  const el = e.currentTarget;
+                  el.style.height = "auto";
+                  el.style.height = Math.max(el.scrollHeight, 28) + "px";
+                }}
+              />
+            )}
           </div>
         ))}
       </div>

@@ -79,7 +79,7 @@ function formatQuestionAnswers(session: Session): string | null {
   );
   if (!answeredQuestions || answeredQuestions.length === 0) return null;
   const tableRows = session.questions.map((question, index) => {
-    const selected = question.selectedOptions && question.selectedOptions.length > 0 ? question.selectedOptions.join(", ") : "-";
+    const selected = question.selectedOptions && question.selectedOptions.length > 0 ? question.selectedOptions.join(", ") : "未选择";
     const answer = question.answer.trim() || "-";
     return `| ${index + 1} | ${tableCell(question.label)} | ${tableCell(selected)} | ${tableCell(answer)} |`;
   });

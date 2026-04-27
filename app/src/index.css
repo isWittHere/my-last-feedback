@@ -4575,6 +4575,16 @@ body,
   cursor: default;
   opacity: 0.6;
 }
+.questions-no-selection {
+  display: inline-flex;
+  align-items: center;
+  color: color-mix(in srgb, #ef4444 76%, var(--color-text-muted));
+  font-size: 10px;
+  font-weight: 600;
+  line-height: 1.4;
+  opacity: 0.72;
+  white-space: nowrap;
+}
 .questions-input {
   width: 100%;
   padding: 4px 8px;
