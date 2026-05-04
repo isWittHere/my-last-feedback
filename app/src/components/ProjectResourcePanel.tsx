@@ -92,9 +92,21 @@ function resourceTreeChildrenContentStyle(depth: number): CSSProperties {
 
 export function ProjectResourcePanel() {
   const { t } = useTranslation();
-  const callers = useFeedbackStore((state) => state.callers);
-  const sessions = useFeedbackStore((state) => state.sessions);
   const focusedComposer = useFeedbackStore((state) => state.focusedComposer);
+  const targetCaller = useFeedbackStore((state) => focusedComposer?.callerId ? state.callers.find((caller) => caller.id === focusedComposer.callerId) || null : null);
+  const sessionWorkspacePathsKey = useFeedbackStore((state) => {
+    const seen = new Set<string>();
+    return state.sessions
+      .map((session) => session.projectDirectory)
+      .filter((path) => {
+        if (!path) return false;
+        const key = normalizePathForCompare(path);
+        if (seen.has(key)) return false;
+        seen.add(key);
+        return true;
+      })
+      .join("\n");
+  });
   const resourceIconTheme = useFeedbackStore((state) => state.resourceIconTheme);
   const activeWorkspacePath = useFeedbackStore((state) => state.mlcActiveWorkspacePath);
   const setActiveWorkspacePath = useFeedbackStore((state) => state.setMlcActiveWorkspacePath);
@@ -104,7 +116,6 @@ export function ProjectResourcePanel() {
   const [loadingByPath, setLoadingByPath] = useState<Set<string>>(() => new Set());
   const [error, setError] = useState<string | null>(null);
 
-  const targetCaller = callers.find((caller) => caller.id === focusedComposer?.callerId) || null;
   const targetWorkspacePath = focusedComposer?.projectDirectory || "";
 
   const workspaceOptions = useMemo(() => {
@@ -115,9 +126,9 @@ export function ProjectResourcePanel() {
       if (!map.has(key)) map.set(key, { path, name: name || basename(path), ownerName });
     };
     addPath(targetWorkspacePath, basename(targetWorkspacePath), targetCaller?.alias || targetCaller?.name);
-    for (const session of sessions) addPath(session.projectDirectory, basename(session.projectDirectory));
+    for (const path of sessionWorkspacePathsKey.split("\n")) addPath(path, basename(path));
     return Array.from(map.values());
-  }, [sessions, targetCaller?.alias, targetCaller?.name, targetWorkspacePath]);
+  }, [sessionWorkspacePathsKey, targetCaller?.alias, targetCaller?.name, targetWorkspacePath]);
 
   const workspacePath = useMemo(() => {
     if (workspaceFilterMode === "target" && targetWorkspacePath) return targetWorkspacePath;

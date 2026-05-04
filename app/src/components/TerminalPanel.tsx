@@ -118,15 +118,26 @@ export function TerminalPanel() {
   const clearTerminalOutput = useTerminalStore((state) => state.clearTerminalOutput);
   const setActiveTerminalTab = useTerminalStore((state) => state.setActiveTerminalTab);
 
-  const sessions = useFeedbackStore((state) => state.sessions);
-  const callers = useFeedbackStore((state) => state.callers);
-  const activeSessionId = useFeedbackStore((state) => state.activeSessionId);
+  const activeSessionProjectDirectory = useFeedbackStore((state) => state.sessions.find((session) => session.id === state.activeSessionId)?.projectDirectory || "");
+  const activeSessionCallerId = useFeedbackStore((state) => state.sessions.find((session) => session.id === state.activeSessionId)?.callerId || "");
+  const activeSessionCreatedAt = useFeedbackStore((state) => state.sessions.find((session) => session.id === state.activeSessionId)?.createdAt || "");
+  const callerNamesKey = useFeedbackStore((state) => state.callers.map((caller) => `${caller.id}\t${caller.name}`).join("\n"));
+  const recentSessionPathsKey = useFeedbackStore((state) => state.sessions.map((session) => `${session.id}\t${session.projectDirectory}\t${session.callerId}\t${session.createdAt}`).join("\n"));
   const focusedComposer = useFeedbackStore((state) => state.focusedComposer);
   const activeWorkspacePath = useFeedbackStore((state) => state.mlcActiveWorkspacePath || "");
 
   const activeTab = tabs.find((tab) => tab.id === activeTabId) || null;
-  const activeSession = sessions.find((session) => session.id === activeSessionId) || null;
-  const callerNames = useMemo(() => new Map(callers.map((caller) => [caller.id, caller.name])), [callers]);
+  const callerNames = useMemo(() => new Map(callerNamesKey.split("\n").filter(Boolean).map((line) => {
+    const [id, name] = line.split("\t");
+    return [id, name || id] as const;
+  })), [callerNamesKey]);
+  const recentSessionCandidates = useMemo(() => recentSessionPathsKey
+    .split("\n")
+    .filter(Boolean)
+    .map((line) => {
+      const [id, projectDirectory, callerId, createdAt] = line.split("\t");
+      return { id, projectDirectory, callerId, createdAt };
+    }), [recentSessionPathsKey]);
 
   const pathCandidates = useMemo(() => {
     const candidates: TerminalPathCandidate[] = [];
@@ -134,13 +145,13 @@ export function TerminalPanel() {
     for (const path of recentPaths) pushCandidate(candidates, seen, path);
     if (activeTab?.cwd) pushCandidate(candidates, seen, { path: activeTab.cwd, label: basename(activeTab.cwd), source: "recent" });
     if (lastUsedCwd) pushCandidate(candidates, seen, { path: lastUsedCwd, label: basename(lastUsedCwd), source: "recent" });
-    if (activeSession?.projectDirectory) {
+    if (activeSessionProjectDirectory) {
       pushCandidate(candidates, seen, {
-        path: activeSession.projectDirectory,
-        label: basename(activeSession.projectDirectory),
+        path: activeSessionProjectDirectory,
+        label: basename(activeSessionProjectDirectory),
         source: "activeSession",
-        callerName: callerNames.get(activeSession.callerId),
-        lastUsedAt: activeSession.createdAt,
+        callerName: callerNames.get(activeSessionCallerId),
+        lastUsedAt: activeSessionCreatedAt,
       });
     }
     if (focusedComposer?.projectDirectory) {
@@ -153,7 +164,7 @@ export function TerminalPanel() {
       });
     }
     if (activeWorkspacePath) pushCandidate(candidates, seen, { path: activeWorkspacePath, label: basename(activeWorkspacePath), source: "workspace" });
-    for (const session of [...sessions].sort((left, right) => right.createdAt.localeCompare(left.createdAt)).slice(0, 10)) {
+    for (const session of [...recentSessionCandidates].sort((left, right) => right.createdAt.localeCompare(left.createdAt)).slice(0, 10)) {
       pushCandidate(candidates, seen, {
         path: session.projectDirectory,
         label: basename(session.projectDirectory),
@@ -163,7 +174,7 @@ export function TerminalPanel() {
       });
     }
     return candidates;
-  }, [activeSession, activeTab?.cwd, activeWorkspacePath, callerNames, focusedComposer, lastUsedCwd, recentPaths, sessions]);
+  }, [activeSessionCallerId, activeSessionCreatedAt, activeSessionProjectDirectory, activeTab?.cwd, activeWorkspacePath, callerNames, focusedComposer, lastUsedCwd, recentPaths, recentSessionCandidates]);
 
   const defaultCwd = lastUsedCwd || pathCandidates[0]?.path || null;
 

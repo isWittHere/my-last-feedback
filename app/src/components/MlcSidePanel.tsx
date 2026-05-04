@@ -114,9 +114,21 @@ function toSelectedDocument(document: MlcDocument): SelectedMlcDocument {
 export function MlcSidePanel() {
   const { t } = useTranslation();
   const isLightTheme = useIsLightTheme();
-  const callers = useFeedbackStore((state) => state.callers);
-  const sessions = useFeedbackStore((state) => state.sessions);
   const focusedComposer = useFeedbackStore((state) => state.focusedComposer);
+  const targetCaller = useFeedbackStore((state) => focusedComposer?.callerId ? state.callers.find((caller) => caller.id === focusedComposer.callerId) || null : null);
+  const sessionWorkspacePathsKey = useFeedbackStore((state) => {
+    const seen = new Set<string>();
+    return state.sessions
+      .map((session) => session.projectDirectory)
+      .filter((path) => {
+        if (!path) return false;
+        const key = normalizePathForCompare(path);
+        if (seen.has(key)) return false;
+        seen.add(key);
+        return true;
+      })
+      .join("\n");
+  });
   const activeWorkspacePath = useFeedbackStore((state) => state.mlcActiveWorkspacePath);
   const setActiveWorkspacePath = useFeedbackStore((state) => state.setMlcActiveWorkspacePath);
   const selectedMlcDocument = useFeedbackStore((state) => state.selectedMlcDocument);
@@ -146,7 +158,6 @@ export function MlcSidePanel() {
     { value: "title-desc", label: t("mlc.sortTitleDesc", "Title Z-A"), icon: "file-text" },
   ], [t]);
 
-  const targetCaller = callers.find((caller) => caller.id === focusedComposer?.callerId) || null;
   const targetWorkspacePath = focusedComposer?.projectDirectory || "";
 
   const workspaceOptions = useMemo(() => {
@@ -157,9 +168,9 @@ export function MlcSidePanel() {
       if (!map.has(key)) map.set(key, { path, name: name || basename(path), ownerName });
     };
     addPath(targetWorkspacePath, basename(targetWorkspacePath), targetCaller?.alias || targetCaller?.name);
-    for (const session of sessions) addPath(session.projectDirectory, basename(session.projectDirectory));
+    for (const path of sessionWorkspacePathsKey.split("\n")) addPath(path, basename(path));
     return Array.from(map.values());
-  }, [sessions, targetCaller?.alias, targetCaller?.name, targetWorkspacePath]);
+  }, [sessionWorkspacePathsKey, targetCaller?.alias, targetCaller?.name, targetWorkspacePath]);
 
   const activeWorkspace = useMemo(() => {
     if (workspaceFilterMode === "target" && targetWorkspacePath) return targetWorkspacePath;
@@ -169,7 +180,7 @@ export function MlcSidePanel() {
   const workspacePathsKey = useMemo(() => workspaceOptions.map((option) => option.path).join("\n"), [workspaceOptions]);
 
   useEffect(() => {
-    const workspacePaths = workspaceOptions.map((option) => option.path).filter(Boolean);
+    const workspacePaths = workspacePathsKey.split("\n").filter(Boolean);
     if (workspacePaths.length === 0) {
       setDocuments([]);
       return;
@@ -192,7 +203,7 @@ export function MlcSidePanel() {
     return () => {
       cancelledRequest = true;
     };
-  }, [workspaceOptions, workspacePathsKey]);
+  }, [workspacePathsKey]);
 
   const filteredDocuments = useMemo(() => {
     const trimmedQuery = query.trim().toLowerCase();

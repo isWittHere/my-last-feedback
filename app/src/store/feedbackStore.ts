@@ -205,6 +205,10 @@ export interface FeedbackDraft {
   updatedAt: string;
 }
 
+export type SessionDraftField = "feedbackText" | "testLogText" | "commandLogs";
+
+export type SessionTextDraft = Pick<Session, SessionDraftField>;
+
 export interface Session {
   id: string;
   callerId: string;
@@ -247,6 +251,7 @@ export interface FeedbackState {
   hiddenCallerIds: string[]; // callers hidden from top bar tabs
   visibleColumnCount: number; // how many callers are visible in the window columns
   sessions: Session[];
+  sessionDraftsById: Record<string, SessionTextDraft>;
   activeCallerId: string | null;
   activeSessionId: string | null;
   queuedDraftsByCallerId: Record<string, FeedbackDraft>;
@@ -269,7 +274,7 @@ export interface FeedbackState {
   clearAllHistory: () => Promise<void>;
   addSession: (session: Session, options?: AddSessionOptions) => void;
   setActiveSession: (id: string) => void;
-  updateSessionField: (sessionId: string, field: keyof Pick<Session, "feedbackText" | "testLogText" | "commandLogs">, value: string) => void;
+  updateSessionField: (sessionId: string, field: SessionDraftField, value: string) => void;
   addSessionImage: (sessionId: string, img: ImageAttachment) => void;
   removeSessionImage: (sessionId: string, path: string) => void;
   clearSessionImages: (sessionId: string) => void;
@@ -527,6 +532,25 @@ function isDraftEmpty(draft: FeedbackDraft): boolean {
     && !draft.gitAction;
 }
 
+export function applySessionTextDraft(session: Session, draft: SessionTextDraft | null | undefined): Session {
+  return draft ? { ...session, ...draft } : session;
+}
+
+function removeSessionTextDraft(drafts: Record<string, SessionTextDraft>, sessionId: string): Record<string, SessionTextDraft> {
+  if (!drafts[sessionId]) return drafts;
+  const next = { ...drafts };
+  delete next[sessionId];
+  return next;
+}
+
+function createSessionTextDraft(session: Session): SessionTextDraft {
+  return {
+    feedbackText: session.feedbackText,
+    testLogText: session.testLogText,
+    commandLogs: session.commandLogs,
+  };
+}
+
 function loadMessageHistory(): Record<string, string[]> {
   try {
     const raw = localStorage.getItem("mlf-message-history-by-caller");
@@ -613,6 +637,7 @@ export const useFeedbackStore = create<FeedbackState>((set, get) => ({
     } catch { return 18; }
   })(),
   sessions: [],
+  sessionDraftsById: {},
   activeCallerId: null,
   activeSessionId: null,
   queuedDraftsByCallerId: {},
@@ -768,6 +793,7 @@ export const useFeedbackStore = create<FeedbackState>((set, get) => ({
       callerOrder: [],
       hiddenCallerIds: [],
       sessions: [],
+      sessionDraftsById: {},
       activeCallerId: null,
       activeSessionId: null,
       unreadCallerIds: [],
@@ -851,13 +877,17 @@ export const useFeedbackStore = create<FeedbackState>((set, get) => ({
   setActiveSession: (id) => set({ activeSessionId: id }),
 
   updateSessionField: (sessionId, field, value) => {
-    set((state) => ({
-      sessions: state.sessions.map((s) =>
-        s.id === sessionId && s.status === "pending"
-          ? { ...s, [field]: value }
-          : s
-      ),
-    }));
+    set((state) => {
+      const session = state.sessions.find((s) => s.id === sessionId);
+      if (!session || session.status !== "pending") return {};
+      const currentDraft = state.sessionDraftsById[sessionId] || createSessionTextDraft(session);
+      return {
+        sessionDraftsById: {
+          ...state.sessionDraftsById,
+          [sessionId]: { ...currentDraft, [field]: value },
+        },
+      };
+    });
   },
 
   addSessionImage: (sessionId, img) => {
@@ -986,8 +1016,9 @@ export const useFeedbackStore = create<FeedbackState>((set, get) => ({
   completeSessionWithSubmittedFeedback: (sessionId, feedbackText) => {
     set((state) => ({
       sessions: state.sessions.map((s) =>
-        s.id === sessionId ? { ...s, feedbackText, status: "responded" as const } : s
+        s.id === sessionId ? { ...applySessionTextDraft(s, state.sessionDraftsById[sessionId]), feedbackText, status: "responded" as const } : s
       ),
+      sessionDraftsById: removeSessionTextDraft(state.sessionDraftsById, sessionId),
       focusedComposer: state.focusedComposer?.sessionId === sessionId ? null : state.focusedComposer,
     }));
     const session = get().sessions.find((s) => s.id === sessionId);
@@ -999,8 +1030,9 @@ export const useFeedbackStore = create<FeedbackState>((set, get) => ({
   markSessionResponded: (sessionId) => {
     set((state) => ({
       sessions: state.sessions.map((s) =>
-        s.id === sessionId ? { ...s, status: "responded" as const } : s
+        s.id === sessionId ? { ...applySessionTextDraft(s, state.sessionDraftsById[sessionId]), status: "responded" as const } : s
       ),
+      sessionDraftsById: removeSessionTextDraft(state.sessionDraftsById, sessionId),
       focusedComposer: state.focusedComposer?.sessionId === sessionId ? null : state.focusedComposer,
     }));
     // Find the caller and update pending count
@@ -1015,6 +1047,7 @@ export const useFeedbackStore = create<FeedbackState>((set, get) => ({
       sessions: state.sessions.map((s) =>
         s.id === sessionId ? { ...s, status: "cancelled" as const } : s
       ),
+      sessionDraftsById: removeSessionTextDraft(state.sessionDraftsById, sessionId),
       focusedComposer: state.focusedComposer?.sessionId === sessionId ? null : state.focusedComposer,
     }));
     invoke("cancel_session", { sessionId }).catch((e: unknown) =>
@@ -1066,6 +1099,7 @@ export const useFeedbackStore = create<FeedbackState>((set, get) => ({
     const remaining = sessions.filter((s) => s.id !== sessionId);
     set((state) => ({
       sessions: remaining,
+      sessionDraftsById: removeSessionTextDraft(state.sessionDraftsById, sessionId),
       focusedComposer: state.focusedComposer?.sessionId === sessionId ? null : state.focusedComposer,
     }));
     // If we removed the active session, select another one from the same caller
