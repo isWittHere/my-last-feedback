@@ -350,6 +350,7 @@ const MESSAGE_HISTORY_MAX = 50;
 const MLC_PANEL_DEFAULT_WIDTH = 320;
 const MLC_PANEL_MIN_WIDTH = 240;
 const MLC_PANEL_MAX_WIDTH = 520;
+const MLC_PAGE_PANEL_MAX_WIDTH = 720;
 const DOCK_LAYOUT_STORAGE_KEY = "mlfb-dock-layout-v1";
 
 export type ResourceIconTheme = "default" | "catppuccin";
@@ -370,8 +371,14 @@ function isDockTabId(value: unknown): value is DockTabId {
   return typeof value === "string" && KNOWN_DOCK_TABS.includes(value as DockTabId);
 }
 
-function clampDockWidth(width: number): number {
-  return Math.min(MLC_PANEL_MAX_WIDTH, Math.max(MLC_PANEL_MIN_WIDTH, width));
+function dockColumnMaxWidth(columnId?: DockColumnId): number {
+  return columnId === "leftPage" || columnId === "rightPage"
+    ? MLC_PAGE_PANEL_MAX_WIDTH
+    : MLC_PANEL_MAX_WIDTH;
+}
+
+function clampDockWidth(width: number, columnId?: DockColumnId): number {
+  return Math.min(dockColumnMaxWidth(columnId), Math.max(MLC_PANEL_MIN_WIDTH, width));
 }
 
 function createDockColumn(overrides: Partial<DockColumnState> = {}): DockColumnState {
@@ -385,7 +392,7 @@ function createDockColumn(overrides: Partial<DockColumnState> = {}): DockColumnS
   };
 }
 
-function normalizeDockColumn(value: Partial<DockColumnState> | null | undefined): DockColumnState {
+function normalizeDockColumn(columnId: DockColumnId, value: Partial<DockColumnState> | null | undefined): DockColumnState {
   const tabIds = Array.isArray(value?.tabIds)
     ? value.tabIds.filter(isDockTabId)
     : [];
@@ -393,7 +400,7 @@ function normalizeDockColumn(value: Partial<DockColumnState> | null | undefined)
   return createDockColumn({
     tabIds,
     activeTabId,
-    width: clampDockWidth(Number(value?.width) || MLC_PANEL_DEFAULT_WIDTH),
+    width: clampDockWidth(Number(value?.width) || MLC_PANEL_DEFAULT_WIDTH, columnId),
     tabBarPosition: value?.tabBarPosition === "bottom" ? "bottom" : "top",
     collapsed: Boolean(value?.collapsed),
   });
@@ -449,10 +456,10 @@ function loadDockLayout(): DockLayoutState {
     if (stored) {
       const parsed = JSON.parse(stored) as Partial<DockLayoutState>;
       const columns: DockLayoutState["columns"] = {
-        leftSidebar: normalizeDockColumn(parsed.columns?.leftSidebar),
-        leftPage: normalizeDockColumn(parsed.columns?.leftPage),
-        rightPage: normalizeDockColumn(parsed.columns?.rightPage),
-        rightSidebar: normalizeDockColumn(parsed.columns?.rightSidebar),
+        leftSidebar: normalizeDockColumn("leftSidebar", parsed.columns?.leftSidebar),
+        leftPage: normalizeDockColumn("leftPage", parsed.columns?.leftPage),
+        rightPage: normalizeDockColumn("rightPage", parsed.columns?.rightPage),
+        rightSidebar: normalizeDockColumn("rightSidebar", parsed.columns?.rightSidebar),
       };
       const seen = new Set<DockTabId>();
       for (const columnId of DOCK_COLUMN_IDS) {
@@ -1525,7 +1532,7 @@ export const useFeedbackStore = create<FeedbackState>((set, get) => ({
           ...state.dockLayout.columns,
           [columnId]: {
             ...state.dockLayout.columns[columnId],
-            width: clampDockWidth(width),
+            width: clampDockWidth(width, columnId),
           },
         },
       };

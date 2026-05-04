@@ -19,6 +19,7 @@ import { resolveCatppuccinResourceIcon, type CatppuccinIconFlavor } from "../Cat
 import { useIsLightTheme } from "../useIsLightTheme";
 import { PromptIcon } from "../PromptIcons";
 import { Icon } from "../Icons";
+import { COMPOSER_SETTINGS_EVENT, getComposerSettings, type ComposerSettings } from "../../composerSettings";
 
 export interface ComposerEditorHandle {
   focus: () => void;
@@ -40,6 +41,7 @@ interface SlashMenuState {
   end: number;
   top: number;
   left: number;
+  maxHeight: number;
 }
 
 interface HistoryEntry {
@@ -189,6 +191,21 @@ function restoreSelection(root: HTMLElement, range: TextRange) {
   selection.addRange(nextRange);
 }
 
+function rectFromOffsets(root: HTMLElement, start: number, end: number): DOMRect | null {
+  const safeEnd = Math.max(end, start + 1);
+  const startPosition = positionFromOffset(root, start);
+  const endPosition = positionFromOffset(root, safeEnd);
+  const range = document.createRange();
+  try {
+    range.setStart(startPosition.node, startPosition.offset);
+    range.setEnd(endPosition.node, endPosition.offset);
+    const rect = range.getBoundingClientRect();
+    return rect.width > 0 || rect.height > 0 ? rect : null;
+  } catch {
+    return null;
+  }
+}
+
 function displayResourceLabel(label: string): string {
   const normalized = label.replace(/\\/g, "/").replace(/\/+$/g, "");
   return normalized.split("/").filter(Boolean).pop() || label;
@@ -281,12 +298,32 @@ function slashTrigger(value: string, caret: number): { query: string; start: num
   return { query, start: before.length - query.length - 1, end: before.length + prefix.length - prefix.length };
 }
 
-function commandMatches(command: PromptCommandOption, query: string): boolean {
-  if (!query) return true;
+function commandMatchRank(command: PromptCommandOption, query: string, settings: ComposerSettings): number | null {
+  if (!query) return 0;
   const normalized = query.toLowerCase();
-  return command.id.includes(normalized)
-    || command.name.toLowerCase().includes(normalized)
-    || command.description.toLowerCase().includes(normalized);
+  const id = command.id.toLowerCase();
+  const name = command.name.toLowerCase();
+  const description = command.description.toLowerCase();
+  if (id.startsWith(normalized) || name.startsWith(normalized)) return 1;
+  if (id.includes(normalized) || name.includes(normalized)) return 2;
+  if (settings.commandSearchIncludesDescription && description.includes(normalized)) return 3;
+  return null;
+}
+
+function highlightedCommandLabel(label: string, query: string) {
+  if (!query) return label;
+  const normalizedLabel = label.toLowerCase();
+  const normalizedQuery = query.toLowerCase();
+  const start = normalizedLabel.indexOf(normalizedQuery);
+  if (start < 0) return label;
+  const end = start + query.length;
+  return (
+    <>
+      {label.slice(0, start)}
+      <span className="composer-slash-match">{label.slice(start, end)}</span>
+      {label.slice(end)}
+    </>
+  );
 }
 
 export const ComposerEditor = forwardRef<ComposerEditorHandle, ComposerEditorProps>(function ComposerEditor({
@@ -307,11 +344,13 @@ export const ComposerEditor = forwardRef<ComposerEditorHandle, ComposerEditorPro
   const valueRef = useRef(value);
   const composingRef = useRef(false);
   const pendingSelectionRef = useRef<TextRange | null>(null);
+  const suppressSlashMenuRef = useRef<{ value: string; minCaret: number; maxCaret: number } | null>(null);
   const historyRef = useRef<HistoryEntry[]>([{ value, selection: { start: value.length, end: value.length } }]);
   const historyIndexRef = useRef(0);
   const lastHistoryValueRef = useRef(value);
   const [slashMenu, setSlashMenu] = useState<SlashMenuState | null>(null);
   const [activeCommandIndex, setActiveCommandIndex] = useState(0);
+  const [composerSettings, setComposerSettings] = useState<ComposerSettings>(getComposerSettings);
   const resourceIconTheme = useFeedbackStore((state) => state.resourceIconTheme);
   const catppuccinFlavor: CatppuccinIconFlavor = useIsLightTheme() ? "latte" : "mocha";
   valueRef.current = value;
@@ -323,8 +362,13 @@ export const ComposerEditor = forwardRef<ComposerEditorHandle, ComposerEditorPro
   );
   const visibleCommands = useMemo(() => {
     if (!slashMenu) return [];
-    return commands.filter((command) => commandMatches(command, slashMenu.query)).slice(0, 8);
-  }, [commands, slashMenu]);
+    return commands
+      .map((command, index) => ({ command, index, rank: commandMatchRank(command, slashMenu.query, composerSettings) }))
+      .filter((item): item is { command: PromptCommandOption; index: number; rank: number } => item.rank !== null)
+      .sort((left, right) => left.rank - right.rank || left.index - right.index)
+      .map((item) => item.command)
+      .slice(0, 8);
+  }, [commands, composerSettings, slashMenu]);
 
   useEffect(() => {
     if (value === lastHistoryValueRef.current) return;
@@ -332,6 +376,15 @@ export const ComposerEditor = forwardRef<ComposerEditorHandle, ComposerEditorPro
     historyIndexRef.current = 0;
     lastHistoryValueRef.current = value;
   }, [value]);
+
+  useEffect(() => {
+    const handleSettingsChanged = (event: Event) => {
+      const detail = (event as CustomEvent<ComposerSettings>).detail;
+      setComposerSettings(detail || getComposerSettings());
+    };
+    window.addEventListener(COMPOSER_SETTINGS_EVENT, handleSettingsChanged);
+    return () => window.removeEventListener(COMPOSER_SETTINGS_EVENT, handleSettingsChanged);
+  }, []);
 
   const pushHistoryEntry = useCallback((nextValue: string, selection: TextRange) => {
     const current = historyRef.current[historyIndexRef.current];
@@ -368,6 +421,14 @@ export const ComposerEditor = forwardRef<ComposerEditorHandle, ComposerEditorPro
       return;
     }
     const currentValue = serializeRoot(root);
+    const suppression = suppressSlashMenuRef.current;
+    if (suppression) {
+      if (suppression.value === currentValue && selection.start >= suppression.minCaret && selection.start <= suppression.maxCaret) {
+        setSlashMenu(null);
+        return;
+      }
+      if (suppression.value !== currentValue || selection.start > suppression.maxCaret) suppressSlashMenuRef.current = null;
+    }
     const trigger = slashTrigger(currentValue, selection.start);
     if (!trigger) {
       setSlashMenu(null);
@@ -375,19 +436,23 @@ export const ComposerEditor = forwardRef<ComposerEditorHandle, ComposerEditorPro
     }
     const windowSelection = window.getSelection();
     const range = windowSelection?.rangeCount ? windowSelection.getRangeAt(0) : null;
-    const rect = range?.getBoundingClientRect();
+    const triggerRect = rectFromOffsets(root, trigger.start, trigger.end);
+    const caretRect = range?.getBoundingClientRect();
     const rootRect = root.getBoundingClientRect();
+    const anchorRect = triggerRect || (caretRect && (caretRect.width > 0 || caretRect.height > 0) ? caretRect : null) || rootRect;
+    const anchorTop = anchorRect.top;
     setSlashMenu({
       query: trigger.query,
       start: trigger.start,
       end: selection.end,
-      top: (rect && rect.height > 0 ? rect.bottom : rootRect.bottom) + 6,
-      left: Math.max(8, rect && rect.width >= 0 ? rect.left : rootRect.left),
+      top: anchorTop - 6,
+      left: Math.max(8, Math.min(anchorRect.left, window.innerWidth - 328)),
+      maxHeight: Math.max(120, Math.min(240, anchorTop - 16)),
     });
     setActiveCommandIndex(0);
   }, [readOnly]);
 
-  const replaceRange = useCallback((start: number, end: number, text: string) => {
+  const replaceRange = useCallback((start: number, end: number, text: string, options: { updateSlashMenu?: boolean } = {}) => {
     const root = rootRef.current;
     const currentSelection = root ? getSelectionRange(root) : { start, end };
     const safeStart = Math.max(0, Math.min(start, valueRef.current.length));
@@ -399,7 +464,7 @@ export const ComposerEditor = forwardRef<ComposerEditorHandle, ComposerEditorPro
       renderComposerDom(root, parseComposerTextTokens(nextValue, { knownCommands: commandSet, projectDirectory }), resourceIconTheme, catppuccinFlavor);
       restoreSelection(root, { start: nextCaret, end: nextCaret });
     }
-    if (root && currentSelection.start === currentSelection.end) requestAnimationFrame(updateSlashMenu);
+    if (options.updateSlashMenu !== false && root && currentSelection.start === currentSelection.end) requestAnimationFrame(updateSlashMenu);
   }, [catppuccinFlavor, commandSet, commitValue, projectDirectory, resourceIconTheme, updateSlashMenu]);
 
   const applyHistory = useCallback((direction: -1 | 1) => {
@@ -425,8 +490,19 @@ export const ComposerEditor = forwardRef<ComposerEditorHandle, ComposerEditorPro
 
   const selectCommand = useCallback((command: PromptCommandOption) => {
     if (!slashMenu) return;
-    replaceRange(slashMenu.start, slashMenu.end, `/${command.id} `);
+    const commandText = `/${command.id.trim()} `;
+    const suffix = valueRef.current.slice(slashMenu.end);
+    const whitespaceAfterCommand = /^\s+/.exec(suffix)?.[0].length || 0;
+    const nextValue = valueRef.current.slice(0, slashMenu.start) + commandText + valueRef.current.slice(slashMenu.end + whitespaceAfterCommand);
+    const nextCaret = slashMenu.start + commandText.length;
+    suppressSlashMenuRef.current = {
+      value: nextValue,
+      minCaret: slashMenu.start + commandText.trimEnd().length,
+      maxCaret: nextCaret,
+    };
+    replaceRange(slashMenu.start, slashMenu.end + whitespaceAfterCommand, commandText, { updateSlashMenu: false });
     setSlashMenu(null);
+    setActiveCommandIndex(0);
   }, [replaceRange, slashMenu]);
 
   const selectionAroundToken = useCallback((selection: TextRange, direction: "backward" | "forward"): TextRange | null => {
@@ -559,6 +635,7 @@ export const ComposerEditor = forwardRef<ComposerEditorHandle, ComposerEditorPro
     if (slashMenu && visibleCommands.length > 0) {
       if (event.key === "ArrowDown" || event.key === "ArrowUp") {
         event.preventDefault();
+        event.stopPropagation();
         setActiveCommandIndex((current) => {
           const delta = event.key === "ArrowDown" ? 1 : -1;
           return (current + delta + visibleCommands.length) % visibleCommands.length;
@@ -567,11 +644,13 @@ export const ComposerEditor = forwardRef<ComposerEditorHandle, ComposerEditorPro
       }
       if (event.key === "Enter" || event.key === "Tab") {
         event.preventDefault();
+        event.stopPropagation();
         selectCommand(visibleCommands[activeCommandIndex] || visibleCommands[0]);
         return;
       }
       if (event.key === "Escape") {
         event.preventDefault();
+        event.stopPropagation();
         setSlashMenu(null);
         return;
       }
@@ -579,6 +658,15 @@ export const ComposerEditor = forwardRef<ComposerEditorHandle, ComposerEditorPro
 
     onKeyDown?.(event, selection);
   }, [activeCommandIndex, applyHistory, onKeyDown, readOnly, selectCommand, slashMenu, visibleCommands]);
+
+  const handleKeyUp = useCallback((event: KeyboardEvent<HTMLDivElement>) => {
+    if (slashMenu && ["ArrowDown", "ArrowUp", "Enter", "Tab", "Escape"].includes(event.key)) {
+      event.preventDefault();
+      event.stopPropagation();
+      return;
+    }
+    requestAnimationFrame(updateSlashMenu);
+  }, [slashMenu, updateSlashMenu]);
 
   const handlePaste = useCallback((event: ClipboardEvent<HTMLDivElement>) => {
     onPaste?.(event);
@@ -612,7 +700,7 @@ export const ComposerEditor = forwardRef<ComposerEditorHandle, ComposerEditorPro
           requestAnimationFrame(updateSlashMenu);
         }}
         onClick={() => requestAnimationFrame(updateSlashMenu)}
-        onKeyUp={() => requestAnimationFrame(updateSlashMenu)}
+        onKeyUp={handleKeyUp}
         onCompositionStart={() => { composingRef.current = true; }}
         onCompositionEnd={() => {
           composingRef.current = false;
@@ -620,8 +708,11 @@ export const ComposerEditor = forwardRef<ComposerEditorHandle, ComposerEditorPro
         }}
       />
       {slashMenu && visibleCommands.length > 0 ? (
-        <div className="composer-slash-menu" style={{ top: slashMenu.top, left: slashMenu.left }}>
+        <div className="composer-slash-menu" style={{ top: slashMenu.top, left: slashMenu.left, maxHeight: slashMenu.maxHeight }}>
           {visibleCommands.map((command, index) => (
+            (() => {
+              const label = command.name || `/${command.id}`;
+              return (
             <button
               key={command.id}
               type="button"
@@ -631,11 +722,12 @@ export const ComposerEditor = forwardRef<ComposerEditorHandle, ComposerEditorPro
             >
               <span className="composer-slash-icon">{command.icon ? <PromptIcon name={command.icon} size={13} /> : <Icon name="terminal" size={13} />}</span>
               <span className="composer-slash-main">
-                <span className="composer-slash-name">/{command.id}</span>
-                <span className="composer-slash-title">{command.name}</span>
+                <span className="composer-slash-name" title={label}>{highlightedCommandLabel(label, slashMenu.query)}</span>
+                {command.description ? <span className="composer-slash-description">{command.description}</span> : null}
               </span>
-              {command.description ? <span className="composer-slash-description">{command.description}</span> : null}
             </button>
+              );
+            })()
           ))}
         </div>
       ) : null}

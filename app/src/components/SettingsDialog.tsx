@@ -11,6 +11,7 @@ import { applyTheme, getStoredTheme, type Theme } from "../theme";
 import { getNotificationSettings, saveNotificationSettings, syncAutoFocusNewRequest, type NotificationSettings } from "../notificationSettings";
 import { getSubmittedViewSettings, saveSubmittedViewSettings, SUBMITTED_VIEW_SECTION_CONFIGS, type SubmittedViewSectionId, type SubmittedViewSettings } from "../submittedViewSettings";
 import { getTerminalSettings, saveTerminalSettings, type TerminalSettings } from "../terminalSettings";
+import { getComposerSettings, saveComposerSettings, type ComposerSettings } from "../composerSettings";
 
 type Tab = "general" | "callers" | "display" | "notification" | "terminal" | "prompts" | "about";
 
@@ -57,6 +58,7 @@ export function SettingsDialog({ open, onClose }: { open: boolean; onClose: () =
   const [confirmClear, setConfirmClear] = useState(false);
   const [notifSettings, setNotifSettings] = useState<NotificationSettings>(getNotificationSettings);
   const [terminalSettings, setTerminalSettings] = useState<TerminalSettings>(getTerminalSettings);
+  const [composerSettings, setComposerSettings] = useState<ComposerSettings>(getComposerSettings);
   const [zoomSettings, setZoomSettings] = useState<ZoomSettings>(getZoomSettings);
   const [submittedViewSettings, setSubmittedViewSettings] = useState<SubmittedViewSettings>(getSubmittedViewSettings);
   const prompts = useFeedbackStore((s) => s.prompts);
@@ -73,6 +75,7 @@ export function SettingsDialog({ open, onClose }: { open: boolean; onClose: () =
     setTheme(getStoredTheme());
     setNotifSettings(getNotificationSettings());
     setTerminalSettings(getTerminalSettings());
+    setComposerSettings(getComposerSettings());
     setSubmittedViewSettings(getSubmittedViewSettings());
     invoke<boolean>("get_autostart").then(setAutostart).catch(() => {});
   }, [open]);
@@ -123,6 +126,14 @@ export function SettingsDialog({ open, onClose }: { open: boolean; onClose: () =
     });
   }, []);
 
+  const handleComposerToggle = useCallback((key: keyof ComposerSettings) => {
+    setComposerSettings((prev) => {
+      const next = { ...prev, [key]: !prev[key] };
+      saveComposerSettings(next);
+      return next;
+    });
+  }, []);
+
   const handleZoomChange = useCallback((key: keyof ZoomSettings, value: number) => {
     setZoomSettings((prev) => {
       const next = { ...prev, [key]: value };
@@ -158,7 +169,7 @@ export function SettingsDialog({ open, onClose }: { open: boolean; onClose: () =
 
   return (
     <div className="settings-overlay" onClick={onClose}>
-      <div className="settings-dialog" onClick={(e) => e.stopPropagation()}>
+      <div className={`settings-dialog${tab === "callers" ? " settings-dialog-caller-manager" : ""}`} onClick={(e) => e.stopPropagation()}>
         {/* Header */}
         <div className="settings-header">
           <span className="settings-header-title">{t("settings.title")}</span>
@@ -486,6 +497,18 @@ export function SettingsDialog({ open, onClose }: { open: boolean; onClose: () =
 
             {tab === "prompts" && (
               <div className="settings-section">
+                <div className="settings-row">
+                  <div className="settings-row-info">
+                    <span className="settings-label">{t("settings.commandSearchIncludesDescription", "Command shortcut matching includes descriptions")}</span>
+                    <span className="settings-sublabel">{t("settings.commandSearchIncludesDescriptionDesc", "When enabled, slash command suggestions can match description text after id and name matches.")}</span>
+                  </div>
+                  <button
+                    className={`settings-toggle${composerSettings.commandSearchIncludesDescription ? " settings-toggle-on" : ""}`}
+                    onClick={() => handleComposerToggle("commandSearchIncludesDescription")}
+                  >
+                    <span className="settings-toggle-knob" />
+                  </button>
+                </div>
                 <div className="settings-row">
                   <div className="settings-row-info">
                     <span className="settings-label">{t("settings.showPromptButtons", "Show prompt buttons")}</span>

@@ -223,7 +223,7 @@ export function CallerManager() {
               <span className="settings-label">{t("callerManager.autoHideInactive")}</span>
               <span className="settings-sublabel">{t("callerManager.autoHideInactiveHint")}</span>
             </div>
-            <div style={{ display: "flex", alignItems: "center", gap: 4 }}>
+            <div className="cm-number-with-unit">
               <input
                 type="number"
                 min={0}
@@ -232,7 +232,7 @@ export function CallerManager() {
                 onChange={(e) => setAutoHideInactiveHours(Math.max(0, parseInt(e.target.value) || 0))}
                 className="cm-number-input"
               />
-              <span style={{ fontSize: 11, color: "var(--color-text-secondary)" }}>{t("callerManager.hours")}</span>
+              <span className="cm-number-unit">{t("callerManager.hours")}</span>
             </div>
           </div>
           <div className="settings-row">

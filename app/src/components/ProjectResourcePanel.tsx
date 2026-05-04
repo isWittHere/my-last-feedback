@@ -108,16 +108,16 @@ export function ProjectResourcePanel() {
   const targetWorkspacePath = focusedComposer?.projectDirectory || "";
 
   const workspaceOptions = useMemo(() => {
-    const map = new Map<string, { path: string; name: string }>();
-    const addPath = (path: string, name?: string) => {
+    const map = new Map<string, { path: string; name: string; ownerName?: string }>();
+    const addPath = (path: string, name?: string, ownerName?: string) => {
       if (!path) return;
       const key = normalizePathForCompare(path);
-      if (!map.has(key)) map.set(key, { path, name: name || basename(path) });
+      if (!map.has(key)) map.set(key, { path, name: name || basename(path), ownerName });
     };
-    addPath(targetWorkspacePath, targetCaller?.name || basename(targetWorkspacePath));
+    addPath(targetWorkspacePath, basename(targetWorkspacePath), targetCaller?.alias || targetCaller?.name);
     for (const session of sessions) addPath(session.projectDirectory, basename(session.projectDirectory));
     return Array.from(map.values());
-  }, [sessions, targetCaller?.name, targetWorkspacePath]);
+  }, [sessions, targetCaller?.alias, targetCaller?.name, targetWorkspacePath]);
 
   const workspacePath = useMemo(() => {
     if (workspaceFilterMode === "target" && targetWorkspacePath) return targetWorkspacePath;
@@ -224,7 +224,7 @@ export function ProjectResourcePanel() {
           </button>
         ) : null}
         {workspaceOptions.map((workspace) => (
-          <button key={normalizePathForCompare(workspace.path)} className={workspaceFilterMode === "workspace" && samePath(workspacePath, workspace.path) ? "active" : ""} onClick={() => { setWorkspaceFilterMode("workspace"); setActiveWorkspacePath(workspace.path); }} data-tooltip={cleanDisplayPath(workspace.path)}>
+          <button key={normalizePathForCompare(workspace.path)} className={workspaceFilterMode === "workspace" && samePath(workspacePath, workspace.path) ? "active" : ""} onClick={() => { setWorkspaceFilterMode("workspace"); setActiveWorkspacePath(workspace.path); }} data-tooltip={workspace.ownerName ? `${cleanDisplayPath(workspace.path)} · ${workspace.ownerName}` : cleanDisplayPath(workspace.path)}>
             <Icon name="folder" size={11} />
             <span>{workspace.name}</span>
           </button>
