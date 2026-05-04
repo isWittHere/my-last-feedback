@@ -8,7 +8,7 @@ PROJ_ROOT="$(cd "$(dirname "$0")/.." && pwd)"
 APP_DIR="$PROJ_ROOT/app"
 
 # Read version from package.json (requires node)
-VERSION="$(node -e "console.log(require('$PROJ_ROOT/package.json').version)")"
+VERSION="$(cd "$PROJ_ROOT" && node -e "console.log(require('./package.json').version)")"
 DIST_DIR="$PROJ_ROOT/dist/win-x64/my-last-feedback"
 ZIP_NAME="my-last-feedback-v${VERSION}-win-x64.zip"
 ZIP_PATH="$PROJ_ROOT/dist/win-x64/$ZIP_NAME"
