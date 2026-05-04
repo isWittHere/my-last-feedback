@@ -10,8 +10,9 @@ import { invoke } from "@tauri-apps/api/core";
 import { applyTheme, getStoredTheme, type Theme } from "../theme";
 import { getNotificationSettings, saveNotificationSettings, syncAutoFocusNewRequest, type NotificationSettings } from "../notificationSettings";
 import { getSubmittedViewSettings, saveSubmittedViewSettings, SUBMITTED_VIEW_SECTION_CONFIGS, type SubmittedViewSectionId, type SubmittedViewSettings } from "../submittedViewSettings";
+import { getTerminalSettings, saveTerminalSettings, type TerminalSettings } from "../terminalSettings";
 
-type Tab = "general" | "callers" | "display" | "notification" | "prompts" | "about";
+type Tab = "general" | "callers" | "display" | "notification" | "terminal" | "prompts" | "about";
 
 export interface ZoomSettings {
   global: number;
@@ -55,6 +56,7 @@ export function SettingsDialog({ open, onClose }: { open: boolean; onClose: () =
   const [autostart, setAutostart] = useState(false);
   const [confirmClear, setConfirmClear] = useState(false);
   const [notifSettings, setNotifSettings] = useState<NotificationSettings>(getNotificationSettings);
+  const [terminalSettings, setTerminalSettings] = useState<TerminalSettings>(getTerminalSettings);
   const [zoomSettings, setZoomSettings] = useState<ZoomSettings>(getZoomSettings);
   const [submittedViewSettings, setSubmittedViewSettings] = useState<SubmittedViewSettings>(getSubmittedViewSettings);
   const prompts = useFeedbackStore((s) => s.prompts);
@@ -70,6 +72,7 @@ export function SettingsDialog({ open, onClose }: { open: boolean; onClose: () =
     if (!open) return;
     setTheme(getStoredTheme());
     setNotifSettings(getNotificationSettings());
+    setTerminalSettings(getTerminalSettings());
     setSubmittedViewSettings(getSubmittedViewSettings());
     invoke<boolean>("get_autostart").then(setAutostart).catch(() => {});
   }, [open]);
@@ -108,6 +111,14 @@ export function SettingsDialog({ open, onClose }: { open: boolean; onClose: () =
       if (key === "autoFocusNewRequest") {
         syncAutoFocusNewRequest(next.autoFocusNewRequest);
       }
+      return next;
+    });
+  }, []);
+
+  const handleTerminalToggle = useCallback((key: keyof TerminalSettings) => {
+    setTerminalSettings((prev) => {
+      const next = { ...prev, [key]: !prev[key] };
+      saveTerminalSettings(next);
       return next;
     });
   }, []);
@@ -186,6 +197,13 @@ export function SettingsDialog({ open, onClose }: { open: boolean; onClose: () =
             >
               <Icon name="bell" size={14} />
               {t("settings.notification")}
+            </button>
+            <button
+              className={`settings-nav-item${tab === "terminal" ? " settings-nav-active" : ""}`}
+              onClick={() => setTab("terminal")}
+            >
+              <Icon name="terminal" size={14} />
+              {t("settings.terminal", "Terminal")}
             </button>
             <button
               className={`settings-nav-item${tab === "prompts" ? " settings-nav-active" : ""}`}
@@ -442,6 +460,23 @@ export function SettingsDialog({ open, onClose }: { open: boolean; onClose: () =
                   <button
                     className={`settings-toggle${notifSettings.persistentUnread ? " settings-toggle-on" : ""}`}
                     onClick={() => handleNotifToggle("persistentUnread")}
+                  >
+                    <span className="settings-toggle-knob" />
+                  </button>
+                </div>
+              </div>
+            )}
+
+            {tab === "terminal" && (
+              <div className="settings-section">
+                <div className="settings-row">
+                  <div className="settings-row-info">
+                    <span className="settings-label">{t("settings.terminalMiddleClickClose", "Close terminal tabs with middle click")}</span>
+                    <span className="settings-sublabel">{t("settings.terminalMiddleClickCloseDesc", "Middle-clicking a terminal tab kills its PTY session and removes the tab.")}</span>
+                  </div>
+                  <button
+                    className={`settings-toggle${terminalSettings.middleClickClosesTab ? " settings-toggle-on" : ""}`}
+                    onClick={() => handleTerminalToggle("middleClickClosesTab")}
                   >
                     <span className="settings-toggle-knob" />
                   </button>

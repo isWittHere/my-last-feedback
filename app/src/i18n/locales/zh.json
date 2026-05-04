@@ -169,6 +169,9 @@
     "showPromptButtonsDesc": "在输入框下方显示旧版提示词按钮。点击后会把对应斜杠命令插入到反馈文本开头。",
     "promptEnable": "启用",
     "promptDisable": "禁用",
+    "terminal": "终端",
+    "terminalMiddleClickClose": "通过中键关闭终端标签页",
+    "terminalMiddleClickCloseDesc": "中键点击终端标签页会终止对应 PTY 会话并移除该标签页。",
     "notification": "通知",
     "taskbarFlash": "任务栏闪烁",
     "taskbarFlashDesc": "当窗口未聚焦时，新请求到达会闪烁任务栏图标",
@@ -304,11 +307,22 @@
   },
   "terminal": {
     "title": "终端",
+    "home": "终端首页",
+    "tabs": "终端标签页",
+    "newTab": "新建终端",
+    "closeTab": "关闭标签页",
+    "choosePath": "选择路径",
     "restart": "重启",
     "clear": "清空",
     "copySelection": "复制选中内容",
     "kill": "终止",
-    "noCwd": "无工作区"
+    "noCwd": "无工作区",
+    "noPathCandidates": "暂无最近路径",
+    "pathSourceRecent": "最近终端",
+    "pathSourceActiveSession": "当前会话",
+    "pathSourceWorkspace": "工作区",
+    "pathSourceCaller": "Caller",
+    "pathSourceFallback": "兜底路径"
   },
   "transfer": {
     "cancel": "取消转移",

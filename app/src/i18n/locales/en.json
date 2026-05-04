@@ -169,6 +169,9 @@
     "showPromptButtonsDesc": "Display legacy prompt buttons below the composer. Clicking one inserts its slash command at the start of the feedback text.",
     "promptEnable": "Enable",
     "promptDisable": "Disable",
+    "terminal": "Terminal",
+    "terminalMiddleClickClose": "Close terminal tabs with middle click",
+    "terminalMiddleClickCloseDesc": "Middle-clicking a terminal tab kills its PTY session and removes the tab.",
     "notification": "Notification",
     "taskbarFlash": "Taskbar flash",
     "taskbarFlashDesc": "Flash the taskbar icon when a new request arrives while the window is not focused",
@@ -304,11 +307,22 @@
   },
   "terminal": {
     "title": "Terminal",
+    "home": "Terminal home",
+    "tabs": "Terminal tabs",
+    "newTab": "New terminal",
+    "closeTab": "Close tab",
+    "choosePath": "Choose path",
     "restart": "Restart",
     "clear": "Clear",
     "copySelection": "Copy selection",
     "kill": "Kill",
-    "noCwd": "No workspace"
+    "noCwd": "No workspace",
+    "noPathCandidates": "No recent paths",
+    "pathSourceRecent": "Recent terminal",
+    "pathSourceActiveSession": "Active session",
+    "pathSourceWorkspace": "Workspace",
+    "pathSourceCaller": "Caller",
+    "pathSourceFallback": "Fallback"
   },
   "transfer": {
     "cancel": "Cancel transfer",

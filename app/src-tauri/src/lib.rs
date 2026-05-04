@@ -25,7 +25,7 @@ use preview_browser::{
     preview_start_picker, preview_stop_picker,
     PreviewBrowserState,
 };
-use terminal::{terminal_create, terminal_kill, terminal_resize, terminal_write, TerminalManager};
+use terminal::{terminal_create, terminal_kill, terminal_list, terminal_read_buffer, terminal_resize, terminal_write, TerminalManager};
 
 /// Global app state shared by persistent-mode commands
 pub struct AppState {
@@ -716,6 +716,8 @@ pub fn run() {
             preview_start_picker,
             preview_stop_picker,
             terminal_create,
+            terminal_list,
+            terminal_read_buffer,
             terminal_write,
             terminal_resize,
             terminal_kill,

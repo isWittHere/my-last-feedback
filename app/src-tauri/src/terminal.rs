@@ -7,6 +7,8 @@ use std::sync::{Arc, Mutex};
 use tauri::{AppHandle, Emitter, State};
 use uuid::Uuid;
 
+const MAX_OUTPUT_BUFFER_BYTES: usize = 1024 * 1024;
+
 #[derive(Clone, Default)]
 pub struct TerminalManager {
     sessions: Arc<Mutex<HashMap<String, TerminalSession>>>,
@@ -16,6 +18,9 @@ struct TerminalSession {
     master: Box<dyn MasterPty + Send>,
     writer: Box<dyn Write + Send>,
     child: Box<dyn Child + Send>,
+    cwd: String,
+    shell: String,
+    output: String,
 }
 
 #[derive(Debug, Serialize)]
@@ -24,6 +29,15 @@ pub struct TerminalSessionInfo {
     terminal_id: String,
     cwd: String,
     shell: String,
+}
+
+#[derive(Debug, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct TerminalSessionSnapshot {
+    terminal_id: String,
+    cwd: String,
+    shell: String,
+    output: String,
 }
 
 #[derive(Clone, Debug, Serialize)]
@@ -58,12 +72,55 @@ impl TerminalManager {
         self.sessions.lock().ok()?.remove(terminal_id)
     }
 
+    fn append_output(&self, terminal_id: &str, data: &str) {
+        if let Ok(mut sessions) = self.sessions.lock() {
+            if let Some(session) = sessions.get_mut(terminal_id) {
+                session.output.push_str(data);
+                trim_output_buffer(&mut session.output);
+            }
+        }
+    }
+
+    fn list(&self) -> Result<Vec<TerminalSessionSnapshot>, String> {
+        let sessions = self.sessions.lock().map_err(|_| "Terminal state is unavailable".to_string())?;
+        Ok(sessions
+            .iter()
+            .map(|(terminal_id, session)| TerminalSessionSnapshot {
+                terminal_id: terminal_id.clone(),
+                cwd: session.cwd.clone(),
+                shell: session.shell.clone(),
+                output: session.output.clone(),
+            })
+            .collect())
+    }
+
+    fn read_buffer(&self, terminal_id: &str) -> Result<String, String> {
+        let sessions = self.sessions.lock().map_err(|_| "Terminal state is unavailable".to_string())?;
+        sessions
+            .get(terminal_id)
+            .map(|session| session.output.clone())
+            .ok_or_else(|| "Terminal session not found".to_string())
+    }
+
     pub fn kill_all(&self) {
         if let Ok(mut sessions) = self.sessions.lock() {
             for (_, mut session) in sessions.drain() {
                 let _ = session.child.kill();
             }
         }
+    }
+}
+
+fn trim_output_buffer(buffer: &mut String) {
+    if buffer.len() <= MAX_OUTPUT_BUFFER_BYTES {
+        return;
+    }
+    let mut trim_to = buffer.len().saturating_sub(MAX_OUTPUT_BUFFER_BYTES);
+    while trim_to < buffer.len() && !buffer.is_char_boundary(trim_to) {
+        trim_to += 1;
+    }
+    if trim_to > 0 && trim_to <= buffer.len() {
+        buffer.drain(..trim_to);
     }
 }
 
@@ -134,7 +191,14 @@ fn spawn_terminal_session(
             Ok(child) => {
                 let reader = pair.master.try_clone_reader().map_err(|error| error.to_string())?;
                 let writer = pair.master.take_writer().map_err(|error| error.to_string())?;
-                return Ok((shell.clone(), reader, TerminalSession { master: pair.master, writer, child }));
+                return Ok((shell.clone(), reader, TerminalSession {
+                    master: pair.master,
+                    writer,
+                    child,
+                    cwd: cwd.to_string_lossy().to_string(),
+                    shell: shell.clone(),
+                    output: String::new(),
+                }));
             }
             Err(error) => {
                 last_error = error.to_string();
@@ -172,6 +236,7 @@ pub fn terminal_create(
                 Ok(0) => break,
                 Ok(count) => {
                     let data = String::from_utf8_lossy(&buffer[..count]).to_string();
+                    manager_for_thread.append_output(&thread_terminal_id, &data);
                     let _ = app_for_thread.emit("terminal-output", TerminalOutputEvent {
                         terminal_id: thread_terminal_id.clone(),
                         data,
@@ -195,6 +260,16 @@ pub fn terminal_create(
         cwd: resolved_cwd.to_string_lossy().to_string(),
         shell,
     })
+}
+
+#[tauri::command]
+pub fn terminal_list(state: State<TerminalManager>) -> Result<Vec<TerminalSessionSnapshot>, String> {
+    state.list()
+}
+
+#[tauri::command]
+pub fn terminal_read_buffer(state: State<TerminalManager>, terminal_id: String) -> Result<String, String> {
+    state.read_buffer(&terminal_id)
 }
 
 #[tauri::command]
