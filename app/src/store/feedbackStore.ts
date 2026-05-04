@@ -149,7 +149,7 @@ export interface FocusedComposer {
 }
 
 export type MlcPanelPosition = "left" | "right";
-export type SidePanelTab = "mlc" | "resources" | "mlcPreview" | "previewBrowser" | "previewInfo";
+export type SidePanelTab = "mlc" | "resources" | "mlcPreview" | "previewBrowser" | "previewInfo" | "terminal";
 export type DockColumnId = "leftSidebar" | "leftPage" | "rightPage" | "rightSidebar";
 export type DockTabId = SidePanelTab;
 export type DockTabBarPosition = "top" | "bottom";
@@ -363,8 +363,8 @@ function loadResourceIconTheme(): ResourceIconTheme {
 }
 
 const DOCK_COLUMN_IDS: DockColumnId[] = ["leftSidebar", "leftPage", "rightPage", "rightSidebar"];
-const KNOWN_DOCK_TABS: DockTabId[] = ["mlc", "resources", "mlcPreview", "previewBrowser", "previewInfo"];
-const DEFAULT_DOCK_TABS: DockTabId[] = ["mlc", "mlcPreview", "resources", "previewBrowser", "previewInfo"];
+const KNOWN_DOCK_TABS: DockTabId[] = ["mlc", "resources", "mlcPreview", "previewBrowser", "previewInfo", "terminal"];
+const DEFAULT_DOCK_TABS: DockTabId[] = ["mlc", "mlcPreview", "resources", "previewBrowser", "previewInfo", "terminal"];
 
 function isDockTabId(value: unknown): value is DockTabId {
   return typeof value === "string" && KNOWN_DOCK_TABS.includes(value as DockTabId);
@@ -432,6 +432,13 @@ function migrateLegacyDockLayout(): DockLayoutState {
     tabBarPosition: legacyTabBarPosition,
     collapsed: !legacyVisible,
   });
+  columns.rightPage = createDockColumn({
+    tabIds: ["terminal"],
+    activeTabId: "terminal",
+    width: legacyWidth,
+    tabBarPosition: legacyTabBarPosition,
+    collapsed: false,
+  });
   for (const columnId of DOCK_COLUMN_IDS) columns[columnId].tabBarPosition = legacyTabBarPosition;
   return { columns };
 }
@@ -459,7 +466,9 @@ function loadDockLayout(): DockLayoutState {
       }
       for (const tabId of DEFAULT_DOCK_TABS) {
         if (seen.has(tabId)) continue;
-        const fallbackColumnId = tabId === "mlcPreview" || tabId === "previewBrowser"
+        const fallbackColumnId = tabId === "terminal"
+          ? "rightPage"
+          : tabId === "mlcPreview" || tabId === "previewBrowser"
           ? DOCK_COLUMN_IDS.find((columnId) => columns[columnId].tabIds.includes("mlc")) || "rightSidebar"
           : tabId === "previewInfo"
             ? "rightSidebar"

@@ -302,6 +302,14 @@
     "document": "Document",
     "refresh": "Refresh"
   },
+  "terminal": {
+    "title": "Terminal",
+    "restart": "Restart",
+    "clear": "Clear",
+    "copySelection": "Copy selection",
+    "kill": "Kill",
+    "noCwd": "No workspace"
+  },
   "transfer": {
     "cancel": "Cancel transfer",
     "open": "Transfer submit",

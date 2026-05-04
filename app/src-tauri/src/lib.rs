@@ -4,6 +4,7 @@ mod preview_browser;
 mod project_resources;
 mod remote;
 mod session;
+mod terminal;
 
 use std::collections::HashSet;
 use std::path::PathBuf;
@@ -24,6 +25,7 @@ use preview_browser::{
     preview_start_picker, preview_stop_picker,
     PreviewBrowserState,
 };
+use terminal::{terminal_create, terminal_kill, terminal_resize, terminal_write, TerminalManager};
 
 /// Global app state shared by persistent-mode commands
 pub struct AppState {
@@ -645,6 +647,7 @@ pub fn run() {
     let settings = load_app_settings(&data_dir);
     let session_mgr = session::create_session_manager(data_dir.clone());
     let mlra_writer: SharedMlraWriter = std::sync::Arc::new(tokio::sync::Mutex::new(None));
+    let terminal_mgr = TerminalManager::default();
 
     let builder = tauri::Builder::default();
     // In debug builds, skip single-instance enforcement so dev binary and installed
@@ -667,6 +670,7 @@ pub fn run() {
         .manage(session_mgr.clone())
         .manage(mlra_writer.clone())
         .manage(PreviewBrowserState::default())
+        .manage(terminal_mgr.clone())
         .invoke_handler(tauri::generate_handler![
             set_auto_focus_new_request,
             get_auto_focus_new_request,
@@ -711,10 +715,15 @@ pub fn run() {
             preview_close_tab,
             preview_start_picker,
             preview_stop_picker,
+            terminal_create,
+            terminal_write,
+            terminal_resize,
+            terminal_kill,
             send_to_mlra_daemon,
         ])
         .setup(move |app| {
             let app_handle = app.handle().clone();
+            let terminal_state = terminal_mgr.clone();
 
             let mgr = session_mgr.clone();
             let handle = app_handle.clone();
@@ -767,6 +776,7 @@ pub fn run() {
                             }
                         }
                         "quit" => {
+                            terminal_state.kill_all();
                             ipc::cleanup_lock_file();
                             std::process::exit(0);
                         }

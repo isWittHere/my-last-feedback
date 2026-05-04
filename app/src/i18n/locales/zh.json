@@ -302,6 +302,14 @@
     "document": "文档",
     "refresh": "刷新"
   },
+  "terminal": {
+    "title": "终端",
+    "restart": "重启",
+    "clear": "清空",
+    "copySelection": "复制选中内容",
+    "kill": "终止",
+    "noCwd": "无工作区"
+  },
   "transfer": {
     "cancel": "取消转移",
     "open": "转移提交",

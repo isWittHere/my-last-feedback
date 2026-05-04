@@ -46,13 +46,15 @@ function dockTabTitle(tabId: DockTabId, translate: (key: string, defaultValue: s
   if (tabId === "mlcPreview") return translate("mlcPreview.title", "MLC Preview");
   if (tabId === "previewBrowser") return translate("previewBrowser.title", "Preview Browser");
   if (tabId === "previewInfo") return translate("previewBrowser.infoTitle", "Preview Info");
+  if (tabId === "terminal") return translate("terminal.title", "Terminal");
   return translate("resources.title", "Project resources");
 }
 
 function dockTabDragIcon(tabId: DockTabId) {
+  if (tabId === "terminal") return "terminal";
   if (tabId === "mlcPreview") return "file-text";
   if (tabId === "previewBrowser") return "globe";
-  if (tabId === "previewInfo") return "terminal";
+    if (tabId === "previewInfo") return "code";
   return "folder";
 }
 
