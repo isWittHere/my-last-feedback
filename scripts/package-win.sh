@@ -5,10 +5,17 @@
 set -e
 
 PROJ_ROOT="$(cd "$(dirname "$0")/.." && pwd)"
-DIST_DIR="$PROJ_ROOT/dist/win-x64/my-last-feedback"
 APP_DIR="$PROJ_ROOT/app"
 
+# Read version from package.json (requires node)
+VERSION="$(node -e "console.log(require('$PROJ_ROOT/package.json').version)")"
+DIST_DIR="$PROJ_ROOT/dist/win-x64/my-last-feedback"
+ZIP_NAME="my-last-feedback-v${VERSION}-win-x64.zip"
+ZIP_PATH="$PROJ_ROOT/dist/win-x64/$ZIP_NAME"
+
 echo "=== My Last Feedback — Windows x64 Package Builder ==="
+echo "    Version : $VERSION"
+echo "    Output  : $DIST_DIR"
 
 # 1. Build Tauri app
 echo "[1/6] Building Tauri app (release)..."
@@ -44,24 +51,22 @@ echo "[4/6] Installing MCP Server Node.js dependencies..."
 cd "$DIST_DIR"
 npm install --omit=dev --ignore-scripts 2>/dev/null
 
-# 5. Summary
-echo "[5/6] Verifying package contents..."
-echo ""
-echo "  Output: $DIST_DIR"
-echo "  Contents:"
-ls -lh "$DIST_DIR"
-echo ""
-echo "  Total size: $(du -sh "$DIST_DIR" | cut -f1)"
+# 5. Create zip archive
+echo "[5/6] Creating zip archive..."
+cd "$PROJ_ROOT/dist/win-x64"
+rm -f "$ZIP_PATH"
+zip -r "$ZIP_NAME" my-last-feedback/
+echo "      Archive: $ZIP_PATH ($(du -h "$ZIP_PATH" | cut -f1))"
 
 # 6. Summary
 echo ""
 echo "[6/6] Package complete!"
 echo ""
-echo "  Output: $DIST_DIR"
+echo "  Version : v${VERSION}"
+echo "  Output  : $DIST_DIR"
+echo "  Archive : $ZIP_PATH"
+echo ""
 echo "  Contents:"
 ls -lh "$DIST_DIR"
 echo ""
 echo "  Total size: $(du -sh "$DIST_DIR" | cut -f1)"
-echo ""
-echo "To create a zip archive:"
-echo "  cd $PROJ_ROOT/dist/win-x64 && zip -r my-last-feedback-win-x64.zip my-last-feedback/"

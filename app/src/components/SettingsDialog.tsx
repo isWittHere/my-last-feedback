@@ -506,7 +506,7 @@ export function SettingsDialog({ open, onClose }: { open: boolean; onClose: () =
                     </svg>
                   </div>
                   <div className="settings-about-name">My Last Feedback</div>
-                  <div className="settings-about-version">v0.1.0</div>
+                  <div className="settings-about-version">v{__APP_VERSION__}</div>
                   <div className="settings-about-desc">{t("settings.aboutDesc")}</div>
                 </div>
               </div>

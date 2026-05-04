@@ -5,10 +5,17 @@
 set -e
 
 PROJ_ROOT="$(cd "$(dirname "$0")/.." && pwd)"
-DIST_DIR="$PROJ_ROOT/dist/mac-arm64/my-last-feedback"
 APP_DIR="$PROJ_ROOT/app"
 
+# Read version from package.json (requires node)
+VERSION="$(node -e "console.log(require('$PROJ_ROOT/package.json').version)")"
+DIST_DIR="$PROJ_ROOT/dist/mac-arm64/my-last-feedback"
+TAR_NAME="my-last-feedback-v${VERSION}-mac-arm64.tar.gz"
+TAR_PATH="$PROJ_ROOT/dist/mac-arm64/$TAR_NAME"
+
 echo "=== My Last Feedback — macOS Package Builder ==="
+echo "    Version : $VERSION"
+echo "    Output  : $DIST_DIR"
 
 # Check we're on macOS
 if [[ "$(uname)" != "Darwin" ]]; then
@@ -66,24 +73,22 @@ echo "[5/7] Installing mlra-server Node.js dependencies..."
 cd "$DIST_DIR/mlra-server"
 npm install --omit=dev --ignore-scripts 2>/dev/null
 
-# 6. Summary
-echo "[6/7] Verifying package contents..."
-echo ""
-echo "  Output: $DIST_DIR"
-echo "  Contents:"
-ls -lh "$DIST_DIR"
-echo ""
-echo "  Total size: $(du -sh "$DIST_DIR" | cut -f1)"
+# 6. Create tar.gz archive
+echo "[6/7] Creating tar.gz archive..."
+cd "$PROJ_ROOT/dist/mac-arm64"
+rm -f "$TAR_PATH"
+tar -czf "$TAR_NAME" my-last-feedback/
+echo "      Archive: $TAR_PATH ($(du -h "$TAR_PATH" | cut -f1))"
 
 # 7. Done
 echo ""
 echo "[7/7] Package complete!"
 echo ""
-echo "  Output: $DIST_DIR"
+echo "  Version : v${VERSION}"
+echo "  Output  : $DIST_DIR"
+echo "  Archive : $TAR_PATH"
+echo ""
 echo "  Contents:"
 ls -lh "$DIST_DIR"
 echo ""
 echo "  Total size: $(du -sh "$DIST_DIR" | cut -f1)"
-echo ""
-echo "To create a tar.gz archive:"
-echo "  cd $PROJ_ROOT/dist/mac-arm64 && tar -czf my-last-feedback-mac-arm64.tar.gz my-last-feedback/"
