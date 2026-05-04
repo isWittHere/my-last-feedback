@@ -55,7 +55,14 @@ npm install --omit=dev --ignore-scripts 2>/dev/null
 echo "[5/6] Creating zip archive..."
 cd "$PROJ_ROOT/dist/win-x64"
 rm -f "$ZIP_PATH"
-zip -r "$ZIP_NAME" my-last-feedback/
+if command -v zip >/dev/null 2>&1; then
+  zip -r "$ZIP_NAME" my-last-feedback/
+elif command -v powershell.exe >/dev/null 2>&1; then
+  powershell.exe -NoProfile -Command "Compress-Archive -Path 'my-last-feedback' -DestinationPath '$ZIP_NAME' -Force"
+else
+  echo "ERROR: neither zip nor powershell.exe is available to create $ZIP_NAME"
+  exit 1
+fi
 echo "      Archive: $ZIP_PATH ($(du -h "$ZIP_PATH" | cut -f1))"
 
 # 6. Summary
