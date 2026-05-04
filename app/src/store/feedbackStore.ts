@@ -329,7 +329,7 @@ export interface FeedbackState {
   setDockColumnCollapsed: (columnId: DockColumnId, collapsed: boolean) => void;
   setDockColumnTabBarPosition: (columnId: DockColumnId, position: DockTabBarPosition) => void;
   setDockActiveTab: (columnId: DockColumnId, tabId: DockTabId | null) => void;
-  moveDockTabToColumn: (tabId: DockTabId, targetColumnId: DockColumnId) => void;
+  moveDockTabToColumn: (tabId: DockTabId, targetColumnId: DockColumnId, targetIndex?: number) => void;
   openDockTab: (tabId: DockTabId, preferredColumnId: DockColumnId) => void;
   startDraggingDockTab: (tabId: DockTabId, sourceColumnId: DockColumnId, pointerX: number, pointerY: number, targetColumnId?: DockColumnId | null) => void;
   updateDraggingDockTab: (pointerX: number, pointerY: number, targetColumnId: DockColumnId | null) => void;
@@ -1600,7 +1600,7 @@ export const useFeedbackStore = create<FeedbackState>((set, get) => ({
     });
   },
 
-  moveDockTabToColumn: (tabId, targetColumnId) => {
+  moveDockTabToColumn: (tabId, targetColumnId, targetIndex) => {
     set((state) => {
       const nextColumns: DockLayoutState["columns"] = {
         leftSidebar: { ...state.dockLayout.columns.leftSidebar, tabIds: [...state.dockLayout.columns.leftSidebar.tabIds] },
@@ -1609,10 +1609,15 @@ export const useFeedbackStore = create<FeedbackState>((set, get) => ({
         rightSidebar: { ...state.dockLayout.columns.rightSidebar, tabIds: [...state.dockLayout.columns.rightSidebar.tabIds] },
       };
 
+      let sourceColumnId: DockColumnId | null = null;
+      let sourceIndex = -1;
+
       for (const columnId of DOCK_COLUMN_IDS) {
         const column = nextColumns[columnId];
         const existingIndex = column.tabIds.indexOf(tabId);
         if (existingIndex === -1) continue;
+        sourceColumnId = columnId;
+        sourceIndex = existingIndex;
         column.tabIds.splice(existingIndex, 1);
         if (column.activeTabId === tabId) {
           column.activeTabId = column.tabIds[existingIndex] || column.tabIds[existingIndex - 1] || column.tabIds[0] || null;
@@ -1620,7 +1625,10 @@ export const useFeedbackStore = create<FeedbackState>((set, get) => ({
       }
 
       const targetColumn = nextColumns[targetColumnId];
-      targetColumn.tabIds.push(tabId);
+      let insertIndex = typeof targetIndex === "number" ? targetIndex : targetColumn.tabIds.length;
+      if (sourceColumnId === targetColumnId && sourceIndex !== -1 && insertIndex > sourceIndex) insertIndex -= 1;
+      insertIndex = Math.max(0, Math.min(insertIndex, targetColumn.tabIds.length));
+      targetColumn.tabIds.splice(insertIndex, 0, tabId);
       targetColumn.activeTabId = tabId;
       targetColumn.collapsed = false;
 

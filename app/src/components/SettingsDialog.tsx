@@ -1,11 +1,11 @@
-import { useState, useEffect, useCallback } from "react";
+import { useState, useEffect, useCallback, type DragEvent as ReactDragEvent, type ReactNode } from "react";
 import { useTranslation } from "react-i18next";
 import i18n from "../i18n";
-import { useFeedbackStore } from "../store/feedbackStore";
+import { useFeedbackStore, type DockColumnId, type DockTabId } from "../store/feedbackStore";
 import { PromptIcon } from "./PromptIcons";
 import { McpConfigHelper } from "./McpConfigHelper";
 import { CallerManager } from "./CallerManager";
-import { Icon } from "./Icons";
+import { Icon, MlcLogoIcon } from "./Icons";
 import { invoke } from "@tauri-apps/api/core";
 import { applyTheme, getStoredTheme, type Theme } from "../theme";
 import { getNotificationSettings, saveNotificationSettings, syncAutoFocusNewRequest, type NotificationSettings } from "../notificationSettings";
@@ -13,7 +13,15 @@ import { getSubmittedViewSettings, saveSubmittedViewSettings, SUBMITTED_VIEW_SEC
 import { getTerminalSettings, saveTerminalSettings, type TerminalSettings } from "../terminalSettings";
 import { getComposerSettings, saveComposerSettings, type ComposerSettings } from "../composerSettings";
 
-type Tab = "general" | "callers" | "display" | "notification" | "terminal" | "prompts" | "about";
+type Tab = "general" | "display" | "callers" | "submitted" | "prompts" | "layoutPanels" | "terminal" | "resources" | "notification" | "about";
+type SettingsGroupId = "mlfb" | "layout";
+
+const SETTINGS_DOCK_COLUMN_IDS: DockColumnId[] = ["leftSidebar", "leftPage", "rightPage", "rightSidebar"];
+const SETTINGS_DOCK_TAB_IDS: DockTabId[] = ["mlc", "mlcPreview", "resources", "previewBrowser", "previewInfo", "terminal"];
+
+function isSettingsDockTabId(value: string): value is DockTabId {
+  return SETTINGS_DOCK_TAB_IDS.includes(value as DockTabId);
+}
 
 export interface ZoomSettings {
   global: number;
@@ -53,6 +61,8 @@ applyZoomSettings();
 export function SettingsDialog({ open, onClose }: { open: boolean; onClose: () => void }) {
   const { t } = useTranslation();
   const [tab, setTab] = useState<Tab>("general");
+  const [collapsedGroups, setCollapsedGroups] = useState<Record<SettingsGroupId, boolean>>({ mlfb: false, layout: false });
+  const [draggedDockTab, setDraggedDockTab] = useState<DockTabId | null>(null);
   const [theme, setTheme] = useState<Theme>(getStoredTheme);
   const [autostart, setAutostart] = useState(false);
   const [confirmClear, setConfirmClear] = useState(false);
@@ -65,9 +75,11 @@ export function SettingsDialog({ open, onClose }: { open: boolean; onClose: () =
   const disabledPrompts = useFeedbackStore((s) => s.disabledPrompts);
   const showPromptButtons = useFeedbackStore((s) => s.showPromptButtons);
   const resourceIconTheme = useFeedbackStore((s) => s.resourceIconTheme);
+  const dockLayout = useFeedbackStore((s) => s.dockLayout);
   const setShowPromptButtons = useFeedbackStore((s) => s.setShowPromptButtons);
   const setResourceIconTheme = useFeedbackStore((s) => s.setResourceIconTheme);
   const togglePromptDisabled = useFeedbackStore((s) => s.togglePromptDisabled);
+  const moveDockTabToColumn = useFeedbackStore((s) => s.moveDockTabToColumn);
 
   // Load autostart state
   useEffect(() => {
@@ -165,6 +177,106 @@ export function SettingsDialog({ open, onClose }: { open: boolean; onClose: () =
     }));
   }, [updateSubmittedViewSettings]);
 
+  const toggleSettingsGroup = useCallback((groupId: SettingsGroupId) => {
+    setCollapsedGroups((current) => ({ ...current, [groupId]: !current[groupId] }));
+  }, []);
+
+  const renderSettingsNavItem = (targetTab: Tab, icon: string, label: string, nested = false) => (
+    <button
+      type="button"
+      className={`settings-nav-item${nested ? " settings-nav-item-nested" : ""}${tab === targetTab ? " settings-nav-active" : ""}`}
+      onClick={() => setTab(targetTab)}
+    >
+      <Icon name={icon} size={14} />
+      <span>{label}</span>
+    </button>
+  );
+
+  const renderSettingsNavGroup = (groupId: SettingsGroupId, label: string, childTabs: Tab[], children: ReactNode) => {
+    const collapsed = collapsedGroups[groupId];
+    const active = childTabs.includes(tab);
+    return (
+      <div className={`settings-nav-group${active ? " settings-nav-group-active" : ""}`}>
+        <button type="button" className="settings-nav-group-toggle" onClick={() => toggleSettingsGroup(groupId)}>
+          <Icon name={collapsed ? "chevron-right" : "chevron-down"} size={14} />
+          <span>{label}</span>
+        </button>
+        {!collapsed && <div className="settings-nav-group-items">{children}</div>}
+      </div>
+    );
+  };
+
+  const dockColumnLabel = (columnId: DockColumnId) => {
+    if (columnId === "leftSidebar") return t("settings.dockLeftSidebar", "Left sidebar");
+    if (columnId === "leftPage") return t("settings.dockLeftPage", "Left page");
+    if (columnId === "rightPage") return t("settings.dockRightPage", "Right page");
+    return t("settings.dockRightSidebar", "Right sidebar");
+  };
+
+  const dockTabLabel = (tabId: DockTabId) => {
+    if (tabId === "mlc") return t("mlc.title", "My Last Chat");
+    if (tabId === "mlcPreview") return t("mlcPreview.title", "MLC Preview");
+    if (tabId === "previewBrowser") return t("previewBrowser.title", "Preview Browser");
+    if (tabId === "previewInfo") return t("previewBrowser.infoTitle", "Preview Info");
+    if (tabId === "terminal") return t("terminal.title", "Terminal");
+    return t("resources.title", "Project resources");
+  };
+
+  const renderDockTabIcon = (tabId: DockTabId) => {
+    if (tabId === "mlc") return <MlcLogoIcon size={13} />;
+    if (tabId === "mlcPreview") return <Icon name="file-text" size={13} />;
+    if (tabId === "previewBrowser") return <Icon name="globe" size={13} />;
+    if (tabId === "previewInfo") return <Icon name="code" size={13} />;
+    if (tabId === "terminal") return <Icon name="terminal" size={13} />;
+    return <Icon name="folder" size={13} />;
+  };
+
+  const dockColumnIcon = (columnId: DockColumnId) => (
+    columnId === "leftPage" || columnId === "rightPage" ? "page-sidebar" : "sidebar"
+  );
+
+  const getDraggedDockTab = (event: ReactDragEvent): DockTabId | null => {
+    if (draggedDockTab) return draggedDockTab;
+    const transferredTabId = event.dataTransfer.getData("text/plain");
+    return isSettingsDockTabId(transferredTabId) ? transferredTabId : null;
+  };
+
+  const handleDockTabDragStart = (event: ReactDragEvent<HTMLButtonElement>, dockTabId: DockTabId) => {
+    setDraggedDockTab(dockTabId);
+    event.dataTransfer.effectAllowed = "move";
+    event.dataTransfer.setData("text/plain", dockTabId);
+  };
+
+  const handleDockPanelDragOver = (event: ReactDragEvent) => {
+    event.preventDefault();
+    event.dataTransfer.dropEffect = "move";
+  };
+
+  const handleDockPanelDrop = (event: ReactDragEvent, columnId: DockColumnId, targetIndex?: number) => {
+    event.preventDefault();
+    const dockTabId = getDraggedDockTab(event);
+    if (!dockTabId) return;
+    moveDockTabToColumn(dockTabId, columnId, targetIndex);
+    setDraggedDockTab(null);
+  };
+
+  const renderSubmittedSectionIcon = (sectionId: SubmittedViewSectionId) => {
+    if (sectionId === "userFeedback") return <Icon name="message-dot" size={13} />;
+    if (sectionId === "slashExpansions") return <Icon name="code" size={13} />;
+    if (sectionId === "userRequirement") return <Icon name="checklist" size={13} />;
+    if (sectionId === "questions") return <Icon name="message" size={13} />;
+    if (sectionId === "gitAction") return <Icon name="git-branch" size={13} />;
+    if (sectionId === "images") return <Icon name="image" size={13} />;
+    if (sectionId === "resourceLinks") return <Icon name="paperclip" size={13} />;
+    if (sectionId === "testLogs") return <Icon name="file-text" size={13} />;
+    if (sectionId === "commandLogs") return <Icon name="terminal" size={13} />;
+    if (sectionId === "mlcReferences") return <MlcLogoIcon size={13} />;
+    if (sectionId === "webPreview") return <Icon name="globe" size={13} />;
+    if (sectionId === "payloadRouting") return <Icon name="arrow-right-left" size={13} />;
+    if (sectionId === "system") return <Icon name="gear" size={13} />;
+    return <Icon name="file" size={13} />;
+  };
+
   if (!open) return null;
 
   return (
@@ -181,55 +293,24 @@ export function SettingsDialog({ open, onClose }: { open: boolean; onClose: () =
         <div className="settings-body">
           {/* Left nav */}
           <div className="settings-nav">
-            <button
-              className={`settings-nav-item${tab === "general" ? " settings-nav-active" : ""}`}
-              onClick={() => setTab("general")}
-            >
-              <Icon name="gear" size={14} />
-              {t("settings.general")}
-            </button>
-            <button
-              className={`settings-nav-item${tab === "callers" ? " settings-nav-active" : ""}`}
-              onClick={() => setTab("callers")}
-            >
-              <Icon name="users" size={14} />
-              {t("settings.callers")}
-            </button>
-            <button
-              className={`settings-nav-item${tab === "display" ? " settings-nav-active" : ""}`}
-              onClick={() => setTab("display")}
-            >
-              <Icon name="sun" size={14} />
-              {t("settings.display")}
-            </button>
-            <button
-              className={`settings-nav-item${tab === "notification" ? " settings-nav-active" : ""}`}
-              onClick={() => setTab("notification")}
-            >
-              <Icon name="bell" size={14} />
-              {t("settings.notification")}
-            </button>
-            <button
-              className={`settings-nav-item${tab === "terminal" ? " settings-nav-active" : ""}`}
-              onClick={() => setTab("terminal")}
-            >
-              <Icon name="terminal" size={14} />
-              {t("settings.terminal", "Terminal")}
-            </button>
-            <button
-              className={`settings-nav-item${tab === "prompts" ? " settings-nav-active" : ""}`}
-              onClick={() => setTab("prompts")}
-            >
-              <Icon name="file-text" size={14} />
-              {t("settings.prompts")}
-            </button>
-            <button
-              className={`settings-nav-item${tab === "about" ? " settings-nav-active" : ""}`}
-              onClick={() => setTab("about")}
-            >
-              <Icon name="info" size={14} />
-              {t("settings.about")}
-            </button>
+            {renderSettingsNavItem("general", "gear", t("settings.general"))}
+            {renderSettingsNavItem("display", "sun", t("settings.display"))}
+            {renderSettingsNavGroup("mlfb", t("settings.mlfb", "MLFB"), ["callers", "submitted", "prompts"], (
+              <>
+                {renderSettingsNavItem("callers", "users", t("settings.callers"), true)}
+                {renderSettingsNavItem("submitted", "checklist", t("settings.submittedFeedback", "Submitted feedback"), true)}
+                {renderSettingsNavItem("prompts", "file-text", t("settings.prompts"), true)}
+              </>
+            ))}
+            {renderSettingsNavGroup("layout", t("settings.layout", "Layout"), ["layoutPanels", "terminal", "resources"], (
+              <>
+                {renderSettingsNavItem("layoutPanels", "page-sidebar", t("settings.panelManagement", "Panel management"), true)}
+                {renderSettingsNavItem("terminal", "terminal", t("settings.terminal", "Terminal"), true)}
+                {renderSettingsNavItem("resources", "folder", t("settings.resourceExplorer", "Resource explorer"), true)}
+              </>
+            ))}
+            {renderSettingsNavItem("notification", "bell", t("settings.notification"))}
+            {renderSettingsNavItem("about", "info", t("settings.about"))}
           </div>
 
           {/* Content */}
@@ -334,29 +415,6 @@ export function SettingsDialog({ open, onClose }: { open: boolean; onClose: () =
                   </div>
                 </div>
 
-                <div className="settings-row">
-                  <div className="settings-row-info" style={{ flex: 1 }}>
-                    <span className="settings-label">{t("settings.resourceIconTheme", "Resource icon theme")}</span>
-                    <span className="settings-sublabel">{t("settings.resourceIconThemeDesc", "Choose the file icon theme used by project resources and resource links.")}</span>
-                  </div>
-                  <div className="settings-btn-group">
-                    <button
-                      className={`settings-btn-option${resourceIconTheme === "default" ? " active" : ""}`}
-                      onClick={() => setResourceIconTheme("default")}
-                    >
-                      <Icon name="file-text" size={12} />
-                      {t("settings.resourceIconThemeDefault", "Default")}
-                    </button>
-                    <button
-                      className={`settings-btn-option${resourceIconTheme === "catppuccin" ? " active" : ""}`}
-                      onClick={() => setResourceIconTheme("catppuccin")}
-                    >
-                      <Icon name="folder" size={12} />
-                      {t("settings.resourceIconThemeCatppuccin", "Catppuccin")}
-                    </button>
-                  </div>
-                </div>
-
                 {/* Zoom: Global */}
                 <div className="settings-row" style={{ borderTop: "1px solid var(--color-border)", paddingTop: 12, marginTop: 4 }}>
                   <div className="settings-row-info" style={{ flex: 1 }}>
@@ -389,8 +447,12 @@ export function SettingsDialog({ open, onClose }: { open: boolean; onClose: () =
                     <span className="settings-zoom-value">{zoomSettings.input}%</span>
                   </div>
                 </div>
+              </div>
+            )}
 
-                <div className="settings-row settings-row-stacked" style={{ borderTop: "1px solid var(--color-border)", paddingTop: 12, marginTop: 4 }}>
+            {tab === "submitted" && (
+              <div className="settings-section">
+                <div className="settings-row settings-row-stacked">
                   <div className="settings-row-info">
                     <span className="settings-label">{t("settings.submittedView", "Submitted feedback view")}</span>
                     <span className="settings-sublabel">{t("settings.submittedViewDesc", "Choose which audit sections are shown and whether each section starts collapsed.")}</span>
@@ -401,25 +463,118 @@ export function SettingsDialog({ open, onClose }: { open: boolean; onClose: () =
                       <span>{t("settings.submittedVisible", "Show")}</span>
                       <span>{t("settings.submittedCollapsed", "Collapse")}</span>
                     </div>
-                    {SUBMITTED_VIEW_SECTION_CONFIGS.map((section) => (
-                      <div key={section.id} className="settings-submitted-section-item">
-                        <span className="settings-submitted-section-name">{t(section.labelKey, section.defaultLabel)}</span>
-                        <button
-                          className={`settings-toggle settings-toggle-sm${submittedViewSettings.visibleSections[section.id] ? " settings-toggle-on" : ""}`}
-                          onClick={() => handleSubmittedSectionVisibleToggle(section.id)}
-                          title={submittedViewSettings.visibleSections[section.id] ? t("settings.submittedHide", "Hide") : t("settings.submittedShow", "Show")}
+                    {SUBMITTED_VIEW_SECTION_CONFIGS.map((section) => {
+                      const sectionLabel = t(section.labelKey, section.defaultLabel);
+                      const showEnglishTitle = sectionLabel !== section.defaultLabel;
+                      return (
+                        <div key={section.id} className="settings-submitted-section-item">
+                          <span className="settings-submitted-section-name">
+                            <span className="settings-list-icon-slot">{renderSubmittedSectionIcon(section.id)}</span>
+                            <span className="settings-submitted-section-title-stack">
+                              <span>{sectionLabel}</span>
+                              {showEnglishTitle && <span className="settings-submitted-section-english">{section.defaultLabel}</span>}
+                            </span>
+                          </span>
+                          <button
+                            className={`settings-toggle settings-toggle-sm${submittedViewSettings.visibleSections[section.id] ? " settings-toggle-on" : ""}`}
+                            onClick={() => handleSubmittedSectionVisibleToggle(section.id)}
+                            title={submittedViewSettings.visibleSections[section.id] ? t("settings.submittedHide", "Hide") : t("settings.submittedShow", "Show")}
+                          >
+                            <span className="settings-toggle-knob" />
+                          </button>
+                          <button
+                            className={`settings-toggle settings-toggle-sm${submittedViewSettings.collapsedSections[section.id] ? " settings-toggle-on" : ""}`}
+                            onClick={() => handleSubmittedSectionCollapsedToggle(section.id)}
+                            title={submittedViewSettings.collapsedSections[section.id] ? t("settings.submittedStartCollapsed", "Starts collapsed") : t("settings.submittedStartExpanded", "Starts expanded")}
+                          >
+                            <span className="settings-toggle-knob" />
+                          </button>
+                        </div>
+                      );
+                    })}
+                  </div>
+                </div>
+              </div>
+            )}
+
+            {tab === "layoutPanels" && (
+              <div className="settings-section">
+                <div className="settings-row settings-row-stacked">
+                  <div className="settings-row-info">
+                    <span className="settings-label">{t("settings.panelManagement", "Panel management")}</span>
+                    <span className="settings-sublabel">{t("settings.panelManagementDesc", "Drag panel tabs into the dock columns where they should appear.")}</span>
+                  </div>
+                  <div className="settings-dock-board">
+                    {SETTINGS_DOCK_COLUMN_IDS.map((columnId) => {
+                      const columnTabIds = dockLayout.columns[columnId].tabIds.filter((dockTabId) => SETTINGS_DOCK_TAB_IDS.includes(dockTabId));
+                      return (
+                        <div
+                          key={columnId}
+                          className="settings-dock-board-column"
+                          onDragOver={handleDockPanelDragOver}
+                          onDrop={(event) => handleDockPanelDrop(event, columnId)}
                         >
-                          <span className="settings-toggle-knob" />
-                        </button>
-                        <button
-                          className={`settings-toggle settings-toggle-sm${submittedViewSettings.collapsedSections[section.id] ? " settings-toggle-on" : ""}`}
-                          onClick={() => handleSubmittedSectionCollapsedToggle(section.id)}
-                          title={submittedViewSettings.collapsedSections[section.id] ? t("settings.submittedStartCollapsed", "Starts collapsed") : t("settings.submittedStartExpanded", "Starts expanded")}
-                        >
-                          <span className="settings-toggle-knob" />
-                        </button>
-                      </div>
-                    ))}
+                          <div className="settings-dock-board-head">
+                            <Icon name={dockColumnIcon(columnId)} size={13} />
+                            <span>{dockColumnLabel(columnId)}</span>
+                            <span className="settings-dock-board-count">{columnTabIds.length}</span>
+                          </div>
+                          <div className="settings-dock-board-list">
+                            {columnTabIds.length === 0 && (
+                              <div className="settings-dock-board-empty">{t("settings.emptyDockColumn", "Empty")}</div>
+                            )}
+                            {columnTabIds.map((dockTabId, dockTabIndex) => (
+                              <button
+                                key={dockTabId}
+                                type="button"
+                                className={`settings-dock-board-chip${draggedDockTab === dockTabId ? " dragging" : ""}`}
+                                draggable
+                                onDragStart={(event) => handleDockTabDragStart(event, dockTabId)}
+                                onDragEnd={() => setDraggedDockTab(null)}
+                                onDragOver={(event) => {
+                                  event.stopPropagation();
+                                  handleDockPanelDragOver(event);
+                                }}
+                                onDrop={(event) => {
+                                  event.stopPropagation();
+                                  handleDockPanelDrop(event, columnId, dockTabIndex);
+                                }}
+                              >
+                                {renderDockTabIcon(dockTabId)}
+                                <span>{dockTabLabel(dockTabId)}</span>
+                              </button>
+                            ))}
+                          </div>
+                        </div>
+                      );
+                    })}
+                  </div>
+                </div>
+              </div>
+            )}
+
+            {tab === "resources" && (
+              <div className="settings-section">
+                <div className="settings-row">
+                  <div className="settings-row-info" style={{ flex: 1 }}>
+                    <span className="settings-label">{t("settings.resourceIconTheme", "Resource icon theme")}</span>
+                    <span className="settings-sublabel">{t("settings.resourceIconThemeDesc", "Choose the file icon theme used by project resources and resource links.")}</span>
+                  </div>
+                  <div className="settings-btn-group">
+                    <button
+                      className={`settings-btn-option${resourceIconTheme === "default" ? " active" : ""}`}
+                      onClick={() => setResourceIconTheme("default")}
+                    >
+                      <Icon name="file-text" size={12} />
+                      {t("settings.resourceIconThemeDefault", "Default")}
+                    </button>
+                    <button
+                      className={`settings-btn-option${resourceIconTheme === "catppuccin" ? " active" : ""}`}
+                      onClick={() => setResourceIconTheme("catppuccin")}
+                    >
+                      <Icon name="folder" size={12} />
+                      {t("settings.resourceIconThemeCatppuccin", "Catppuccin")}
+                    </button>
                   </div>
                 </div>
               </div>
@@ -527,16 +682,24 @@ export function SettingsDialog({ open, onClose }: { open: boolean; onClose: () =
                   </div>
                 ) : (
                   <div className="settings-prompt-list">
+                    <div className="settings-prompt-head">
+                      <span>{t("settings.promptListCommand", "Command")}</span>
+                      <span>{t("settings.promptListEnabled", "Enabled")}</span>
+                    </div>
                     {prompts.map((p) => {
                       const enabled = !disabledPrompts.includes(p.name);
                       return (
                         <div key={p.name} className="settings-prompt-item">
                           <div className="settings-prompt-info">
-                            {p.icon && <PromptIcon name={p.icon} size={14} />}
-                            <span className="settings-prompt-name">{p.name}</span>
-                            {p.description && (
-                              <span className="settings-prompt-desc">{p.description}</span>
-                            )}
+                            <span className="settings-list-icon-slot">
+                              {p.icon && <PromptIcon name={p.icon} size={14} />}
+                            </span>
+                            <span className="settings-prompt-title-stack">
+                              <span className="settings-prompt-name">{p.name}</span>
+                              {p.description && (
+                                <span className="settings-prompt-desc">{p.description}</span>
+                              )}
+                            </span>
                           </div>
                           <button
                             className={`settings-toggle${enabled ? " settings-toggle-on" : ""}`}
