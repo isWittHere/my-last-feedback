@@ -588,6 +588,7 @@ export function FeedbackApp() {
   const dockColumns = useFeedbackStore((s) => s.dockLayout.columns);
   const leftSidebarColumn = dockColumns.leftSidebar;
   const leftPageColumn = dockColumns.leftPage;
+  const rightPageColumn = dockColumns.rightPage;
   const rightSidebarColumn = dockColumns.rightSidebar;
   const setDockColumnCollapsed = useFeedbackStore((s) => s.setDockColumnCollapsed);
 
@@ -761,14 +762,27 @@ export function FeedbackApp() {
             <LayoutModeButton layoutMode={layoutMode} onCycle={cycleLayoutMode} onSelect={setLayoutMode} />
             </>
           )}
-          {appView === "MLFB" && rightSidebarColumn.tabIds.length > 0 && (
-            <button
-              onClick={() => toggleDockColumn("rightSidebar")}
-              className={`titlebar-btn titlebar-side-toggle titlebar-side-toggle-right${rightSidebarColumn.tabIds.length > 0 && !rightSidebarColumn.collapsed ? " titlebar-btn-active" : ""}`}
-              title={rightSidebarColumn.tabIds.length > 0 && !rightSidebarColumn.collapsed ? t("dock.closeRightSidebar", "Close right sidebar") : t("dock.openRightSidebar", "Open right sidebar")}
-            >
-              <Icon name="sidebar" size={13} />
-            </button>
+          {appView === "MLFB" && (rightPageColumn.tabIds.length > 0 || rightSidebarColumn.tabIds.length > 0) && (
+            <div className="titlebar-dock-group">
+              {rightPageColumn.tabIds.length > 0 && (
+                <button
+                  onClick={() => toggleDockColumn("rightPage")}
+                  className={`titlebar-btn titlebar-side-toggle titlebar-side-toggle-right-page${!rightPageColumn.collapsed ? " titlebar-btn-active" : ""}`}
+                  title={!rightPageColumn.collapsed ? t("dock.closeRightPage", "Close right page panel") : t("dock.openRightPage", "Open right page panel")}
+                >
+                  <Icon name="page-sidebar" size={13} style={{ transform: "scaleX(-1)" }} />
+                </button>
+              )}
+              {rightSidebarColumn.tabIds.length > 0 && (
+                <button
+                  onClick={() => toggleDockColumn("rightSidebar")}
+                  className={`titlebar-btn titlebar-side-toggle titlebar-side-toggle-right${!rightSidebarColumn.collapsed ? " titlebar-btn-active" : ""}`}
+                  title={!rightSidebarColumn.collapsed ? t("dock.closeRightSidebar", "Close right sidebar") : t("dock.openRightSidebar", "Open right sidebar")}
+                >
+                  <Icon name="sidebar" size={13} />
+                </button>
+              )}
+            </div>
           )}
           <button
             onClick={() => toggleTheme()}
@@ -838,6 +852,7 @@ export function FeedbackApp() {
                 <WelcomeHome />
               )}
             </div>
+            <DockColumn columnId="rightPage" />
             <DockColumn columnId="rightSidebar" />
           </>
         )}

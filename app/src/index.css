@@ -1680,6 +1680,7 @@ body,
   border-right: 1px dashed color-mix(in srgb, var(--color-border) 70%, transparent);
   background: color-mix(in srgb, var(--color-bg-elevated) 34%, transparent);
 }
+.dock-column-drop-zone[data-column-id="rightPage"],
 .dock-column-drop-zone[data-column-id="rightSidebar"] {
   border-right: none;
   border-left: 1px dashed color-mix(in srgb, var(--color-border) 70%, transparent);

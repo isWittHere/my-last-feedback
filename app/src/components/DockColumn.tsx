@@ -17,11 +17,12 @@ import { usePreviewBrowserStore } from "../store/previewBrowserStore";
 const DOCK_COLUMN_LABELS: Record<DockColumnId, string> = {
   leftSidebar: "Left sidebar",
   leftPage: "Left page panel",
+  rightPage: "Right page panel",
   rightSidebar: "Right sidebar",
 };
 
 function isDockColumnId(value: string | undefined): value is DockColumnId {
-  return value === "leftSidebar" || value === "leftPage" || value === "rightSidebar";
+  return value === "leftSidebar" || value === "leftPage" || value === "rightPage" || value === "rightSidebar";
 }
 
 function getDockColumnIdAtPoint(clientX: number, clientY: number): DockColumnId | null {
@@ -53,6 +54,7 @@ function isDockTabId(value: string): value is DockTabId {
 function dockColumnTargetIcon(columnId: DockColumnId): ReactNode {
   if (columnId === "leftSidebar") return <Icon name="sidebar" size={15} style={{ transform: "scaleX(-1)" }} />;
   if (columnId === "leftPage") return <Icon name="page-sidebar" size={15} />;
+  if (columnId === "rightPage") return <Icon name="page-sidebar" size={15} style={{ transform: "scaleX(-1)" }} />;
   return <Icon name="sidebar" size={15} />;
 }
 
@@ -126,7 +128,7 @@ export function DockColumn({ columnId }: { columnId: DockColumnId }) {
     }
   }, [column.activeTabId, column.collapsed, column.tabIds, hidePreviewBrowserTab, previewBrowserTabIds]);
 
-  const visualPosition = columnId === "rightSidebar" ? "right" : "left";
+  const visualPosition = columnId === "rightPage" || columnId === "rightSidebar" ? "right" : "left";
 
   const handleResizeMouseDown = useCallback((event: ReactMouseEvent) => {
     event.preventDefault();
@@ -326,8 +328,12 @@ export function DockColumn({ columnId }: { columnId: DockColumnId }) {
             <span>{t("dock.moveToLeftSidebar", "Move to left sidebar")}</span>
           </button>
           <button type="button" role="menuitem" onClick={() => moveMenuTab("leftPage")} disabled={columnId === "leftPage"}>
-            <Icon name="sidebar" size={12} />
+            <Icon name="page-sidebar" size={12} />
             <span>{t("dock.moveToLeftPage", "Move to left page")}</span>
+          </button>
+          <button type="button" role="menuitem" onClick={() => moveMenuTab("rightPage")} disabled={columnId === "rightPage"}>
+            <Icon name="page-sidebar" size={12} style={{ transform: "scaleX(-1)" }} />
+            <span>{t("dock.moveToRightPage", "Move to right page")}</span>
           </button>
           <button type="button" role="menuitem" onClick={() => moveMenuTab("rightSidebar")} disabled={columnId === "rightSidebar"}>
             <Icon name="sidebar" size={12} style={{ transform: "scaleX(-1)" }} />

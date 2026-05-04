@@ -150,7 +150,7 @@ export interface FocusedComposer {
 
 export type MlcPanelPosition = "left" | "right";
 export type SidePanelTab = "mlc" | "resources" | "mlcPreview" | "previewBrowser" | "previewInfo";
-export type DockColumnId = "leftSidebar" | "leftPage" | "rightSidebar";
+export type DockColumnId = "leftSidebar" | "leftPage" | "rightPage" | "rightSidebar";
 export type DockTabId = SidePanelTab;
 export type DockTabBarPosition = "top" | "bottom";
 
@@ -362,7 +362,7 @@ function loadResourceIconTheme(): ResourceIconTheme {
   } catch { return "default"; }
 }
 
-const DOCK_COLUMN_IDS: DockColumnId[] = ["leftSidebar", "leftPage", "rightSidebar"];
+const DOCK_COLUMN_IDS: DockColumnId[] = ["leftSidebar", "leftPage", "rightPage", "rightSidebar"];
 const KNOWN_DOCK_TABS: DockTabId[] = ["mlc", "resources", "mlcPreview", "previewBrowser", "previewInfo"];
 const DEFAULT_DOCK_TABS: DockTabId[] = ["mlc", "mlcPreview", "resources", "previewBrowser", "previewInfo"];
 
@@ -399,23 +399,6 @@ function normalizeDockColumn(value: Partial<DockColumnState> | null | undefined)
   });
 }
 
-function normalizeLeftDockColumns(columns: DockLayoutState["columns"]): void {
-  if (columns.leftSidebar.tabIds.length > 0 || columns.leftPage.tabIds.length === 0) return;
-  columns.leftSidebar = {
-    ...columns.leftSidebar,
-    tabIds: [...columns.leftPage.tabIds],
-    activeTabId: columns.leftPage.activeTabId || columns.leftPage.tabIds[0] || null,
-    width: columns.leftPage.width,
-    collapsed: columns.leftPage.collapsed,
-  };
-  columns.leftPage = {
-    ...columns.leftPage,
-    tabIds: [],
-    activeTabId: null,
-    collapsed: false,
-  };
-}
-
 function persistDockLayout(layout: DockLayoutState): void {
   try { localStorage.setItem(DOCK_LAYOUT_STORAGE_KEY, JSON.stringify(layout)); } catch {}
 }
@@ -439,6 +422,7 @@ function migrateLegacyDockLayout(): DockLayoutState {
   const columns: DockLayoutState["columns"] = {
     leftSidebar: createDockColumn(),
     leftPage: createDockColumn(),
+    rightPage: createDockColumn(),
     rightSidebar: createDockColumn(),
   };
   columns[targetColumnId] = createDockColumn({
@@ -460,6 +444,7 @@ function loadDockLayout(): DockLayoutState {
       const columns: DockLayoutState["columns"] = {
         leftSidebar: normalizeDockColumn(parsed.columns?.leftSidebar),
         leftPage: normalizeDockColumn(parsed.columns?.leftPage),
+        rightPage: normalizeDockColumn(parsed.columns?.rightPage),
         rightSidebar: normalizeDockColumn(parsed.columns?.rightSidebar),
       };
       const seen = new Set<DockTabId>();
@@ -481,7 +466,6 @@ function loadDockLayout(): DockLayoutState {
           : "rightSidebar";
         columns[fallbackColumnId].tabIds.push(tabId);
       }
-      normalizeLeftDockColumns(columns);
       for (const columnId of DOCK_COLUMN_IDS) {
         const column = columns[columnId];
         if (!column.activeTabId || !column.tabIds.includes(column.activeTabId)) column.activeTabId = column.tabIds[0] || null;
@@ -1570,6 +1554,10 @@ export const useFeedbackStore = create<FeedbackState>((set, get) => ({
             ...state.dockLayout.columns.leftPage,
             tabBarPosition: position,
           },
+          rightPage: {
+            ...state.dockLayout.columns.rightPage,
+            tabBarPosition: position,
+          },
           rightSidebar: {
             ...state.dockLayout.columns.rightSidebar,
             tabBarPosition: position,
@@ -1601,6 +1589,7 @@ export const useFeedbackStore = create<FeedbackState>((set, get) => ({
       const nextColumns: DockLayoutState["columns"] = {
         leftSidebar: { ...state.dockLayout.columns.leftSidebar, tabIds: [...state.dockLayout.columns.leftSidebar.tabIds] },
         leftPage: { ...state.dockLayout.columns.leftPage, tabIds: [...state.dockLayout.columns.leftPage.tabIds] },
+        rightPage: { ...state.dockLayout.columns.rightPage, tabIds: [...state.dockLayout.columns.rightPage.tabIds] },
         rightSidebar: { ...state.dockLayout.columns.rightSidebar, tabIds: [...state.dockLayout.columns.rightSidebar.tabIds] },
       };
 
@@ -1618,7 +1607,6 @@ export const useFeedbackStore = create<FeedbackState>((set, get) => ({
       targetColumn.tabIds.push(tabId);
       targetColumn.activeTabId = tabId;
       targetColumn.collapsed = false;
-      normalizeLeftDockColumns(nextColumns);
 
       const dockLayout = { columns: nextColumns };
       persistDockLayout(dockLayout);
@@ -1633,6 +1621,7 @@ export const useFeedbackStore = create<FeedbackState>((set, get) => ({
       const nextColumns: DockLayoutState["columns"] = {
         leftSidebar: { ...state.dockLayout.columns.leftSidebar, tabIds: [...state.dockLayout.columns.leftSidebar.tabIds] },
         leftPage: { ...state.dockLayout.columns.leftPage, tabIds: [...state.dockLayout.columns.leftPage.tabIds] },
+        rightPage: { ...state.dockLayout.columns.rightPage, tabIds: [...state.dockLayout.columns.rightPage.tabIds] },
         rightSidebar: { ...state.dockLayout.columns.rightSidebar, tabIds: [...state.dockLayout.columns.rightSidebar.tabIds] },
       };
       let targetColumnId: DockColumnId | null = null;
@@ -1647,7 +1636,6 @@ export const useFeedbackStore = create<FeedbackState>((set, get) => ({
       if (!targetColumn.tabIds.includes(tabId)) targetColumn.tabIds.push(tabId);
       targetColumn.activeTabId = tabId;
       targetColumn.collapsed = false;
-      normalizeLeftDockColumns(nextColumns);
       const dockLayout = { columns: nextColumns };
       persistDockLayout(dockLayout);
       return { dockLayout };

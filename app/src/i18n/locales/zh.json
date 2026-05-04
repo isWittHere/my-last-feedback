@@ -274,10 +274,13 @@
     "openLeftSidebar": "打开左侧栏",
     "moveToLeftSidebar": "移动到左侧栏",
     "moveToLeftPage": "移动到左侧页面",
+    "moveToRightPage": "移动到右侧页面",
     "moveToRightSidebar": "移动到右侧栏",
     "collapsePanel": "折叠面板",
     "closeLeftPage": "关闭左侧页面面板",
     "openLeftPage": "打开左侧页面面板",
+    "closeRightPage": "关闭右侧页面面板",
+    "openRightPage": "打开右侧页面面板",
     "closeRightSidebar": "关闭右侧栏",
     "openRightSidebar": "打开右侧栏"
   },

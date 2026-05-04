@@ -274,10 +274,13 @@
     "openLeftSidebar": "Open left sidebar",
     "moveToLeftSidebar": "Move to left sidebar",
     "moveToLeftPage": "Move to left page",
+    "moveToRightPage": "Move to right page",
     "moveToRightSidebar": "Move to right sidebar",
     "collapsePanel": "Collapse panel",
     "closeLeftPage": "Close left page panel",
     "openLeftPage": "Open left page panel",
+    "closeRightPage": "Close right page panel",
+    "openRightPage": "Open right page panel",
     "closeRightSidebar": "Close right sidebar",
     "openRightSidebar": "Open right sidebar"
   },

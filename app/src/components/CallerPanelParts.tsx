@@ -11,7 +11,7 @@ import { webAttachmentLabel } from "../browser/webAttachmentFormat";
 import { collectSubmittedResourceLinks, type SubmittedResourceLink } from "../composer/submittedFeedback";
 import { CatppuccinResourceIcon } from "./CatppuccinResourceIcon";
 
-const DOCK_COLUMN_IDS: DockColumnId[] = ["leftSidebar", "leftPage", "rightSidebar"];
+const DOCK_COLUMN_IDS: DockColumnId[] = ["leftSidebar", "leftPage", "rightPage", "rightSidebar"];
 const GIT_ACTION_TYPES: GitActionType[] = ["commit-before", "commit", "commit-push", "create-branch"];
 
 function gitActionLabelKey(type: GitActionType) {
