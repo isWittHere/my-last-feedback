@@ -62,6 +62,7 @@ interface TerminalWorkspaceState {
 const RECENT_PATHS_STORAGE_KEY = "mlfb-terminal-recent-paths-v1";
 const LAST_CWD_STORAGE_KEY = "mlfb-terminal-last-cwd-v1";
 const OUTPUT_LIMIT = 240_000;
+const OUTPUT_TRIM_LINE_SCAN_LIMIT = 4096;
 const RECENT_PATH_LIMIT = 12;
 
 function basename(value: string): string {
@@ -74,7 +75,16 @@ function normalizePath(value: string): string {
 
 function trimOutput(value: string): string {
   if (value.length <= OUTPUT_LIMIT) return value;
-  return value.slice(value.length - OUTPUT_LIMIT);
+  let trimStart = value.length - OUTPUT_LIMIT;
+  const scanEnd = Math.min(value.length, trimStart + OUTPUT_TRIM_LINE_SCAN_LIMIT);
+  const newlineIndex = value.indexOf("\n", trimStart);
+  if (newlineIndex >= 0 && newlineIndex < scanEnd) trimStart = newlineIndex + 1;
+  while (trimStart < value.length) {
+    const code = value.charCodeAt(trimStart);
+    if (code < 0xdc00 || code > 0xdfff) break;
+    trimStart += 1;
+  }
+  return value.slice(trimStart);
 }
 
 function newTabId(): string {

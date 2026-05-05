@@ -103,6 +103,7 @@ export function TerminalPanel() {
   const fitAddonRef = useRef<FitAddon | null>(null);
   const activeTerminalIdRef = useRef<string | null>(null);
   const renderedOutputRef = useRef<{ tabId: string | null; length: number }>({ tabId: null, length: 0 });
+  const suppressedTerminalDataWritesRef = useRef(0);
   const pathMenuRef = useRef<HTMLDivElement>(null);
   const [pathMenuOpen, setPathMenuOpen] = useState(false);
   const [terminalSettings, setTerminalSettings] = useState<TerminalSettings>(getTerminalSettings);
@@ -231,6 +232,36 @@ export function TerminalPanel() {
     } catch {}
   }, []);
 
+  const finishSuppressedTerminalDataWrite = useCallback(() => {
+    suppressedTerminalDataWritesRef.current = Math.max(0, suppressedTerminalDataWritesRef.current - 1);
+  }, []);
+
+  const writeTerminalOutput = useCallback((terminal: Terminal, output: string, suppressTerminalData = false) => {
+    if (!output) return;
+    if (!suppressTerminalData) {
+      terminal.write(output);
+      return;
+    }
+    suppressedTerminalDataWritesRef.current += 1;
+    try {
+      terminal.write(output, finishSuppressedTerminalDataWrite);
+    } catch {
+      finishSuppressedTerminalDataWrite();
+    }
+  }, [finishSuppressedTerminalDataWrite]);
+
+  const resetAndReplayTerminalOutput = useCallback((terminal: Terminal, output: string) => {
+    suppressedTerminalDataWritesRef.current += 1;
+    try {
+      terminal.reset();
+      terminal.clear();
+      if (output) terminal.write(output, finishSuppressedTerminalDataWrite);
+      else finishSuppressedTerminalDataWrite();
+    } catch {
+      finishSuppressedTerminalDataWrite();
+    }
+  }, [finishSuppressedTerminalDataWrite]);
+
   const createFromPath = useCallback(async (cwd: string | null, source: TerminalPathSource = "recent") => {
     await createTerminalTab(cwd, { ...terminalSizeOptions(), source });
     setPathMenuOpen(false);
@@ -271,11 +302,12 @@ export function TerminalPanel() {
     fitAddonRef.current = fitAddon;
     renderedOutputRef.current = { tabId: null, length: 0 };
     if (activeTab.output) {
-      terminal.write(activeTab.output);
+      writeTerminalOutput(terminal, activeTab.output, true);
       renderedOutputRef.current = { tabId: activeTab.id, length: activeTab.output.length };
     }
 
     const dataDisposable = terminal.onData((data) => {
+      if (suppressedTerminalDataWritesRef.current > 0) return;
       const terminalId = activeTerminalIdRef.current;
       if (terminalId) void invoke("terminal_write", { terminalId, data }).catch(() => undefined);
     });
@@ -291,8 +323,9 @@ export function TerminalPanel() {
       terminalRef.current = null;
       fitAddonRef.current = null;
       renderedOutputRef.current = { tabId: null, length: 0 };
+      suppressedTerminalDataWritesRef.current = 0;
     };
-  }, [Boolean(activeTab), fitAndResize, terminalTheme]);
+  }, [Boolean(activeTab), fitAndResize, terminalTheme, writeTerminalOutput]);
 
   useEffect(() => {
     const terminal = terminalRef.current;
@@ -300,16 +333,15 @@ export function TerminalPanel() {
     const rendered = renderedOutputRef.current;
     const output = activeTab.output || "";
     if (rendered.tabId !== activeTab.id || output.length < rendered.length) {
-      terminal.clear();
-      if (output) terminal.write(output);
+      resetAndReplayTerminalOutput(terminal, output);
       renderedOutputRef.current = { tabId: activeTab.id, length: output.length };
       return;
     }
     if (output.length > rendered.length) {
-      terminal.write(output.slice(rendered.length));
+      writeTerminalOutput(terminal, output.slice(rendered.length));
       renderedOutputRef.current = { tabId: activeTab.id, length: output.length };
     }
-  }, [activeTab?.id, activeTab?.output]);
+  }, [activeTab?.id, activeTab?.output, resetAndReplayTerminalOutput, writeTerminalOutput]);
 
   useEffect(() => {
     fitAndResize();

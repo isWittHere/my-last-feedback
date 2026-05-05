@@ -8,6 +8,7 @@ use tauri::{AppHandle, Emitter, State};
 use uuid::Uuid;
 
 const MAX_OUTPUT_BUFFER_BYTES: usize = 1024 * 1024;
+const OUTPUT_TRIM_LINE_SCAN_BYTES: usize = 4096;
 
 #[derive(Clone, Default)]
 pub struct TerminalManager {
@@ -118,6 +119,12 @@ fn trim_output_buffer(buffer: &mut String) {
     let mut trim_to = buffer.len().saturating_sub(MAX_OUTPUT_BUFFER_BYTES);
     while trim_to < buffer.len() && !buffer.is_char_boundary(trim_to) {
         trim_to += 1;
+    }
+    let scan_end = trim_to.saturating_add(OUTPUT_TRIM_LINE_SCAN_BYTES).min(buffer.len());
+    if trim_to < scan_end {
+        if let Some(newline_offset) = buffer[trim_to..scan_end].find('\n') {
+            trim_to += newline_offset + 1;
+        }
     }
     if trim_to > 0 && trim_to <= buffer.len() {
         buffer.drain(..trim_to);
