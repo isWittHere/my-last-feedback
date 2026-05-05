@@ -55,6 +55,48 @@ interface CommandHint {
   description: string;
 }
 
+const VISUAL_TRAILING_BREAK = "composerVisualTrailingBreak";
+const BLOCK_BOUNDARY_TAGS = new Set([
+  "ADDRESS",
+  "ARTICLE",
+  "ASIDE",
+  "BLOCKQUOTE",
+  "DD",
+  "DIV",
+  "DL",
+  "DT",
+  "FIGCAPTION",
+  "FIGURE",
+  "FOOTER",
+  "H1",
+  "H2",
+  "H3",
+  "H4",
+  "H5",
+  "H6",
+  "HEADER",
+  "LI",
+  "MAIN",
+  "NAV",
+  "OL",
+  "P",
+  "PRE",
+  "SECTION",
+  "UL",
+]);
+
+function isElement(node: Node): node is HTMLElement {
+  return node instanceof HTMLElement;
+}
+
+function isVisualTrailingBreak(node: HTMLElement): boolean {
+  return node.tagName === "BR" && node.dataset[VISUAL_TRAILING_BREAK] === "true";
+}
+
+function isBlockBoundaryElement(node: Node): node is HTMLElement {
+  return isElement(node) && !node.dataset.composerRaw && BLOCK_BOUNDARY_TAGS.has(node.tagName);
+}
+
 interface ComposerEditorProps {
   value: string;
   onChange: (value: string) => void;
@@ -73,28 +115,70 @@ interface ComposerEditorProps {
 
 function tokenLength(node: Node): number {
   if (node.nodeType === Node.TEXT_NODE) return node.textContent?.length || 0;
-  if (!(node instanceof HTMLElement)) return 0;
+  if (!isElement(node)) return 0;
   if (node.dataset.composerRaw) return node.dataset.composerRaw.length;
-  if (node.tagName === "BR") return 1;
+  if (node.tagName === "BR") return isVisualTrailingBreak(node) ? 0 : 1;
   let total = 0;
   node.childNodes.forEach((child) => { total += tokenLength(child); });
   return total;
 }
 
+function trimSingleTrailingNewline(value: string): string {
+  return value.endsWith("\n") ? value.slice(0, -1) : value;
+}
+
+function serializeChildren(parent: Node): string {
+  const children = Array.from(parent.childNodes);
+  const hasBlockChildren = children.some(isBlockBoundaryElement);
+  if (!hasBlockChildren) {
+    let value = "";
+    children.forEach((child) => { value += serializeNode(child); });
+    return value;
+  }
+
+  const parts: string[] = [];
+  let inlineValue = "";
+  for (const child of children) {
+    if (isBlockBoundaryElement(child)) {
+      if (inlineValue) {
+        parts.push(inlineValue);
+        inlineValue = "";
+      }
+      parts.push(trimSingleTrailingNewline(serializeNode(child)));
+    } else {
+      inlineValue += serializeNode(child);
+    }
+  }
+  if (inlineValue) parts.push(inlineValue);
+  return parts.join("\n");
+}
+
 function serializeNode(node: Node): string {
   if (node.nodeType === Node.TEXT_NODE) return node.textContent || "";
-  if (!(node instanceof HTMLElement)) return "";
+  if (!isElement(node)) return "";
   if (node.dataset.composerRaw) return node.dataset.composerRaw;
-  if (node.tagName === "BR") return "\n";
-  let value = "";
-  node.childNodes.forEach((child) => { value += serializeNode(child); });
-  return value;
+  if (node.tagName === "BR") return isVisualTrailingBreak(node) ? "" : "\n";
+  return serializeChildren(node);
 }
 
 function serializeRoot(root: HTMLElement): string {
-  let value = "";
-  root.childNodes.forEach((child) => { value += serializeNode(child); });
+  const value = serializeChildren(root);
   return value.replace(/\u00a0/g, " ");
+}
+
+function createLineBreak(visualOnly = false): HTMLBRElement {
+  const lineBreak = document.createElement("br");
+  if (visualOnly) lineBreak.dataset[VISUAL_TRAILING_BREAK] = "true";
+  return lineBreak;
+}
+
+function appendTextWithLineBreaks(fragment: DocumentFragment, text: string) {
+  if (!text) return;
+  const parts = text.split("\n");
+  parts.forEach((part, index) => {
+    if (part) fragment.appendChild(document.createTextNode(part));
+    if (index < parts.length - 1) fragment.appendChild(createLineBreak());
+  });
 }
 
 function isBlankComposerValue(value: string): boolean {
@@ -129,7 +213,7 @@ function offsetFromPosition(root: HTMLElement, container: Node, offset: number):
       current += node.textContent?.length || 0;
       return false;
     }
-    if (!(node instanceof HTMLElement)) return false;
+    if (!isElement(node)) return false;
     if (node.dataset.composerRaw) {
       if (node.contains(container)) {
         found = current + (offset > 0 ? node.dataset.composerRaw.length : 0);
@@ -139,7 +223,7 @@ function offsetFromPosition(root: HTMLElement, container: Node, offset: number):
       return false;
     }
     if (node.tagName === "BR") {
-      current += 1;
+      current += tokenLength(node);
       return false;
     }
     for (const child of Array.from(node.childNodes)) {
@@ -172,7 +256,18 @@ function positionFromOffset(root: HTMLElement, offset: number): { node: Node; of
       remaining -= length;
       return null;
     }
-    if (!(node instanceof HTMLElement)) return null;
+    if (!isElement(node)) return null;
+    if (node.tagName === "BR") {
+      const length = tokenLength(node);
+      if (length === 0) return null;
+      const parent = node.parentNode || root;
+      const siblings = Array.from(parent.childNodes);
+      const index = siblings.indexOf(node);
+      if (remaining === 0) return { node: parent, offset: index };
+      if (remaining <= length) return { node: parent, offset: index + 1 };
+      remaining -= length;
+      return null;
+    }
     if (node.dataset.composerRaw) {
       const length = node.dataset.composerRaw.length;
       if (remaining <= length) {
@@ -283,7 +378,7 @@ function createResourceChipIcon(token: Extract<ReturnType<typeof parseComposerTe
   return createChipIcon(token.kind === "folder" ? "folder" : "file");
 }
 
-function renderComposerDom(root: HTMLElement, tokens: ReturnType<typeof parseComposerTextTokens>, resourceIconTheme: ResourceIconTheme, catppuccinFlavor: CatppuccinIconFlavor) {
+function renderComposerDom(root: HTMLElement, value: string, tokens: ReturnType<typeof parseComposerTextTokens>, resourceIconTheme: ResourceIconTheme, catppuccinFlavor: CatppuccinIconFlavor) {
   const fragment = document.createDocumentFragment();
   for (const token of tokens) {
     if (token.type === "resourceLink") {
@@ -305,9 +400,10 @@ function renderComposerDom(root: HTMLElement, tokens: ReturnType<typeof parseCom
       appendTokenLabel(chip, token.value);
       fragment.appendChild(chip);
     } else {
-      fragment.appendChild(document.createTextNode(token.type === "slashCommand" ? token.raw : token.value));
+      appendTextWithLineBreaks(fragment, token.type === "slashCommand" ? token.raw : token.value);
     }
   }
+  if (value.endsWith("\n")) fragment.appendChild(createLineBreak(true));
   root.replaceChildren(fragment);
 }
 
@@ -556,7 +652,7 @@ export const ComposerEditor = forwardRef<ComposerEditorHandle, ComposerEditorPro
     const nextCaret = normalizedNextValue.length === 0 ? 0 : safeStart + text.length;
     commitValue(normalizedNextValue, { start: nextCaret, end: nextCaret });
     if (root) {
-      renderComposerDom(root, parseComposerTextTokens(normalizedNextValue, { knownCommands: commandSet, projectDirectory }), resourceIconTheme, catppuccinFlavor);
+      renderComposerDom(root, normalizedNextValue, parseComposerTextTokens(normalizedNextValue, { knownCommands: commandSet, projectDirectory }), resourceIconTheme, catppuccinFlavor);
       restoreSelection(root, { start: nextCaret, end: nextCaret });
     }
     if (options.updateSlashMenu !== false && root && currentSelection.start === currentSelection.end) requestAnimationFrame(updateSlashMenu);
@@ -570,7 +666,7 @@ export const ComposerEditor = forwardRef<ComposerEditorHandle, ComposerEditorPro
     commitValue(entry.value, entry.selection, false);
     const root = rootRef.current;
     if (root) {
-      renderComposerDom(root, parseComposerTextTokens(entry.value, { knownCommands: commandSet, projectDirectory }), resourceIconTheme, catppuccinFlavor);
+      renderComposerDom(root, entry.value, parseComposerTextTokens(entry.value, { knownCommands: commandSet, projectDirectory }), resourceIconTheme, catppuccinFlavor);
       restoreSelection(root, entry.selection);
     }
     requestAnimationFrame(updateSlashMenu);
@@ -692,7 +788,7 @@ export const ComposerEditor = forwardRef<ComposerEditorHandle, ComposerEditorPro
       pendingSelectionRef.current = normalizedSelection;
       const root = rootRef.current;
       if (!root) return;
-      renderComposerDom(root, parseComposerTextTokens(normalizedNextValue, { knownCommands: commandSet, projectDirectory }), resourceIconTheme, catppuccinFlavor);
+      renderComposerDom(root, normalizedNextValue, parseComposerTextTokens(normalizedNextValue, { knownCommands: commandSet, projectDirectory }), resourceIconTheme, catppuccinFlavor);
       if (document.activeElement !== root) root.focus();
       restoreSelection(root, normalizedSelection);
       requestAnimationFrame(updateSlashMenu);
@@ -705,7 +801,7 @@ export const ComposerEditor = forwardRef<ComposerEditorHandle, ComposerEditorPro
     const root = rootRef.current;
     if (!root) return;
     const activeSelection = document.activeElement === root ? getSelectionRange(root) : null;
-    renderComposerDom(root, tokens, resourceIconTheme, catppuccinFlavor);
+    renderComposerDom(root, normalizedValue, tokens, resourceIconTheme, catppuccinFlavor);
     const pending = pendingSelectionRef.current;
     pendingSelectionRef.current = null;
     const nextSelection = pending || activeSelection;
@@ -766,8 +862,46 @@ export const ComposerEditor = forwardRef<ComposerEditorHandle, ComposerEditorPro
       }
     }
 
+    if (!readOnly && !composingRef.current && !event.ctrlKey && !event.metaKey && !event.altKey) {
+      if (event.key === "Enter") {
+        event.preventDefault();
+        replaceRange(selection.start, selection.end, "\n");
+        return;
+      }
+
+      if (event.key === "Backspace") {
+        event.preventDefault();
+        const tokenSelection = selectionAroundToken(selection, "backward");
+        if (tokenSelection) {
+          replaceRange(tokenSelection.start, tokenSelection.end, "");
+          return;
+        }
+        if (selection.start !== selection.end) {
+          replaceRange(selection.start, selection.end, "");
+          return;
+        }
+        if (selection.start > 0) replaceRange(selection.start - 1, selection.start, "");
+        return;
+      }
+
+      if (event.key === "Delete") {
+        event.preventDefault();
+        const tokenSelection = selectionAroundToken(selection, "forward");
+        if (tokenSelection) {
+          replaceRange(tokenSelection.start, tokenSelection.end, "");
+          return;
+        }
+        if (selection.start !== selection.end) {
+          replaceRange(selection.start, selection.end, "");
+          return;
+        }
+        if (selection.start < valueRef.current.length) replaceRange(selection.start, selection.start + 1, "");
+        return;
+      }
+    }
+
     onKeyDown?.(event, selection);
-  }, [activeCommandIndex, applyHistory, onKeyDown, readOnly, selectCommand, setHintSuppressed, slashMenu, visibleCommands]);
+  }, [activeCommandIndex, applyHistory, onKeyDown, readOnly, replaceRange, selectCommand, selectionAroundToken, setHintSuppressed, slashMenu, visibleCommands]);
 
   const handleKeyUp = useCallback((event: KeyboardEvent<HTMLDivElement>) => {
     if (slashMenu && ["ArrowDown", "ArrowUp", "Enter", "Tab", "Escape"].includes(event.key)) {
