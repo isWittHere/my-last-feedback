@@ -14,10 +14,6 @@ interface InsertFeedbackTextEventDetail {
   text: string;
 }
 
-function isBlankFeedbackText(value: string): boolean {
-  return value.replace(/\u00a0/g, " ").replace(/\r?\n/g, "").length === 0;
-}
-
 export function FeedbackInput({ minHeight, queuedCallerId }: { minHeight?: number; queuedCallerId?: string } = {}) {
   const { t } = useTranslation();
   const friendlyName = useFriendlyName();
@@ -187,7 +183,6 @@ export function FeedbackInput({ minHeight, queuedCallerId }: { minHeight?: numbe
   );
 
   const aliasLabel = caller?.alias ? `${friendlyName(caller.alias)} (${caller.alias})` : caller?.name || "AI";
-  const isValueBlank = isBlankFeedbackText(value);
   const placeholderText = queuedCallerId
     ? ""
     : caller?.alias
@@ -209,6 +204,12 @@ export function FeedbackInput({ minHeight, queuedCallerId }: { minHeight?: numbe
       onFocus={handleFocus}
       readOnly={isReadonly}
       placeholder={placeholderText}
+      placeholderContent={queuedCallerId ? (
+        <>
+          <div className="composer-editor-placeholder-title">{draftPlaceholderLine}</div>
+          <div>{draftPasteHint}</div>
+        </>
+      ) : undefined}
       className="input-area"
       containerClassName={minHeight === undefined ? "flex-1" : undefined}
       projectDirectory={activeSession?.projectDirectory || ""}
@@ -225,32 +226,6 @@ export function FeedbackInput({ minHeight, queuedCallerId }: { minHeight?: numbe
       }}
     />
   );
-
-  if (queuedCallerId) {
-    return (
-      <div className={minHeight === undefined ? "relative flex-1 min-h-0" : "relative"} style={{ width: "100%" }}>
-        {editor}
-        {isValueBlank && (
-          <div
-            style={{
-              position: "absolute",
-              top: 8,
-              left: 10,
-              right: 10,
-              pointerEvents: "none",
-              color: "var(--color-text-muted)",
-              fontSize: 13,
-              lineHeight: 1.6,
-              zoom: "var(--zoom-input, 1)",
-            }}
-          >
-            <div style={{ fontWeight: 700 }}>{draftPlaceholderLine}</div>
-            <div>{draftPasteHint}</div>
-          </div>
-        )}
-      </div>
-    );
-  }
 
   return editor;
 }

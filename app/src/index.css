@@ -3923,7 +3923,7 @@ body,
   word-break: normal;
   caret-color: var(--color-text-primary);
 }
-.composer-editor-placeholder {
+.composer-editor-hint-layer {
   box-sizing: border-box;
   position: absolute;
   z-index: 0;
@@ -3931,12 +3931,23 @@ body,
   padding: 8px 10px;
   color: var(--color-text-muted);
   pointer-events: none;
-  white-space: pre-wrap;
   overflow: hidden;
   font-family: inherit;
   font-size: 13px;
   line-height: 1.6;
   zoom: var(--zoom-input, 1);
+}
+.composer-editor-placeholder {
+  white-space: pre-wrap;
+}
+.composer-editor-placeholder-title {
+  font-weight: 700;
+}
+.composer-editor-root[data-hint-suppressed="true"] .composer-editor-hint-layer {
+  display: none;
+}
+.composer-editor-root:has(.composer-editor:not(:empty)) .composer-editor-placeholder {
+  display: none;
 }
 .composer-token-chip {
   display: inline-flex;
@@ -3979,6 +3990,17 @@ body,
   border-color: color-mix(in srgb, var(--caller-color, var(--color-primary)) 34%, transparent);
   background: color-mix(in srgb, var(--caller-color, var(--color-primary)) 14%, transparent);
   color: var(--color-text-primary);
+}
+.composer-command-hint {
+  box-sizing: border-box;
+  margin-top: calc(1.6em + 2px);
+  color: var(--color-text-muted);
+  font-style: normal;
+  line-height: inherit;
+  white-space: normal;
+  overflow-wrap: anywhere;
+  user-select: none;
+  pointer-events: none;
 }
 .composer-token-chip-color {
   border-color: color-mix(in srgb, var(--color-border) 70%, transparent);

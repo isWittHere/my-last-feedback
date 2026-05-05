@@ -8,6 +8,7 @@ import {
   useRef,
   useState,
   type CSSProperties,
+  type ReactNode,
   type KeyboardEvent,
   type ClipboardEvent,
   type FormEvent,
@@ -49,6 +50,11 @@ interface HistoryEntry {
   selection: TextRange;
 }
 
+interface CommandHint {
+  command: string;
+  description: string;
+}
+
 interface ComposerEditorProps {
   value: string;
   onChange: (value: string) => void;
@@ -57,6 +63,7 @@ interface ComposerEditorProps {
   onFocus?: () => void;
   readOnly?: boolean;
   placeholder?: string;
+  placeholderContent?: ReactNode;
   className?: string;
   containerClassName?: string;
   style?: CSSProperties;
@@ -304,6 +311,17 @@ function renderComposerDom(root: HTMLElement, tokens: ReturnType<typeof parseCom
   root.replaceChildren(fragment);
 }
 
+function commandHintForValue(value: string, commands: PromptCommandOption[]): CommandHint | null {
+  const match = /^\/([\p{L}\p{N}_-]+)\s*$/u.exec(value);
+  if (!match) return null;
+  const commandId = match[1]?.toLowerCase();
+  if (!commandId) return null;
+  const command = commands.find((candidate) => candidate.id.toLowerCase() === commandId);
+  if (!command) return null;
+  const description = command.description.trim();
+  return description ? { command: command.id.toLowerCase(), description } : null;
+}
+
 function slashTrigger(value: string, caret: number): { query: string; start: number; end: number } | null {
   const before = value.slice(0, caret);
   const match = /(^|[\s([{])\/([\p{L}\p{N}_-]*)$/u.exec(before);
@@ -341,6 +359,12 @@ function highlightedCommandLabel(label: string, query: string) {
   );
 }
 
+function shouldHidePlaceholderForKey(event: KeyboardEvent<HTMLDivElement>): boolean {
+  if (event.ctrlKey || event.metaKey || event.altKey) return false;
+  if (event.key === "Process") return true;
+  return event.key.length === 1;
+}
+
 export const ComposerEditor = forwardRef<ComposerEditorHandle, ComposerEditorProps>(function ComposerEditor({
   value,
   onChange,
@@ -349,12 +373,14 @@ export const ComposerEditor = forwardRef<ComposerEditorHandle, ComposerEditorPro
   onFocus,
   readOnly,
   placeholder,
+  placeholderContent,
   className,
   containerClassName,
   style,
   projectDirectory,
   commands = [],
 }, forwardedRef) {
+  const containerRef = useRef<HTMLDivElement>(null);
   const rootRef = useRef<HTMLDivElement>(null);
   const normalizedValue = normalizeBlankComposerValue(value);
   const valueRef = useRef(normalizedValue);
@@ -367,11 +393,26 @@ export const ComposerEditor = forwardRef<ComposerEditorHandle, ComposerEditorPro
   const [slashMenu, setSlashMenu] = useState<SlashMenuState | null>(null);
   const [activeCommandIndex, setActiveCommandIndex] = useState(0);
   const [isComposing, setIsComposing] = useState(false);
+  const [isTransientInputActive, setIsTransientInputActive] = useState(false);
   const [composerSettings, setComposerSettings] = useState<ComposerSettings>(getComposerSettings);
   const resourceIconTheme = useFeedbackStore((state) => state.resourceIconTheme);
   const catppuccinFlavor: CatppuccinIconFlavor = useIsLightTheme() ? "latte" : "mocha";
   valueRef.current = normalizedValue;
-  const showPlaceholder = !!placeholder && isBlankComposerValue(normalizedValue) && !isComposing;
+
+  const setHintSuppressed = useCallback((value: boolean) => {
+    const container = containerRef.current;
+    if (container) {
+      if (value) container.dataset.hintSuppressed = "true";
+      else delete container.dataset.hintSuppressed;
+    }
+    setIsTransientInputActive(value);
+  }, []);
+
+  const showPlaceholder = (placeholderContent !== undefined || !!placeholder) && isBlankComposerValue(normalizedValue) && !isComposing && !isTransientInputActive;
+  const commandHint = useMemo(
+    () => isComposing || isTransientInputActive ? null : commandHintForValue(normalizedValue, commands),
+    [commands, isComposing, isTransientInputActive, normalizedValue],
+  );
 
   const commandSet = useMemo(() => new Set(commands.map((command) => command.id)), [commands]);
   const tokens = useMemo(
@@ -404,6 +445,38 @@ export const ComposerEditor = forwardRef<ComposerEditorHandle, ComposerEditorPro
     return () => window.removeEventListener(COMPOSER_SETTINGS_EVENT, handleSettingsChanged);
   }, []);
 
+  useEffect(() => {
+    const root = rootRef.current;
+    if (!root) return;
+
+    const suppressForKeyboardInput = (event: globalThis.KeyboardEvent) => {
+      if (readOnly) return;
+      if (event.ctrlKey || event.metaKey || event.altKey) return;
+      if (event.key === "Process" || event.key.length === 1) setHintSuppressed(true);
+    };
+    const suppressForBeforeInput = (event: Event) => {
+      if (readOnly) return;
+      const inputEvent = event as InputEvent;
+      if (inputEvent.isComposing || inputEvent.inputType === "insertCompositionText" || inputEvent.inputType === "insertText") {
+        setHintSuppressed(true);
+      }
+    };
+    const suppressForComposition = () => {
+      if (!readOnly) setHintSuppressed(true);
+    };
+
+    root.addEventListener("keydown", suppressForKeyboardInput, true);
+    root.addEventListener("beforeinput", suppressForBeforeInput, true);
+    root.addEventListener("compositionstart", suppressForComposition, true);
+    root.addEventListener("compositionupdate", suppressForComposition, true);
+    return () => {
+      root.removeEventListener("keydown", suppressForKeyboardInput, true);
+      root.removeEventListener("beforeinput", suppressForBeforeInput, true);
+      root.removeEventListener("compositionstart", suppressForComposition, true);
+      root.removeEventListener("compositionupdate", suppressForComposition, true);
+    };
+  }, [readOnly, setHintSuppressed]);
+
   const pushHistoryEntry = useCallback((nextValue: string, selection: TextRange) => {
     const current = historyRef.current[historyIndexRef.current];
     if (current?.value === nextValue) {
@@ -425,9 +498,10 @@ export const ComposerEditor = forwardRef<ComposerEditorHandle, ComposerEditorPro
     const previousValue = valueRef.current;
     valueRef.current = normalizedNextValue;
     lastHistoryValueRef.current = normalizedNextValue;
+    if (!composingRef.current) setHintSuppressed(false);
     if (recordHistory && normalizedSelection) pushHistoryEntry(normalizedNextValue, normalizedSelection);
     if (normalizedNextValue !== previousValue) onChange(normalizedNextValue);
-  }, [onChange, pushHistoryEntry]);
+  }, [onChange, pushHistoryEntry, setHintSuppressed]);
 
   const updateSlashMenu = useCallback(() => {
     const root = rootRef.current;
@@ -540,6 +614,7 @@ export const ComposerEditor = forwardRef<ComposerEditorHandle, ComposerEditorPro
     if (nativeEvent.isComposing || nativeEvent.inputType === "insertCompositionText") {
       composingRef.current = true;
       setIsComposing(true);
+      setHintSuppressed(true);
       setSlashMenu(null);
       return;
     }
@@ -595,7 +670,7 @@ export const ComposerEditor = forwardRef<ComposerEditorHandle, ComposerEditorPro
       }
       if (selection.start < valueRef.current.length) replaceRange(selection.start, selection.start + 1, "");
     }
-  }, [applyHistory, readOnly, replaceRange, selectionAroundToken]);
+  }, [applyHistory, readOnly, replaceRange, selectionAroundToken, setHintSuppressed]);
 
   useImperativeHandle(forwardedRef, () => ({
     focus: () => rootRef.current?.focus(),
@@ -629,25 +704,31 @@ export const ComposerEditor = forwardRef<ComposerEditorHandle, ComposerEditorPro
   useLayoutEffect(() => {
     const root = rootRef.current;
     if (!root) return;
+    const activeSelection = document.activeElement === root ? getSelectionRange(root) : null;
     renderComposerDom(root, tokens, resourceIconTheme, catppuccinFlavor);
     const pending = pendingSelectionRef.current;
-    if (!pending) return;
     pendingSelectionRef.current = null;
+    const nextSelection = pending || activeSelection;
+    if (!nextSelection) return;
     if (document.activeElement !== root) root.focus();
-    restoreSelection(root, pending);
-  }, [catppuccinFlavor, resourceIconTheme, tokens]);
+    restoreSelection(root, clampTextRange(nextSelection, normalizedValue.length));
+  }, [catppuccinFlavor, normalizedValue.length, resourceIconTheme, tokens]);
 
   const handleInput = useCallback(() => {
     const root = rootRef.current;
     if (!root || composingRef.current) return;
     const selection = getSelectionRange(root);
     commitValue(serializeRoot(root), selection);
+    setHintSuppressed(false);
     requestAnimationFrame(updateSlashMenu);
-  }, [commitValue, updateSlashMenu]);
+  }, [commitValue, setHintSuppressed, updateSlashMenu]);
 
   const handleKeyDown = useCallback((event: KeyboardEvent<HTMLDivElement>) => {
     const root = rootRef.current;
     const selection = root ? getSelectionRange(root) : { start: 0, end: 0 };
+    if (!readOnly && shouldHidePlaceholderForKey(event)) {
+      setHintSuppressed(true);
+    }
 
     if (!readOnly && (event.ctrlKey || event.metaKey) && event.key.toLowerCase() === "z") {
       event.preventDefault();
@@ -686,7 +767,7 @@ export const ComposerEditor = forwardRef<ComposerEditorHandle, ComposerEditorPro
     }
 
     onKeyDown?.(event, selection);
-  }, [activeCommandIndex, applyHistory, onKeyDown, readOnly, selectCommand, slashMenu, visibleCommands]);
+  }, [activeCommandIndex, applyHistory, onKeyDown, readOnly, selectCommand, setHintSuppressed, slashMenu, visibleCommands]);
 
   const handleKeyUp = useCallback((event: KeyboardEvent<HTMLDivElement>) => {
     if (slashMenu && ["ArrowDown", "ArrowUp", "Enter", "Tab", "Escape"].includes(event.key)) {
@@ -707,8 +788,13 @@ export const ComposerEditor = forwardRef<ComposerEditorHandle, ComposerEditorPro
   }, [insertText, onPaste]);
 
   return (
-    <div className={`composer-editor-root${containerClassName ? ` ${containerClassName}` : ""}`} style={{ minHeight: style?.minHeight, height: style?.height }}>
-      {showPlaceholder ? <div className="composer-editor-placeholder">{placeholder}</div> : null}
+    <div ref={containerRef} className={`composer-editor-root${containerClassName ? ` ${containerClassName}` : ""}`} data-hint-suppressed={isTransientInputActive ? "true" : undefined} style={{ minHeight: style?.minHeight, height: style?.height }}>
+      {showPlaceholder || commandHint ? (
+        <div className="composer-editor-hint-layer" aria-hidden="true">
+          {showPlaceholder ? <div className="composer-editor-placeholder">{placeholderContent ?? placeholder}</div> : null}
+          {!showPlaceholder && commandHint ? <div className="composer-command-hint">{commandHint.description}</div> : null}
+        </div>
+      ) : null}
       <div
         ref={rootRef}
         contentEditable={!readOnly}
@@ -720,6 +806,22 @@ export const ComposerEditor = forwardRef<ComposerEditorHandle, ComposerEditorPro
         data-empty={isBlankComposerValue(normalizedValue) ? "true" : undefined}
         className={`composer-editor ${className || ""}`.trim()}
         style={style}
+        onKeyDownCapture={(event) => {
+          if (!readOnly && shouldHidePlaceholderForKey(event)) setHintSuppressed(true);
+        }}
+        onBeforeInputCapture={(event) => {
+          if (readOnly) return;
+          const nativeEvent = event.nativeEvent as InputEvent;
+          if (nativeEvent.isComposing || nativeEvent.inputType === "insertCompositionText" || nativeEvent.inputType === "insertText") {
+            setHintSuppressed(true);
+          }
+        }}
+        onCompositionStartCapture={() => {
+          if (!readOnly) setHintSuppressed(true);
+        }}
+        onCompositionUpdateCapture={() => {
+          if (!readOnly) setHintSuppressed(true);
+        }}
         onBeforeInput={handleBeforeInput}
         onInput={handleInput}
         onKeyDown={handleKeyDown}
@@ -733,16 +835,19 @@ export const ComposerEditor = forwardRef<ComposerEditorHandle, ComposerEditorPro
         onCompositionStart={() => {
           composingRef.current = true;
           setIsComposing(true);
+          setHintSuppressed(true);
           setSlashMenu(null);
         }}
         onCompositionUpdate={() => {
           composingRef.current = true;
           setIsComposing(true);
+          setHintSuppressed(true);
           setSlashMenu(null);
         }}
         onCompositionEnd={() => {
           composingRef.current = false;
           setIsComposing(false);
+          setHintSuppressed(false);
           handleInput();
         }}
       />
