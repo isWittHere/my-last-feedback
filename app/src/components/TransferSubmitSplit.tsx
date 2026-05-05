@@ -6,6 +6,7 @@ interface TransferSubmitSplitProps {
   color: string;
   disabled: boolean;
   submitting: boolean;
+  transferEnabled?: boolean;
   transferAlias: string | null;
   popoverOpen: boolean;
   draft: string;
@@ -39,6 +40,7 @@ export function TransferSubmitSplit(props: TransferSubmitSplitProps) {
     color,
     disabled,
     submitting,
+    transferEnabled = true,
     transferAlias,
     popoverOpen,
     draft,
@@ -55,7 +57,7 @@ export function TransferSubmitSplit(props: TransferSubmitSplitProps) {
 
   // Close popover on outside click / Escape
   useEffect(() => {
-    if (!popoverOpen) return;
+    if (!transferEnabled || !popoverOpen) return;
     const onDocClick = (e: MouseEvent) => {
       if (!rootRef.current) return;
       if (rootRef.current.contains(e.target as Node)) return;
@@ -70,15 +72,15 @@ export function TransferSubmitSplit(props: TransferSubmitSplitProps) {
       document.removeEventListener("mousedown", onDocClick);
       document.removeEventListener("keydown", onKey);
     };
-  }, [popoverOpen, onClosePopover]);
+  }, [transferEnabled, popoverOpen, onClosePopover]);
 
   // Autofocus the input when the popover opens
   useEffect(() => {
-    if (popoverOpen) {
+    if (transferEnabled && popoverOpen) {
       const t = setTimeout(() => inputRef.current?.focus(), 0);
       return () => clearTimeout(t);
     }
-  }, [popoverOpen]);
+  }, [transferEnabled, popoverOpen]);
 
   const validation = useMemo(() => {
     const trimmed = draft.trim();
@@ -96,7 +98,7 @@ export function TransferSubmitSplit(props: TransferSubmitSplitProps) {
     onConfirmTransfer(draft.trim());
   };
 
-  const isTransfer = !!transferAlias;
+  const isTransfer = transferEnabled && !!transferAlias;
   const bg = disabled ? "var(--color-bg-elevated)" : color;
   const border = disabled ? "var(--color-border)" : color;
   const commonMainStyle: React.CSSProperties = {
@@ -118,7 +120,7 @@ export function TransferSubmitSplit(props: TransferSubmitSplitProps) {
   return (
     <div ref={rootRef} style={{ position: "relative", display: "inline-flex", alignItems: "center" }}>
       {/* Left aux control: chevron (default) or close (×) in transfer mode */}
-      {isTransfer ? (
+      {transferEnabled && (isTransfer ? (
         <button
           onClick={onCancelTransfer}
           className="btn"
@@ -165,10 +167,10 @@ export function TransferSubmitSplit(props: TransferSubmitSplitProps) {
         >
           <Icon name="chevron-down" size={10} className="app-disclosure-icon" />
         </button>
-      )}
+      ))}
 
       {/* Target alias chip (only in transfer mode) */}
-      {isTransfer && (
+      {transferEnabled && isTransfer && (
         <div
           style={{
             height: 34,
@@ -208,8 +210,8 @@ export function TransferSubmitSplit(props: TransferSubmitSplitProps) {
         title={isTransfer ? t("transfer.submitTo", "Transfer and submit (Ctrl+Enter) to {{alias}}", { alias: transferAlias }) : t("feedback.submit", "Send Feedback (Ctrl+Enter)")}
         style={{
           ...commonMainStyle,
-          borderTopLeftRadius: 0,
-          borderBottomLeftRadius: 0,
+          borderTopLeftRadius: transferEnabled ? 0 : undefined,
+          borderBottomLeftRadius: transferEnabled ? 0 : undefined,
         }}
       >
         {submitting ? (
@@ -222,7 +224,7 @@ export function TransferSubmitSplit(props: TransferSubmitSplitProps) {
       </button>
 
       {/* Popover */}
-      {popoverOpen && (
+      {transferEnabled && popoverOpen && (
         <div
           style={{
             position: "absolute",

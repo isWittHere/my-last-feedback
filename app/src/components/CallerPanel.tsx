@@ -204,6 +204,7 @@ function CallerContent() {
   const prompts = useFeedbackStore((state) => state.prompts);
   const disabledPrompts = useFeedbackStore((state) => state.disabledPrompts);
   const showPromptButtons = useFeedbackStore((state) => state.showPromptButtons);
+  const showTransferSubmitUi = useFeedbackStore((state) => state.showTransferSubmitUi);
   const updateSessionField = useFeedbackStore((state) => state.updateSessionField);
   const visiblePrompts = useMemo(
     () => prompts.filter((prompt) => !disabledPrompts.includes(prompt.name)),
@@ -313,16 +314,24 @@ function CallerContent() {
     setTransferDraft("");
   }, [activeSession?.id]);
 
+  useEffect(() => {
+    if (showTransferSubmitUi) return;
+    setTransferAlias(null);
+    setTransferPopoverOpen(false);
+    setTransferDraft("");
+  }, [showTransferSubmitUi]);
+
   const handleSubmit = useCallback(
     async (quickAction?: string) => {
       if (!activeSession || activeSession.status !== "pending" || sessionSubmitting) return;
       setSessionSubmitting(true);
+      const effectiveTransferAlias = showTransferSubmitUi ? transferAlias : null;
 
       const submittedFeedback = buildSubmittedFeedback(activeSession, {
         prompts: visiblePrompts,
         quickAction,
         callerAlias: caller?.alias || null,
-        transferAlias,
+        transferAlias: effectiveTransferAlias,
         language: i18n.language,
       });
       const finalFeedback = submittedFeedback.markdown;
@@ -337,7 +346,7 @@ function CallerContent() {
           images: imageList,
           mlcAttachments: activeSession.mlcAttachments || [],
           webAttachments: activeSession.webAttachments || [],
-          transferToAlias: transferAlias,
+          transferToAlias: effectiveTransferAlias,
         });
         pushMessageHistory(activeSession.callerId, historyText);
         completeSessionWithSubmittedFeedback(activeSession.id, finalFeedback);
@@ -351,7 +360,7 @@ function CallerContent() {
         setSessionSubmitting(false);
       }
     },
-    [activeSession, caller?.alias, i18n.language, sessionSubmitting, completeSessionWithSubmittedFeedback, pushMessageHistory, transferAlias, visiblePrompts]
+    [activeSession, caller?.alias, i18n.language, sessionSubmitting, completeSessionWithSubmittedFeedback, pushMessageHistory, showTransferSubmitUi, transferAlias, visiblePrompts]
   );
 
   // Ctrl+Enter shortcut — scoped to this panel
@@ -442,6 +451,7 @@ function CallerContent() {
               color={callerColor}
               disabled={sessionSubmitting || !hasContent}
               submitting={sessionSubmitting}
+              transferEnabled={showTransferSubmitUi}
               transferAlias={transferAlias}
               popoverOpen={transferPopoverOpen}
               draft={transferDraft}

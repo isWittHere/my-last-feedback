@@ -15,6 +15,8 @@ export interface PromptItem {
   icon: string;
 }
 
+export type CallerColumnMode = "auto" | 1 | 2 | 3;
+
 // ── Multi-session types ──
 
 export type SessionStatus = "pending" | "responded" | "cancelled";
@@ -238,9 +240,11 @@ export interface FeedbackState {
   // Prompt visibility
   disabledPrompts: string[];
   showPromptButtons: boolean;
+  showTransferSubmitUi: boolean;
   resourceIconTheme: ResourceIconTheme;
   setDisabledPrompts: (names: string[]) => void;
   setShowPromptButtons: (value: boolean) => void;
+  setShowTransferSubmitUi: (value: boolean) => void;
   setResourceIconTheme: (theme: ResourceIconTheme) => void;
   togglePromptDisabled: (name: string) => void;
 
@@ -249,6 +253,7 @@ export interface FeedbackState {
   callerOrder: string[]; // user-controlled display order of caller IDs
   unreadCallerIds: string[]; // callers with unread new sessions
   hiddenCallerIds: string[]; // callers hidden from top bar tabs
+  callerColumnMode: CallerColumnMode;
   visibleColumnCount: number; // how many callers are visible in the window columns
   sessions: Session[];
   sessionDraftsById: Record<string, SessionTextDraft>;
@@ -306,6 +311,7 @@ export interface FeedbackState {
   toggleCallerHidden: (callerId: string) => void;
   unhideCaller: (callerId: string) => void;
   trimCallerSessions: (callerId: string) => Promise<void>;
+  setCallerColumnMode: (mode: CallerColumnMode) => void;
   setVisibleColumnCount: (count: number) => void;
   setQueuedDrafts: (drafts: Record<string, FeedbackDraft>) => void;
   getQueuedDraft: (callerId: string) => FeedbackDraft;
@@ -357,8 +363,20 @@ const MLC_PANEL_MIN_WIDTH = 240;
 const MLC_PANEL_MAX_WIDTH = 520;
 const MLC_PAGE_PANEL_MAX_WIDTH = 720;
 const DOCK_LAYOUT_STORAGE_KEY = "mlfb-dock-layout-v1";
+const CALLER_COLUMN_MODE_STORAGE_KEY = "mlf-caller-column-mode";
 
 export type ResourceIconTheme = "default" | "catppuccin";
+
+function parseCallerColumnMode(value: string | null): CallerColumnMode {
+  if (value === "1") return 1;
+  if (value === "2") return 2;
+  if (value === "3") return 3;
+  return "auto";
+}
+
+function loadCallerColumnMode(): CallerColumnMode {
+  try { return parseCallerColumnMode(localStorage.getItem(CALLER_COLUMN_MODE_STORAGE_KEY)); } catch { return "auto"; }
+}
 
 function loadResourceIconTheme(): ResourceIconTheme {
   try {
@@ -585,6 +603,12 @@ export const useFeedbackStore = create<FeedbackState>((set, get) => ({
       return localStorage.getItem("mlf-show-prompt-buttons") === "true";
     } catch { return false; }
   })(),
+  showTransferSubmitUi: (() => {
+    try {
+      const stored = localStorage.getItem("mlf-show-transfer-submit-ui");
+      return stored == null ? true : stored === "true";
+    } catch { return true; }
+  })(),
   resourceIconTheme: loadResourceIconTheme(),
   setDisabledPrompts: (names) => {
     set({ disabledPrompts: names });
@@ -593,6 +617,10 @@ export const useFeedbackStore = create<FeedbackState>((set, get) => ({
   setShowPromptButtons: (value) => {
     set({ showPromptButtons: value });
     try { localStorage.setItem("mlf-show-prompt-buttons", String(value)); } catch {}
+  },
+  setShowTransferSubmitUi: (value) => {
+    set({ showTransferSubmitUi: value });
+    try { localStorage.setItem("mlf-show-transfer-submit-ui", String(value)); } catch {}
   },
   setResourceIconTheme: (theme) => {
     set({ resourceIconTheme: theme });
@@ -611,6 +639,7 @@ export const useFeedbackStore = create<FeedbackState>((set, get) => ({
   callers: [],
   callerOrder: [],
   unreadCallerIds: [],
+  callerColumnMode: loadCallerColumnMode(),
   visibleColumnCount: 0,
   hiddenCallerIds: (() => {
     try {
@@ -1315,6 +1344,11 @@ export const useFeedbackStore = create<FeedbackState>((set, get) => ({
           : activeSessionId,
       });
     }
+  },
+
+  setCallerColumnMode: (mode) => {
+    set({ callerColumnMode: mode });
+    try { localStorage.setItem(CALLER_COLUMN_MODE_STORAGE_KEY, String(mode)); } catch {}
   },
 
   setVisibleColumnCount: (count) => set({ visibleColumnCount: count }),

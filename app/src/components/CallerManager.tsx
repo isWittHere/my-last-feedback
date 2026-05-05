@@ -11,6 +11,8 @@ interface WorkspaceGroup {
   callerIds: string[];
 }
 
+const callerColumnModes = ["auto", 1, 2, 3] as const;
+
 export function CallerManager() {
   const { t } = useTranslation();
   const friendlyName = useFriendlyName();
@@ -20,6 +22,7 @@ export function CallerManager() {
     maxSessionsPerCaller, setMaxSessionsPerCaller,
     autoRemoveEmptyCallers, setAutoRemoveEmptyCallers,
     autoHideInactiveHours, setAutoHideInactiveHours,
+    callerColumnMode, setCallerColumnMode,
   } = useFeedbackStore(
     useShallow((s) => ({
       callers: s.callers,
@@ -36,6 +39,8 @@ export function CallerManager() {
       setAutoRemoveEmptyCallers: s.setAutoRemoveEmptyCallers,
       autoHideInactiveHours: s.autoHideInactiveHours,
       setAutoHideInactiveHours: s.setAutoHideInactiveHours,
+      callerColumnMode: s.callerColumnMode,
+      setCallerColumnMode: s.setCallerColumnMode,
     }))
   );
 
@@ -217,6 +222,23 @@ export function CallerManager() {
               onChange={(e) => setMaxSessionsPerCaller(Math.max(0, parseInt(e.target.value) || 0))}
               className="cm-number-input"
             />
+          </div>
+          <div className="settings-row">
+            <div className="settings-row-info">
+              <span className="settings-label">{t("callerManager.callerColumns")}</span>
+              <span className="settings-sublabel">{t("callerManager.callerColumnsHint")}</span>
+            </div>
+            <div className="settings-btn-group">
+              {callerColumnModes.map((mode) => (
+                <button
+                  key={String(mode)}
+                  className={`settings-btn-option${callerColumnMode === mode ? " active" : ""}`}
+                  onClick={() => setCallerColumnMode(mode)}
+                >
+                  {mode === "auto" ? t("callerManager.callerColumnsAuto") : mode}
+                </button>
+              ))}
+            </div>
           </div>
           <div className="settings-row">
             <div className="settings-row-info">

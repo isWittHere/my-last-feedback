@@ -74,9 +74,11 @@ export function SettingsDialog({ open, onClose }: { open: boolean; onClose: () =
   const prompts = useFeedbackStore((s) => s.prompts);
   const disabledPrompts = useFeedbackStore((s) => s.disabledPrompts);
   const showPromptButtons = useFeedbackStore((s) => s.showPromptButtons);
+  const showTransferSubmitUi = useFeedbackStore((s) => s.showTransferSubmitUi);
   const resourceIconTheme = useFeedbackStore((s) => s.resourceIconTheme);
   const dockLayout = useFeedbackStore((s) => s.dockLayout);
   const setShowPromptButtons = useFeedbackStore((s) => s.setShowPromptButtons);
+  const setShowTransferSubmitUi = useFeedbackStore((s) => s.setShowTransferSubmitUi);
   const setResourceIconTheme = useFeedbackStore((s) => s.setResourceIconTheme);
   const togglePromptDisabled = useFeedbackStore((s) => s.togglePromptDisabled);
   const moveDockTabToColumn = useFeedbackStore((s) => s.moveDockTabToColumn);
@@ -452,6 +454,18 @@ export function SettingsDialog({ open, onClose }: { open: boolean; onClose: () =
 
             {tab === "submitted" && (
               <div className="settings-section">
+                <div className="settings-row">
+                  <div className="settings-row-info">
+                    <span className="settings-label">{t("settings.showTransferSubmitUi", "Show transfer submit")}</span>
+                    <span className="settings-sublabel">{t("settings.showTransferSubmitUiDesc", "Show the transfer control beside the submit button to hand off agent_name after submitting.")}</span>
+                  </div>
+                  <button
+                    className={`settings-toggle${showTransferSubmitUi ? " settings-toggle-on" : ""}`}
+                    onClick={() => setShowTransferSubmitUi(!showTransferSubmitUi)}
+                  >
+                    <span className="settings-toggle-knob" />
+                  </button>
+                </div>
                 <div className="settings-row settings-row-stacked">
                   <div className="settings-row-info">
                     <span className="settings-label">{t("settings.submittedView", "Submitted feedback view")}</span>

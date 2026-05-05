@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { useTranslation } from "react-i18next";
-import { useFeedbackStore, type DockColumnId, type DockTabId } from "../store/feedbackStore";
+import { useFeedbackStore, type CallerColumnMode, type DockColumnId, type DockTabId } from "../store/feedbackStore";
 import { CallerTabs } from "./CallerTabs";
 import { CallerPanel } from "./CallerPanel";
 import { SettingsDialog } from "./SettingsDialog";
@@ -611,18 +611,17 @@ export function FeedbackApp() {
   const visibleCallers = useMemo(() => callers.filter(c => !hiddenCallerIds.includes(c.id)), [callers, hiddenCallerIds]);
 
   // ── Layout mode: auto / 1 / 2 / 3 ──
-  const [layoutMode, setLayoutMode] = useState<"auto" | 1 | 2 | 3>("auto");
-  const layoutModes: Array<"auto" | 1 | 2 | 3> = ["auto", 1, 2, 3];
+  const callerColumnMode = useFeedbackStore((s) => s.callerColumnMode);
+  const setCallerColumnMode = useFeedbackStore((s) => s.setCallerColumnMode);
+  const layoutModes: CallerColumnMode[] = ["auto", 1, 2, 3];
   const cycleLayoutMode = useCallback(() => {
-    setLayoutMode(prev => {
-      const idx = layoutModes.indexOf(prev);
-      return layoutModes[(idx + 1) % layoutModes.length];
-    });
-  }, []);
+    const idx = layoutModes.indexOf(callerColumnMode);
+    setCallerColumnMode(layoutModes[(idx + 1) % layoutModes.length]);
+  }, [callerColumnMode, setCallerColumnMode]);
 
   // Dynamic parallel: how many columns can fit?
   const autoMaxColumns = Math.max(1, Math.floor(callerWorkspaceWidth / PANEL_MIN_WIDTH));
-  const maxColumns = layoutMode === "auto" ? autoMaxColumns : layoutMode;
+  const maxColumns = callerColumnMode === "auto" ? autoMaxColumns : callerColumnMode;
   const canMultiColumn = visibleCallers.length > 1 && maxColumns >= 2;
 
   // Column callers = first N from user-ordered list, excluding hidden ones
@@ -761,7 +760,7 @@ export function FeedbackApp() {
             <button onClick={() => useFeedbackStore.getState().sortCallersByName()} className="titlebar-btn" title={t("titlebar.sortByWorkspace")}>
               <Icon name="sort" size={13} style={{ transform: "rotate(-90deg)" }} />
             </button>
-            <LayoutModeButton layoutMode={layoutMode} onCycle={cycleLayoutMode} onSelect={setLayoutMode} />
+            <LayoutModeButton layoutMode={callerColumnMode} onCycle={cycleLayoutMode} onSelect={setCallerColumnMode} />
             </>
           )}
           {appView === "MLFB" && (rightPageColumn.tabIds.length > 0 || rightSidebarColumn.tabIds.length > 0) && (
@@ -868,16 +867,14 @@ export function FeedbackApp() {
 }
 
 /** Layout mode toggle button with click-to-cycle and hover dropdown */
-type LayoutMode = "auto" | 1 | 2 | 3;
-
 function LayoutModeButton({
   layoutMode,
   onCycle,
   onSelect,
 }: {
-  layoutMode: LayoutMode;
+  layoutMode: CallerColumnMode;
   onCycle: () => void;
-  onSelect: (mode: LayoutMode) => void;
+  onSelect: (mode: CallerColumnMode) => void;
 }) {
   const { t } = useTranslation();
   const pushNativeWebViewBlocker = useFeedbackStore((s) => s.pushNativeWebViewBlocker);
@@ -899,12 +896,12 @@ function LayoutModeButton({
     hideTimer.current = setTimeout(() => setShowDropdown(false), 200);
   };
 
-  const modeLabel = (m: LayoutMode) => {
+  const modeLabel = (m: CallerColumnMode) => {
     if (m === "auto") return t("titlebar.layoutAuto", "Auto");
     return `${m}`;
   };
 
-  const modeIcon = (m: LayoutMode) => {
+  const modeIcon = (m: CallerColumnMode) => {
     // Simple column icons
     const cols = m === "auto" ? 0 : m;
     if (cols === 0) {
@@ -930,7 +927,7 @@ function LayoutModeButton({
     );
   };
 
-  const allModes: LayoutMode[] = ["auto", 1, 2, 3];
+  const allModes: CallerColumnMode[] = ["auto", 1, 2, 3];
 
   return (
     <div
