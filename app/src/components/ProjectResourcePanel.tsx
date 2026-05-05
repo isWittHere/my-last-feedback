@@ -161,12 +161,46 @@ export function ProjectResourcePanel() {
     }
   }, [workspacePath]);
 
+  const loadedDirectoryPaths = useMemo(() => {
+    const paths = new Map<string, string>();
+    if (workspacePath) paths.set(normalizePath(workspacePath), workspacePath);
+    for (const entries of Object.values(childrenByPath)) {
+      for (const entry of entries) {
+        if (entry.kind === "folder" && childrenByPath[normalizePath(entry.absolutePath)]) {
+          paths.set(normalizePath(entry.absolutePath), entry.absolutePath);
+        }
+      }
+    }
+    return Array.from(paths.values());
+  }, [childrenByPath, workspacePath]);
+
+  const refreshLoadedDirectories = useCallback(() => {
+    if (!workspacePath) return;
+    const paths = loadedDirectoryPaths.length > 0 ? loadedDirectoryPaths : [workspacePath];
+    void Promise.all(paths.map((directoryPath) => loadDirectory(directoryPath)));
+  }, [loadDirectory, loadedDirectoryPaths, workspacePath]);
+
   useEffect(() => {
     setChildrenByPath({});
     setExpanded(new Set());
     setError(null);
     if (workspacePath) loadDirectory(workspacePath);
   }, [loadDirectory, workspacePath]);
+
+  useEffect(() => {
+    const refreshWhenVisible = () => {
+      if (document.visibilityState !== "hidden") refreshLoadedDirectories();
+    };
+    const handleVisibilityChange = () => {
+      if (document.visibilityState === "visible") refreshLoadedDirectories();
+    };
+    window.addEventListener("focus", refreshWhenVisible);
+    document.addEventListener("visibilitychange", handleVisibilityChange);
+    return () => {
+      window.removeEventListener("focus", refreshWhenVisible);
+      document.removeEventListener("visibilitychange", handleVisibilityChange);
+    };
+  }, [refreshLoadedDirectories]);
 
   const toggleFolder = useCallback((entry: ProjectResourceEntry) => {
     const key = normalizePath(entry.absolutePath);
@@ -224,6 +258,7 @@ export function ProjectResourcePanel() {
 
   const rootEntries = childrenByPath[normalizePath(workspacePath)] || [];
   const rootLoading = workspacePath && loadingByPath.has(workspacePath);
+  const isRefreshing = loadingByPath.size > 0;
 
   return (
     <>
@@ -240,6 +275,9 @@ export function ProjectResourcePanel() {
             <span>{workspace.name}</span>
           </button>
         ))}
+        <button type="button" onClick={refreshLoadedDirectories} disabled={!workspacePath || isRefreshing} data-tooltip={t("resources.refresh", "Refresh resources")} aria-label={t("resources.refresh", "Refresh resources")}>
+          <Icon name={isRefreshing ? "spinner" : "refresh"} size={11} className={isRefreshing ? "animate-spin" : undefined} />
+        </button>
       </div>
 
       <div className="mlc-list resource-tree-list">

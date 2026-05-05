@@ -149,6 +149,7 @@ export function MlcSidePanel() {
   const [collapsedGroups, setCollapsedGroups] = useState<Set<string>>(() => new Set());
   const [tooltip, setTooltip] = useState<{ content: MlcTooltipContent; left: number; top: number } | null>(null);
   const tooltipTimerRef = useRef<number | null>(null);
+  const loadGenerationRef = useRef(0);
 
   const sortOptions = useMemo<Array<AppSelectOption<SortBy>>>(() => [
     { value: "updated-desc", label: t("mlc.sortUpdated", "Recently Updated"), icon: "clock" },
@@ -179,31 +180,49 @@ export function MlcSidePanel() {
 
   const workspacePathsKey = useMemo(() => workspaceOptions.map((option) => option.path).join("\n"), [workspaceOptions]);
 
-  useEffect(() => {
+  const loadDocuments = useCallback(() => {
     const workspacePaths = workspacePathsKey.split("\n").filter(Boolean);
+    const generation = loadGenerationRef.current + 1;
+    loadGenerationRef.current = generation;
     if (workspacePaths.length === 0) {
       setDocuments([]);
+      setLoading(false);
+      setError(null);
       return;
     }
 
-    let cancelledRequest = false;
     setLoading(true);
     setError(null);
     invoke<MlcDocument[]>("mlc_search_documents", { request: { workspacePaths } })
       .then((result) => {
-        if (!cancelledRequest) setDocuments(result);
+        if (loadGenerationRef.current === generation) setDocuments(result);
       })
       .catch((err) => {
-        if (!cancelledRequest) setError(String(err));
+        if (loadGenerationRef.current === generation) setError(String(err));
       })
       .finally(() => {
-        if (!cancelledRequest) setLoading(false);
+        if (loadGenerationRef.current === generation) setLoading(false);
       });
-
-    return () => {
-      cancelledRequest = true;
-    };
   }, [workspacePathsKey]);
+
+  useEffect(() => {
+    loadDocuments();
+  }, [loadDocuments]);
+
+  useEffect(() => {
+    const refreshWhenVisible = () => {
+      if (document.visibilityState !== "hidden") loadDocuments();
+    };
+    const handleVisibilityChange = () => {
+      if (document.visibilityState === "visible") loadDocuments();
+    };
+    window.addEventListener("focus", refreshWhenVisible);
+    document.addEventListener("visibilitychange", handleVisibilityChange);
+    return () => {
+      window.removeEventListener("focus", refreshWhenVisible);
+      document.removeEventListener("visibilitychange", handleVisibilityChange);
+    };
+  }, [loadDocuments]);
 
   const filteredDocuments = useMemo(() => {
     const trimmedQuery = query.trim().toLowerCase();
@@ -382,6 +401,9 @@ export function MlcSidePanel() {
         </button>
         <button className="mlc-toggle-btn" onClick={() => setViewMode((mode) => mode === "detail" ? "compact" : "detail")} title={viewMode === "detail" ? t("mlc.compactView", "Compact view") : t("mlc.detailView", "Detailed view")}>
           <Icon name={viewMode === "detail" ? "menu" : "list-tree"} size={13} />
+        </button>
+        <button className="mlc-toggle-btn" onClick={loadDocuments} disabled={loading} title={t("mlc.refresh", "Refresh")}> 
+          <Icon name={loading ? "spinner" : "refresh"} size={13} className={loading ? "animate-spin" : undefined} />
         </button>
       </div>
 

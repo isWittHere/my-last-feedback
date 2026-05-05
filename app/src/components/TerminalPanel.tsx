@@ -6,7 +6,7 @@ import "@xterm/xterm/css/xterm.css";
 import { useTranslation } from "react-i18next";
 import { useFeedbackStore } from "../store/feedbackStore";
 import { useTerminalStore, type TerminalPathCandidate, type TerminalPathSource } from "../store/terminalStore";
-import { getTerminalSettings, TERMINAL_SETTINGS_EVENT, type TerminalSettings } from "../terminalSettings";
+import { getTerminalSettings, terminalShellToCommand, TERMINAL_SETTINGS_EVENT, type TerminalSettings } from "../terminalSettings";
 import { Icon } from "./Icons";
 import { useIsLightTheme } from "./useIsLightTheme";
 
@@ -102,7 +102,7 @@ export function TerminalPanel() {
   const terminalRef = useRef<Terminal | null>(null);
   const fitAddonRef = useRef<FitAddon | null>(null);
   const activeTerminalIdRef = useRef<string | null>(null);
-  const renderedOutputRef = useRef<{ tabId: string | null; length: number }>({ tabId: null, length: 0 });
+  const renderedOutputRef = useRef<{ tabId: string | null; baseLength: number; endLength: number; generation: number }>({ tabId: null, baseLength: 0, endLength: 0, generation: 0 });
   const suppressedTerminalDataWritesRef = useRef(0);
   const pathMenuRef = useRef<HTMLDivElement>(null);
   const [pathMenuOpen, setPathMenuOpen] = useState(false);
@@ -233,7 +233,9 @@ export function TerminalPanel() {
   }, []);
 
   const finishSuppressedTerminalDataWrite = useCallback(() => {
-    suppressedTerminalDataWritesRef.current = Math.max(0, suppressedTerminalDataWritesRef.current - 1);
+    window.setTimeout(() => {
+      suppressedTerminalDataWritesRef.current = Math.max(0, suppressedTerminalDataWritesRef.current - 1);
+    }, 0);
   }, []);
 
   const writeTerminalOutput = useCallback((terminal: Terminal, output: string, suppressTerminalData = false) => {
@@ -263,10 +265,10 @@ export function TerminalPanel() {
   }, [finishSuppressedTerminalDataWrite]);
 
   const createFromPath = useCallback(async (cwd: string | null, source: TerminalPathSource = "recent") => {
-    await createTerminalTab(cwd, { ...terminalSizeOptions(), source });
+    await createTerminalTab(cwd, { ...terminalSizeOptions(), source, shell: terminalShellToCommand(terminalSettings.defaultShell) });
     setPathMenuOpen(false);
     window.setTimeout(() => terminalRef.current?.focus(), 0);
-  }, [createTerminalTab, terminalSizeOptions]);
+  }, [createTerminalTab, terminalSettings.defaultShell, terminalSizeOptions]);
 
   const createDefaultTerminal = useCallback(() => {
     if (!defaultCwd && pathCandidates.length === 0) {
@@ -300,10 +302,15 @@ export function TerminalPanel() {
     terminal.open(host);
     terminalRef.current = terminal;
     fitAddonRef.current = fitAddon;
-    renderedOutputRef.current = { tabId: null, length: 0 };
+    renderedOutputRef.current = { tabId: null, baseLength: 0, endLength: 0, generation: activeTab.outputGeneration };
     if (activeTab.output) {
       writeTerminalOutput(terminal, activeTab.output, true);
-      renderedOutputRef.current = { tabId: activeTab.id, length: activeTab.output.length };
+      renderedOutputRef.current = {
+        tabId: activeTab.id,
+        baseLength: activeTab.outputBaseLength,
+        endLength: activeTab.outputBaseLength + activeTab.output.length,
+        generation: activeTab.outputGeneration,
+      };
     }
 
     const dataDisposable = terminal.onData((data) => {
@@ -322,7 +329,7 @@ export function TerminalPanel() {
       terminal.dispose();
       terminalRef.current = null;
       fitAddonRef.current = null;
-      renderedOutputRef.current = { tabId: null, length: 0 };
+      renderedOutputRef.current = { tabId: null, baseLength: 0, endLength: 0, generation: 0 };
       suppressedTerminalDataWritesRef.current = 0;
     };
   }, [Boolean(activeTab), fitAndResize, terminalTheme, writeTerminalOutput]);
@@ -332,16 +339,19 @@ export function TerminalPanel() {
     if (!terminal || !activeTab) return;
     const rendered = renderedOutputRef.current;
     const output = activeTab.output || "";
-    if (rendered.tabId !== activeTab.id || output.length < rendered.length) {
+    const baseLength = activeTab.outputBaseLength || 0;
+    const endLength = baseLength + output.length;
+    if (rendered.tabId !== activeTab.id || rendered.generation !== activeTab.outputGeneration || rendered.endLength < baseLength) {
       resetAndReplayTerminalOutput(terminal, output);
-      renderedOutputRef.current = { tabId: activeTab.id, length: output.length };
+      renderedOutputRef.current = { tabId: activeTab.id, baseLength, endLength, generation: activeTab.outputGeneration };
       return;
     }
-    if (output.length > rendered.length) {
-      writeTerminalOutput(terminal, output.slice(rendered.length));
-      renderedOutputRef.current = { tabId: activeTab.id, length: output.length };
+    if (endLength > rendered.endLength) {
+      const start = Math.max(0, rendered.endLength - baseLength);
+      writeTerminalOutput(terminal, output.slice(start));
+      renderedOutputRef.current = { tabId: activeTab.id, baseLength, endLength, generation: activeTab.outputGeneration };
     }
-  }, [activeTab?.id, activeTab?.output, resetAndReplayTerminalOutput, writeTerminalOutput]);
+  }, [activeTab?.id, activeTab?.output, activeTab?.outputBaseLength, activeTab?.outputGeneration, resetAndReplayTerminalOutput, writeTerminalOutput]);
 
   useEffect(() => {
     fitAndResize();
@@ -355,14 +365,14 @@ export function TerminalPanel() {
   const restartActiveTab = useCallback(() => {
     if (!activeTab) return;
     terminalRef.current?.clear();
-    renderedOutputRef.current = { tabId: activeTab.id, length: 0 };
-    void restartTerminalTab(activeTab.id, terminalSizeOptions());
-  }, [activeTab, restartTerminalTab, terminalSizeOptions]);
+    renderedOutputRef.current = { tabId: activeTab.id, baseLength: 0, endLength: 0, generation: activeTab.outputGeneration + 1 };
+    void restartTerminalTab(activeTab.id, { ...terminalSizeOptions(), shell: terminalShellToCommand(terminalSettings.defaultShell) });
+  }, [activeTab, restartTerminalTab, terminalSettings.defaultShell, terminalSizeOptions]);
 
   const clearActiveTab = useCallback(() => {
     if (!activeTab) return;
     terminalRef.current?.clear();
-    renderedOutputRef.current = { tabId: activeTab.id, length: 0 };
+    renderedOutputRef.current = { tabId: activeTab.id, baseLength: 0, endLength: 0, generation: activeTab.outputGeneration + 1 };
     clearTerminalOutput(activeTab.id);
   }, [activeTab, clearTerminalOutput]);
 

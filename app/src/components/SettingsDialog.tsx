@@ -10,10 +10,11 @@ import { invoke } from "@tauri-apps/api/core";
 import { applyTheme, getStoredTheme, type Theme } from "../theme";
 import { getNotificationSettings, saveNotificationSettings, syncAutoFocusNewRequest, type NotificationSettings } from "../notificationSettings";
 import { getSubmittedViewSettings, saveSubmittedViewSettings, SUBMITTED_VIEW_SECTION_CONFIGS, type SubmittedViewSectionId, type SubmittedViewSettings } from "../submittedViewSettings";
-import { getTerminalSettings, saveTerminalSettings, type TerminalSettings } from "../terminalSettings";
+import { getTerminalSettings, saveTerminalSettings, type TerminalSettings, type TerminalShellId } from "../terminalSettings";
 import { getComposerSettings, saveComposerSettings, type ComposerSettings } from "../composerSettings";
 import { SESSION_LIST_MODE_OPTIONS } from "../sessionNavigationSettings";
 import { SessionNavigationModeIcon } from "./SessionNavigationModeIcon";
+import { AppSelect, type AppSelectOption } from "./AppSelect";
 
 type Tab = "general" | "display" | "callers" | "submitted" | "prompts" | "sessionNavigation" | "layoutPanels" | "terminal" | "resources" | "notification" | "about";
 type SettingsGroupId = "mlfb" | "layout";
@@ -138,9 +139,17 @@ export function SettingsDialog({ open, onClose }: { open: boolean; onClose: () =
     });
   }, []);
 
-  const handleTerminalToggle = useCallback((key: keyof TerminalSettings) => {
+  const handleTerminalToggle = useCallback((key: "middleClickClosesTab") => {
     setTerminalSettings((prev) => {
       const next = { ...prev, [key]: !prev[key] };
+      saveTerminalSettings(next);
+      return next;
+    });
+  }, []);
+
+  const handleTerminalShellChange = useCallback((defaultShell: TerminalShellId) => {
+    setTerminalSettings((prev) => {
+      const next = { ...prev, defaultShell };
       saveTerminalSettings(next);
       return next;
     });
@@ -692,6 +701,26 @@ export function SettingsDialog({ open, onClose }: { open: boolean; onClose: () =
 
             {tab === "terminal" && (
               <div className="settings-section">
+                <div className="settings-row">
+                  <div className="settings-row-info">
+                    <span className="settings-label">{t("settings.terminalDefaultShell", "Default shell")}</span>
+                    <span className="settings-sublabel">{t("settings.terminalDefaultShellDesc", "Used when creating or restarting terminal tabs.")}</span>
+                  </div>
+                  <AppSelect
+                    value={terminalSettings.defaultShell}
+                    options={[
+                      { value: "auto", label: t("settings.terminalShellAuto", "Auto"), description: t("settings.terminalShellAutoDesc", "Try Command Prompt, PowerShell 7, then Windows PowerShell."), icon: "terminal" },
+                      { value: "pwsh", label: t("settings.terminalShellPwsh", "PowerShell 7"), description: "pwsh.exe", icon: "terminal" },
+                      { value: "powershell", label: t("settings.terminalShellWindowsPowerShell", "Windows PowerShell"), description: "powershell.exe", icon: "terminal" },
+                      { value: "cmd", label: t("settings.terminalShellCmd", "Command Prompt"), description: t("settings.terminalShellCmdDesc", "Default: cmd.exe"), icon: "terminal" },
+                      { value: "git-bash", label: t("settings.terminalShellGitBash", "Git Bash"), description: t("settings.terminalShellGitBashDesc", "Uses common Git for Windows install paths or bash.exe."), icon: "terminal" },
+                      { value: "wsl", label: t("settings.terminalShellWsl", "WSL Bash"), description: "wsl.exe", icon: "terminal" },
+                    ] satisfies Array<AppSelectOption<TerminalShellId>>}
+                    onChange={handleTerminalShellChange}
+                    ariaLabel={t("settings.terminalDefaultShell", "Default shell")}
+                    className="settings-select-control"
+                  />
+                </div>
                 <div className="settings-row">
                   <div className="settings-row-info">
                     <span className="settings-label">{t("settings.terminalMiddleClickClose", "Close terminal tabs with middle click")}</span>

@@ -3,7 +3,7 @@ use serde::Serialize;
 use std::collections::HashMap;
 use std::io::{Read, Write};
 use std::path::PathBuf;
-use std::sync::{Arc, Mutex};
+use std::sync::{Arc, Mutex, MutexGuard};
 use tauri::{AppHandle, Emitter, State};
 use uuid::Uuid;
 
@@ -63,27 +63,30 @@ struct TerminalErrorEvent {
 }
 
 impl TerminalManager {
+    fn sessions_guard(&self) -> MutexGuard<'_, HashMap<String, TerminalSession>> {
+        self.sessions.lock().unwrap_or_else(|poisoned| poisoned.into_inner())
+    }
+
     fn insert(&self, terminal_id: String, session: TerminalSession) -> Result<(), String> {
-        let mut sessions = self.sessions.lock().map_err(|_| "Terminal state is unavailable".to_string())?;
+        let mut sessions = self.sessions_guard();
         sessions.insert(terminal_id, session);
         Ok(())
     }
 
     fn remove(&self, terminal_id: &str) -> Option<TerminalSession> {
-        self.sessions.lock().ok()?.remove(terminal_id)
+        self.sessions_guard().remove(terminal_id)
     }
 
     fn append_output(&self, terminal_id: &str, data: &str) {
-        if let Ok(mut sessions) = self.sessions.lock() {
-            if let Some(session) = sessions.get_mut(terminal_id) {
-                session.output.push_str(data);
-                trim_output_buffer(&mut session.output);
-            }
+        let mut sessions = self.sessions_guard();
+        if let Some(session) = sessions.get_mut(terminal_id) {
+            session.output.push_str(data);
+            trim_output_buffer(&mut session.output);
         }
     }
 
     fn list(&self) -> Result<Vec<TerminalSessionSnapshot>, String> {
-        let sessions = self.sessions.lock().map_err(|_| "Terminal state is unavailable".to_string())?;
+        let sessions = self.sessions_guard();
         Ok(sessions
             .iter()
             .map(|(terminal_id, session)| TerminalSessionSnapshot {
@@ -96,7 +99,7 @@ impl TerminalManager {
     }
 
     fn read_buffer(&self, terminal_id: &str) -> Result<String, String> {
-        let sessions = self.sessions.lock().map_err(|_| "Terminal state is unavailable".to_string())?;
+        let sessions = self.sessions_guard();
         sessions
             .get(terminal_id)
             .map(|session| session.output.clone())
@@ -104,10 +107,9 @@ impl TerminalManager {
     }
 
     pub fn kill_all(&self) {
-        if let Ok(mut sessions) = self.sessions.lock() {
-            for (_, mut session) in sessions.drain() {
-                let _ = session.child.kill();
-            }
+        let mut sessions = self.sessions_guard();
+        for (_, mut session) in sessions.drain() {
+            let _ = session.child.kill();
         }
     }
 }
@@ -122,13 +124,37 @@ fn trim_output_buffer(buffer: &mut String) {
     }
     let scan_end = trim_to.saturating_add(OUTPUT_TRIM_LINE_SCAN_BYTES).min(buffer.len());
     if trim_to < scan_end {
-        if let Some(newline_offset) = buffer[trim_to..scan_end].find('\n') {
+        if let Some(newline_offset) = buffer.as_bytes()[trim_to..scan_end].iter().position(|byte| *byte == b'\n') {
             trim_to += newline_offset + 1;
         }
+    }
+    trim_to = skip_leading_csi_fragment(buffer.as_bytes(), trim_to);
+    while trim_to < buffer.len() && !buffer.is_char_boundary(trim_to) {
+        trim_to += 1;
     }
     if trim_to > 0 && trim_to <= buffer.len() {
         buffer.drain(..trim_to);
     }
+}
+
+fn skip_leading_csi_fragment(bytes: &[u8], start: usize) -> usize {
+    let Some(first_byte) = bytes.get(start).copied() else {
+        return start;
+    };
+    if !matches!(first_byte, b'0'..=b'9' | b';' | b':' | b'?') {
+        return start;
+    }
+    let scan_end = start.saturating_add(128).min(bytes.len());
+    for index in start..scan_end {
+        let byte = bytes[index];
+        if byte == b'\x1b' || byte == b'\n' || byte == b'\r' {
+            return start;
+        }
+        if (0x40..=0x7e).contains(&byte) {
+            return index + 1;
+        }
+    }
+    start
 }
 
 fn emit_error(app: &AppHandle, terminal_id: &str, message: impl Into<String>) {
@@ -155,11 +181,38 @@ fn resolve_cwd(cwd: Option<String>) -> PathBuf {
 
 fn default_shell_candidates(shell: Option<String>) -> Vec<String> {
     if let Some(shell) = shell.map(|value| value.trim().to_string()).filter(|value| !value.is_empty()) {
+        #[cfg(target_os = "windows")]
+        {
+            match shell.as_str() {
+                "auto" => return vec!["cmd.exe".to_string(), "pwsh.exe".to_string(), "powershell.exe".to_string()],
+                "pwsh" | "pwsh.exe" => return vec!["pwsh.exe".to_string()],
+                "powershell" | "powershell.exe" => return vec!["powershell.exe".to_string()],
+                "cmd" | "cmd.exe" => return vec!["cmd.exe".to_string()],
+                "git-bash" => return vec![
+                    "C:\\Program Files\\Git\\bin\\bash.exe".to_string(),
+                    "C:\\Program Files (x86)\\Git\\bin\\bash.exe".to_string(),
+                    "bash.exe".to_string(),
+                ],
+                "wsl" | "wsl.exe" => return vec!["wsl.exe".to_string()],
+                _ => {}
+            }
+        }
+        #[cfg(not(target_os = "windows"))]
+        {
+            match shell.as_str() {
+                "auto" => {}
+                "pwsh" => return vec!["pwsh".to_string()],
+                "powershell" => return vec!["powershell".to_string()],
+                "cmd" => return vec!["cmd".to_string()],
+                "git-bash" | "wsl" => {}
+                _ => return vec![shell],
+            }
+        }
         return vec![shell];
     }
     #[cfg(target_os = "windows")]
     {
-        vec!["pwsh.exe".to_string(), "powershell.exe".to_string(), "cmd.exe".to_string()]
+        vec!["cmd.exe".to_string(), "pwsh.exe".to_string(), "powershell.exe".to_string()]
     }
     #[cfg(not(target_os = "windows"))]
     {
@@ -281,7 +334,7 @@ pub fn terminal_read_buffer(state: State<TerminalManager>, terminal_id: String) 
 
 #[tauri::command]
 pub fn terminal_write(state: State<TerminalManager>, terminal_id: String, data: String) -> Result<(), String> {
-    let mut sessions = state.sessions.lock().map_err(|_| "Terminal state is unavailable".to_string())?;
+    let mut sessions = state.sessions_guard();
     let session = sessions.get_mut(&terminal_id).ok_or_else(|| "Terminal session not found".to_string())?;
     session.writer.write_all(data.as_bytes()).map_err(|error| error.to_string())?;
     session.writer.flush().map_err(|error| error.to_string())
@@ -289,7 +342,7 @@ pub fn terminal_write(state: State<TerminalManager>, terminal_id: String, data: 
 
 #[tauri::command]
 pub fn terminal_resize(state: State<TerminalManager>, terminal_id: String, cols: u16, rows: u16) -> Result<(), String> {
-    let sessions = state.sessions.lock().map_err(|_| "Terminal state is unavailable".to_string())?;
+    let sessions = state.sessions_guard();
     let session = sessions.get(&terminal_id).ok_or_else(|| "Terminal session not found".to_string())?;
     session.master.resize(pty_size(Some(cols), Some(rows))).map_err(|error| error.to_string())
 }

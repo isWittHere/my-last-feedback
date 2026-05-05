@@ -30,6 +30,8 @@ export interface TerminalTabState {
   shell: string | null;
   status: TerminalTabStatus;
   output: string;
+  outputBaseLength: number;
+  outputGeneration: number;
   error: string | null;
   createdAt: string;
   lastActiveAt: string;
@@ -39,6 +41,7 @@ interface CreateTerminalTabOptions {
   cols?: number;
   rows?: number;
   source?: TerminalPathSource;
+  shell?: string | null;
 }
 
 interface TerminalWorkspaceState {
@@ -64,6 +67,12 @@ const LAST_CWD_STORAGE_KEY = "mlfb-terminal-last-cwd-v1";
 const OUTPUT_LIMIT = 240_000;
 const OUTPUT_TRIM_LINE_SCAN_LIMIT = 4096;
 const RECENT_PATH_LIMIT = 12;
+const CSI_FRAGMENT_SCAN_LIMIT = 128;
+
+interface TrimmedOutput {
+  output: string;
+  trimmedLength: number;
+}
 
 function basename(value: string): string {
   return value.replace(/\\/g, "/").split("/").filter(Boolean).pop() || value;
@@ -73,18 +82,51 @@ function normalizePath(value: string): string {
   return value.trim().replace(/\\/g, "/").replace(/\/+$/, "").toLowerCase();
 }
 
-function trimOutput(value: string): string {
-  if (value.length <= OUTPUT_LIMIT) return value;
+function trimOutput(value: string): TrimmedOutput {
+  if (value.length <= OUTPUT_LIMIT) return { output: value, trimmedLength: 0 };
   let trimStart = value.length - OUTPUT_LIMIT;
   const scanEnd = Math.min(value.length, trimStart + OUTPUT_TRIM_LINE_SCAN_LIMIT);
   const newlineIndex = value.indexOf("\n", trimStart);
   if (newlineIndex >= 0 && newlineIndex < scanEnd) trimStart = newlineIndex + 1;
+  trimStart = skipLeadingCsiFragment(value, trimStart);
   while (trimStart < value.length) {
     const code = value.charCodeAt(trimStart);
     if (code < 0xdc00 || code > 0xdfff) break;
     trimStart += 1;
   }
-  return value.slice(trimStart);
+  return { output: value.slice(trimStart), trimmedLength: trimStart };
+}
+
+function appendTabOutput(tab: TerminalTabState, data: string): TerminalTabState {
+  const trimmed = trimOutput(tab.output + data);
+  return {
+    ...tab,
+    output: trimmed.output,
+    outputBaseLength: tab.outputBaseLength + trimmed.trimmedLength,
+    lastActiveAt: new Date().toISOString(),
+  };
+}
+
+function replaceTabOutput(tab: TerminalTabState, output: string): TerminalTabState {
+  const trimmed = trimOutput(output);
+  return {
+    ...tab,
+    output: trimmed.output,
+    outputBaseLength: trimmed.trimmedLength,
+    outputGeneration: tab.outputGeneration + 1,
+  };
+}
+
+function skipLeadingCsiFragment(value: string, start: number): number {
+  const firstChar = value[start];
+  if (!firstChar || !/[0-9;:?]/.test(firstChar)) return start;
+  const scanEnd = Math.min(value.length, start + CSI_FRAGMENT_SCAN_LIMIT);
+  for (let index = start; index < scanEnd; index += 1) {
+    const code = value.charCodeAt(index);
+    if (code === 0x1b || code === 0x0a || code === 0x0d) return start;
+    if (code >= 0x40 && code <= 0x7e) return index + 1;
+  }
+  return start;
 }
 
 function newTabId(): string {
@@ -158,6 +200,7 @@ export const useTerminalStore = create<TerminalWorkspaceState>((set, get) => ({
         .map<TerminalTabState>((snapshot) => {
           recentPaths = upsertRecentPath(recentPaths, snapshot.cwd, "recent");
           lastUsedCwd = snapshot.cwd || lastUsedCwd;
+          const trimmedOutput = trimOutput(snapshot.output || "");
           return {
             id: newTabId(),
             terminalId: snapshot.terminalId,
@@ -165,7 +208,9 @@ export const useTerminalStore = create<TerminalWorkspaceState>((set, get) => ({
             cwd: snapshot.cwd,
             shell: snapshot.shell,
             status: "running",
-            output: trimOutput(snapshot.output || ""),
+            output: trimmedOutput.output,
+            outputBaseLength: trimmedOutput.trimmedLength,
+            outputGeneration: 0,
             error: null,
             createdAt: now,
             lastActiveAt: now,
@@ -194,6 +239,8 @@ export const useTerminalStore = create<TerminalWorkspaceState>((set, get) => ({
       shell: null,
       status: "starting",
       output: "",
+      outputBaseLength: 0,
+      outputGeneration: 0,
       error: null,
       createdAt: now,
       lastActiveAt: now,
@@ -203,6 +250,7 @@ export const useTerminalStore = create<TerminalWorkspaceState>((set, get) => ({
     try {
       const info = await invoke<TerminalSessionInfo>("terminal_create", {
         cwd: requestedCwd || null,
+        shell: options.shell || null,
         cols: options.cols,
         rows: options.rows,
       });
@@ -227,10 +275,9 @@ export const useTerminalStore = create<TerminalWorkspaceState>((set, get) => ({
       const message = err instanceof Error ? err.message : String(err);
       set((state) => ({
         tabs: updateTab(state.tabs, tabId, (tab) => ({
-          ...tab,
+          ...appendTabOutput(tab, `\r\n${message}\r\n`),
           status: "failed",
           error: message,
-          output: trimOutput(`${tab.output}\r\n${message}\r\n`),
         })),
       }));
     }
@@ -242,12 +289,13 @@ export const useTerminalStore = create<TerminalWorkspaceState>((set, get) => ({
     if (!tab) return;
     if (tab.terminalId) await invoke("terminal_kill", { terminalId: tab.terminalId }).catch(() => undefined);
     set((state) => ({
-      tabs: updateTab(state.tabs, tabId, (item) => ({ ...item, terminalId: null, status: "starting", output: "", error: null })),
+      tabs: updateTab(state.tabs, tabId, (item) => ({ ...item, terminalId: null, status: "starting", output: "", outputBaseLength: 0, outputGeneration: item.outputGeneration + 1, error: null })),
       activeTabId: tabId,
     }));
     try {
       const info = await invoke<TerminalSessionInfo>("terminal_create", {
         cwd: tab.cwd || null,
+        shell: options.shell || null,
         cols: options.cols,
         rows: options.rows,
       });
@@ -270,7 +318,7 @@ export const useTerminalStore = create<TerminalWorkspaceState>((set, get) => ({
       });
     } catch (err) {
       const message = err instanceof Error ? err.message : String(err);
-      set((state) => ({ tabs: updateTab(state.tabs, tabId, (item) => ({ ...item, status: "failed", error: message, output: message })) }));
+      set((state) => ({ tabs: updateTab(state.tabs, tabId, (item) => ({ ...replaceTabOutput(item, message), status: "failed", error: message })) }));
     }
   },
 
@@ -290,16 +338,15 @@ export const useTerminalStore = create<TerminalWorkspaceState>((set, get) => ({
     await invoke("terminal_kill", { terminalId }).catch(() => undefined);
     set((state) => ({
       tabs: updateTab(state.tabs, tabId, (item) => ({
-        ...item,
+        ...appendTabOutput(item, "\r\n[process exited]\r\n"),
         terminalId: null,
         status: "exited",
-        output: trimOutput(`${item.output}\r\n[process exited]\r\n`),
       })),
     }));
   },
 
   clearTerminalOutput: (tabId) => {
-    set((state) => ({ tabs: updateTab(state.tabs, tabId, (tab) => ({ ...tab, output: "" })) }));
+    set((state) => ({ tabs: updateTab(state.tabs, tabId, (tab) => ({ ...tab, output: "", outputBaseLength: 0, outputGeneration: tab.outputGeneration + 1 })) }));
   },
 
   setActiveTerminalTab: (tabId) => {
@@ -313,7 +360,7 @@ export const useTerminalStore = create<TerminalWorkspaceState>((set, get) => ({
   appendTerminalOutput: (terminalId, data) => {
     set((state) => ({
       tabs: state.tabs.map((tab) => tab.terminalId === terminalId
-        ? { ...tab, output: trimOutput(tab.output + data), lastActiveAt: new Date().toISOString() }
+        ? appendTabOutput(tab, data)
         : tab),
     }));
   },
@@ -324,10 +371,9 @@ export const useTerminalStore = create<TerminalWorkspaceState>((set, get) => ({
     const message = exitCode === null ? "[process exited]" : `[process exited: ${exitCode}]`;
     set((state) => ({
       tabs: updateTab(state.tabs, tab.id, (item) => ({
-        ...item,
+        ...(item.output.endsWith(`${message}\r\n`) ? item : appendTabOutput(item, `\r\n${message}\r\n`)),
         terminalId: null,
         status: "exited",
-        output: item.output.endsWith(`${message}\r\n`) ? item.output : trimOutput(`${item.output}\r\n${message}\r\n`),
       })),
     }));
   },
@@ -337,10 +383,9 @@ export const useTerminalStore = create<TerminalWorkspaceState>((set, get) => ({
     if (!tab) return;
     set((state) => ({
       tabs: updateTab(state.tabs, tab.id, (item) => ({
-        ...item,
+        ...appendTabOutput(item, `\r\n${message}\r\n`),
         status: "failed",
         error: message,
-        output: trimOutput(`${item.output}\r\n${message}\r\n`),
       })),
     }));
   },

@@ -4562,6 +4562,11 @@ body,
   gap: 8px;
   flex-shrink: 0;
 }
+.settings-select-control {
+  width: 190px;
+  height: 28px;
+  flex-shrink: 0;
+}
 .settings-zoom-value {
   font-size: 11px;
   font-weight: 600;
