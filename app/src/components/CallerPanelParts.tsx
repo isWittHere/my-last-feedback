@@ -937,7 +937,7 @@ export function ReadonlyTagBar({ session }: { session: import("../store/feedback
         )}
         {hasGitAction && (
           <div className="attachment-tag" data-preview-overlay style={{ cursor: "default" }}>
-            <Icon name="git-branch" size={10} />
+            <GitActionOptionIcon type={session.gitAction!.type} size={11} />
             <span className="truncate" style={{ maxWidth: 140 }}>{gitLabel}{gitDetail}</span>
           </div>
         )}
