@@ -44,6 +44,8 @@ interface CreateTerminalTabOptions {
   shell?: string | null;
 }
 
+type RestartTerminalTabOptions = Pick<CreateTerminalTabOptions, "cols" | "rows" | "shell">;
+
 interface TerminalWorkspaceState {
   tabs: TerminalTabState[];
   activeTabId: string | null;
@@ -51,7 +53,7 @@ interface TerminalWorkspaceState {
   lastUsedCwd: string | null;
   restoreBackendTerminals: () => Promise<void>;
   createTerminalTab: (cwd?: string | null, options?: CreateTerminalTabOptions) => Promise<string>;
-  restartTerminalTab: (tabId: string, options?: Pick<CreateTerminalTabOptions, "cols" | "rows">) => Promise<void>;
+  restartTerminalTab: (tabId: string, options?: RestartTerminalTabOptions) => Promise<void>;
   closeTerminalTab: (tabId: string) => Promise<void>;
   killTerminalTab: (tabId: string) => Promise<void>;
   clearTerminalOutput: (tabId: string) => void;
