@@ -273,7 +273,7 @@ export function buildSubmittedFeedback(session: Session, options: SubmittedFeedb
 
   return {
     markdown: sections.join("\n\n"),
-    historyText: [trimmedFeedback, quickAction].filter(Boolean).join("\n\n"),
+    historyText: trimmedFeedback,
     imageList: session.images.map((image) => ({ path: image.path, name: image.name, data_url: image.dataUrl })),
   };
 }
