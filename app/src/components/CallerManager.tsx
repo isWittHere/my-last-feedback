@@ -12,6 +12,19 @@ interface WorkspaceGroup {
 }
 
 const callerColumnModes = ["auto", 1, 2, 3] as const;
+type CallerColumnModeOption = typeof callerColumnModes[number];
+
+function renderCallerColumnModeIcon(mode: CallerColumnModeOption) {
+  const columnCount = mode === "auto" ? 2 : mode;
+  return (
+    <span className={`cm-column-mode-icon cm-column-mode-icon-${String(mode)}`} aria-hidden="true">
+      {Array.from({ length: columnCount }, (_, columnIndex) => (
+        <span key={columnIndex} className="cm-column-mode-cell" />
+      ))}
+      {mode === "auto" ? <span className="cm-column-mode-auto-mark">A</span> : null}
+    </span>
+  );
+}
 
 export function CallerManager() {
   const { t } = useTranslation();
@@ -228,14 +241,16 @@ export function CallerManager() {
               <span className="settings-label">{t("callerManager.callerColumns")}</span>
               <span className="settings-sublabel">{t("callerManager.callerColumnsHint")}</span>
             </div>
-            <div className="settings-btn-group">
+            <div className="cm-column-mode-group" role="group" aria-label={t("callerManager.callerColumns")}>
               {callerColumnModes.map((mode) => (
                 <button
                   key={String(mode)}
-                  className={`settings-btn-option${callerColumnMode === mode ? " active" : ""}`}
+                  className={`cm-column-mode-button${callerColumnMode === mode ? " active" : ""}`}
+                  title={mode === "auto" ? t("callerManager.callerColumnsAuto") : `${mode}`}
+                  aria-label={`${t("callerManager.callerColumns")}: ${mode === "auto" ? t("callerManager.callerColumnsAuto") : mode}`}
                   onClick={() => setCallerColumnMode(mode)}
                 >
-                  {mode === "auto" ? t("callerManager.callerColumnsAuto") : mode}
+                  {renderCallerColumnModeIcon(mode)}
                 </button>
               ))}
             </div>

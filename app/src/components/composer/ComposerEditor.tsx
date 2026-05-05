@@ -90,6 +90,15 @@ function serializeRoot(root: HTMLElement): string {
   return value.replace(/\u00a0/g, " ");
 }
 
+function isBlankComposerValue(value: string): boolean {
+  return value.replace(/\u00a0/g, " ").replace(/\r?\n/g, "").length === 0;
+}
+
+function normalizeBlankComposerValue(value: string): string {
+  const normalizedValue = value.replace(/\u00a0/g, " ");
+  return isBlankComposerValue(normalizedValue) ? "" : normalizedValue;
+}
+
 function offsetFromPosition(root: HTMLElement, container: Node, offset: number): number {
   let current = 0;
   let found: number | null = null;
@@ -189,6 +198,12 @@ function restoreSelection(root: HTMLElement, range: TextRange) {
   nextRange.setEnd(end.node, end.offset);
   selection.removeAllRanges();
   selection.addRange(nextRange);
+}
+
+function clampTextRange(range: TextRange, length: number): TextRange {
+  const start = Math.max(0, Math.min(range.start, length));
+  const end = Math.max(start, Math.min(range.end, length));
+  return { start, end };
 }
 
 function rectFromOffsets(root: HTMLElement, start: number, end: number): DOMRect | null {
@@ -341,24 +356,27 @@ export const ComposerEditor = forwardRef<ComposerEditorHandle, ComposerEditorPro
   commands = [],
 }, forwardedRef) {
   const rootRef = useRef<HTMLDivElement>(null);
-  const valueRef = useRef(value);
+  const normalizedValue = normalizeBlankComposerValue(value);
+  const valueRef = useRef(normalizedValue);
   const composingRef = useRef(false);
   const pendingSelectionRef = useRef<TextRange | null>(null);
   const suppressSlashMenuRef = useRef<{ value: string; minCaret: number; maxCaret: number } | null>(null);
-  const historyRef = useRef<HistoryEntry[]>([{ value, selection: { start: value.length, end: value.length } }]);
+  const historyRef = useRef<HistoryEntry[]>([{ value: normalizedValue, selection: { start: normalizedValue.length, end: normalizedValue.length } }]);
   const historyIndexRef = useRef(0);
-  const lastHistoryValueRef = useRef(value);
+  const lastHistoryValueRef = useRef(normalizedValue);
   const [slashMenu, setSlashMenu] = useState<SlashMenuState | null>(null);
   const [activeCommandIndex, setActiveCommandIndex] = useState(0);
+  const [isComposing, setIsComposing] = useState(false);
   const [composerSettings, setComposerSettings] = useState<ComposerSettings>(getComposerSettings);
   const resourceIconTheme = useFeedbackStore((state) => state.resourceIconTheme);
   const catppuccinFlavor: CatppuccinIconFlavor = useIsLightTheme() ? "latte" : "mocha";
-  valueRef.current = value;
+  valueRef.current = normalizedValue;
+  const showPlaceholder = !!placeholder && isBlankComposerValue(normalizedValue) && !isComposing;
 
   const commandSet = useMemo(() => new Set(commands.map((command) => command.id)), [commands]);
   const tokens = useMemo(
-    () => parseComposerTextTokens(value, { knownCommands: commandSet, projectDirectory }),
-    [commandSet, projectDirectory, value],
+    () => parseComposerTextTokens(normalizedValue, { knownCommands: commandSet, projectDirectory }),
+    [commandSet, normalizedValue, projectDirectory],
   );
   const visibleCommands = useMemo(() => {
     if (!slashMenu) return [];
@@ -371,11 +389,11 @@ export const ComposerEditor = forwardRef<ComposerEditorHandle, ComposerEditorPro
   }, [commands, composerSettings, slashMenu]);
 
   useEffect(() => {
-    if (value === lastHistoryValueRef.current) return;
-    historyRef.current = [{ value, selection: { start: value.length, end: value.length } }];
+    if (normalizedValue === lastHistoryValueRef.current) return;
+    historyRef.current = [{ value: normalizedValue, selection: { start: normalizedValue.length, end: normalizedValue.length } }];
     historyIndexRef.current = 0;
-    lastHistoryValueRef.current = value;
-  }, [value]);
+    lastHistoryValueRef.current = normalizedValue;
+  }, [normalizedValue]);
 
   useEffect(() => {
     const handleSettingsChanged = (event: Event) => {
@@ -401,12 +419,14 @@ export const ComposerEditor = forwardRef<ComposerEditorHandle, ComposerEditorPro
   }, []);
 
   const commitValue = useCallback((nextValue: string, selection?: TextRange, recordHistory = true) => {
-    if (selection) pendingSelectionRef.current = selection;
+    const normalizedNextValue = normalizeBlankComposerValue(nextValue);
+    const normalizedSelection = selection ? clampTextRange(selection, normalizedNextValue.length) : undefined;
+    if (normalizedSelection) pendingSelectionRef.current = normalizedSelection;
     const previousValue = valueRef.current;
-    valueRef.current = nextValue;
-    lastHistoryValueRef.current = nextValue;
-    if (recordHistory && selection) pushHistoryEntry(nextValue, selection);
-    if (nextValue !== previousValue) onChange(nextValue);
+    valueRef.current = normalizedNextValue;
+    lastHistoryValueRef.current = normalizedNextValue;
+    if (recordHistory && normalizedSelection) pushHistoryEntry(normalizedNextValue, normalizedSelection);
+    if (normalizedNextValue !== previousValue) onChange(normalizedNextValue);
   }, [onChange, pushHistoryEntry]);
 
   const updateSlashMenu = useCallback(() => {
@@ -458,10 +478,11 @@ export const ComposerEditor = forwardRef<ComposerEditorHandle, ComposerEditorPro
     const safeStart = Math.max(0, Math.min(start, valueRef.current.length));
     const safeEnd = Math.max(safeStart, Math.min(end, valueRef.current.length));
     const nextValue = valueRef.current.slice(0, safeStart) + text + valueRef.current.slice(safeEnd);
-    const nextCaret = safeStart + text.length;
-    commitValue(nextValue, { start: nextCaret, end: nextCaret });
+    const normalizedNextValue = normalizeBlankComposerValue(nextValue);
+    const nextCaret = normalizedNextValue.length === 0 ? 0 : safeStart + text.length;
+    commitValue(normalizedNextValue, { start: nextCaret, end: nextCaret });
     if (root) {
-      renderComposerDom(root, parseComposerTextTokens(nextValue, { knownCommands: commandSet, projectDirectory }), resourceIconTheme, catppuccinFlavor);
+      renderComposerDom(root, parseComposerTextTokens(normalizedNextValue, { knownCommands: commandSet, projectDirectory }), resourceIconTheme, catppuccinFlavor);
       restoreSelection(root, { start: nextCaret, end: nextCaret });
     }
     if (options.updateSlashMenu !== false && root && currentSelection.start === currentSelection.end) requestAnimationFrame(updateSlashMenu);
@@ -515,8 +536,14 @@ export const ComposerEditor = forwardRef<ComposerEditorHandle, ComposerEditorPro
   }, [tokens]);
 
   const handleBeforeInput = useCallback((event: FormEvent<HTMLDivElement>) => {
-    if (readOnly || composingRef.current) return;
     const nativeEvent = event.nativeEvent as InputEvent;
+    if (nativeEvent.isComposing || nativeEvent.inputType === "insertCompositionText") {
+      composingRef.current = true;
+      setIsComposing(true);
+      setSlashMenu(null);
+      return;
+    }
+    if (readOnly || composingRef.current) return;
     const root = rootRef.current;
     if (!root) return;
     const selection = getSelectionRange(root);
@@ -583,14 +610,16 @@ export const ComposerEditor = forwardRef<ComposerEditorHandle, ComposerEditorPro
     },
     insertText,
     syncValue: (nextValue, selection = { start: nextValue.length, end: nextValue.length }) => {
-      valueRef.current = nextValue;
-      lastHistoryValueRef.current = nextValue;
-      pendingSelectionRef.current = selection;
+      const normalizedNextValue = normalizeBlankComposerValue(nextValue);
+      const normalizedSelection = clampTextRange(selection, normalizedNextValue.length);
+      valueRef.current = normalizedNextValue;
+      lastHistoryValueRef.current = normalizedNextValue;
+      pendingSelectionRef.current = normalizedSelection;
       const root = rootRef.current;
       if (!root) return;
-      renderComposerDom(root, parseComposerTextTokens(nextValue, { knownCommands: commandSet, projectDirectory }), resourceIconTheme, catppuccinFlavor);
+      renderComposerDom(root, parseComposerTextTokens(normalizedNextValue, { knownCommands: commandSet, projectDirectory }), resourceIconTheme, catppuccinFlavor);
       if (document.activeElement !== root) root.focus();
-      restoreSelection(root, selection);
+      restoreSelection(root, normalizedSelection);
       requestAnimationFrame(updateSlashMenu);
     },
     getSelectionRange: () => rootRef.current ? getSelectionRange(rootRef.current) : { start: 0, end: 0 },
@@ -679,6 +708,7 @@ export const ComposerEditor = forwardRef<ComposerEditorHandle, ComposerEditorPro
 
   return (
     <div className={`composer-editor-root${containerClassName ? ` ${containerClassName}` : ""}`} style={{ minHeight: style?.minHeight, height: style?.height }}>
+      {showPlaceholder ? <div className="composer-editor-placeholder">{placeholder}</div> : null}
       <div
         ref={rootRef}
         contentEditable={!readOnly}
@@ -687,8 +717,7 @@ export const ComposerEditor = forwardRef<ComposerEditorHandle, ComposerEditorPro
         aria-multiline="true"
         aria-readonly={readOnly || undefined}
         data-composer-input="true"
-        data-empty={value.length === 0 ? "true" : undefined}
-        data-placeholder={placeholder || undefined}
+        data-empty={isBlankComposerValue(normalizedValue) ? "true" : undefined}
         className={`composer-editor ${className || ""}`.trim()}
         style={style}
         onBeforeInput={handleBeforeInput}
@@ -701,9 +730,19 @@ export const ComposerEditor = forwardRef<ComposerEditorHandle, ComposerEditorPro
         }}
         onClick={() => requestAnimationFrame(updateSlashMenu)}
         onKeyUp={handleKeyUp}
-        onCompositionStart={() => { composingRef.current = true; }}
+        onCompositionStart={() => {
+          composingRef.current = true;
+          setIsComposing(true);
+          setSlashMenu(null);
+        }}
+        onCompositionUpdate={() => {
+          composingRef.current = true;
+          setIsComposing(true);
+          setSlashMenu(null);
+        }}
         onCompositionEnd={() => {
           composingRef.current = false;
+          setIsComposing(false);
           handleInput();
         }}
       />
