@@ -124,8 +124,10 @@
     "groupEarlier": "更早",
     "copied": "已复制！",
     "clickToCopy": "点击复制: agent_name=\"{{alias}}\".",
+    "openSession": "打开会话",
     "collapse": "收起侧栏",
-    "expand": "展开侧栏"
+    "expand": "展开侧栏",
+    "summaryCharacters": "{{count}} 字"
   },
   "session": {
     "waitingForRequest": "等待反馈请求...",
@@ -144,6 +146,15 @@
     "mlfb": "MLFB",
     "layout": "布局",
     "submittedFeedback": "提交反馈",
+    "sessionNavigation": "Session 导航",
+    "sessionNavigationMode": "导航显示模式",
+    "sessionNavigationModeDesc": "选择每个 Caller 面板内的 session 导航显示方式。",
+    "sessionNavigationModeExpanded": "侧栏：详细信息",
+    "sessionNavigationModeRail": "侧栏：简略信息",
+    "sessionNavigationModeTopbarCompact": "顶部：简略信息",
+    "sessionNavigationModeTopbarStats": "顶部：统计视图",
+    "sessionNavigationAttachmentDots": "显示缩略导航附件圆点",
+    "sessionNavigationAttachmentDotsDesc": "当 session 包含附件或额外提交资源时，在缩略导航 item 上显示小圆点。",
     "panelManagement": "面板管理",
     "panelManagementDesc": "将面板标签页拖入它们应出现的 dock 列。",
     "dockLeftSidebar": "左侧栏",

@@ -124,8 +124,10 @@
     "groupEarlier": "Earlier",
     "copied": "Copied!",
     "clickToCopy": "Click to copy: agent_name=\"{{alias}}\".",
+    "openSession": "Open session",
     "collapse": "Collapse sidebar",
-    "expand": "Expand sidebar"
+    "expand": "Expand sidebar",
+    "summaryCharacters": "{{count}} chars"
   },
   "session": {
     "waitingForRequest": "Waiting for feedback request...",
@@ -144,6 +146,15 @@
     "mlfb": "MLFB",
     "layout": "Layout",
     "submittedFeedback": "Submitted feedback",
+    "sessionNavigation": "Session navigation",
+    "sessionNavigationMode": "Navigation display mode",
+    "sessionNavigationModeDesc": "Choose how sessions are shown inside each caller panel.",
+    "sessionNavigationModeExpanded": "Sidebar: details",
+    "sessionNavigationModeRail": "Sidebar: compact",
+    "sessionNavigationModeTopbarCompact": "Top: compact",
+    "sessionNavigationModeTopbarStats": "Top: stats",
+    "sessionNavigationAttachmentDots": "Show compact navigation attachment dots",
+    "sessionNavigationAttachmentDotsDesc": "Show a small dot on compact session items when a session has attachments or extra submitted resources.",
     "panelManagement": "Panel management",
     "panelManagementDesc": "Drag panel tabs into the dock columns where they should appear.",
     "dockLeftSidebar": "Left sidebar",

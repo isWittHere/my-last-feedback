@@ -39,6 +39,8 @@ export function CallerPanel({ callerId }: { callerId: string }) {
     const latestPending = [...initial].reverse().find((s) => s.status === "pending");
     return latestPending?.id || initial[initial.length - 1].id;
   });
+  const sessionListMode = useFeedbackStore((s) => s.sessionListMode);
+  const setSessionListMode = useFeedbackStore((s) => s.setSessionListMode);
 
   useEffect(() => {
     // If current selection no longer exists, pick a new one
@@ -81,8 +83,8 @@ export function CallerPanel({ callerId }: { callerId: string }) {
   return (
     <CallerContext.Provider value={override}>
       <div className="caller-panel" style={caller?.color ? { borderColor: `${caller.color}44`, '--caller-color': caller.color } as React.CSSProperties : undefined}>
-        <div className="caller-panel-body">
-          <Sidebar />
+        <div className={`caller-panel-body${sessionListMode === "topbarCompact" || sessionListMode === "topbarStats" ? " caller-panel-body-topbar" : ` caller-panel-body-${sessionListMode}`}`}>
+          <Sidebar mode={sessionListMode} onModeChange={setSessionListMode} />
           <CallerContent />
         </div>
       </div>

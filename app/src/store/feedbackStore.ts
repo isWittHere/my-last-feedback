@@ -1,5 +1,6 @@
 import { create } from "zustand";
 import { invoke } from "@tauri-apps/api/core";
+import { readSessionListMode, readShowSessionNavigationAttachmentDots, saveSessionListMode, saveShowSessionNavigationAttachmentDots, type SessionListMode } from "../sessionNavigationSettings";
 
 export interface ImageAttachment {
   path: string;
@@ -242,10 +243,14 @@ export interface FeedbackState {
   showPromptButtons: boolean;
   showTransferSubmitUi: boolean;
   resourceIconTheme: ResourceIconTheme;
+  sessionListMode: SessionListMode;
+  showSessionNavigationAttachmentDots: boolean;
   setDisabledPrompts: (names: string[]) => void;
   setShowPromptButtons: (value: boolean) => void;
   setShowTransferSubmitUi: (value: boolean) => void;
   setResourceIconTheme: (theme: ResourceIconTheme) => void;
+  setSessionListMode: (mode: SessionListMode) => void;
+  setShowSessionNavigationAttachmentDots: (value: boolean) => void;
   togglePromptDisabled: (name: string) => void;
 
   // ── Persistent mode fields ──
@@ -610,6 +615,8 @@ export const useFeedbackStore = create<FeedbackState>((set, get) => ({
     } catch { return true; }
   })(),
   resourceIconTheme: loadResourceIconTheme(),
+  sessionListMode: readSessionListMode(),
+  showSessionNavigationAttachmentDots: readShowSessionNavigationAttachmentDots(),
   setDisabledPrompts: (names) => {
     set({ disabledPrompts: names });
     try { localStorage.setItem("mlf-disabled-prompts", JSON.stringify(names)); } catch {}
@@ -625,6 +632,14 @@ export const useFeedbackStore = create<FeedbackState>((set, get) => ({
   setResourceIconTheme: (theme) => {
     set({ resourceIconTheme: theme });
     try { localStorage.setItem("mlfb-resource-icon-theme", theme); } catch {}
+  },
+  setSessionListMode: (mode) => {
+    set({ sessionListMode: mode });
+    saveSessionListMode(mode);
+  },
+  setShowSessionNavigationAttachmentDots: (value) => {
+    set({ showSessionNavigationAttachmentDots: value });
+    saveShowSessionNavigationAttachmentDots(value);
   },
   togglePromptDisabled: (name) => {
     const { disabledPrompts } = get();

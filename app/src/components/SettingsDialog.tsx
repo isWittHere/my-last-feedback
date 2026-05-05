@@ -12,8 +12,10 @@ import { getNotificationSettings, saveNotificationSettings, syncAutoFocusNewRequ
 import { getSubmittedViewSettings, saveSubmittedViewSettings, SUBMITTED_VIEW_SECTION_CONFIGS, type SubmittedViewSectionId, type SubmittedViewSettings } from "../submittedViewSettings";
 import { getTerminalSettings, saveTerminalSettings, type TerminalSettings } from "../terminalSettings";
 import { getComposerSettings, saveComposerSettings, type ComposerSettings } from "../composerSettings";
+import { SESSION_LIST_MODE_OPTIONS } from "../sessionNavigationSettings";
+import { SessionNavigationModeIcon } from "./SessionNavigationModeIcon";
 
-type Tab = "general" | "display" | "callers" | "submitted" | "prompts" | "layoutPanels" | "terminal" | "resources" | "notification" | "about";
+type Tab = "general" | "display" | "callers" | "submitted" | "prompts" | "sessionNavigation" | "layoutPanels" | "terminal" | "resources" | "notification" | "about";
 type SettingsGroupId = "mlfb" | "layout";
 
 const SETTINGS_DOCK_COLUMN_IDS: DockColumnId[] = ["leftSidebar", "leftPage", "rightPage", "rightSidebar"];
@@ -76,10 +78,14 @@ export function SettingsDialog({ open, onClose }: { open: boolean; onClose: () =
   const showPromptButtons = useFeedbackStore((s) => s.showPromptButtons);
   const showTransferSubmitUi = useFeedbackStore((s) => s.showTransferSubmitUi);
   const resourceIconTheme = useFeedbackStore((s) => s.resourceIconTheme);
+  const sessionListMode = useFeedbackStore((s) => s.sessionListMode);
+  const showSessionNavigationAttachmentDots = useFeedbackStore((s) => s.showSessionNavigationAttachmentDots);
   const dockLayout = useFeedbackStore((s) => s.dockLayout);
   const setShowPromptButtons = useFeedbackStore((s) => s.setShowPromptButtons);
   const setShowTransferSubmitUi = useFeedbackStore((s) => s.setShowTransferSubmitUi);
   const setResourceIconTheme = useFeedbackStore((s) => s.setResourceIconTheme);
+  const setSessionListMode = useFeedbackStore((s) => s.setSessionListMode);
+  const setShowSessionNavigationAttachmentDots = useFeedbackStore((s) => s.setShowSessionNavigationAttachmentDots);
   const togglePromptDisabled = useFeedbackStore((s) => s.togglePromptDisabled);
   const moveDockTabToColumn = useFeedbackStore((s) => s.moveDockTabToColumn);
 
@@ -297,11 +303,12 @@ export function SettingsDialog({ open, onClose }: { open: boolean; onClose: () =
           <div className="settings-nav">
             {renderSettingsNavItem("general", "gear", t("settings.general"))}
             {renderSettingsNavItem("display", "sun", t("settings.display"))}
-            {renderSettingsNavGroup("mlfb", t("settings.mlfb", "MLFB"), ["callers", "submitted", "prompts"], (
+            {renderSettingsNavGroup("mlfb", t("settings.mlfb", "MLFB"), ["callers", "submitted", "prompts", "sessionNavigation"], (
               <>
                 {renderSettingsNavItem("callers", "users", t("settings.callers"), true)}
                 {renderSettingsNavItem("submitted", "checklist", t("settings.submittedFeedback", "Submitted feedback"), true)}
                 {renderSettingsNavItem("prompts", "file-text", t("settings.prompts"), true)}
+                {renderSettingsNavItem("sessionNavigation", "list-tree", t("settings.sessionNavigation", "Session navigation"), true)}
               </>
             ))}
             {renderSettingsNavGroup("layout", t("settings.layout", "Layout"), ["layoutPanels", "terminal", "resources"], (
@@ -507,6 +514,42 @@ export function SettingsDialog({ open, onClose }: { open: boolean; onClose: () =
                       );
                     })}
                   </div>
+                </div>
+              </div>
+            )}
+
+            {tab === "sessionNavigation" && (
+              <div className="settings-section">
+                <div className="settings-row settings-row-stacked">
+                  <div className="settings-row-info">
+                    <span className="settings-label">{t("settings.sessionNavigationMode", "Navigation display mode")}</span>
+                    <span className="settings-sublabel">{t("settings.sessionNavigationModeDesc", "Choose how sessions are shown inside each caller panel.")}</span>
+                  </div>
+                  <div className="cm-column-mode-group session-nav-mode-group" role="group" aria-label={t("settings.sessionNavigationMode", "Navigation display mode")}>
+                    {SESSION_LIST_MODE_OPTIONS.map((option) => (
+                      <button
+                        key={option.mode}
+                        className={`cm-column-mode-button${sessionListMode === option.mode ? " active" : ""}`}
+                        title={t(option.labelKey, option.defaultLabel)}
+                        aria-label={`${t("settings.sessionNavigationMode", "Navigation display mode")}: ${t(option.labelKey, option.defaultLabel)}`}
+                        onClick={() => setSessionListMode(option.mode)}
+                      >
+                        <SessionNavigationModeIcon mode={option.mode} />
+                      </button>
+                    ))}
+                  </div>
+                </div>
+                <div className="settings-row">
+                  <div className="settings-row-info">
+                    <span className="settings-label">{t("settings.sessionNavigationAttachmentDots", "Show attachment dots in compact navigation")}</span>
+                    <span className="settings-sublabel">{t("settings.sessionNavigationAttachmentDotsDesc", "Show small dots on compact session items when a session has attachments or extra submitted resources.")}</span>
+                  </div>
+                  <button
+                    className={`settings-toggle${showSessionNavigationAttachmentDots ? " settings-toggle-on" : ""}`}
+                    onClick={() => setShowSessionNavigationAttachmentDots(!showSessionNavigationAttachmentDots)}
+                  >
+                    <span className="settings-toggle-knob" />
+                  </button>
                 </div>
               </div>
             )}

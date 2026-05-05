@@ -197,7 +197,7 @@ export function SummaryPanel() {
           <>
             {/* Agent identity header */}
             {caller && (
-              <div style={{ display: "flex", alignItems: "center", gap: 6, padding: "6px 0 4px" }}>
+              <div className="summary-caller-header" style={{ display: "flex", alignItems: "center", gap: 6, padding: "6px 0 4px" }}>
                 <IdenticonAvatar alias={caller.alias || caller.name} color={caller.color} size={22} />
                 <span style={{ fontSize: 14, lineHeight: "22px", color: "var(--color-text-muted)" }}>
                   <span style={{ fontWeight: 600, color: caller.color }}>{caller.alias ? friendlyName(caller.alias) : caller.name.charAt(0).toUpperCase()}</span>
