@@ -324,7 +324,7 @@ export function AgentProcessGroup({ blocks, messageId, isStreaming = false, proj
     <section ref={groupRef} className="agent-process-stream" data-expanded={expanded} data-mode={mode} data-streaming={isStreaming || hasBusyStep}>
       <div className="agent-process-stream-head">
         <button type="button" className="agent-process-summary" onClick={() => setExpanded((value) => !value)}>
-          <span>{summary}</span>
+          <span className={hasBusyStep || isStreaming ? "agent-silver-shimmer-text" : undefined}>{summary}</span>
           <Icon name="chevron-right" size={12} className="agent-process-caret" />
         </button>
         {steps.length > 1 && !isSingleThinking && (

@@ -77,7 +77,7 @@ export function AgentApprovalRow({ session }: { session: AgentSession }) {
     <section className="agent-approval-row" data-preview-overlay>
       <div className="agent-approval-row-main">
         <Icon name="shield" size={13} />
-        <span className="agent-approval-row-label">{t("agentConsole.requestApproval", "Request approval")}</span>
+        <span className="agent-approval-row-label agent-silver-shimmer-text">{t("agentConsole.requestApproval", "Request approval")}</span>
         <span className="agent-approval-row-title">{pendingPermissionBlock?.title || t("agentConsole.permissionPending", "Permission request pending")}</span>
         {extraCount > 0 && <span className="agent-approval-row-count">{t("agentConsole.approvalMoreCount", "+{{count}} more", { count: extraCount })}</span>}
       </div>
