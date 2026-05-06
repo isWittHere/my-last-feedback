@@ -84,6 +84,7 @@ export function AgentComposer({ session }: { session: AgentSession }) {
   const setGitAction = useAgentStore((state) => state.setGitAction);
   const updateGitBranchName = useAgentStore((state) => state.updateGitBranchName);
   const sendAgentPrompt = useAgentStore((state) => state.sendAgentPrompt);
+  const abortAgentPrompt = useAgentStore((state) => state.abortAgentPrompt);
   const dockLayout = useFeedbackStore((state) => state.dockLayout);
   const setFocusedComposer = useFeedbackStore((state) => state.setFocusedComposer);
   const setMlcActiveWorkspacePath = useFeedbackStore((state) => state.setMlcActiveWorkspacePath);
@@ -145,6 +146,10 @@ export function AgentComposer({ session }: { session: AgentSession }) {
   const send = useCallback(() => {
     void sendAgentPrompt(session.id);
   }, [sendAgentPrompt, session.id]);
+
+  const abort = useCallback(() => {
+    void abortAgentPrompt(session.id);
+  }, [abortAgentPrompt, session.id]);
 
   const handleAttachLogClick = useCallback(async () => {
     const wasHidden = !showTestLog;
@@ -314,16 +319,17 @@ export function AgentComposer({ session }: { session: AgentSession }) {
 
   const modeOptions = session.availableModes || [];
   const modelOptions = getEnabledOpenCodeModels(session.availableModels || [], session.modelId);
-  const bottomLeftSlot = session.providerRuntime?.initialized && (modeOptions.length > 0 || modelOptions.length > 0) ? (
+  const bottomLeftSlot = modeOptions.length > 0 || modelOptions.length > 0 ? (
     <div className="agent-composer-selectors">
       {modeOptions.length > 0 ? <AgentSelectButton label={t("agentConsole.mode", "Mode")} value={session.modeId || modeOptions[0].id} options={modeOptions} onSelect={(mode) => setSessionMode(session.id, mode)} /> : null}
       {modelOptions.length > 0 ? <AgentSelectButton label={t("agentConsole.model", "Model")} value={session.modelId || modelOptions[0].id} options={modelOptions} onSelect={(model) => setSessionModel(session.id, model)} /> : null}
     </div>
   ) : null;
 
+  const isRunning = session.status === "running" || session.status === "cancelling";
   const submitControl = (
-    <button type="button" className="agent-send-button" onClick={send} disabled={!hasContent} title={t("agentConsole.send", "Send")}>
-      <Icon name="send" size={15} />
+    <button type="button" className="agent-send-button" onClick={isRunning ? abort : send} disabled={isRunning ? session.status === "cancelling" : !hasContent} title={isRunning ? t("agentConsole.abort", "Abort") : t("agentConsole.send", "Send")}>
+      <Icon name={isRunning ? "circle-x" : "send"} size={15} />
     </button>
   );
 

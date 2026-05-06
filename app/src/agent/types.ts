@@ -127,9 +127,12 @@ export interface AgentDiagnosticEntry {
 }
 
 export interface AgentProviderRuntimeInfo {
+  transport?: "http";
   processId?: string;
   command?: string;
   args?: string[];
+  baseUrl?: string;
+  username?: string;
   initialized?: boolean;
   protocolVersion?: number | string;
   agentInfo?: {

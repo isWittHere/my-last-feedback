@@ -158,11 +158,9 @@ export function buildAgentProcessSteps(blocks: AgentContentBlock[], messageId?: 
 
 export function splitAgentMessageBlocks(message: AgentMessage): { processBlocks: AgentContentBlock[]; resultBlocks: AgentContentBlock[] } {
   if (message.role !== "assistant") return { processBlocks: [], resultBlocks: message.blocks };
-  const firstResultIndex = message.blocks.findIndex((block) => block.origin.phase === "result");
-  if (firstResultIndex < 0) return { processBlocks: message.blocks, resultBlocks: [] };
   return {
-    processBlocks: message.blocks.slice(0, firstResultIndex),
-    resultBlocks: message.blocks.slice(firstResultIndex),
+    processBlocks: message.blocks.filter((block) => block.origin.phase === "process"),
+    resultBlocks: message.blocks.filter((block) => block.origin.phase === "result"),
   };
 }
 

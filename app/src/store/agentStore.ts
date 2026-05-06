@@ -1,13 +1,12 @@
 import { create } from "zustand";
-import { AcpClient } from "../agent/acp/client";
-import type { AcpInitializeResult, AcpNewSessionResult, AcpSessionListItem, AcpSessionListResult } from "../agent/acp/types";
 import { hasAgentComposerContent } from "../agent/composer";
-import { createOpenCodeAcpStartOptions, createOpenCodeInitializeParams } from "../agent/opencode/provider";
+import { normalizeOpenCodeEvent, normalizeOpenCodePart, normalizeOpenCodeTodos, startOpenCodeServerRuntime } from "../agent/opencode";
+import type { OpenCodeAgentInfo, OpenCodeBusEvent, OpenCodeMessage, OpenCodeMessageInfo, OpenCodePermissionReply, OpenCodePermissionRule, OpenCodeProviderResponse, OpenCodeServerRuntime, OpenCodeSseConnection } from "../agent/opencode";
 import { createAgentSession } from "../agent/sessionFactory";
 import { buildSubmittedComposerPayload } from "../composer/submittedFeedback";
 import { getAgentConsoleSettings } from "../agentConsoleSettings";
 import { setOpenCodePreferredModel, syncOpenCodeModels } from "../openCodeSettings";
-import type { AgentChoiceOption, AgentContentBlock, AgentDiagnosticEntry, AgentMessage, AgentSession } from "../agent/types";
+import type { AgentChoiceOption, AgentContentBlock, AgentContextUsage, AgentDiagnosticEntry, AgentMessage, AgentSession } from "../agent/types";
 import type { AgentProviderId } from "../agent/types";
 import type { GitAction, ImageAttachment, MlcAttachment, WebAttachment } from "./feedbackStore";
 
@@ -15,18 +14,28 @@ export interface AgentProviderSessionListState {
   providerId: AgentProviderId;
   status: "idle" | "loading" | "ready" | "error" | "unsupported";
   capability: "supported" | "unsupported" | "unknown";
-  sessions: AcpSessionListItem[];
+  sessions: AgentProviderSessionItem[];
   nextCursor?: string | null;
   error?: string;
   updatedAt?: string;
 }
 
-interface AgentAcpRuntimeEntry {
+export interface AgentProviderSessionItem {
   sessionId: string;
-  client: AcpClient;
+  cwd?: string | null;
+  title?: string | null;
+  updatedAt?: string | null;
+  _meta?: Record<string, unknown> | null;
+  [key: string]: unknown;
 }
 
-const acpRuntimes = new Map<string, AgentAcpRuntimeEntry>();
+interface AgentOpenCodeHttpRuntimeEntry {
+  sessionId: string;
+  runtime: OpenCodeServerRuntime;
+  events: OpenCodeSseConnection;
+}
+
+const openCodeHttpRuntimes = new Map<string, AgentOpenCodeHttpRuntimeEntry>();
 const STREAM_FLUSH_INTERVAL_MS = 40;
 const STREAM_DRAIN_INTERVAL_MS = 16;
 const STREAM_RATE_WINDOW_MS = 900;
@@ -41,6 +50,7 @@ interface PacedTextBuffer {
   sessionId: string;
   phase: "process" | "result";
   messageId?: string;
+  partId?: string;
   pending: string;
   draining: boolean;
   inputWindowStartedAt: number;
@@ -57,6 +67,7 @@ interface AgentStoreState {
   activeSessionId: string | null;
   providerSessionLists: Partial<Record<AgentProviderId, AgentProviderSessionListState>>;
   getActiveSession: () => AgentSession | null;
+  createNewSession: () => string;
   setActiveSession: (sessionId: string) => void;
   setSessionMode: (sessionId: string, modeId: string) => void;
   setSessionModel: (sessionId: string, modelId: string) => void;
@@ -74,16 +85,20 @@ interface AgentStoreState {
   updateGitBranchName: (sessionId: string, branchName: string) => void;
   updateDraft: (sessionId: string, draft: string) => void;
   appendAgentDiagnostic: (sessionId: string, level: AgentDiagnosticEntry["level"], message: string) => void;
-  startOpenCodeAcp: (sessionId: string) => Promise<void>;
-  stopOpenCodeAcp: (sessionId: string) => Promise<void>;
+  startOpenCodeProvider: (sessionId: string) => Promise<void>;
+  stopOpenCodeProvider: (sessionId: string) => Promise<void>;
   receiveAgentProcessOutput: (processId: string, data: string) => void;
   receiveAgentProcessStderr: (processId: string, data: string) => void;
   receiveAgentProcessExit: (processId: string, exitCode: number | null) => void;
   receiveAgentProcessError: (processId: string, message: string) => void;
   sendAgentPrompt: (sessionId: string) => Promise<void>;
+  abortAgentPrompt: (sessionId: string) => Promise<void>;
   refreshProviderSessions: (providerId: AgentProviderId, cursor?: string | null) => Promise<void>;
   restoreProviderSession: (providerId: AgentProviderId, providerSessionId: string) => Promise<void>;
+  renameProviderSession: (providerId: AgentProviderId, providerSessionId: string, title: string) => Promise<void>;
+  deleteProviderSession: (providerId: AgentProviderId, providerSessionId: string) => Promise<void>;
   resolveMockPermission: (sessionId: string, requestId: string, optionId: string) => void;
+  cleanupEmptySessions: () => Promise<number>;
   resetAgentSession: () => void;
 }
 
@@ -142,10 +157,6 @@ function appendDiagnosticToSession(session: AgentSession, level: AgentDiagnostic
   };
 }
 
-function normalizeAcpMethod(method: string): string {
-  return method.replace(/[\/_-]/g, "").toLowerCase();
-}
-
 function finitePositiveNumber(value: unknown): number | undefined {
   return typeof value === "number" && Number.isFinite(value) && value > 0 ? value : undefined;
 }
@@ -178,70 +189,222 @@ function toChoiceOption(id: unknown, label: unknown, description: unknown, sourc
   };
 }
 
-function optionCategory(option: unknown): string {
-  if (!option || typeof option !== "object") return "";
-  const value = option as Record<string, unknown>;
-  return typeof value.category === "string" ? value.category : typeof value.id === "string" ? value.id : "";
+function openCodeHttpRuntimeForSession(session: AgentSession | null | undefined, sessions: AgentSession[] = []): AgentOpenCodeHttpRuntimeEntry | null {
+  const processId = session?.providerRuntime?.transport === "http" ? session.providerRuntime.processId : undefined;
+  if (processId) return openCodeHttpRuntimes.get(processId) || null;
+  if (!session) return null;
+  const providerRuntimeSession = sessions.find((item) => item.providerId === session.providerId && item.providerRuntime?.transport === "http" && item.providerRuntime.processId && item.providerRuntime.initialized);
+  const providerProcessId = providerRuntimeSession?.providerRuntime?.processId;
+  return providerProcessId ? openCodeHttpRuntimes.get(providerProcessId) || null : null;
 }
 
-function choicesFromConfigOption(option: unknown): AgentChoiceOption[] {
-  if (!option || typeof option !== "object") return [];
-  const value = option as Record<string, unknown>;
-  if (!Array.isArray(value.options)) return [];
-  return value.options
-    .map((item) => {
-      if (!item || typeof item !== "object") return null;
-      const optionValue = item as Record<string, unknown>;
-      return toChoiceOption(optionValue.value, optionValue.name, optionValue.description, optionValue);
-    })
-    .filter((choice): choice is AgentChoiceOption => Boolean(choice));
+function createOpenCodeHttpPort(): number {
+  return 41000 + Math.floor(Math.random() * 12000);
 }
 
-function currentValueFromConfigOption(option: unknown): string | undefined {
-  if (!option || typeof option !== "object") return undefined;
-  const currentValue = (option as Record<string, unknown>).currentValue;
-  return typeof currentValue === "string" && currentValue ? currentValue : undefined;
+function openCodeReadOnlyPermissionRules(): OpenCodePermissionRule[] {
+  return [
+    { permission: "glob", pattern: "*", action: "allow" },
+    { permission: "grep", pattern: "*", action: "allow" },
+    { permission: "read", pattern: "*", action: "allow" },
+    { permission: "list", pattern: "*", action: "allow" },
+    { permission: "external_directory", pattern: "*", action: "deny" },
+    { permission: "edit", pattern: "*", action: "deny" },
+    { permission: "bash", pattern: "*", action: "deny" },
+  ];
 }
 
-function applyAcpSessionSetupResult(session: AgentSession, result: AcpNewSessionResult): AgentSession {
-  const configOptions = Array.isArray(result.configOptions) ? result.configOptions : [];
-  const modelConfig = configOptions.find((option) => optionCategory(option) === "model");
-  const modeConfig = configOptions.find((option) => optionCategory(option) === "mode");
-  const availableModels = Array.isArray(result.models?.availableModels)
-    ? result.models.availableModels
-      .map((model) => toChoiceOption(model.modelId, model.name, model.description, model))
-      .filter((option): option is AgentChoiceOption => Boolean(option))
-    : choicesFromConfigOption(modelConfig).length > 0 ? choicesFromConfigOption(modelConfig) : session.availableModels || [];
-  const availableModes = Array.isArray(result.modes?.availableModes)
-    ? result.modes.availableModes
-      .map((mode) => toChoiceOption(mode.id, mode.name, mode.description))
-      .filter((option): option is AgentChoiceOption => Boolean(option))
-    : choicesFromConfigOption(modeConfig).length > 0 ? choicesFromConfigOption(modeConfig) : session.availableModes || [];
-  const serverModelId = result.models?.currentModelId || currentValueFromConfigOption(modelConfig) || session.modelId || availableModels[0]?.id;
-  const openCodeSettings = availableModels.length > 0 ? syncOpenCodeModels(availableModels, serverModelId) : null;
-  const modelId = openCodeSettings?.preferredModelId || serverModelId;
-  const modeId = result.modes?.currentModeId || currentValueFromConfigOption(modeConfig) || session.modeId || availableModes[0]?.id;
+function choicesFromOpenCodeProviders(providerData: OpenCodeProviderResponse): AgentChoiceOption[] {
+  const connected = new Set(providerData.connected || []);
+  const providers = Array.isArray(providerData.all) ? providerData.all : [];
+  return providers.flatMap((provider) => {
+    if (connected.size > 0 && !connected.has(provider.id)) return [];
+    return Object.values(provider.models || {})
+      .filter((model) => !model.status || model.status === "active")
+      .map((model) => toChoiceOption(`${provider.id}/${model.id}`, model.name || model.id, provider.name, model))
+      .filter((option): option is AgentChoiceOption => Boolean(option));
+  });
+}
 
+function choicesFromOpenCodeAgents(agents: OpenCodeAgentInfo[]): AgentChoiceOption[] {
+  const visiblePrimaryAgents = agents.filter((agent) => !agent.hidden && (agent.mode === "primary" || agent.mode === "all"));
+  const visibleAgents = visiblePrimaryAgents.length > 0 ? visiblePrimaryAgents : agents.filter((agent) => !agent.hidden);
+  return visibleAgents
+    .map((agent) => toChoiceOption(agent.name, agent.name, agent.description, agent))
+    .filter((option): option is AgentChoiceOption => Boolean(option));
+}
+
+function fallbackOpenCodeAgentChoices(): AgentChoiceOption[] {
+  return [
+    { id: "build", label: "build", description: "The default OpenCode agent." },
+    { id: "plan", label: "plan", description: "Plan mode with edit tools disabled." },
+  ];
+}
+
+function selectOpenCodeAgentMode(currentModeId: string | undefined, availableModes: AgentChoiceOption[]): string | undefined {
+  if (currentModeId && availableModes.some((mode) => mode.id === currentModeId)) return currentModeId;
+  return availableModes.find((mode) => mode.id === "build")?.id || availableModes[0]?.id;
+}
+
+function openCodeModelFromSession(session: AgentSession): { providerID: string; modelID: string } | undefined {
+  if (!session.modelId) return undefined;
+  const [providerID, ...modelParts] = session.modelId.split("/");
+  const modelID = modelParts.join("/");
+  return providerID && modelID ? { providerID, modelID } : undefined;
+}
+
+function openCodeModelIdFromInfo(info: OpenCodeMessageInfo | undefined): string | undefined {
+  if (!info) return undefined;
+  if (info.model?.providerID && info.model.modelID) return `${info.model.providerID}/${info.model.modelID}`;
+  return [info.providerID, info.modelID].filter(Boolean).join("/") || undefined;
+}
+
+function openCodeSelectionFromMessages(messages: OpenCodeMessage[]): { modelId?: string; modeId?: string } {
+  const selection: { modelId?: string; modeId?: string } = {};
+  for (let index = messages.length - 1; index >= 0; index -= 1) {
+    const info = messages[index].info;
+    if (!info) continue;
+    selection.modelId ||= openCodeModelIdFromInfo(info);
+    selection.modeId ||= typeof info.agent === "string" && info.agent ? info.agent : typeof info.mode === "string" && info.mode ? info.mode : undefined;
+    if (selection.modelId && selection.modeId) break;
+  }
+  return selection;
+}
+
+function contextLimitForModel(availableModels: AgentChoiceOption[] | undefined, modelId: string | undefined): number | undefined {
+  if (!modelId) return undefined;
+  return availableModels?.find((model) => model.id === modelId)?.contextLimit;
+}
+
+function openCodeMessageUsedTokens(info: OpenCodeMessageInfo | undefined): number | undefined {
+  const tokens = info?.tokens;
+  if (!tokens) return undefined;
+  const input = finitePositiveNumber(tokens.input) ?? 0;
+  const output = finitePositiveNumber(tokens.output) ?? 0;
+  const reasoning = finitePositiveNumber(tokens.reasoning) ?? 0;
+  const cacheRead = finitePositiveNumber(tokens.cache?.read) ?? 0;
+  const cacheWrite = finitePositiveNumber(tokens.cache?.write) ?? 0;
+  const contextUsed = input + cacheRead;
+  const totalUsed = input + output + reasoning + cacheRead + cacheWrite;
+  return contextUsed > 0 ? contextUsed : totalUsed > 0 ? totalUsed : undefined;
+}
+
+function openCodeContextUsageFromInfo(info: OpenCodeMessageInfo | undefined, contextLimit: number | undefined, costAmount?: number): AgentContextUsage | undefined {
+  const usedTokens = openCodeMessageUsedTokens(info);
+  if (!usedTokens || !contextLimit) return undefined;
   return {
-    ...session,
-    providerSessionId: result.sessionId || session.providerSessionId,
-    modelId,
-    modeId,
-    availableModels,
-    availableModes,
-    contextUsage: session.modelId === modelId ? session.contextUsage : undefined,
-    configOptions: configOptions.length > 0 ? configOptions : session.configOptions,
+    usedTokens,
+    contextLimit,
+    ...(costAmount !== undefined && costAmount > 0 ? { cost: { amount: costAmount, currency: "USD" } } : {}),
     updatedAt: nowIso(),
   };
 }
 
-function runtimeForSession(session: AgentSession | undefined, sessions: AgentSession[] = []): AgentAcpRuntimeEntry | null {
-  const processId = session?.providerRuntime?.processId;
-  if (processId) return acpRuntimes.get(processId) || null;
-  if (!session) return null;
-  const providerRuntimeSession = sessions.find((item) => item.providerId === session.providerId && item.providerRuntime?.processId && item.providerRuntime.initialized);
-  const providerProcessId = providerRuntimeSession?.providerRuntime?.processId;
-  return providerProcessId ? acpRuntimes.get(providerProcessId) || null : null;
+function openCodeContextUsageFromMessages(messages: OpenCodeMessage[], contextLimit: number | undefined): AgentContextUsage | undefined {
+  const assistantMessages = messages.filter((message) => message.info?.role === "assistant");
+  const lastAssistantWithUsage = [...assistantMessages].reverse().find((message) => openCodeMessageUsedTokens(message.info) !== undefined);
+  const totalCost = assistantMessages.reduce((sum, message) => sum + (finitePositiveNumber(message.info?.cost) ?? 0), 0);
+  return openCodeContextUsageFromInfo(lastAssistantWithUsage?.info, contextLimit, totalCost);
+}
+
+function agentMessagesFromOpenCodeMessages(messages: OpenCodeMessage[]): AgentMessage[] {
+  const mappedMessages = messages.map((message) => {
+    const role = message.info?.role === "user" ? "user" : "assistant";
+    const updatedTime = typeof message.info?.time?.updated === "number" ? message.info.time.updated : null;
+    const messageStatus = message.info?.time?.completed || message.info?.status === "complete" ? "complete" : message.info?.status === "error" ? "error" : "complete";
+    const blocks = (message.parts || [])
+      .map((part) => normalizeOpenCodePart(part))
+      .filter((block): block is AgentContentBlock => Boolean(block))
+      .filter((block) => block.type !== "text" || Boolean(block.content.trim()))
+      .map((block) => messageStatus === "complete" && block.type === "thinking" ? { ...block, status: "completed" as const, updatedAt: block.updatedAt || nowIso() } : block);
+    return {
+      id: message.info?.id || newId("msg"),
+      role,
+      status: messageStatus,
+      blocks,
+      modelId: openCodeModelIdFromInfo(message.info),
+      createdAt: message.info?.time?.created ? new Date(message.info.time.created).toISOString() : nowIso(),
+      updatedAt: updatedTime ? new Date(updatedTime).toISOString() : nowIso(),
+    } satisfies AgentMessage;
+  });
+  return mergeContiguousAssistantMessages(mappedMessages);
+}
+
+function mergeMessageStatus(current: AgentMessage["status"], next: AgentMessage["status"]): AgentMessage["status"] {
+  if (current === "error" || next === "error") return "error";
+  if (current === "streaming" || next === "streaming") return "streaming";
+  return "complete";
+}
+
+function latestIso(current?: string, next?: string): string | undefined {
+  if (!current) return next;
+  if (!next) return current;
+  return new Date(next).getTime() > new Date(current).getTime() ? next : current;
+}
+
+function mergeContiguousAssistantMessages(messages: AgentMessage[]): AgentMessage[] {
+  const merged: AgentMessage[] = [];
+  for (const message of messages) {
+    const previous = merged[merged.length - 1];
+    if (message.role === "assistant" && previous?.role === "assistant") {
+      merged[merged.length - 1] = {
+        ...previous,
+        blocks: [...previous.blocks, ...message.blocks],
+        status: mergeMessageStatus(previous.status, message.status),
+        modelId: previous.modelId || message.modelId,
+        updatedAt: latestIso(previous.updatedAt || previous.createdAt, message.updatedAt || message.createdAt),
+      };
+      continue;
+    }
+    merged.push(message);
+  }
+  return merged;
+}
+
+function appendRestoredTaskList(messages: AgentMessage[], todos: unknown[], providerSessionId: string): AgentMessage[] {
+  if (todos.length === 0) return messages;
+  const block = normalizeOpenCodeTodos(todos, providerSessionId);
+  if (block.tasks.length === 0) return messages;
+  let targetIndex = -1;
+  for (let index = messages.length - 1; index >= 0; index -= 1) {
+    if (messages[index].role === "assistant") {
+      targetIndex = index;
+      break;
+    }
+  }
+  if (targetIndex < 0) return messages;
+  return messages.map((message, index) => index === targetIndex ? {
+    ...message,
+    blocks: replaceLatestTaskListBlock(message.blocks, block),
+    updatedAt: nowIso(),
+  } : message);
+}
+
+function replaceLatestTaskListBlock(blocks: AgentContentBlock[], block: AgentContentBlock): AgentContentBlock[] {
+  if (block.type !== "task_list") return blocks;
+  for (let index = blocks.length - 1; index >= 0; index -= 1) {
+    if (blocks[index].type === "task_list") {
+      return blocks.map((item, itemIndex) => itemIndex === index ? block : item);
+    }
+  }
+  return [...blocks, block];
+}
+
+function upsertLatestTaskListBlock(session: AgentSession, block: AgentContentBlock): AgentSession {
+  if (block.type !== "task_list") return upsertAssistantBlock(session, block);
+  const messages = [...session.messages];
+  for (let messageIndex = messages.length - 1; messageIndex >= 0; messageIndex -= 1) {
+    const message = messages[messageIndex];
+    if (message.role !== "assistant") continue;
+    if (!message.blocks.some((item) => item.type === "task_list")) continue;
+    messages[messageIndex] = {
+      ...message,
+      blocks: replaceLatestTaskListBlock(message.blocks, block),
+      updatedAt: nowIso(),
+    };
+    return { ...session, messages, updatedAt: nowIso() };
+  }
+  return upsertAssistantBlock(session, block);
 }
 
 function initializedProviderSession(providerId: AgentProviderId, sessions: AgentSession[]): AgentSession | undefined {
@@ -262,75 +425,100 @@ function hasLocalSessionContent(session: AgentSession): boolean {
 }
 
 function isReusableProvisionalSession(session: AgentSession, providerId: AgentProviderId): boolean {
-  return session.providerId === providerId &&
-    session.providerSessionState === "provisional" &&
-    !hasLocalSessionContent(session) &&
+  return session.providerId === providerId && isEmptyAgentSession(session);
+}
+
+function isEmptyAgentSession(session: AgentSession): boolean {
+  return !hasLocalSessionContent(session) &&
+    (!session.providerSessionId || session.providerSessionState === "provisional") &&
     session.status !== "running" &&
     session.status !== "starting" &&
     session.status !== "cancelling";
 }
 
-function describeAcpSessionSetup(result: AcpNewSessionResult): string {
-  const modelCount = result.models?.availableModels?.length ?? choicesFromConfigOption((result.configOptions || []).find((option) => optionCategory(option) === "model")).length;
-  const modeCount = result.modes?.availableModes?.length ?? choicesFromConfigOption((result.configOptions || []).find((option) => optionCategory(option) === "mode")).length;
-  return `OpenCode ACP session created: ${result.sessionId} (${modelCount} models, ${modeCount} modes)`;
+function cleanupEmptyAgentSessions(sessions: AgentSession[], activeSessionId: string | null, preserveSessionIds: string[] = []): { sessions: AgentSession[]; activeSessionId: string | null; removedCount: number } {
+  if (sessions.length <= 1) return { sessions, activeSessionId, removedCount: 0 };
+  const preserveIds = new Set<string>([...preserveSessionIds, ...(activeSessionId ? [activeSessionId] : [])]);
+  const nextSessions = sessions.filter((session, index) => {
+    if (!isEmptyAgentSession(session)) return true;
+    if (preserveIds.has(session.id)) return true;
+    if (sessions.length === 1 && index === 0) return true;
+    return false;
+  });
+  if (nextSessions.length === 0) {
+    const fallback = sessions.find((session) => activeSessionId && session.id === activeSessionId) || sessions[0];
+    return { sessions: [fallback], activeSessionId: fallback.id, removedCount: sessions.length - 1 };
+  }
+  const nextActiveSessionId = nextSessions.some((session) => session.id === activeSessionId)
+    ? activeSessionId
+    : nextSessions[0].id;
+  return { sessions: nextSessions, activeSessionId: nextActiveSessionId, removedCount: sessions.length - nextSessions.length };
 }
 
-function extractTextContent(content: unknown): string {
-  if (!content || typeof content !== "object") return "";
-  const value = content as Record<string, unknown>;
-  return value.type === "text" && typeof value.text === "string" ? value.text : "";
+function providerStatusIsBusy(status: unknown): boolean {
+  if (typeof status === "string") return status === "busy" || status === "running" || status === "retry";
+  if (typeof status === "object" && status !== null) {
+    const type = (status as Record<string, unknown>).type;
+    return type === "busy" || type === "running" || type === "retry";
+  }
+  return false;
 }
 
-function isRecord(value: unknown): value is Record<string, unknown> {
-  return Boolean(value) && typeof value === "object" && !Array.isArray(value);
+async function ensureOpenCodeRuntime(providerId: AgentProviderId, get: () => AgentStoreState): Promise<AgentOpenCodeHttpRuntimeEntry | null> {
+  if (providerId !== "opencode") return null;
+  let state = get();
+  let session = initializedProviderSession(providerId, state.sessions) || state.sessions.find((item) => item.providerId === providerId) || state.getActiveSession();
+  let httpRuntime = openCodeHttpRuntimeForSession(session, state.sessions);
+  if (!httpRuntime && session?.providerId === "opencode") {
+    await get().startOpenCodeProvider(session.id);
+    state = get();
+    session = initializedProviderSession(providerId, state.sessions) || state.sessions.find((item) => item.id === session?.id) || state.sessions.find((item) => item.providerId === providerId) || state.getActiveSession();
+    httpRuntime = openCodeHttpRuntimeForSession(session, state.sessions);
+  }
+  return httpRuntime;
 }
 
-function providerSessionListCapability(session: AgentSession | undefined): AgentProviderSessionListState["capability"] {
-  const capabilities = session?.providerRuntime?.agentCapabilities;
-  if (!isRecord(capabilities)) return "unknown";
-  const sessionCapabilities = isRecord(capabilities.sessionCapabilities) ? capabilities.sessionCapabilities : undefined;
-  if (isRecord(sessionCapabilities?.list)) return "supported";
-  if (sessionCapabilities && "list" in sessionCapabilities) return "unsupported";
-  return "unknown";
+async function cleanupEmptyProviderSessions(httpRuntime: AgentOpenCodeHttpRuntimeEntry): Promise<Set<string>> {
+  const deletedSessionIds = new Set<string>();
+  const [providerSessions, statuses] = await Promise.all([
+    httpRuntime.runtime.client.listSessions(),
+    httpRuntime.runtime.client.sessionStatuses().catch((): Record<string, unknown> => ({})),
+  ]);
+  for (const providerSession of providerSessions) {
+    if (!providerSession.id || providerStatusIsBusy(statuses[providerSession.id])) continue;
+    const messages = await httpRuntime.runtime.client.messages(providerSession.id).catch(() => null);
+    if (!messages || messages.length > 0) continue;
+    const deleted = await httpRuntime.runtime.client.deleteSession(providerSession.id).catch(() => false);
+    if (deleted) deletedSessionIds.add(providerSession.id);
+  }
+  return deletedSessionIds;
 }
 
-function providerLoadSessionCapability(session: AgentSession | undefined): "supported" | "unsupported" | "unknown" {
-  const capabilities = session?.providerRuntime?.agentCapabilities;
-  if (!isRecord(capabilities)) return "unknown";
-  if (capabilities.loadSession === true) return "supported";
-  if ("loadSession" in capabilities) return "unsupported";
-  return "unknown";
-}
-
-function normalizeAcpSessionListResult(result: unknown): { sessions: AcpSessionListItem[]; nextCursor?: string | null } {
-  const rawSessions = Array.isArray(result)
-    ? result
-    : isRecord(result) && Array.isArray(result.sessions)
-      ? result.sessions
-      : [];
-  const sessions = rawSessions
-    .filter(isRecord)
-    .map((item) => ({
-      ...item,
-      sessionId: typeof item.sessionId === "string" ? item.sessionId : typeof item.id === "string" ? item.id : "",
-      cwd: typeof item.cwd === "string" ? item.cwd : null,
-      title: typeof item.title === "string" ? item.title : null,
-      updatedAt: typeof item.updatedAt === "string" ? item.updatedAt : null,
-      _meta: isRecord(item._meta) ? item._meta : null,
-    }))
-    .filter((item): item is AcpSessionListItem => Boolean(item.sessionId));
+function removeDeletedProviderSessions(state: AgentStoreState, providerId: AgentProviderId, deletedSessionIds: Set<string>): Partial<AgentStoreState> {
+  if (deletedSessionIds.size === 0) return {};
+  const sessions = state.sessions.map((session) => session.providerId === providerId && session.providerSessionId && deletedSessionIds.has(session.providerSessionId)
+    ? {
+      ...session,
+      providerSessionId: undefined,
+      providerSessionState: undefined,
+      updatedAt: nowIso(),
+    }
+    : session);
+  const cleaned = cleanupEmptyAgentSessions(sessions, null);
   return {
-    sessions,
-    nextCursor: isRecord(result) && typeof result.nextCursor === "string" ? result.nextCursor : null,
+    sessions: cleaned.sessions,
+    activeSessionId: cleaned.activeSessionId,
+    providerSessionLists: {
+      ...state.providerSessionLists,
+      [providerId]: state.providerSessionLists[providerId]
+        ? {
+          ...state.providerSessionLists[providerId],
+          sessions: state.providerSessionLists[providerId].sessions.filter((item) => !deletedSessionIds.has(item.sessionId)),
+          updatedAt: nowIso(),
+        }
+        : undefined,
+    },
   };
-}
-
-function isMethodUnavailableError(error: unknown): boolean {
-  if (!error || typeof error !== "object") return false;
-  const value = error as { message?: unknown; code?: unknown };
-  const message = typeof value.message === "string" ? value.message.toLowerCase() : "";
-  return value.code === -32601 || message.includes("method not found") || message.includes("not implemented") || message.includes("unknown method");
 }
 
 function insertProcessBlock(blocks: AgentContentBlock[], block: AgentContentBlock): AgentContentBlock[] {
@@ -339,109 +527,7 @@ function insertProcessBlock(blocks: AgentContentBlock[], block: AgentContentBloc
   return [...blocks.slice(0, firstResultIndex), block, ...blocks.slice(firstResultIndex)];
 }
 
-function toolStatusFromAcp(status: unknown): "pending" | "running" | "completed" | "failed" | undefined {
-  if (status === "pending") return "pending";
-  if (status === "running" || status === "in_progress") return "running";
-  if (status === "completed") return "completed";
-  if (status === "failed" || status === "error") return "failed";
-  return undefined;
-}
-
-function extractToolContentText(content: unknown): string {
-  if (typeof content === "string") return content;
-  if (Array.isArray(content)) {
-    return content
-      .map((item) => {
-        if (!isRecord(item)) return "";
-        if (item.type === "content") return extractToolContentText(item.content);
-        return extractTextContent(item);
-      })
-      .filter(Boolean)
-      .join("\n");
-  }
-  if (isRecord(content)) return extractTextContent(content);
-  return "";
-}
-
-function extractToolResult(update: Record<string, unknown>): string | undefined {
-  const rawOutput = isRecord(update.rawOutput) ? update.rawOutput : undefined;
-  if (typeof rawOutput?.output === "string" && rawOutput.output) return rawOutput.output;
-  const contentText = extractToolContentText(update.content);
-  return contentText || undefined;
-}
-
-function toolArgsFromRawInput(rawInput: unknown): Record<string, unknown> | undefined {
-  if (rawInput == null) return undefined;
-  if (isRecord(rawInput)) return rawInput;
-  return { input: rawInput };
-}
-
-function stableHash(value: string): string {
-  let hash = 0x811c9dc5;
-  for (let index = 0; index < value.length; index += 1) {
-    hash ^= value.charCodeAt(index);
-    hash = Math.imul(hash, 0x01000193) >>> 0;
-  }
-  return hash.toString(16);
-}
-
-function taskStatusFromAcp(status: unknown): "not-started" | "in-progress" | "completed" {
-  if (status === "in_progress" || status === "in-progress" || status === "running") return "in-progress";
-  if (status === "completed" || status === "cancelled") return "completed";
-  return "not-started";
-}
-
-function taskPriorityFromAcp(priority: unknown): "high" | "medium" | "low" | undefined {
-  return priority === "high" || priority === "medium" || priority === "low" ? priority : undefined;
-}
-
-function taskEntriesFromUnknown(value: unknown): Array<{ content: string; status: unknown; priority: unknown }> {
-  if (!Array.isArray(value)) return [];
-  return value
-    .map((item) => {
-      if (!isRecord(item)) return null;
-      const content = typeof item.content === "string" ? item.content : typeof item.title === "string" ? item.title : "";
-      if (!content.trim()) return null;
-      return { content, status: item.status, priority: item.priority };
-    })
-    .filter((item): item is { content: string; status: unknown; priority: unknown } => Boolean(item));
-}
-
-function todoEntriesFromToolUpdate(update: Record<string, unknown>): Array<{ content: string; status: unknown; priority: unknown }> {
-  const rawInput = isRecord(update.rawInput) ? update.rawInput : undefined;
-  const inputTodos = taskEntriesFromUnknown(rawInput?.todos);
-  if (inputTodos.length > 0) return inputTodos;
-
-  const rawOutput = isRecord(update.rawOutput) ? update.rawOutput : undefined;
-  if (typeof rawOutput?.output === "string") {
-    try {
-      const parsed = JSON.parse(rawOutput.output) as unknown;
-      const outputTodos = taskEntriesFromUnknown(parsed);
-      if (outputTodos.length > 0) return outputTodos;
-    } catch {}
-  }
-
-  const contentText = extractToolContentText(update.content);
-  if (contentText) {
-    try {
-      const parsed = JSON.parse(contentText) as unknown;
-      return taskEntriesFromUnknown(parsed);
-    } catch {}
-  }
-  return [];
-}
-
-function isTodoToolUpdate(update: Record<string, unknown>): boolean {
-  const title = typeof update.title === "string" ? update.title.toLowerCase() : "";
-  const rawInput = isRecord(update.rawInput) ? update.rawInput : undefined;
-  return title === "todowrite" || Array.isArray(rawInput?.todos);
-}
-
-function taskListTitle(completedCount: number, totalCount: number): string {
-  return `待办事项 (${completedCount}/${totalCount})`;
-}
-
-function appendAssistantTextChunkImmediate(session: AgentSession, phase: "process" | "result", text: string, messageId?: string): AgentSession {
+function appendAssistantTextChunkImmediate(session: AgentSession, phase: "process" | "result", text: string, messageId?: string, partId?: string): AgentSession {
   if (!text) return session;
   const messages = [...session.messages];
   const lastMessage = messages[messages.length - 1];
@@ -452,7 +538,7 @@ function appendAssistantTextChunkImmediate(session: AgentSession, phase: "proces
   }
 
   const targetType = phase === "process" ? "thinking" : "text";
-  const blockIndex = assistantMessage.blocks.findIndex((block) => block.type === targetType && block.origin.phase === phase);
+  const blockIndex = assistantMessage.blocks.findIndex((block) => partId ? block.id === partId : block.type === targetType && block.origin.phase === phase);
   let blocks = [...assistantMessage.blocks];
   if (blockIndex >= 0) {
     const block = blocks[blockIndex];
@@ -460,7 +546,7 @@ function appendAssistantTextChunkImmediate(session: AgentSession, phase: "proces
     if (block.type === "thinking") blocks[blockIndex] = { ...block, content: block.content + text, status: "running", updatedAt: nowIso() };
   } else if (phase === "process") {
     blocks = insertProcessBlock(blocks, {
-      id: newId("agent_thinking"),
+      id: partId || newId("agent_thinking"),
       type: "thinking",
       content: text,
       status: "running",
@@ -468,15 +554,15 @@ function appendAssistantTextChunkImmediate(session: AgentSession, phase: "proces
       createdAt: nowIso(),
     });
   } else {
-    blocks.push(textBlock(text, "result"));
+    blocks.push(partId ? { ...textBlock(text, "result"), id: partId } : textBlock(text, "result"));
   }
 
   messages[messages.length - 1] = { ...assistantMessage, blocks, updatedAt: nowIso() };
   return { ...session, messages, updatedAt: nowIso() };
 }
 
-function pacedBufferKey(sessionId: string, phase: "process" | "result", messageId?: string): string {
-  return `${sessionId}:${messageId || "active"}:${phase}`;
+function pacedBufferKey(sessionId: string, phase: "process" | "result", messageId?: string, partId?: string): string {
+  return `${sessionId}:${messageId || "active"}:${partId || "part"}:${phase}`;
 }
 
 function charsForBacklog(length: number): number {
@@ -521,7 +607,7 @@ function flushPacedTextBuffer(key: string) {
 
   if (text) {
     useAgentStore.setState((state) => ({
-      sessions: updateSession(state.sessions, buffer.sessionId, (session) => appendAssistantTextChunkImmediate(session, buffer.phase, text, buffer.messageId)),
+      sessions: updateSession(state.sessions, buffer.sessionId, (session) => appendAssistantTextChunkImmediate(session, buffer.phase, text, buffer.messageId, buffer.partId)),
     }));
   }
 
@@ -533,17 +619,18 @@ function flushPacedTextBuffer(key: string) {
   resolvePacedBuffer(buffer);
 }
 
-function appendAssistantTextChunk(session: AgentSession, phase: "process" | "result", text: string, messageId?: string): AgentSession {
+function appendAssistantTextChunk(session: AgentSession, phase: "process" | "result", text: string, messageId?: string, partId?: string): AgentSession {
   if (!text) return session;
   if (!getAgentConsoleSettings().smoothStreamingOutput) {
-    return appendAssistantTextChunkImmediate(session, phase, text, messageId);
+    return appendAssistantTextChunkImmediate(session, phase, text, messageId, partId);
   }
 
-  const key = pacedBufferKey(session.id, phase, messageId);
+  const key = pacedBufferKey(session.id, phase, messageId, partId);
   const buffer = pacedTextBuffers.get(key) || {
     sessionId: session.id,
     phase,
     messageId,
+    partId,
     pending: "",
     draining: false,
     inputWindowStartedAt: Date.now(),
@@ -587,168 +674,18 @@ function clearPacedTextBuffers(sessionId?: string) {
   }
 }
 
-function applyAcpToolCallUpdate(session: AgentSession, update: Record<string, unknown>, messageId?: string): AgentSession {
-  const toolCallId = typeof update.toolCallId === "string" && update.toolCallId ? update.toolCallId : undefined;
-  if (!toolCallId) return appendDiagnosticToSession(session, "warn", "ACP tool update did not include a toolCallId.");
-
-  const messages = [...session.messages];
-  const blockId = `agent_tool_${toolCallId}`;
-  let targetMessageIndex = -1;
-  for (let index = messages.length - 1; index >= 0; index -= 1) {
-    const message = messages[index];
-    if (message.role === "assistant" && message.blocks.some((block) => block.type === "tool_call" && block.id === blockId)) {
-      targetMessageIndex = index;
-      break;
-    }
+function clearPacedTextBufferForPart(sessionId: string, phase: "process" | "result", messageId?: string, partId?: string) {
+  const keys = [...new Set([
+    pacedBufferKey(sessionId, phase, messageId, partId),
+    pacedBufferKey(sessionId, phase, messageId, undefined),
+  ])];
+  for (const key of keys) {
+    const buffer = pacedTextBuffers.get(key);
+    if (!buffer) continue;
+    if (buffer.timer) clearTimeout(buffer.timer);
+    pacedTextBuffers.delete(key);
+    resolvePacedBuffer(buffer);
   }
-  if (targetMessageIndex < 0) {
-    for (let index = messages.length - 1; index >= 0; index -= 1) {
-      const message = messages[index];
-      if (message.role === "assistant" && message.status === "streaming") {
-        targetMessageIndex = index;
-        break;
-      }
-    }
-  }
-  if (targetMessageIndex < 0) {
-    for (let index = messages.length - 1; index >= 0; index -= 1) {
-      const message = messages[index];
-      if (message.role === "assistant") {
-        targetMessageIndex = index;
-        break;
-      }
-    }
-  }
-
-  let assistantMessage = targetMessageIndex >= 0 ? messages[targetMessageIndex] : null;
-  if (!assistantMessage) {
-    assistantMessage = createStreamingAssistantMessage(messageId);
-    messages.push(assistantMessage);
-    targetMessageIndex = messages.length - 1;
-  }
-
-  const status = toolStatusFromAcp(update.status);
-  const title = typeof update.title === "string" && update.title ? update.title : undefined;
-  const kind = typeof update.kind === "string" && update.kind ? update.kind : undefined;
-  const name = kind || title || toolCallId;
-  const label = title || kind || toolCallId;
-  const args = toolArgsFromRawInput(update.rawInput);
-  const result = extractToolResult(update);
-  let blocks = [...assistantMessage.blocks];
-  const blockIndex = blocks.findIndex((block) => block.type === "tool_call" && block.id === blockId);
-
-  if (blockIndex >= 0) {
-    const block = blocks[blockIndex];
-    if (block.type === "tool_call") {
-      blocks[blockIndex] = {
-        ...block,
-        name: name || block.name,
-        title: title || block.title,
-        label: label || block.label,
-        status: status || block.status,
-        args: args || block.args,
-        result: result || block.result,
-        updatedAt: nowIso(),
-      };
-    }
-  } else {
-    blocks = insertProcessBlock(blocks, {
-      id: blockId,
-      type: "tool_call",
-      name,
-      title,
-      label,
-      status: status || "pending",
-      args,
-      result,
-      origin: { phase: "process", placement: "standalone" },
-      createdAt: nowIso(),
-    });
-  }
-
-  messages[targetMessageIndex] = { ...assistantMessage, blocks, updatedAt: nowIso() };
-  return { ...session, messages, updatedAt: nowIso() };
-}
-
-function applyAcpTaskListUpdate(session: AgentSession, entries: Array<{ content: string; status: unknown; priority: unknown }>, messageId?: string): AgentSession {
-  if (entries.length === 0) return session;
-  const tasks = entries.map((entry, index) => ({
-    id: `agent_task_${index}_${stableHash(entry.content)}`,
-    title: entry.content,
-    status: taskStatusFromAcp(entry.status),
-    priority: taskPriorityFromAcp(entry.priority),
-  }));
-  const completedCount = tasks.filter((task) => task.status === "completed").length;
-  const title = taskListTitle(completedCount, tasks.length);
-  const messages = [...session.messages];
-  let targetMessageIndex = -1;
-
-  for (let index = messages.length - 1; index >= 0; index -= 1) {
-    const message = messages[index];
-    if (message.role === "assistant" && message.blocks.some((block) => block.type === "task_list")) {
-      targetMessageIndex = index;
-      break;
-    }
-  }
-  if (targetMessageIndex < 0) {
-    for (let index = messages.length - 1; index >= 0; index -= 1) {
-      const message = messages[index];
-      if (message.role === "assistant" && message.status === "streaming") {
-        targetMessageIndex = index;
-        break;
-      }
-    }
-  }
-  if (targetMessageIndex < 0) {
-    for (let index = messages.length - 1; index >= 0; index -= 1) {
-      const message = messages[index];
-      if (message.role === "assistant") {
-        targetMessageIndex = index;
-        break;
-      }
-    }
-  }
-
-  let assistantMessage = targetMessageIndex >= 0 ? messages[targetMessageIndex] : null;
-  if (!assistantMessage) {
-    assistantMessage = createStreamingAssistantMessage(messageId);
-    messages.push(assistantMessage);
-    targetMessageIndex = messages.length - 1;
-  }
-
-  let blocks = [...assistantMessage.blocks];
-  const blockIndex = blocks.findIndex((block) => block.type === "task_list");
-  if (blockIndex >= 0) {
-    const block = blocks[blockIndex];
-    if (block.type === "task_list") {
-      blocks[blockIndex] = { ...block, title, tasks, updatedAt: nowIso() };
-    }
-  } else {
-    blocks = insertProcessBlock(blocks, {
-      id: newId("agent_task_list"),
-      type: "task_list",
-      title,
-      tasks,
-      origin: { phase: "process", placement: "standalone" },
-      createdAt: nowIso(),
-    });
-  }
-
-  messages[targetMessageIndex] = { ...assistantMessage, blocks, updatedAt: nowIso() };
-  return { ...session, messages, updatedAt: nowIso() };
-}
-
-function removeToolCallBlock(session: AgentSession, toolCallId: unknown): AgentSession {
-  if (typeof toolCallId !== "string" || !toolCallId) return session;
-  const blockId = `agent_tool_${toolCallId}`;
-  let changed = false;
-  const messages = session.messages.map((message) => {
-    const blocks = message.blocks.filter((block) => !(block.type === "tool_call" && block.id === blockId));
-    if (blocks.length === message.blocks.length) return message;
-    changed = true;
-    return { ...message, blocks, updatedAt: nowIso() };
-  });
-  return changed ? { ...session, messages, updatedAt: nowIso() } : session;
 }
 
 function completeStreamingAssistant(session: AgentSession): AgentSession {
@@ -788,54 +725,138 @@ function failStreamingAssistant(session: AgentSession, message: string): AgentSe
   return { ...completed, messages, updatedAt: nowIso() };
 }
 
-function applyAcpSessionUpdate(session: AgentSession, params: unknown): AgentSession {
-  if (!params || typeof params !== "object") return session;
-  const payload = params as Record<string, unknown>;
-  const update = payload.update;
-  if (!update || typeof update !== "object") return session;
-  const value = update as Record<string, unknown>;
-  const updateType = typeof value.sessionUpdate === "string" ? value.sessionUpdate : "";
-  const messageId = typeof value.messageId === "string" ? value.messageId : undefined;
-
-  if (updateType === "agent_message_chunk") {
-    return appendAssistantTextChunk(session, "result", extractTextContent(value.content), messageId);
-  }
-  if (updateType === "agent_thought_chunk") {
-    return appendAssistantTextChunk(session, "process", extractTextContent(value.content), messageId);
-  }
-  if (updateType === "plan") {
-    return applyAcpTaskListUpdate(session, taskEntriesFromUnknown(value.entries), messageId);
-  }
-  if (updateType === "tool_call" || updateType === "tool_call_update") {
-    if (isTodoToolUpdate(value)) {
-      const withTasks = applyAcpTaskListUpdate(session, todoEntriesFromToolUpdate(value), messageId);
-      return removeToolCallBlock(withTasks, value.toolCallId);
+function findAssistantMessageIndex(messages: AgentMessage[], blockId?: string): number {
+  if (blockId) {
+    for (let index = messages.length - 1; index >= 0; index -= 1) {
+      const message = messages[index];
+      if (message.role === "assistant" && message.blocks.some((block) => block.id === blockId)) return index;
     }
-    return applyAcpToolCallUpdate(session, value, messageId);
   }
-  if (updateType === "user_message_chunk") {
-    return session;
+  for (let index = messages.length - 1; index >= 0; index -= 1) {
+    const message = messages[index];
+    if (message.role === "assistant" && message.status === "streaming") return index;
   }
-  if (updateType === "usage_update") {
-    const usedTokens = finitePositiveNumber(value.used);
-    const contextLimit = finitePositiveNumber(value.size);
-    if (!usedTokens || !contextLimit) return appendDiagnosticToSession(session, "info", "ACP usage update did not include context size.");
-    const cost = value.cost && typeof value.cost === "object" ? value.cost as Record<string, unknown> : undefined;
-    return {
-      ...session,
-      contextUsage: {
-        usedTokens,
-        contextLimit,
-        cost: cost ? {
-          amount: finitePositiveNumber(cost.amount),
-          currency: typeof cost.currency === "string" ? cost.currency : undefined,
-        } : undefined,
+  for (let index = messages.length - 1; index >= 0; index -= 1) {
+    if (messages[index].role === "assistant") return index;
+  }
+  return -1;
+}
+
+function upsertAssistantBlock(session: AgentSession, block: AgentContentBlock, messageId?: string): AgentSession {
+  const messages = [...session.messages];
+  let targetIndex = findAssistantMessageIndex(messages, block.id);
+  let assistantMessage = targetIndex >= 0 ? messages[targetIndex] : null;
+  if (!assistantMessage) {
+    assistantMessage = createStreamingAssistantMessage(messageId);
+    messages.push(assistantMessage);
+    targetIndex = messages.length - 1;
+  }
+
+  let blocks = [...assistantMessage.blocks];
+  let blockIndex = blocks.findIndex((item) => item.id === block.id);
+  if (blockIndex < 0 && (block.type === "text" || block.type === "thinking")) {
+    blockIndex = blocks.findIndex((item) => item.type === block.type && item.origin.phase === block.origin.phase);
+  }
+  if (blockIndex >= 0) {
+    blocks[blockIndex] = { ...blocks[blockIndex], ...block, updatedAt: nowIso() } as AgentContentBlock;
+  } else if (block.origin.phase === "process") {
+    blocks = insertProcessBlock(blocks, block);
+  } else {
+    blocks.push(block);
+  }
+  messages[targetIndex] = { ...assistantMessage, blocks, updatedAt: nowIso() };
+  return { ...session, messages, updatedAt: nowIso() };
+}
+
+function applyOpenCodeBusEvent(session: AgentSession, event: OpenCodeBusEvent): AgentSession {
+  let nextSession = session;
+  for (const normalized of normalizeOpenCodeEvent(event)) {
+    if (normalized.type !== "unknown" && normalized.sessionId && normalized.sessionId !== nextSession.providerSessionId) continue;
+    if (normalized.type === "text.delta") {
+      nextSession = appendAssistantTextChunk(nextSession, normalized.phase, normalized.delta, normalized.messageId, normalized.partId);
+      continue;
+    }
+    if (normalized.type === "block.updated") {
+      if (normalized.block.type === "text" || normalized.block.type === "thinking") {
+        clearPacedTextBufferForPart(nextSession.id, normalized.block.origin.phase, normalized.messageId, normalized.partId);
+      }
+      nextSession = upsertAssistantBlock(nextSession, normalized.block, normalized.messageId);
+      continue;
+    }
+    if (normalized.type === "permission.asked") {
+      nextSession = upsertAssistantBlock(nextSession, normalized.block);
+      nextSession = nextSession.pendingPermissionIds.includes(normalized.requestId)
+        ? nextSession
+        : { ...nextSession, pendingPermissionIds: [...nextSession.pendingPermissionIds, normalized.requestId], updatedAt: nowIso() };
+      continue;
+    }
+    if (normalized.type === "todo.updated") {
+      nextSession = upsertLatestTaskListBlock(nextSession, normalized.block);
+      continue;
+    }
+    if (normalized.type === "session.status") {
+      nextSession = {
+        ...(normalized.status === "idle" ? completeStreamingAssistant(nextSession) : nextSession),
+        status: normalized.status === "idle" ? "idle" : normalized.status === "running" ? "running" : nextSession.status,
         updatedAt: nowIso(),
-      },
-      updatedAt: nowIso(),
-    };
+      };
+      continue;
+    }
+    if (normalized.type === "session.error") {
+      const isAbort = normalized.error.name === "MessageAbortedError";
+      nextSession = {
+        ...(isAbort ? completeStreamingAssistant(nextSession) : failStreamingAssistant(nextSession, normalized.error.message || normalized.error.name || "OpenCode session error")),
+        status: isAbort ? "idle" : "error",
+        updatedAt: nowIso(),
+      };
+      continue;
+    }
+    if (normalized.type === "message.updated") {
+      const modelId = normalized.modelId || openCodeModelIdFromInfo(normalized.info) || nextSession.modelId;
+      if (modelId) {
+        const contextLimit = contextLimitForModel(nextSession.availableModels, modelId) ?? nextSession.contextUsage?.contextLimit;
+        const contextUsage = normalized.info?.role === "assistant"
+          ? openCodeContextUsageFromInfo(normalized.info, contextLimit, nextSession.contextUsage?.cost?.amount)
+          : undefined;
+        nextSession = {
+          ...nextSession,
+          modelId,
+          ...(contextUsage ? { contextUsage } : {}),
+          updatedAt: nowIso(),
+        };
+      }
+      if (normalized.info?.agent || normalized.info?.mode) nextSession = { ...nextSession, modeId: normalized.info.agent || normalized.info.mode, updatedAt: nowIso() };
+      if (normalized.status === "complete") nextSession = completeStreamingAssistant(nextSession);
+      if (normalized.status === "error") nextSession = { ...nextSession, status: "error", updatedAt: nowIso() };
+    }
   }
-  return appendDiagnosticToSession(session, "info", `ACP update: ${updateType || "unknown"}`);
+  return nextSession;
+}
+
+function handleOpenCodeBusEvent(sessionId: string, event: OpenCodeBusEvent) {
+  useAgentStore.setState((state) => ({
+    sessions: updateSession(state.sessions, sessionId, (session) => applyOpenCodeBusEvent(session, event)),
+  }));
+}
+
+function openCodePermissionReplyFromOption(optionId: string): OpenCodePermissionReply {
+  if (optionId === "always") return "always";
+  if (optionId === "reject" || optionId === "deny") return "reject";
+  return "once";
+}
+
+function resolvePermissionInSession(session: AgentSession, requestId: string, optionId: string): AgentSession {
+  return {
+    ...session,
+    pendingPermissionIds: session.pendingPermissionIds.filter((id) => id !== requestId),
+    messages: session.messages.map((message) => ({
+      ...message,
+      blocks: message.blocks.map((block) => block.type === "permission" && block.requestId === requestId
+        ? { ...block, status: "resolved", selectedOptionId: optionId, updatedAt: nowIso() }
+        : block),
+    })),
+    updatedAt: nowIso(),
+  };
 }
 
 const AGENT_COMMAND_PROMPTS = [
@@ -859,17 +880,42 @@ export const useAgentStore = create<AgentStoreState>((set, get) => ({
     return state.sessions.find((session) => session.id === state.activeSessionId) || null;
   },
 
-  setActiveSession: (sessionId) => set({ activeSessionId: sessionId }),
+  createNewSession: () => {
+    const state = get();
+    const activeSession = state.getActiveSession();
+    const createdAt = nowIso();
+    const sessionId = newId("agent_session");
+    const session: AgentSession = {
+      ...createAgentSession(),
+      id: sessionId,
+      title: "New Agent Session",
+      cwd: activeSession?.cwd || "",
+      modelId: activeSession?.modelId,
+      modeId: activeSession?.modeId,
+      availableModels: activeSession?.availableModels || [],
+      availableModes: activeSession?.availableModes || [],
+      configOptions: activeSession?.configOptions || [],
+      status: "idle",
+      createdAt,
+      updatedAt: createdAt,
+    };
+    const cleaned = getAgentConsoleSettings().autoCleanupEmptySessions
+      ? cleanupEmptyAgentSessions(state.sessions, sessionId, [sessionId])
+      : { sessions: state.sessions, activeSessionId: sessionId, removedCount: 0 };
+    set({ sessions: [...cleaned.sessions, session], activeSessionId: sessionId });
+    return sessionId;
+  },
+
+  setActiveSession: (sessionId) => set((state) => {
+    if (!getAgentConsoleSettings().autoCleanupEmptySessions) return { activeSessionId: sessionId };
+    const cleaned = cleanupEmptyAgentSessions(state.sessions, sessionId, [sessionId]);
+    return { sessions: cleaned.sessions, activeSessionId: cleaned.activeSessionId || sessionId };
+  }),
 
   setSessionMode: (sessionId, modeId) => {
     set((state) => ({
       sessions: updateSession(state.sessions, sessionId, (session) => ({ ...session, modeId, updatedAt: nowIso() })),
     }));
-    const session = get().sessions.find((item) => item.id === sessionId);
-    const runtime = runtimeForSession(session, get().sessions);
-    if (!runtime || !session?.providerSessionId) return;
-    void runtime.client.request("session/set_mode", { sessionId: session.providerSessionId, modeId })
-      .catch((error) => get().appendAgentDiagnostic(sessionId, "error", `Failed to set ACP mode: ${error instanceof Error ? error.message : String(error)}`));
   },
 
   setSessionModel: (sessionId, modelId) => {
@@ -877,11 +923,6 @@ export const useAgentStore = create<AgentStoreState>((set, get) => ({
     set((state) => ({
       sessions: updateSession(state.sessions, sessionId, (session) => ({ ...session, modelId, contextUsage: undefined, updatedAt: nowIso() })),
     }));
-    const session = get().sessions.find((item) => item.id === sessionId);
-    const runtime = runtimeForSession(session, get().sessions);
-    if (!runtime || !session?.providerSessionId) return;
-    void runtime.client.request("session/set_model", { sessionId: session.providerSessionId, modelId })
-      .catch((error) => get().appendAgentDiagnostic(sessionId, "error", `Failed to set ACP model: ${error instanceof Error ? error.message : String(error)}`));
   },
 
   addImage: (sessionId, image) => set((state) => ({
@@ -966,184 +1007,139 @@ export const useAgentStore = create<AgentStoreState>((set, get) => ({
     sessions: updateSession(state.sessions, sessionId, (session) => appendDiagnosticToSession(session, level, message)),
   })),
 
-  startOpenCodeAcp: async (sessionId) => {
+  startOpenCodeProvider: async (sessionId) => {
     const session = get().sessions.find((item) => item.id === sessionId);
     if (!session) return;
     if (session.providerRuntime?.processId) {
-      await get().stopOpenCodeAcp(sessionId);
+      await get().stopOpenCodeProvider(sessionId);
     }
 
-    set((state) => ({
-      sessions: updateSession(state.sessions, sessionId, (item) => appendDiagnosticToSession({
-        ...item,
-        status: "starting",
-        providerRuntime: { initialized: false },
-      }, "info", "Starting OpenCode ACP provider...")),
-    }));
-
-    const client = new AcpClient({
-      onDiagnostic: (level, message) => get().appendAgentDiagnostic(sessionId, level, message),
-      onNotification: (method, params) => {
-        const normalized = normalizeAcpMethod(method);
-        if (normalized === "sessionupdate") {
-          set((state) => ({
-            sessions: updateSession(state.sessions, sessionId, (item) => applyAcpSessionUpdate(item, params)),
-          }));
-          return;
-        }
-        get().appendAgentDiagnostic(sessionId, "info", `ACP notification: ${method}`);
-      },
-      onRequest: (method, params) => {
-        const normalized = normalizeAcpMethod(method);
-        if (normalized === "sessionupdate") {
-          set((state) => ({
-            sessions: updateSession(state.sessions, sessionId, (item) => applyAcpSessionUpdate(item, params)),
-          }));
-          return null;
-        }
-        if (normalized === "requestpermission") {
-          get().appendAgentDiagnostic(sessionId, "warn", "ACP permission requests are visible in diagnostics only for this build; rejecting by default.");
-          return { outcome: { outcome: "cancelled" } };
-        }
-        get().appendAgentDiagnostic(sessionId, "warn", `ACP client request is not implemented yet: ${method}`);
-        throw new Error(`ACP client request is not implemented yet: ${method}`);
-      },
-    });
-
-    try {
-      const info = await client.start(createOpenCodeAcpStartOptions(session.cwd));
-      acpRuntimes.set(info.processId, { sessionId, client });
+    if (session.providerId === "opencode") {
       set((state) => ({
-        sessions: updateSession(state.sessions, sessionId, (item) => ({
+        sessions: updateSession(state.sessions, sessionId, (item) => appendDiagnosticToSession({
           ...item,
-          cwd: info.cwd,
-          status: "running",
-          providerRuntime: {
-            processId: info.processId,
-            command: info.command,
-            args: info.args,
-            initialized: false,
-          },
-          updatedAt: nowIso(),
-        })),
+          status: "starting",
+          providerRuntime: { transport: "http", initialized: false },
+        }, "info", "Preparing Agent session...")),
       }));
 
-      get().appendAgentDiagnostic(sessionId, "info", "Sending ACP initialize request...");
-      const initializeResult = await client.request<AcpInitializeResult>("initialize", createOpenCodeInitializeParams());
-      get().appendAgentDiagnostic(sessionId, "info", `ACP initialize returned${initializeResult.agentInfo?.version ? `: OpenCode ${initializeResult.agentInfo.version}` : "."}`);
-      const canLoadExistingSession = Boolean(
-        session.providerSessionId &&
-        session.providerSessionState !== "provisional" &&
-        providerLoadSessionCapability({
-          ...session,
-          providerRuntime: { ...session.providerRuntime, agentCapabilities: initializeResult.agentCapabilities },
-        }) === "supported"
-      );
-      if (canLoadExistingSession) {
-        get().appendAgentDiagnostic(sessionId, "info", "Loading OpenCode ACP session...");
-        const sessionResult = await client.request<AcpNewSessionResult>("session/load", {
-          sessionId: session.providerSessionId,
-          cwd: info.cwd,
-          mcpServers: [],
+      try {
+        const runtime = await startOpenCodeServerRuntime({ cwd: session.cwd, port: createOpenCodeHttpPort() });
+        const events = runtime.client.openEvents({
+          onEvent: (event) => handleOpenCodeBusEvent(sessionId, event),
+          onError: (error) => get().appendAgentDiagnostic(sessionId, "error", `Agent event stream error: ${error.message}`),
+          onOpen: () => get().appendAgentDiagnostic(sessionId, "info", "Agent event stream connected."),
+          onClose: () => get().appendAgentDiagnostic(sessionId, "info", "Agent event stream closed."),
         });
-        set((state) => ({
-          sessions: updateSession(state.sessions, sessionId, (item) => appendDiagnosticToSession({
-            ...applyAcpSessionSetupResult(item, sessionResult),
-            providerSessionState: item.providerSessionState || "restored",
-            status: "idle",
-            providerRuntime: {
-              ...item.providerRuntime,
-              initialized: true,
-              protocolVersion: initializeResult.protocolVersion,
-              agentInfo: initializeResult.agentInfo,
-              agentCapabilities: initializeResult.agentCapabilities,
-              authMethods: initializeResult.authMethods,
-            },
-          }, "info", `OpenCode ACP session loaded: ${sessionResult.sessionId || session.providerSessionId}.`)),
-        }));
-        const configuredSession = get().sessions.find((item) => item.id === sessionId);
-        if (configuredSession?.providerSessionId && configuredSession.modelId && configuredSession.modelId !== sessionResult.models?.currentModelId) {
-          await client.request("session/set_model", { sessionId: configuredSession.providerSessionId, modelId: configuredSession.modelId })
-            .then(() => get().appendAgentDiagnostic(sessionId, "info", `OpenCode model selected: ${configuredSession.modelId}`))
-            .catch((error) => get().appendAgentDiagnostic(sessionId, "warn", `Failed to apply preferred OpenCode model: ${error instanceof Error ? error.message : String(error)}`));
-        }
-      } else {
+        events.start();
+        openCodeHttpRuntimes.set(runtime.processInfo.processId, { sessionId, runtime, events });
+        const [providers, agents] = await Promise.all([
+          runtime.client.providers(),
+          runtime.client.agents().catch(() => [] as OpenCodeAgentInfo[]),
+        ]);
+        const availableModels = choicesFromOpenCodeProviders(providers);
+        const availableModes = choicesFromOpenCodeAgents(agents);
+        const modeOptions = availableModes.length > 0 ? availableModes : fallbackOpenCodeAgentChoices();
+        const serverModelId = session.modelId || availableModels[0]?.id;
+        const openCodeSettings = availableModels.length > 0 ? syncOpenCodeModels(availableModels, serverModelId) : null;
+        const modelId = openCodeSettings?.preferredModelId || serverModelId;
+        const modeId = selectOpenCodeAgentMode(session.modeId, modeOptions);
         set((state) => ({
           sessions: updateSession(state.sessions, sessionId, (item) => appendDiagnosticToSession({
             ...item,
             status: "idle",
             providerRuntime: {
-              ...item.providerRuntime,
+              ...runtime.runtimeInfo,
+              transport: "http",
               initialized: true,
-              protocolVersion: initializeResult.protocolVersion,
-              agentInfo: initializeResult.agentInfo,
-              agentCapabilities: initializeResult.agentCapabilities,
-              authMethods: initializeResult.authMethods,
+              agentCapabilities: {
+                sessionCapabilities: { list: {}, load: {}, delete: {}, update: {} },
+                loadSession: true,
+                promptAsync: true,
+                abort: true,
+                events: true,
+                tools: true,
+              },
             },
+            availableModels: availableModels.length > 0 ? availableModels : item.availableModels,
+            availableModes: modeOptions,
+            modelId,
+            modeId,
             updatedAt: nowIso(),
-          }, "info", "OpenCode ACP provider initialized. Session will be created on first prompt.")),
+          }, "info", "Agent session ready.")),
+        }));
+      } catch (error) {
+        const message = error instanceof Error ? error.message : String(error);
+        set((state) => ({
+          sessions: updateSession(state.sessions, sessionId, (item) => appendDiagnosticToSession({
+            ...item,
+            status: "error",
+            providerRuntime: { ...item.providerRuntime, transport: "http", processId: undefined, initialized: false },
+          }, "error", `Failed to prepare Agent session: ${message}`)),
         }));
       }
-    } catch (error) {
-      const message = error instanceof Error ? error.message : String(error);
-      await client.stop().catch(() => undefined);
-      for (const [processId, entry] of acpRuntimes) {
-        if (entry.client === client) acpRuntimes.delete(processId);
-      }
-      set((state) => ({
-        sessions: updateSession(state.sessions, sessionId, (item) => appendDiagnosticToSession({
-          ...item,
-          status: "error",
-          providerRuntime: { ...item.providerRuntime, processId: undefined, initialized: false },
-        }, "error", `Failed to start OpenCode ACP: ${message}`)),
-      }));
+      return;
     }
+    set((state) => ({
+      sessions: updateSession(state.sessions, sessionId, (item) => appendDiagnosticToSession({
+        ...item,
+        status: "error",
+        providerRuntime: { ...item.providerRuntime, initialized: false },
+      }, "error", "This Agent backend is not supported.")),
+    }));
   },
 
-  stopOpenCodeAcp: async (sessionId) => {
+  stopOpenCodeProvider: async (sessionId) => {
     const session = get().sessions.find((item) => item.id === sessionId);
     const processId = session?.providerRuntime?.processId;
     if (!processId) return;
-    const runtime = acpRuntimes.get(processId);
-    acpRuntimes.delete(processId);
+    const httpRuntime = openCodeHttpRuntimes.get(processId);
+    if (httpRuntime) {
+      openCodeHttpRuntimes.delete(processId);
+      clearPacedTextBuffers(sessionId);
+      httpRuntime.events.stop();
+      await httpRuntime.runtime.stop().catch(() => undefined);
+      set((state) => ({
+        sessions: updateSession(state.sessions, sessionId, (item) => appendDiagnosticToSession({
+          ...item,
+          status: "disconnected",
+          providerRuntime: { ...item.providerRuntime, processId: undefined, initialized: false },
+        }, "info", "Agent session stopped.")),
+      }));
+      return;
+    }
     clearPacedTextBuffers(sessionId);
-    await runtime?.client.stop().catch(() => undefined);
     set((state) => ({
       sessions: updateSession(state.sessions, sessionId, (item) => appendDiagnosticToSession({
         ...item,
         status: "disconnected",
         providerRuntime: { ...item.providerRuntime, processId: undefined, initialized: false },
-      }, "info", "OpenCode ACP provider stopped.")),
+      }, "warn", "Agent session process was not found.")),
     }));
   },
 
-  receiveAgentProcessOutput: (processId, data) => {
-    acpRuntimes.get(processId)?.client.handleStdout(data);
-  },
+  receiveAgentProcessOutput: (_processId, _data) => {},
 
-  receiveAgentProcessStderr: (processId, data) => {
-    acpRuntimes.get(processId)?.client.handleStderr(data);
-  },
+  receiveAgentProcessStderr: (_processId, _data) => {},
 
   receiveAgentProcessExit: (processId, exitCode) => {
-    const runtime = acpRuntimes.get(processId);
-    if (!runtime) return;
-    runtime.client.handleExit(exitCode);
-    acpRuntimes.delete(processId);
-    set((state) => ({
-      sessions: updateSession(state.sessions, runtime.sessionId, (session) => appendDiagnosticToSession({
-        ...session,
-        status: "disconnected",
-        providerRuntime: { ...session.providerRuntime, processId: undefined, initialized: false },
-      }, exitCode === 0 || exitCode === null ? "info" : "warn", `OpenCode ACP process exited${exitCode === null ? "" : ` with code ${exitCode}`}.`)),
-    }));
+    const httpRuntime = openCodeHttpRuntimes.get(processId);
+    if (httpRuntime) {
+      httpRuntime.events.stop();
+      openCodeHttpRuntimes.delete(processId);
+      set((state) => ({
+        sessions: updateSession(state.sessions, httpRuntime.sessionId, (session) => appendDiagnosticToSession({
+          ...session,
+          status: "disconnected",
+          providerRuntime: { ...session.providerRuntime, processId: undefined, initialized: false },
+        }, exitCode === 0 || exitCode === null ? "info" : "warn", `Agent session exited${exitCode === null ? "" : ` with code ${exitCode}`}.`)),
+      }));
+      return;
+    }
+    return;
   },
 
-  receiveAgentProcessError: (processId, message) => {
-    const runtime = acpRuntimes.get(processId);
-    if (!runtime) return;
-    get().appendAgentDiagnostic(runtime.sessionId, "error", message);
-  },
+  receiveAgentProcessError: (_processId, _message) => {},
 
   sendAgentPrompt: async (sessionId) => {
     let session = get().sessions.find((item) => item.id === sessionId);
@@ -1181,56 +1177,51 @@ export const useAgentStore = create<AgentStoreState>((set, get) => ({
 
     try {
       session = get().sessions.find((item) => item.id === sessionId);
-      if (!runtimeForSession(session, get().sessions)) {
-        await get().startOpenCodeAcp(sessionId);
-      }
-      session = get().sessions.find((item) => item.id === sessionId);
-      if (!session) throw new Error("OpenCode ACP provider is not connected");
-      const runtime = runtimeForSession(session, get().sessions);
-      if (!runtime) throw new Error("OpenCode ACP runtime is not available");
-
-      let providerSessionId = session.providerSessionId;
-      if (!providerSessionId) {
-        const result = await runtime.client.request<AcpNewSessionResult>("session/new", {
-          cwd: session.cwd,
-          mcpServers: [],
-        });
-        providerSessionId = result.sessionId;
-        set((state) => ({
-          sessions: updateSession(state.sessions, sessionId, (item) => appendDiagnosticToSession({
-            ...applyAcpSessionSetupResult(item, result),
-            providerSessionState: "provisional",
-          }, "info", `OpenCode ACP session created: ${providerSessionId}`)),
-        }));
-        const configuredSession = get().sessions.find((item) => item.id === sessionId);
-        if (configuredSession?.providerSessionId && configuredSession.modelId && configuredSession.modelId !== result.models?.currentModelId) {
-          await runtime.client.request("session/set_model", { sessionId: configuredSession.providerSessionId, modelId: configuredSession.modelId })
-            .then(() => get().appendAgentDiagnostic(sessionId, "info", `OpenCode model selected: ${configuredSession.modelId}`))
-            .catch((error) => get().appendAgentDiagnostic(sessionId, "warn", `Failed to apply preferred OpenCode model: ${error instanceof Error ? error.message : String(error)}`));
+      if (session?.providerId === "opencode") {
+        if (!openCodeHttpRuntimeForSession(session, get().sessions)) {
+          await get().startOpenCodeProvider(sessionId);
         }
+        session = get().sessions.find((item) => item.id === sessionId);
+        if (!session) throw new Error("Agent session is not ready");
+        const httpRuntime = openCodeHttpRuntimeForSession(session, get().sessions);
+        if (!httpRuntime) throw new Error("Agent session is not available");
+
+        let providerSessionId = session.providerSessionId;
+        if (!providerSessionId) {
+          const created = await httpRuntime.runtime.client.createSession();
+          providerSessionId = created.id;
+          await httpRuntime.runtime.client.updateSession(providerSessionId, { permission: openCodeReadOnlyPermissionRules() }).catch((error) => {
+            get().appendAgentDiagnostic(sessionId, "warn", `Failed to apply read-only permissions: ${error instanceof Error ? error.message : String(error)}`);
+          });
+          set((state) => ({
+            sessions: updateSession(state.sessions, sessionId, (item) => appendDiagnosticToSession({
+              ...item,
+              providerSessionId,
+              providerSessionState: "active",
+              title: item.title || created.title || item.title,
+              updatedAt: nowIso(),
+            }, "info", `Session created: ${providerSessionId}`)),
+          }));
+        }
+
+        const configuredSession = get().sessions.find((item) => item.id === sessionId) || session;
+        await httpRuntime.runtime.client.promptAsync(providerSessionId, {
+          parts: [{ type: "text", text: submittedPrompt.historyText || submittedPrompt.markdown }],
+          model: openCodeModelFromSession(configuredSession),
+          ...(configuredSession.modeId ? { agent: configuredSession.modeId } : {}),
+        });
+        set((state) => ({
+          sessions: updateSession(state.sessions, sessionId, (item) => ({
+            ...item,
+            providerSessionId,
+            providerSessionState: "active",
+            status: "running",
+            updatedAt: nowIso(),
+          })),
+        }));
+        return;
       }
-
-      set((state) => ({
-        sessions: updateSession(state.sessions, sessionId, (item) => ({
-          ...item,
-          providerSessionState: "active",
-          updatedAt: nowIso(),
-        })),
-      }));
-
-      await runtime.client.request("session/prompt", {
-        sessionId: providerSessionId,
-        prompt: [{ type: "text", text: submittedPrompt.historyText || submittedPrompt.markdown }],
-      }, 10 * 60 * 1000);
-      await drainPacedTextBuffers(sessionId);
-
-      set((state) => ({
-        sessions: updateSession(state.sessions, sessionId, (item) => ({
-          ...completeStreamingAssistant(item),
-          providerSessionState: "active",
-          status: "idle",
-        })),
-      }));
+      throw new Error("This Agent backend is not supported.");
     } catch (error) {
       const message = error instanceof Error ? error.message : String(error);
       await drainPacedTextBuffers(sessionId);
@@ -1243,175 +1234,328 @@ export const useAgentStore = create<AgentStoreState>((set, get) => ({
     }
   },
 
+  abortAgentPrompt: async (sessionId) => {
+    const session = get().sessions.find((item) => item.id === sessionId);
+    if (!session) return;
+    const httpRuntime = openCodeHttpRuntimeForSession(session, get().sessions);
+    if (httpRuntime && session.providerSessionId) {
+      set((state) => ({
+        sessions: updateSession(state.sessions, sessionId, (item) => appendDiagnosticToSession({
+          ...item,
+          status: "cancelling",
+          updatedAt: nowIso(),
+        }, "info", "Aborting session...")),
+      }));
+      try {
+        await httpRuntime.runtime.client.abort(session.providerSessionId);
+      } catch (error) {
+        set((state) => ({
+          sessions: updateSession(state.sessions, sessionId, (item) => appendDiagnosticToSession({
+            ...item,
+            status: "error",
+            updatedAt: nowIso(),
+          }, "error", `Failed to abort session: ${error instanceof Error ? error.message : String(error)}`)),
+        }));
+      }
+      return;
+    }
+    set((state) => ({
+      sessions: updateSession(state.sessions, sessionId, (item) => appendDiagnosticToSession(item, "warn", "Abort is not available for this session.")),
+    }));
+  },
+
   refreshProviderSessions: async (providerId, cursor = null) => {
-    const session = get().sessions.find((item) => item.providerId === providerId) || get().getActiveSession();
-    const capability = providerSessionListCapability(session);
+    let session = get().sessions.find((item) => item.providerId === providerId) || get().getActiveSession();
+    let httpRuntime = openCodeHttpRuntimeForSession(session, get().sessions);
+    if (!httpRuntime && session?.providerId === "opencode") {
+      await get().startOpenCodeProvider(session.id);
+      session = get().sessions.find((item) => item.id === session?.id) || get().sessions.find((item) => item.providerId === providerId) || get().getActiveSession();
+      httpRuntime = openCodeHttpRuntimeForSession(session, get().sessions);
+    }
+    if (httpRuntime) {
+      const existing = get().providerSessionLists[providerId];
+      set((state) => ({
+        providerSessionLists: {
+          ...state.providerSessionLists,
+          [providerId]: {
+            providerId,
+            status: "loading",
+            capability: "supported",
+            sessions: cursor ? existing?.sessions || [] : [],
+            nextCursor: null,
+            updatedAt: existing?.updatedAt,
+          },
+        },
+      }));
+      try {
+        const [sessions, statuses] = await Promise.all([
+          httpRuntime.runtime.client.listSessions(),
+          httpRuntime.runtime.client.sessionStatuses().catch((): Record<string, string> => ({})),
+        ]);
+        const normalized: AgentProviderSessionItem[] = sessions.map((item) => ({
+          sessionId: item.id,
+          cwd: item.directory || null,
+          title: item.title || null,
+          updatedAt: item.time?.updated ? new Date(item.time.updated).toISOString() : null,
+          _meta: { slug: item.slug, path: item.path, status: statuses[item.id] },
+        }));
+        set((state) => ({
+          providerSessionLists: {
+            ...state.providerSessionLists,
+            [providerId]: {
+              providerId,
+              status: "ready",
+              capability: "supported",
+              sessions: normalized,
+              nextCursor: null,
+              updatedAt: nowIso(),
+            },
+          },
+        }));
+      } catch (error) {
+        set((state) => ({
+          providerSessionLists: {
+            ...state.providerSessionLists,
+            [providerId]: {
+              providerId,
+              status: "error",
+              capability: "supported",
+              sessions: existing?.sessions || [],
+              nextCursor: null,
+              error: error instanceof Error ? error.message : String(error),
+              updatedAt: existing?.updatedAt,
+            },
+          },
+        }));
+      }
+      return;
+    }
     const existing = get().providerSessionLists[providerId];
     set((state) => ({
       providerSessionLists: {
         ...state.providerSessionLists,
         [providerId]: {
           providerId,
-          status: capability === "unsupported" ? "unsupported" : "loading",
-          capability,
-          sessions: cursor ? existing?.sessions || [] : [],
-          nextCursor: cursor,
-          error: capability === "unsupported" ? "Provider does not advertise ACP session/list support." : undefined,
+          status: "error",
+          capability: "unknown",
+          sessions: existing?.sessions || [],
+          nextCursor: existing?.nextCursor,
+          error: "Session list is not available.",
           updatedAt: existing?.updatedAt,
         },
       },
     }));
-    if (capability === "unsupported") return;
-    const runtime = runtimeForSession(session, get().sessions);
-    if (!session || !runtime || !session.providerRuntime?.initialized) {
-      set((state) => ({
-        providerSessionLists: {
-          ...state.providerSessionLists,
-          [providerId]: {
-            providerId,
-            status: "error",
-            capability,
-            sessions: existing?.sessions || [],
-            nextCursor: existing?.nextCursor,
-            error: "Start the provider before listing ACP sessions.",
-            updatedAt: existing?.updatedAt,
-          },
-        },
-      }));
-      return;
-    }
-
-    try {
-      const result = await runtime.client.request<AcpSessionListResult>("session/list", {
-        cwd: session.cwd || undefined,
-        cursor: cursor || undefined,
-      });
-      const normalized = normalizeAcpSessionListResult(result);
-      set((state) => ({
-        providerSessionLists: {
-          ...state.providerSessionLists,
-          [providerId]: {
-            providerId,
-            status: "ready",
-            capability: capability === "unknown" ? "supported" : capability,
-            sessions: cursor ? [...(existing?.sessions || []), ...normalized.sessions] : normalized.sessions,
-            nextCursor: normalized.nextCursor,
-            updatedAt: nowIso(),
-          },
-        },
-      }));
-    } catch (error) {
-      const unsupported = isMethodUnavailableError(error);
-      set((state) => ({
-        providerSessionLists: {
-          ...state.providerSessionLists,
-          [providerId]: {
-            providerId,
-            status: unsupported ? "unsupported" : "error",
-            capability: unsupported ? "unsupported" : capability,
-            sessions: existing?.sessions || [],
-            nextCursor: existing?.nextCursor,
-            error: error instanceof Error ? error.message : String(error),
-            updatedAt: existing?.updatedAt,
-          },
-        },
-      }));
-    }
   },
 
   restoreProviderSession: async (providerId, providerSessionId) => {
-    const state = get();
-    const runtimeOwner = initializedProviderSession(providerId, state.sessions);
+    let state = get();
+    let runtimeOwner = initializedProviderSession(providerId, state.sessions);
     const existingSession = state.sessions.find((item) => item.providerId === providerId && item.providerSessionId === providerSessionId && item.providerSessionState !== "provisional");
     if (existingSession) {
+      const providerRuntime = runtimeOwner?.providerRuntime;
       set((state) => ({
         activeSessionId: existingSession.id,
-        sessions: runtimeOwner?.providerRuntime ? updateSession(state.sessions, existingSession.id, (item) => ({
+        sessions: providerRuntime ? updateSession(state.sessions, existingSession.id, (item) => ({
           ...item,
-          providerRuntime: runtimeOwner.providerRuntime,
+          providerRuntime,
           updatedAt: nowIso(),
         })) : state.sessions,
       }));
       return;
     }
 
-    const session = runtimeOwner || state.sessions.find((item) => item.providerId === providerId) || state.getActiveSession();
-    const runtime = runtimeForSession(session, state.sessions);
-    const loadCapability = providerLoadSessionCapability(runtimeOwner || session);
-    if (!session || !runtime || !runtimeOwner?.providerRuntime?.initialized) {
-      throw new Error("Start the provider before restoring ACP sessions.");
+    let session = runtimeOwner || state.sessions.find((item) => item.providerId === providerId) || state.getActiveSession();
+    let httpRuntime = openCodeHttpRuntimeForSession(session, state.sessions);
+    if (!httpRuntime && session?.providerId === "opencode") {
+      await get().startOpenCodeProvider(session.id);
+      state = get();
+      runtimeOwner = initializedProviderSession(providerId, state.sessions);
+      session = runtimeOwner || state.sessions.find((item) => item.id === session?.id) || state.sessions.find((item) => item.providerId === providerId) || state.getActiveSession();
+      httpRuntime = openCodeHttpRuntimeForSession(session, state.sessions);
     }
-    if (loadCapability !== "supported") {
-      throw new Error("Provider does not advertise ACP session/load support.");
-    }
+    if (session && httpRuntime) {
+      const listItem = state.providerSessionLists[providerId]?.sessions.find((item) => item.sessionId === providerSessionId);
+      const activeSession = state.getActiveSession();
+      const reusableSession = activeSession && isReusableProvisionalSession(activeSession, providerId)
+        ? activeSession
+        : state.sessions.find((item) => isReusableProvisionalSession(item, providerId));
+      const targetSessionId = reusableSession?.id || newId("agent_session");
 
-    const listItem = state.providerSessionLists[providerId]?.sessions.find((item) => item.sessionId === providerSessionId);
-    const activeSession = state.getActiveSession();
-    const reusableSession = activeSession && isReusableProvisionalSession(activeSession, providerId)
-      ? activeSession
-      : state.sessions.find((item) => isReusableProvisionalSession(item, providerId));
-    const targetSessionId = reusableSession?.id || newId("agent_session");
-
-    const result = await runtime.client.request<AcpNewSessionResult>("session/load", {
-      sessionId: providerSessionId,
-      cwd: session.cwd,
-      mcpServers: [],
-    });
-    set((state) => ({
-      activeSessionId: targetSessionId,
-      sessions: reusableSession
-        ? updateSession(state.sessions, reusableSession.id, (item) => appendDiagnosticToSession({
-          ...applyAcpSessionSetupResult({
+      const [messages, todos, providerSessions] = await Promise.all([
+        httpRuntime.runtime.client.messages(providerSessionId),
+        httpRuntime.runtime.client.todos(providerSessionId).catch(() => []),
+        httpRuntime.runtime.client.listSessions().catch(() => []),
+      ]);
+      const providerSession = providerSessions.find((item) => item.id === providerSessionId);
+      const replayedMessages = appendRestoredTaskList(agentMessagesFromOpenCodeMessages(messages), todos, providerSessionId);
+      const restoredSelection = openCodeSelectionFromMessages(messages);
+      const restoredModelId = restoredSelection.modelId || session.modelId;
+      const restoredModeId = selectOpenCodeAgentMode(restoredSelection.modeId || session.modeId, session.availableModes || []);
+      const restoredContextUsage = openCodeContextUsageFromMessages(messages, contextLimitForModel(session.availableModels, restoredModelId));
+      set((state) => ({
+        activeSessionId: targetSessionId,
+        sessions: reusableSession
+          ? updateSession(state.sessions, reusableSession.id, (item) => appendDiagnosticToSession({
             ...item,
-            title: listItem?.title || item.title,
-            cwd: listItem?.cwd || item.cwd || session.cwd,
-            providerRuntime: runtimeOwner.providerRuntime || item.providerRuntime,
-          }, { ...result, sessionId: result.sessionId || providerSessionId }),
-          providerSessionState: "restored",
-          status: "idle",
-        }, "info", `ACP session restored: ${providerSessionId}`))
-        : [...state.sessions, appendDiagnosticToSession({
-          ...applyAcpSessionSetupResult({
-            ...createAgentSession(),
-            id: targetSessionId,
-            providerId,
-            title: listItem?.title || session.title,
-            cwd: listItem?.cwd || session.cwd,
-            providerRuntime: runtimeOwner.providerRuntime || session.providerRuntime,
-            modelId: session.modelId,
-            modeId: session.modeId,
+            title: providerSession?.title || listItem?.title || item.title,
+            cwd: providerSession?.directory || listItem?.cwd || item.cwd || session.cwd,
+            providerRuntime: runtimeOwner?.providerRuntime || session.providerRuntime,
+            providerSessionId,
+            providerSessionState: "restored",
+            messages: replayedMessages,
+            modelId: restoredModelId,
+            modeId: restoredModeId,
             availableModels: session.availableModels || [],
             availableModes: session.availableModes || [],
             configOptions: session.configOptions || [],
+            contextUsage: restoredContextUsage,
+            status: "idle",
+            updatedAt: nowIso(),
+          }, "info", `Session restored: ${providerSessionId}`))
+          : [...state.sessions, appendDiagnosticToSession({
+            ...createAgentSession(),
+            id: targetSessionId,
+            providerId,
+            title: providerSession?.title || listItem?.title || session.title,
+            cwd: providerSession?.directory || listItem?.cwd || session.cwd,
+            providerRuntime: runtimeOwner?.providerRuntime || session.providerRuntime,
+            providerSessionId,
+            providerSessionState: "restored",
+            messages: replayedMessages,
+            modelId: restoredModelId,
+            modeId: restoredModeId,
+            availableModels: session.availableModels || [],
+            availableModes: session.availableModes || [],
+            configOptions: session.configOptions || [],
+            contextUsage: restoredContextUsage,
             status: "idle",
             createdAt: nowIso(),
             updatedAt: nowIso(),
-          }, { ...result, sessionId: result.sessionId || providerSessionId }),
-          providerSessionState: "restored",
-          status: "idle",
-        }, "info", `ACP session restored: ${providerSessionId}`)],
+          }, "info", `Session restored: ${providerSessionId}`)],
+      }));
+      return;
+    }
+
+    throw new Error("Session restore is not available.");
+  },
+
+  renameProviderSession: async (providerId, providerSessionId, title) => {
+    const trimmedTitle = title.trim();
+    if (!trimmedTitle) return;
+    let state = get();
+    let session = initializedProviderSession(providerId, state.sessions) || state.sessions.find((item) => item.providerId === providerId) || state.getActiveSession();
+    let httpRuntime = openCodeHttpRuntimeForSession(session, state.sessions);
+    if (!httpRuntime && session?.providerId === "opencode") {
+      await get().startOpenCodeProvider(session.id);
+      state = get();
+      session = initializedProviderSession(providerId, state.sessions) || state.sessions.find((item) => item.id === session?.id) || state.sessions.find((item) => item.providerId === providerId) || state.getActiveSession();
+      httpRuntime = openCodeHttpRuntimeForSession(session, state.sessions);
+    }
+    if (!httpRuntime) throw new Error("Session rename is not available.");
+    const updated = await httpRuntime.runtime.client.updateSession(providerSessionId, { title: trimmedTitle });
+    const nextTitle = updated.title || trimmedTitle;
+    set((state) => ({
+      providerSessionLists: {
+        ...state.providerSessionLists,
+        [providerId]: state.providerSessionLists[providerId]
+          ? {
+            ...state.providerSessionLists[providerId],
+            sessions: state.providerSessionLists[providerId].sessions.map((item) => item.sessionId === providerSessionId ? { ...item, title: nextTitle, updatedAt: nowIso() } : item),
+            updatedAt: nowIso(),
+          }
+          : undefined,
+      },
+      sessions: state.sessions.map((item) => item.providerId === providerId && item.providerSessionId === providerSessionId
+        ? appendDiagnosticToSession({
+          ...item,
+          title: nextTitle,
+          updatedAt: nowIso(),
+        }, "info", `Session renamed: ${nextTitle}`)
+        : item),
     }));
   },
 
-  resolveMockPermission: (sessionId, requestId, optionId) => set((state) => ({
-    sessions: updateSession(state.sessions, sessionId, (session) => ({
-      ...session,
-      pendingPermissionIds: session.pendingPermissionIds.filter((id) => id !== requestId),
-      messages: session.messages.map((message) => ({
-        ...message,
-        blocks: message.blocks.map((block) => block.type === "permission" && block.requestId === requestId
-          ? { ...block, status: "resolved", selectedOptionId: optionId, updatedAt: nowIso() }
-          : block),
-      })),
-      updatedAt: nowIso(),
-    })),
-  })),
+  deleteProviderSession: async (providerId, providerSessionId) => {
+    let state = get();
+    let session = initializedProviderSession(providerId, state.sessions) || state.sessions.find((item) => item.providerId === providerId) || state.getActiveSession();
+    let httpRuntime = openCodeHttpRuntimeForSession(session, state.sessions);
+    if (!httpRuntime && session?.providerId === "opencode") {
+      await get().startOpenCodeProvider(session.id);
+      state = get();
+      session = initializedProviderSession(providerId, state.sessions) || state.sessions.find((item) => item.id === session?.id) || state.sessions.find((item) => item.providerId === providerId) || state.getActiveSession();
+      httpRuntime = openCodeHttpRuntimeForSession(session, state.sessions);
+    }
+    if (!httpRuntime) throw new Error("Session delete is not available.");
+    await httpRuntime.runtime.client.deleteSession(providerSessionId);
+    set((state) => ({
+      providerSessionLists: {
+        ...state.providerSessionLists,
+        [providerId]: state.providerSessionLists[providerId]
+          ? {
+            ...state.providerSessionLists[providerId],
+            sessions: state.providerSessionLists[providerId].sessions.filter((item) => item.sessionId !== providerSessionId),
+            updatedAt: nowIso(),
+          }
+          : undefined,
+      },
+      sessions: state.sessions.map((item) => item.providerId === providerId && item.providerSessionId === providerSessionId
+        ? appendDiagnosticToSession({
+          ...item,
+          providerSessionId: undefined,
+          providerSessionState: undefined,
+          status: item.status === "running" || item.status === "cancelling" ? "idle" : item.status,
+          updatedAt: nowIso(),
+        }, "info", `Session deleted: ${providerSessionId}`)
+        : item),
+    }));
+  },
+
+  resolveMockPermission: (sessionId, requestId, optionId) => {
+    const session = get().sessions.find((item) => item.id === sessionId);
+    const httpRuntime = openCodeHttpRuntimeForSession(session, get().sessions);
+    if (session?.providerSessionId && httpRuntime) {
+      void httpRuntime.runtime.client.respondPermission(session.providerSessionId, requestId, openCodePermissionReplyFromOption(optionId))
+        .catch((error) => get().appendAgentDiagnostic(sessionId, "error", `Failed to answer OpenCode permission: ${error instanceof Error ? error.message : String(error)}`));
+    }
+    set((state) => ({
+      sessions: updateSession(state.sessions, sessionId, (session) => resolvePermissionInSession(session, requestId, optionId)),
+    }));
+  },
+
+  cleanupEmptySessions: async () => {
+    let state = get();
+    let removedCount = 0;
+    const cleaned = cleanupEmptyAgentSessions(state.sessions, null);
+    if (cleaned.removedCount > 0) {
+      removedCount += cleaned.removedCount;
+      set({ sessions: cleaned.sessions, activeSessionId: cleaned.activeSessionId });
+      state = get();
+    }
+
+    const providerIds = new Set<AgentProviderId>([
+      ...state.sessions.map((session) => session.providerId),
+      ...(Object.keys(state.providerSessionLists) as AgentProviderId[]),
+      "opencode",
+    ]);
+    for (const providerId of providerIds) {
+      const httpRuntime = await ensureOpenCodeRuntime(providerId, get);
+      if (!httpRuntime) continue;
+      const deletedSessionIds = await cleanupEmptyProviderSessions(httpRuntime);
+      if (deletedSessionIds.size === 0) continue;
+      removedCount += deletedSessionIds.size;
+      set((state) => removeDeletedProviderSessions(state, providerId, deletedSessionIds));
+      state = get();
+    }
+
+    return removedCount;
+  },
 
   resetAgentSession: () => {
-    for (const runtime of acpRuntimes.values()) {
-      void runtime.client.stop().catch(() => undefined);
+    for (const entry of openCodeHttpRuntimes.values()) {
+      entry.events.stop();
+      void entry.runtime.stop().catch(() => undefined);
     }
-    acpRuntimes.clear();
+    openCodeHttpRuntimes.clear();
     clearPacedTextBuffers();
     set(() => ({
       sessions: [createAgentSession()],

@@ -2,6 +2,7 @@ import { useState, useEffect, useCallback, useMemo, type DragEvent as ReactDragE
 import { useTranslation } from "react-i18next";
 import i18n from "../i18n";
 import { useFeedbackStore, type DockColumnId, type DockTabId } from "../store/feedbackStore";
+import { useAgentStore } from "../store/agentStore";
 import { PromptIcon } from "./PromptIcons";
 import { McpConfigHelper } from "./McpConfigHelper";
 import { CallerManager } from "./CallerManager";
@@ -20,8 +21,8 @@ import { SESSION_LIST_MODE_OPTIONS } from "../sessionNavigationSettings";
 import { SessionNavigationModeIcon } from "./SessionNavigationModeIcon";
 import { AppSelect, type AppSelectOption } from "./AppSelect";
 
-type Tab = "general" | "display" | "callers" | "submitted" | "prompts" | "sessionNavigation" | "layoutPanels" | "acpConsole" | "openCode" | "terminal" | "resources" | "notification" | "about";
-type SettingsGroupId = "mlfb" | "acp" | "layout";
+type Tab = "general" | "display" | "callers" | "submitted" | "prompts" | "sessionNavigation" | "layoutPanels" | "agentConsole" | "agentChat" | "agentSessionManager" | "openCode" | "terminal" | "resources" | "notification" | "about";
+type SettingsGroupId = "mlfb" | "agent" | "layout";
 
 const SETTINGS_DOCK_COLUMN_IDS: DockColumnId[] = ["leftSidebar", "leftPage", "rightPage", "rightSidebar"];
 const SETTINGS_DOCK_TAB_IDS: DockTabId[] = ["mlc", "mlcPreview", "resources", "previewBrowser", "previewInfo", "agentConsole", "terminal"];
@@ -76,7 +77,7 @@ applyZoomSettings();
 export function SettingsDialog({ open, onClose }: { open: boolean; onClose: () => void }) {
   const { t } = useTranslation();
   const [tab, setTab] = useState<Tab>("general");
-  const [collapsedGroups, setCollapsedGroups] = useState<Record<SettingsGroupId, boolean>>({ mlfb: false, acp: false, layout: false });
+  const [collapsedGroups, setCollapsedGroups] = useState<Record<SettingsGroupId, boolean>>({ mlfb: false, agent: false, layout: false });
   const [draggedDockTab, setDraggedDockTab] = useState<DockTabId | null>(null);
   const [theme, setTheme] = useState<Theme>(getStoredTheme);
   const [autostart, setAutostart] = useState(false);
@@ -88,9 +89,10 @@ export function SettingsDialog({ open, onClose }: { open: boolean; onClose: () =
   const [agentConsoleSettings, setAgentConsoleSettings] = useState<AgentConsoleSettings>(getAgentConsoleSettings);
   const [openCodeSettings, setOpenCodeSettings] = useState<OpenCodeSettings>(getOpenCodeSettings);
   const [openCodeModelQuery, setOpenCodeModelQuery] = useState("");
+  const [agentCleanupMessage, setAgentCleanupMessage] = useState<string | null>(null);
   const [zoomSettings, setZoomSettings] = useState<ZoomSettings>(getZoomSettings);
   const [submittedViewSettings, setSubmittedViewSettings] = useState<SubmittedViewSettings>(getSubmittedViewSettings);
-  const acpPreviewSession = useMemo(() => createMockAgentSession(), []);
+  const agentPreviewSession = useMemo(() => createMockAgentSession(), []);
   const prompts = useFeedbackStore((s) => s.prompts);
   const disabledPrompts = useFeedbackStore((s) => s.disabledPrompts);
   const showPromptButtons = useFeedbackStore((s) => s.showPromptButtons);
@@ -106,6 +108,7 @@ export function SettingsDialog({ open, onClose }: { open: boolean; onClose: () =
   const setShowSessionNavigationAttachmentDots = useFeedbackStore((s) => s.setShowSessionNavigationAttachmentDots);
   const togglePromptDisabled = useFeedbackStore((s) => s.togglePromptDisabled);
   const moveDockTabToColumn = useFeedbackStore((s) => s.moveDockTabToColumn);
+  const cleanupEmptyAgentSessions = useAgentStore((s) => s.cleanupEmptySessions);
 
   // Load autostart state
   useEffect(() => {
@@ -115,6 +118,7 @@ export function SettingsDialog({ open, onClose }: { open: boolean; onClose: () =
     setTerminalSettings(getTerminalSettings());
     setComposerSettings(getComposerSettings());
     setAgentConsoleSettings(getAgentConsoleSettings());
+    setAgentCleanupMessage(null);
     setOpenCodeSettings(getOpenCodeSettings());
     setSubmittedViewSettings(getSubmittedViewSettings());
     invoke<boolean>("get_autostart").then(setAutostart).catch(() => {});
@@ -197,6 +201,29 @@ export function SettingsDialog({ open, onClose }: { open: boolean; onClose: () =
       return next;
     });
   }, []);
+
+  const handleAgentAutoCleanupToggle = useCallback(() => {
+    let shouldCleanup = false;
+    setAgentConsoleSettings((prev) => {
+      const next = { ...prev, autoCleanupEmptySessions: !prev.autoCleanupEmptySessions };
+      saveAgentConsoleSettings(next);
+      shouldCleanup = next.autoCleanupEmptySessions;
+      return next;
+    });
+    if (shouldCleanup) {
+      setAgentCleanupMessage(t("settings.agentSessionCleanupRunning", "Cleaning empty sessions..."));
+      void cleanupEmptyAgentSessions()
+        .then((removedCount) => setAgentCleanupMessage(t("settings.agentSessionCleanupDone", "Cleaned {{count}} empty sessions", { count: removedCount })))
+        .catch((error) => setAgentCleanupMessage(error instanceof Error ? error.message : String(error)));
+    }
+  }, [cleanupEmptyAgentSessions, t]);
+
+  const handleAgentCleanupNow = useCallback(() => {
+    setAgentCleanupMessage(t("settings.agentSessionCleanupRunning", "Cleaning empty sessions..."));
+    void cleanupEmptyAgentSessions()
+      .then((removedCount) => setAgentCleanupMessage(t("settings.agentSessionCleanupDone", "Cleaned {{count}} empty sessions", { count: removedCount })))
+      .catch((error) => setAgentCleanupMessage(error instanceof Error ? error.message : String(error)));
+  }, [cleanupEmptyAgentSessions, t]);
 
   const handleAgentMessageSpeakerToggle = useCallback(() => {
     setAgentConsoleSettings((prev) => {
@@ -312,20 +339,20 @@ export function SettingsDialog({ open, onClose }: { open: boolean; onClose: () =
   };
 
   const agentIndicatorModeLabel = (mode: AgentTopbarIndicatorMode) => {
-    if (mode === "hidden") return t("settings.acpIndicatorHidden", "Hidden");
-    if (mode === "text") return t("settings.acpIndicatorText", "Text only");
-    return t("settings.acpIndicatorTextAndGraphic", "Text and graphic");
+    if (mode === "hidden") return t("settings.agentIndicatorHidden", "Hidden");
+    if (mode === "text") return t("settings.agentIndicatorText", "Text only");
+    return t("settings.agentIndicatorTextAndGraphic", "Text and graphic");
   };
 
   const renderAgentIndicatorModeGroup = (key: keyof AgentConsoleSettings, currentMode: AgentTopbarIndicatorMode, ariaLabel: string) => (
-    <div className="cm-column-mode-group settings-acp-mode-group" role="group" aria-label={ariaLabel}>
+    <div className="cm-column-mode-group settings-agent-mode-group" role="group" aria-label={ariaLabel}>
       {AGENT_TOPBAR_INDICATOR_MODE_OPTIONS.map((mode) => {
         const label = agentIndicatorModeLabel(mode);
         return (
           <button
             key={mode}
             type="button"
-            className={`cm-column-mode-button settings-acp-mode-button${currentMode === mode ? " active" : ""}`}
+            className={`cm-column-mode-button settings-agent-mode-button${currentMode === mode ? " active" : ""}`}
             title={label}
             aria-label={`${ariaLabel}: ${label}`}
             onClick={() => handleAgentIndicatorModeChange(key, mode)}
@@ -338,11 +365,11 @@ export function SettingsDialog({ open, onClose }: { open: boolean; onClose: () =
   );
 
   const processStepModeLabel = (mode: AgentProcessStepDefaultMode) => mode === "tabs"
-    ? t("settings.acpProcessStepModeTabs", "Tabs")
-    : t("settings.acpProcessStepModeTimeline", "Timeline");
+    ? t("settings.agentProcessStepModeTabs", "Tabs")
+    : t("settings.agentProcessStepModeTimeline", "Timeline");
 
   const renderAgentProcessStepModeGroup = () => (
-    <div className="settings-btn-group" role="group" aria-label={t("settings.acpProcessStepDefaultMode", "Step process default view")}> 
+    <div className="settings-btn-group" role="group" aria-label={t("settings.agentProcessStepDefaultMode", "Step process default view")}>
       {AGENT_PROCESS_STEP_MODE_OPTIONS.map((mode) => {
         const label = processStepModeLabel(mode);
         return (
@@ -365,22 +392,22 @@ export function SettingsDialog({ open, onClose }: { open: boolean; onClose: () =
     const value = agentConsoleSettings.diffVisual[key];
     const displayValue = Number.isInteger(value) ? String(value) : value.toFixed(1);
     return (
-      <div className="settings-acp-offset-row">
-        <span className="settings-acp-offset-label">{label}</span>
-        <div className="settings-acp-offset-stepper" role="group" aria-label={label}>
+      <div className="settings-agent-offset-row">
+        <span className="settings-agent-offset-label">{label}</span>
+        <div className="settings-agent-offset-stepper" role="group" aria-label={label}>
           <button
             type="button"
-            className="settings-acp-offset-button"
+            className="settings-agent-offset-button"
             disabled={value <= -4}
             onClick={() => handleAgentDiffTextOffsetChange(key, value - 0.5)}
             aria-label={`${label} -0.5px`}
           >
             -
           </button>
-          <span className="settings-acp-offset-value">{displayValue}px</span>
+          <span className="settings-agent-offset-value">{displayValue}px</span>
           <button
             type="button"
-            className="settings-acp-offset-button"
+            className="settings-agent-offset-button"
             disabled={value >= 4}
             onClick={() => handleAgentDiffTextOffsetChange(key, value + 0.5)}
             aria-label={`${label} +0.5px`}
@@ -392,16 +419,11 @@ export function SettingsDialog({ open, onClose }: { open: boolean; onClose: () =
     );
   };
 
-  const renderAcpPreview = () => {
+  const renderAgentPreview = () => {
     return (
-      <div className="settings-acp-preview" aria-label={t("settings.acpPreview", "ACP preview")}>
+      <div className="settings-agent-preview" aria-label={t("settings.agentPreview", "Agent preview")}>
         <AgentSessionHeader
-          session={acpPreviewSession}
-          sessions={[acpPreviewSession]}
-          activeSessionId={acpPreviewSession.id}
-          onSelectSession={() => {}}
-          onStartAcp={async () => {}}
-          onStopAcp={async () => {}}
+          session={agentPreviewSession}
           previewMode
         />
       </div>
@@ -417,7 +439,7 @@ export function SettingsDialog({ open, onClose }: { open: boolean; onClose: () =
         <div className="settings-row settings-row-stacked">
           <div className="settings-row-info">
             <span className="settings-label">{t("settings.openCodeModelLibrary", "OpenCode model library")}</span>
-            <span className="settings-sublabel">{t("settings.openCodeModelLibraryDesc", "Models are discovered from the real ACP session. Enable the models that should appear in the compact Agent Console switcher.")}</span>
+            <span className="settings-sublabel">{t("settings.openCodeModelLibraryDesc", "Models are discovered from OpenCode. Enable the models that should appear in the compact Agent Console switcher.")}</span>
           </div>
           <div className="settings-opencode-summary-row">
             <span>{t("settings.openCodeModelsTotal", "{{count}} models", { count: openCodeSettings.models.length })}</span>
@@ -437,7 +459,7 @@ export function SettingsDialog({ open, onClose }: { open: boolean; onClose: () =
           {openCodeSettings.models.length === 0 ? (
             <div className="settings-opencode-empty">
               <Icon name="robot" size={15} />
-              <span>{t("settings.openCodeModelLibraryEmpty", "Connect OpenCode ACP once to discover available models.")}</span>
+              <span>{t("settings.openCodeModelLibraryEmpty", "Run an Agent session once to discover available models.")}</span>
             </div>
           ) : (
             <div className="settings-opencode-model-list">
@@ -591,9 +613,11 @@ export function SettingsDialog({ open, onClose }: { open: boolean; onClose: () =
                 {renderSettingsNavItem("sessionNavigation", "list-tree", t("settings.sessionNavigation", "Session navigation"), true)}
               </>
             ))}
-            {renderSettingsNavGroup("acp", t("settings.acp", "ACP"), ["acpConsole", "openCode"], (
+            {renderSettingsNavGroup("agent", t("settings.agent", "Agent"), ["agentConsole", "agentChat", "agentSessionManager", "openCode"], (
               <>
-                {renderSettingsNavItem("acpConsole", "robot", t("settings.acpConsoleDisplay", "Navigation bar"), true)}
+                {renderSettingsNavItem("agentConsole", "robot", t("settings.agentConsoleDisplay", "Navigation bar"), true)}
+                {renderSettingsNavItem("agentChat", "message-dot", t("settings.agentChat", "Chat"), true)}
+                {renderSettingsNavItem("agentSessionManager", "message", t("settings.agentSessionManager", "Session manager"), true)}
                 {renderSettingsNavItem("openCode", "code", t("settings.openCode", "OpenCode"), true)}
               </>
             ))}
@@ -609,7 +633,7 @@ export function SettingsDialog({ open, onClose }: { open: boolean; onClose: () =
           </div>
 
           {/* Content */}
-          <div className={`settings-content${tab === "acpConsole" ? " settings-content-acp" : ""}`}>
+          <div className={`settings-content${tab === "agentConsole" ? " settings-content-agent" : ""}`}>
             {tab === "general" && (
               <div className="settings-section">
                 <div className="settings-row">
@@ -806,7 +830,7 @@ export function SettingsDialog({ open, onClose }: { open: boolean; onClose: () =
 
             {tab === "sessionNavigation" && (
               <div className="settings-section">
-                <div className="settings-row settings-row-stacked">
+                <div className="settings-row">
                   <div className="settings-row-info">
                     <span className="settings-label">{t("settings.sessionNavigationMode", "Navigation display mode")}</span>
                     <span className="settings-sublabel">{t("settings.sessionNavigationModeDesc", "Choose how sessions are shown inside each caller panel.")}</span>
@@ -896,77 +920,117 @@ export function SettingsDialog({ open, onClose }: { open: boolean; onClose: () =
               </div>
             )}
 
-            {tab === "acpConsole" && (
-              <>
-                {renderAcpPreview()}
-                <div className="settings-section settings-acp-section">
-                  <div className="settings-row settings-row-stacked">
-                    <div className="settings-row">
-                      <div className="settings-row-info">
-                        <span className="settings-label">{t("settings.acpSmoothStreamingOutput", "Smooth streaming output")}</span>
-                        <span className="settings-sublabel">{t("settings.acpSmoothStreamingOutputDesc", "Pace Agent text updates on the frontend so fast ACP chunks still appear progressively.")}</span>
-                      </div>
-                      <button
-                        type="button"
-                        className={`settings-toggle${agentConsoleSettings.smoothStreamingOutput ? " settings-toggle-on" : ""}`}
-                        onClick={handleAgentSmoothStreamingToggle}
-                        aria-label={t("settings.acpSmoothStreamingOutput", "Smooth streaming output")}
-                        aria-pressed={agentConsoleSettings.smoothStreamingOutput}
-                      >
-                        <span className="settings-toggle-knob" />
-                      </button>
-                    </div>
-                    <div className="settings-row">
-                      <div className="settings-row-info">
-                        <span className="settings-label">{t("settings.acpProcessStepDefaultMode", "Step process default view")}</span>
-                        <span className="settings-sublabel">{t("settings.acpProcessStepDefaultModeDesc", "Choose whether new Agent process steps open in tabs or timeline view by default.")}</span>
-                      </div>
-                      {renderAgentProcessStepModeGroup()}
-                    </div>
-                    <div className="settings-row">
-                      <div className="settings-row-info">
-                        <span className="settings-label">{t("settings.acpMessageSpeakerLine", "Message speaker line")}</span>
-                        <span className="settings-sublabel">{t("settings.acpMessageSpeakerLineDesc", "Show the avatar and speaker label above each Agent message.")}</span>
-                      </div>
-                      <button
-                        type="button"
-                        className={`settings-toggle${agentConsoleSettings.showMessageSpeakerLine ? " settings-toggle-on" : ""}`}
-                        onClick={handleAgentMessageSpeakerToggle}
-                        aria-label={t("settings.acpMessageSpeakerLine", "Message speaker line")}
-                        aria-pressed={agentConsoleSettings.showMessageSpeakerLine}
-                      >
-                        <span className="settings-toggle-knob" />
-                      </button>
-                    </div>
+            {tab === "agentSessionManager" && (
+              <div className="settings-section settings-agent-section">
+                <div className="settings-row settings-row-stacked">
+                  <div className="settings-row">
                     <div className="settings-row-info">
-                      <span className="settings-label">{t("settings.acpTopbarIndicators", "Topbar indicators")}</span>
-                      <span className="settings-sublabel">{t("settings.acpTopbarIndicatorsDesc", "Configure how Agent Console diff and context indicators appear in the topbar.")}</span>
+                      <span className="settings-label">{t("settings.agentAutoCleanupEmptySessions", "Auto-clean empty sessions")}</span>
+                      <span className="settings-sublabel">{t("settings.agentAutoCleanupEmptySessionsDesc", "Remove inactive empty Agent sessions when switching sessions.")}</span>
                     </div>
-                    <div className="settings-acp-indicator-list">
-                      <div className="settings-acp-indicator-row">
-                        <span className="settings-acp-indicator-label">{t("settings.acpDiffIndicator", "Diff indicator")}</span>
-                        {renderAgentIndicatorModeGroup("diffIndicatorMode", agentConsoleSettings.diffIndicatorMode, t("settings.acpDiffIndicator", "Diff indicator"))}
+                    <button
+                      type="button"
+                      className={`settings-toggle${agentConsoleSettings.autoCleanupEmptySessions ? " settings-toggle-on" : ""}`}
+                      onClick={handleAgentAutoCleanupToggle}
+                      aria-label={t("settings.agentAutoCleanupEmptySessions", "Auto-clean empty sessions")}
+                      aria-pressed={agentConsoleSettings.autoCleanupEmptySessions}
+                    >
+                      <span className="settings-toggle-knob" />
+                    </button>
+                  </div>
+                  <div className="settings-row">
+                    <div className="settings-row-info">
+                      <span className="settings-label">{t("settings.agentCleanupEmptySessionsNow", "Clean empty sessions now")}</span>
+                      <span className="settings-sublabel">{agentCleanupMessage || t("settings.agentCleanupEmptySessionsNowDesc", "Immediately remove inactive empty Agent sessions.")}</span>
+                    </div>
+                    <div className="settings-btn-group">
+                      <button type="button" className="settings-btn-option" onClick={handleAgentCleanupNow}>
+                        {t("settings.agentCleanupEmptySessionsButton", "Clean now")}
+                      </button>
+                    </div>
+                  </div>
+                </div>
+              </div>
+            )}
+
+            {tab === "agentChat" && (
+              <div className="settings-section settings-agent-section">
+                <div className="settings-row settings-row-stacked">
+                  <div className="settings-row">
+                    <div className="settings-row-info">
+                      <span className="settings-label">{t("settings.agentMessageSpeakerLine", "Show session avatar and name during chat")}</span>
+                      <span className="settings-sublabel">{t("settings.agentMessageSpeakerLineDesc", "Show the session avatar and name above each Agent message.")}</span>
+                    </div>
+                    <button
+                      type="button"
+                      className={`settings-toggle${agentConsoleSettings.showMessageSpeakerLine ? " settings-toggle-on" : ""}`}
+                      onClick={handleAgentMessageSpeakerToggle}
+                      aria-label={t("settings.agentMessageSpeakerLine", "Show session avatar and name during chat")}
+                      aria-pressed={agentConsoleSettings.showMessageSpeakerLine}
+                    >
+                      <span className="settings-toggle-knob" />
+                    </button>
+                  </div>
+                  <div className="settings-row">
+                    <div className="settings-row-info">
+                      <span className="settings-label">{t("settings.agentProcessStepDefaultMode", "Step process default view")}</span>
+                      <span className="settings-sublabel">{t("settings.agentProcessStepDefaultModeDesc", "Choose whether new Agent process steps open in tabs or timeline view by default.")}</span>
+                    </div>
+                    {renderAgentProcessStepModeGroup()}
+                  </div>
+                  <div className="settings-row">
+                    <div className="settings-row-info">
+                      <span className="settings-label">{t("settings.agentSmoothStreamingOutput", "Smooth streaming output")}</span>
+                      <span className="settings-sublabel">{t("settings.agentSmoothStreamingOutputDesc", "Pace Agent text updates so fast model chunks still appear progressively.")}</span>
+                    </div>
+                    <button
+                      type="button"
+                      className={`settings-toggle${agentConsoleSettings.smoothStreamingOutput ? " settings-toggle-on" : ""}`}
+                      onClick={handleAgentSmoothStreamingToggle}
+                      aria-label={t("settings.agentSmoothStreamingOutput", "Smooth streaming output")}
+                      aria-pressed={agentConsoleSettings.smoothStreamingOutput}
+                    >
+                      <span className="settings-toggle-knob" />
+                    </button>
+                  </div>
+                </div>
+              </div>
+            )}
+
+            {tab === "agentConsole" && (
+              <>
+                {renderAgentPreview()}
+                <div className="settings-section settings-agent-section">
+                  <div className="settings-row settings-row-stacked">
+                    <div className="settings-row-info">
+                      <span className="settings-label">{t("settings.agentTopbarIndicators", "Topbar indicators")}</span>
+                      <span className="settings-sublabel">{t("settings.agentTopbarIndicatorsDesc", "Configure how Agent Console diff and context indicators appear in the topbar.")}</span>
+                    </div>
+                    <div className="settings-agent-indicator-list">
+                      <div className="settings-agent-indicator-row">
+                        <span className="settings-agent-indicator-label">{t("settings.agentDiffIndicator", "Diff indicator")}</span>
+                        {renderAgentIndicatorModeGroup("diffIndicatorMode", agentConsoleSettings.diffIndicatorMode, t("settings.agentDiffIndicator", "Diff indicator"))}
                       </div>
-                      <div className="settings-acp-indicator-row">
-                        <span className="settings-acp-indicator-label">{t("settings.acpContextIndicator", "Context indicator")}</span>
-                        {renderAgentIndicatorModeGroup("contextIndicatorMode", agentConsoleSettings.contextIndicatorMode, t("settings.acpContextIndicator", "Context indicator"))}
+                      <div className="settings-agent-indicator-row">
+                        <span className="settings-agent-indicator-label">{t("settings.agentContextIndicator", "Context indicator")}</span>
+                        {renderAgentIndicatorModeGroup("contextIndicatorMode", agentConsoleSettings.contextIndicatorMode, t("settings.agentContextIndicator", "Context indicator"))}
                       </div>
                     </div>
-                    <div className="settings-acp-visual-group">
+                    <div className="settings-agent-visual-group">
                       <div className="settings-row-info">
-                        <span className="settings-label">{t("settings.acpDiffVisualAdjustment", "Diff visual adjustment")}</span>
-                        <span className="settings-sublabel">{t("settings.acpDiffVisualAdjustmentDesc", "Tune diff colors and compact topbar text position.")}</span>
+                        <span className="settings-label">{t("settings.agentDiffVisualAdjustment", "Diff visual adjustment")}</span>
+                        <span className="settings-sublabel">{t("settings.agentDiffVisualAdjustmentDesc", "Tune diff colors and compact topbar text position.")}</span>
                       </div>
-                      <div className="settings-acp-color-presets" role="group" aria-label={t("settings.acpDiffColorPreset", "Diff color preset")}>
+                      <div className="settings-agent-color-presets" role="group" aria-label={t("settings.agentDiffColorPreset", "Diff color preset")}>
                         {AGENT_DIFF_COLOR_PRESETS.map((preset) => {
                           const label = t(preset.labelKey, preset.defaultLabel);
                           return (
                             <button
                               key={preset.id}
                               type="button"
-                              className={`settings-acp-color-preset${agentConsoleSettings.diffVisual.colorPresetId === preset.id ? " active" : ""}`}
+                              className={`settings-agent-color-preset${agentConsoleSettings.diffVisual.colorPresetId === preset.id ? " active" : ""}`}
                               title={label}
-                              aria-label={`${t("settings.acpDiffColorPreset", "Diff color preset")}: ${label}`}
+                              aria-label={`${t("settings.agentDiffColorPreset", "Diff color preset")}: ${label}`}
                               onClick={() => handleAgentDiffColorPresetChange(preset.id)}
                             >
                               <span style={{ background: preset.additions }} />
@@ -975,24 +1039,24 @@ export function SettingsDialog({ open, onClose }: { open: boolean; onClose: () =
                           );
                         })}
                       </div>
-                      <div className="settings-acp-offset-panel">
+                      <div className="settings-agent-offset-panel">
                         <button
                           type="button"
-                          className="settings-acp-offset-toggle"
+                          className="settings-agent-offset-toggle"
                           onClick={() => setDiffOffsetCollapsed((value) => !value)}
                           aria-expanded={!diffOffsetCollapsed}
                         >
                           <Icon name={diffOffsetCollapsed ? "chevron-right" : "chevron-down"} size={13} />
-                          <span>{t("settings.acpDiffTextOffsetAdvanced", "Text offset fine tuning")}</span>
+                          <span>{t("settings.agentDiffTextOffsetAdvanced", "Text offset fine tuning")}</span>
                         </button>
                         {!diffOffsetCollapsed && (
-                          <div className="settings-acp-offset-list">
-                            <div className="settings-acp-offset-title">{t("settings.acpDiffAddTextOffset", "Addition text offset")}</div>
-                            {renderAgentDiffOffsetControl(t("settings.acpDiffTextOffsetX", "Horizontal offset"), "additionsOffsetX")}
-                            {renderAgentDiffOffsetControl(t("settings.acpDiffTextOffsetY", "Vertical offset"), "additionsOffsetY")}
-                            <div className="settings-acp-offset-title">{t("settings.acpDiffDeleteTextOffset", "Deletion text offset")}</div>
-                            {renderAgentDiffOffsetControl(t("settings.acpDiffTextOffsetX", "Horizontal offset"), "deletionsOffsetX")}
-                            {renderAgentDiffOffsetControl(t("settings.acpDiffTextOffsetY", "Vertical offset"), "deletionsOffsetY")}
+                          <div className="settings-agent-offset-list">
+                            <div className="settings-agent-offset-title">{t("settings.agentDiffAddTextOffset", "Addition text offset")}</div>
+                            {renderAgentDiffOffsetControl(t("settings.agentDiffTextOffsetX", "Horizontal offset"), "additionsOffsetX")}
+                            {renderAgentDiffOffsetControl(t("settings.agentDiffTextOffsetY", "Vertical offset"), "additionsOffsetY")}
+                            <div className="settings-agent-offset-title">{t("settings.agentDiffDeleteTextOffset", "Deletion text offset")}</div>
+                            {renderAgentDiffOffsetControl(t("settings.agentDiffTextOffsetX", "Horizontal offset"), "deletionsOffsetX")}
+                            {renderAgentDiffOffsetControl(t("settings.agentDiffTextOffsetY", "Vertical offset"), "deletionsOffsetY")}
                           </div>
                         )}
                       </div>

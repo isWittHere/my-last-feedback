@@ -40,7 +40,7 @@ function dockTabLabel(tabId: DockTabId, translate: (key: string, defaultValue: s
   if (tabId === "previewBrowser") return translate("previewBrowser.title", "Preview Browser");
   if (tabId === "previewInfo") return translate("previewBrowser.infoTitle", "Preview Info");
   if (tabId === "agentConsole") return translate("agentConsole.title", "Agent Console");
-  if (tabId === "agentSessions") return translate("agentSessions.title", "ACP Sessions");
+  if (tabId === "agentSessions") return translate("agentSessions.title", "Sessions");
   if (tabId === "terminal") return translate("terminal.title", "Terminal");
   return translate("resources.title", "Project resources");
 }

@@ -54,7 +54,7 @@ index 16c43af..6b7241c 100644
 +  opacity: 1;
 +}`;
 
-export function createMockAssistantBlocks(prompt = "实现 ACP Agent Console 静态面板"): AgentContentBlock[] {
+export function createMockAssistantBlocks(prompt = "实现 OpenCode Agent Console 静态面板"): AgentContentBlock[] {
   return [
     {
       id: "mock-thinking-1",
@@ -65,7 +65,7 @@ export function createMockAssistantBlocks(prompt = "实现 ACP Agent Console 静
 
 1. **消息阅读层**：继续使用 MLFB 的 Markdown、头像行、间距和正文密度。
 2. **过程观察层**：复刻 CBZWW 的 process block 流，包含摘要、tab/timeline、工具参数和结果。
-3. **未来协议层**：ACP 事件只负责映射为 block，不直接决定 UI 风格。
+3. **事件映射层**：OpenCode 事件只负责映射为 block，不直接决定 UI 风格。
 
 > 这一步的判断是：用户不是要一个“新 agent 产品页”，而是要 MLFB 里面自然长出来的 agent 记录面板。`,
       status: "completed",
@@ -130,7 +130,7 @@ export function createMockAssistantBlocks(prompt = "实现 ACP Agent Console 静
         resultBlockTypes: ["text", "task_list", "error"],
         origin: { phase: "process | result", placement: "standalone | inline", group_id: "mock-run-1" },
       },
-      result: JSON.stringify({ output: "block contract 可以覆盖 Phase 1 的静态 UI，也能向后兼容 ACP JSON-RPC 事件映射。" }),
+      result: JSON.stringify({ output: "block contract 可以覆盖 Phase 1 的静态 UI，也能承接 OpenCode SSE 事件映射。" }),
       origin: processOrigin("mock-run-1"),
       createdAt: MOCK_CREATED_AT,
     },
@@ -143,7 +143,7 @@ export function createMockAssistantBlocks(prompt = "实现 ACP Agent Console 静
         { id: "task-2", title: "过程链复刻 CBZWW block 流样式", status: "completed" },
         { id: "task-3", title: "工具参数改为结构化 key/value", status: "completed" },
         { id: "task-4", title: "流式 step 内部滚动与阴影", status: "in-progress" },
-        { id: "task-5", title: "后续接入真实 ACP provider", status: "not-started" },
+        { id: "task-5", title: "后续接入真实 OpenCode 会话", status: "not-started" },
       ],
       origin: processOrigin("mock-run-1"),
       createdAt: MOCK_CREATED_AT,
@@ -208,7 +208,7 @@ type AgentBlockPlacement = "inline" | "standalone";
 
 - 用户输入与 agent 输出按 MLFB 的 Markdown 阅读方式穿插呈现。
 - Agent 的中间过程折叠为一条 CBZWW 风格的 block stream，默认展示摘要，展开后查看思考、工具调用和任务状态。
-- ACP 后端事件后续只需要映射成这些过程块与最终 Markdown 输出。
+- OpenCode 后端事件后续只需要映射成这些过程块与最终 Markdown 输出。
 
 ### 渲染覆盖面
 
@@ -234,7 +234,7 @@ type AgentBlockPlacement = "inline" | "standalone";
 - [x] Markdown 保持 MLFB 阅读体验
 - [x] 过程链保留 CBZWW 的 block 流结构
 - [x] 箭头 hover 显隐与位置对齐参考实现
-- [ ] 接入真实 ACP stdout JSON-RPC 事件
+- [ ] 接入真实 OpenCode HTTP/SSE 事件
 
 参考入口可以从 [README](README.md) 和 [BUILD](BUILD.md) 继续向后端阶段推进。`,
       origin: resultOrigin(),
@@ -329,7 +329,7 @@ export function createMockAgentSession(): AgentSession {
       {
         id: "mock-user-text-1",
         type: "text",
-        content: "请开始实现 ACP Agent Console 的第一阶段静态面板。",
+        content: "请开始实现 OpenCode Agent Console 的第一阶段静态面板。",
         origin: resultOrigin(),
         createdAt: MOCK_CREATED_AT,
       },
@@ -404,7 +404,7 @@ export function createMockAgentSession(): AgentSession {
   return {
     id: "agent-session-mock",
     providerId: "opencode",
-    title: "OpenCode ACP Console",
+    title: "OpenCode Agent Console",
     cwd: "e:/Dev/my-last-feedback",
     modelId: "claude-sonnet",
     modeId: "plan",
@@ -417,9 +417,10 @@ export function createMockAgentSession(): AgentSession {
       { id: "build", label: "Build", description: "Implement changes in the workspace" },
     ],
     providerRuntime: {
-      processId: "mock-acp-preview",
+      processId: "mock-opencode-preview",
       command: "opencode",
-      args: ["acp"],
+      args: ["serve"],
+      transport: "http",
       initialized: true,
       protocolVersion: 1,
       agentInfo: { name: "OpenCode", version: "mock" },
@@ -430,7 +431,7 @@ export function createMockAgentSession(): AgentSession {
     gitAction: null,
     images: [],
     mlcAttachments: [
-      { filePath: ".myLastChat/MLC_MLFB ACP Agent Console统一施工规划书.md", title: "ACP 施工规划书", description: "Agent Console 统一施工规划参考" },
+      { filePath: ".myLastChat/MLC_OpenCode_Tool_Event_HTTP通道验证报告.md", title: "OpenCode HTTP/SSE 验证", description: "Agent Console OpenCode 参考" },
     ],
     webAttachments: [],
     messages: [userMessage, assistantMessage, followupUserMessage, followupAssistantMessage, richMockUserMessage, streamingAssistantMessage],
@@ -439,7 +440,7 @@ export function createMockAgentSession(): AgentSession {
       {
         id: "mock-diag-1",
         level: "info",
-        message: "Phase 1 使用 mock 数据，尚未启动真实 ACP provider。",
+        message: "Phase 1 使用 mock 数据，尚未使用真实 OpenCode 会话。",
         createdAt: MOCK_CREATED_AT,
       },
     ],

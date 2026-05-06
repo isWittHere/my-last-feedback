@@ -9,7 +9,7 @@ export function createAgentSession(): AgentSession {
   return {
     id: "agent-session-opencode",
     providerId: "opencode",
-    title: "OpenCode ACP Console",
+    title: "OpenCode Agent Console",
     cwd: "",
     modelId: undefined,
     modeId: undefined,

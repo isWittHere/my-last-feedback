@@ -24,15 +24,16 @@ export interface AgentConsoleSettings {
   diffIndicatorMode: AgentTopbarIndicatorMode;
   contextIndicatorMode: AgentTopbarIndicatorMode;
   smoothStreamingOutput: boolean;
+  autoCleanupEmptySessions: boolean;
   processStepDefaultMode: AgentProcessStepDefaultMode;
   showMessageSpeakerLine: boolean;
   diffVisual: AgentDiffVisualSettings;
 }
 
 export const AGENT_DIFF_COLOR_PRESETS: AgentDiffColorPreset[] = [
-  { id: "classic", labelKey: "settings.acpDiffColorClassic", defaultLabel: "Classic", additions: "#22c55e", deletions: "#ef4444" },
-  { id: "soft", labelKey: "settings.acpDiffColorSoft", defaultLabel: "Soft", additions: "#4ec9b0", deletions: "#f06060" },
-  { id: "vscode", labelKey: "settings.acpDiffColorVscode", defaultLabel: "VS Code", additions: "#6a9955", deletions: "#f06060" },
+  { id: "classic", labelKey: "settings.agentDiffColorClassic", defaultLabel: "Classic", additions: "#22c55e", deletions: "#ef4444" },
+  { id: "soft", labelKey: "settings.agentDiffColorSoft", defaultLabel: "Soft", additions: "#4ec9b0", deletions: "#f06060" },
+  { id: "vscode", labelKey: "settings.agentDiffColorVscode", defaultLabel: "VS Code", additions: "#6a9955", deletions: "#f06060" },
 ];
 
 const STORAGE_KEY = "mlfb-agent-console-settings-v1";
@@ -42,6 +43,7 @@ const DEFAULT_SETTINGS: AgentConsoleSettings = {
   diffIndicatorMode: "textAndGraphic",
   contextIndicatorMode: "textAndGraphic",
   smoothStreamingOutput: false,
+  autoCleanupEmptySessions: true,
   processStepDefaultMode: "tabs",
   showMessageSpeakerLine: true,
   diffVisual: {
@@ -94,6 +96,7 @@ export function getAgentConsoleSettings(): AgentConsoleSettings {
       diffIndicatorMode: isIndicatorMode(parsed.diffIndicatorMode) ? parsed.diffIndicatorMode : DEFAULT_SETTINGS.diffIndicatorMode,
       contextIndicatorMode: isIndicatorMode(parsed.contextIndicatorMode) ? parsed.contextIndicatorMode : DEFAULT_SETTINGS.contextIndicatorMode,
       smoothStreamingOutput: typeof parsed.smoothStreamingOutput === "boolean" ? parsed.smoothStreamingOutput : DEFAULT_SETTINGS.smoothStreamingOutput,
+      autoCleanupEmptySessions: typeof parsed.autoCleanupEmptySessions === "boolean" ? parsed.autoCleanupEmptySessions : DEFAULT_SETTINGS.autoCleanupEmptySessions,
       processStepDefaultMode: isProcessStepDefaultMode(parsed.processStepDefaultMode) ? parsed.processStepDefaultMode : DEFAULT_SETTINGS.processStepDefaultMode,
       showMessageSpeakerLine: typeof parsed.showMessageSpeakerLine === "boolean" ? parsed.showMessageSpeakerLine : DEFAULT_SETTINGS.showMessageSpeakerLine,
       diffVisual: {

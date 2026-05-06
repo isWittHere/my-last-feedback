@@ -12,11 +12,6 @@ const PANEL_MIN_SIZE = 0.08;
 
 export function AgentConsolePanel() {
   const activeSession = useAgentStore((state) => state.getActiveSession());
-  const sessions = useAgentStore((state) => state.sessions);
-  const activeSessionId = useAgentStore((state) => state.activeSessionId);
-  const setActiveSession = useAgentStore((state) => state.setActiveSession);
-  const startOpenCodeAcp = useAgentStore((state) => state.startOpenCodeAcp);
-  const stopOpenCodeAcp = useAgentStore((state) => state.stopOpenCodeAcp);
   const containerRef = useRef<HTMLDivElement>(null);
   const inputPanelRef = useRef<HTMLDivElement>(null);
   const [panelSizes, setPanelSizes] = useState([1 - INPUT_DEFAULT, INPUT_DEFAULT]);
@@ -89,7 +84,7 @@ export function AgentConsolePanel() {
 
   return (
     <div className="agent-console-panel">
-      <AgentSessionHeader session={activeSession} sessions={sessions} activeSessionId={activeSessionId} onSelectSession={setActiveSession} onStartAcp={startOpenCodeAcp} onStopAcp={stopOpenCodeAcp} />
+      <AgentSessionHeader session={activeSession} />
       <div ref={containerRef} className="agent-console-resizable-body">
         <div className="agent-console-timeline-region panel-card" style={{ flex: `0 0 calc(${panelSizes[0] * 100}% - 1px)`, minHeight: 48 }}>
           <AgentMessageTimeline session={activeSession} />

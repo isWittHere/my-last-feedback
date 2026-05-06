@@ -1,30 +1,7 @@
-import type { AgentProcessStartOptions } from "../acp/types";
-
 export const OPENCODE_PROVIDER_ID = "opencode" as const;
 
-export const OPENCODE_ACP_COMMAND = "opencode";
-export const OPENCODE_ACP_ARGS = ["acp"];
-
-export function createOpenCodeAcpStartOptions(cwd: string): AgentProcessStartOptions {
-  return {
-    command: OPENCODE_ACP_COMMAND,
-    args: OPENCODE_ACP_ARGS,
-    cwd: cwd || null,
-    env: null,
-  };
-}
-
-export function createOpenCodeInitializeParams() {
-  return {
-    protocolVersion: 1,
-    clientCapabilities: {
-      _meta: {
-        "terminal-auth": true,
-      },
-    },
-    clientInfo: {
-      name: "My Last Feedback",
-      version: "0.4.1",
-    },
-  };
-}
+export const OPENCODE_HTTP_COMMAND = "opencode";
+export const OPENCODE_HTTP_ARGS = ["serve"];
+export const OPENCODE_HTTP_HOSTNAME = "127.0.0.1";
+export const OPENCODE_HTTP_DEFAULT_PORT = 40973;
+export const OPENCODE_HTTP_USERNAME = "opencode";
