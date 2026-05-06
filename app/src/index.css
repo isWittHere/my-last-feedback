@@ -2680,7 +2680,9 @@ body,
 .agent-console-status-pill,
 .agent-console-meta-pill,
 .agent-composer-actions,
-.agent-permission-dock {
+.agent-approval-row,
+.agent-approval-row-main,
+.agent-approval-row-actions {
   display: inline-flex;
   align-items: center;
 }
@@ -2743,12 +2745,31 @@ body,
   background: var(--color-bg-base);
 }
 
+.agent-session-status-stack {
+  flex: 0 0 auto;
+  min-width: 0;
+  margin: 0 8px;
+  border: 1px solid var(--color-border-subtle);
+  border-bottom: 0;
+  border-top-left-radius: var(--radius-md);
+  border-top-right-radius: var(--radius-md);
+  background: color-mix(in srgb, var(--color-bg-surface) 92%, var(--color-bg-base));
+}
+
+.agent-session-status-stack:empty {
+  display: none;
+}
+
+.agent-session-status-stack > * + * {
+  border-top: 1px solid var(--color-border-subtle);
+}
+
 .agent-task-panel {
   flex: 0 0 auto;
   min-width: 0;
-  border-top: 1px solid var(--color-border-subtle);
+  border-top: 0;
   border-bottom: 0;
-  background: color-mix(in srgb, var(--color-bg-surface) 92%, var(--color-bg-base));
+  background: transparent;
   padding: 0;
 }
 
@@ -2812,7 +2833,7 @@ body,
   display: flex;
   align-items: center;
   gap: 8px;
-  padding: 2px 4px;
+  padding: 2px 4px 2px 19px;
   color: var(--color-text-muted);
   font-size: 12px;
   line-height: 1.5;
@@ -2836,6 +2857,157 @@ body,
 
 .agent-task-panel-row[data-status="in-progress"] svg {
   animation: spin 7s linear infinite;
+}
+
+.agent-approval-row {
+  flex: 0 0 auto;
+  min-width: 0;
+  min-height: 28px;
+  justify-content: space-between;
+  gap: 10px;
+  padding: 3px 8px;
+  color: var(--color-text-muted);
+  background: transparent;
+  font-family: inherit;
+  font-size: 12px;
+  font-weight: 400;
+  line-height: 1.5;
+}
+
+.agent-approval-row :where(span, button) {
+  font-family: inherit;
+  font-size: 12px;
+  font-weight: 400;
+  line-height: 1.5;
+}
+
+.agent-approval-row-main {
+  min-width: 0;
+  flex: 1;
+  gap: 6px;
+}
+
+.agent-approval-row-label {
+  flex: 0 0 auto;
+  color: var(--color-text-muted);
+}
+
+.agent-approval-row-title {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  color: var(--color-text-secondary);
+}
+
+.agent-approval-row-count {
+  flex: 0 0 auto;
+  color: var(--color-text-muted);
+}
+
+.agent-approval-row-actions {
+  flex: 0 0 auto;
+  gap: 6px;
+}
+
+.agent-approval-allow-wrap {
+  position: relative;
+  display: inline-flex;
+  align-items: center;
+}
+
+.agent-approval-split-button {
+  display: inline-flex;
+  align-items: stretch;
+  box-sizing: border-box;
+  height: 24px;
+  overflow: hidden;
+  border: 0;
+  border-radius: var(--radius-sm);
+  background: color-mix(in srgb, var(--color-success) 16%, transparent);
+}
+
+.agent-approval-row-actions > button,
+.agent-approval-split-button > button {
+  box-sizing: border-box;
+  height: 24px;
+  min-height: 22px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  padding: 0 8px;
+  border: 0;
+  border-radius: var(--radius-sm);
+  background: var(--color-bg-base);
+  color: var(--color-text-muted);
+  cursor: pointer;
+}
+
+.agent-approval-allow-menu .app-select-option {
+  font-size: 12px;
+}
+
+.agent-approval-row-actions > button:hover,
+.agent-approval-split-button > button:hover {
+  color: var(--color-text-secondary);
+}
+
+.agent-approval-action-reject {
+  color: var(--color-danger) !important;
+  background: color-mix(in srgb, var(--color-danger) 14%, transparent) !important;
+}
+
+.agent-approval-action-reject:hover {
+  color: var(--color-danger) !important;
+  background: color-mix(in srgb, var(--color-danger) 20%, transparent) !important;
+}
+
+.agent-approval-action-allow-main,
+.agent-approval-action-allow-caret {
+  border: 0 !important;
+  border-radius: 0 !important;
+  color: var(--color-success) !important;
+  background: transparent !important;
+}
+
+.agent-approval-action-allow-main:hover,
+.agent-approval-action-allow-caret:hover {
+  color: var(--color-success) !important;
+  background: color-mix(in srgb, var(--color-success) 20%, transparent) !important;
+}
+
+.agent-approval-action-allow-main {
+  height: 24px;
+  min-height: 24px;
+}
+
+.agent-approval-action-allow-caret {
+  width: 21px;
+  flex: 0 0 21px;
+  height: 24px;
+  min-height: 24px;
+  padding: 0;
+  box-shadow: inset 1px 0 0 color-mix(in srgb, var(--color-success) 30%, transparent);
+}
+
+.agent-approval-action-allow-caret svg {
+  flex: 0 0 auto;
+  display: block;
+  overflow: visible;
+  transform: translateX(-1px);
+}
+
+.app-select-panel.agent-approval-allow-menu {
+  right: 0;
+  top: auto;
+  bottom: calc(100% + 4px);
+  min-width: 148px;
+}
+
+.agent-approval-allow-menu .app-select-option:hover,
+.agent-approval-allow-menu .app-select-option:focus-visible {
+  background: color-mix(in srgb, var(--color-success) 16%, transparent);
+  color: var(--color-success);
 }
 
 .agent-message-timeline {
@@ -3403,34 +3575,6 @@ body,
   flex-direction: column;
   border-top: 0;
   background: var(--color-bg-input-raised);
-}
-
-.agent-permission-dock {
-  min-height: 30px;
-  gap: 6px;
-  padding: 4px 8px;
-  border-bottom: 1px solid color-mix(in srgb, var(--color-warning) 24%, var(--color-border));
-  color: var(--color-warning);
-  background: color-mix(in srgb, var(--color-warning) 8%, var(--color-bg-input-raised));
-  font-size: 11px;
-}
-
-.agent-permission-dock span {
-  min-width: 0;
-  flex: 1;
-  overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
-}
-
-.agent-permission-dock button {
-  min-height: 22px;
-  border: 1px solid var(--color-border-subtle);
-  border-radius: var(--radius-sm);
-  background: var(--color-bg-base);
-  color: var(--color-text-secondary);
-  font-size: 11px;
-  cursor: pointer;
 }
 
 .agent-composer-frame {

@@ -45,7 +45,7 @@ export interface AgentToolCallBlock extends AgentBlockBase {
 export interface AgentPermissionOption {
   id: string;
   label: string;
-  kind: "allow_once" | "allow_always" | "reject_once";
+  kind: "allow_once" | "allow_session" | "allow_always" | "reject_once";
 }
 
 export interface AgentPermissionBlock extends AgentBlockBase {

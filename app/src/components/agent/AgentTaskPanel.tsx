@@ -32,7 +32,7 @@ export function AgentTaskPanel({ session }: { session: AgentSession }) {
     <section className="agent-task-panel" data-expanded={expanded}>
       <div className="agent-task-panel-inner">
         <button type="button" className="agent-task-panel-toggle" onClick={() => setExpanded((value) => !value)}>
-          <Icon name="chevron-right" size={12} className="agent-task-panel-caret" />
+          <Icon name="chevron-right" size={13} className="agent-task-panel-caret" />
           <span>{`待办事项(${completedCount}/${tasks.length})`}</span>
           {!expanded && inProgressTask && <span className="agent-task-panel-current">· {inProgressTask.title}</span>}
         </button>
@@ -40,7 +40,7 @@ export function AgentTaskPanel({ session }: { session: AgentSession }) {
           <div className="agent-task-panel-body">
             {tasks.map((task) => (
               <div key={task.id} className="agent-task-panel-row" data-status={task.status}>
-                <Icon name={taskIconName(task.status)} size={15} />
+                <Icon name={taskIconName(task.status)} size={13} />
                 <span>{task.title}</span>
               </div>
             ))}

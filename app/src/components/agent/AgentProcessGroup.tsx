@@ -67,7 +67,7 @@ function stepIconName(step: AgentStepItem): string {
   if (step.kind === "thinking") return "message-dot";
   if (step.kind === "tool") return "wrench";
   if (step.kind === "task_list") return "checklist";
-  if (step.kind === "permission") return "lock";
+  if (step.kind === "permission") return "shield";
   if (step.kind === "error") return "warning";
   return "file-text";
 }

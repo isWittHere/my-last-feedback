@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 import { useAgentStore } from "../../store/agentStore";
-import { AgentActionBar } from "./AgentActionBar";
+import { AgentApprovalRow } from "./AgentApprovalRow";
 import { AgentComposer } from "./AgentComposer";
 import { AgentMessageTimeline } from "./AgentMessageTimeline";
 import { AgentSessionHeader } from "./AgentSessionHeader";
@@ -92,12 +92,14 @@ export function AgentConsolePanel() {
       <div ref={containerRef} className="agent-console-resizable-body">
         <div className="agent-console-timeline-region panel-card" style={{ flex: `0 0 calc(${panelSizes[0] * 100}% - 1px)`, minHeight: 48 }}>
           <AgentMessageTimeline session={activeSession} />
-          <AgentTaskPanel session={activeSession} />
+          <div className="agent-session-status-stack">
+            <AgentApprovalRow session={activeSession} />
+            <AgentTaskPanel session={activeSession} />
+          </div>
         </div>
         <div className="resize-handle" onMouseDown={(event) => handleMouseDown(0, event)} />
         <div ref={inputPanelRef} className="agent-console-input-region panel-card panel-feedback panel-feedback-editable" data-tooltip-placement="top" style={{ flex: `0 0 ${panelSizes[1] * 100}%`, minHeight: 92, position: "relative" }}>
           <div className="agent-composer-area">
-            <AgentActionBar session={activeSession} />
             <AgentComposer session={activeSession} />
           </div>
         </div>

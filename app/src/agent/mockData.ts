@@ -268,6 +268,22 @@ function createMockStreamingAssistantBlocks(): AgentContentBlock[] {
       createdAt: MOCK_CREATED_AT,
     },
     {
+      id: "mock-permission-block-1",
+      type: "permission",
+      requestId: "mock-permission-1",
+      title: "允许 Agent 运行构建验证命令",
+      toolCallId: "mock-stream-tool-1",
+      status: "pending",
+      options: [
+        { id: "allow-once", label: "允许一次", kind: "allow_once" },
+        { id: "allow-session", label: "本 session 允许", kind: "allow_session" },
+        { id: "allow-always", label: "始终允许", kind: "allow_always" },
+        { id: "reject-once", label: "拒绝", kind: "reject_once" },
+      ],
+      origin: processOrigin("mock-run-stream"),
+      createdAt: MOCK_CREATED_AT,
+    },
+    {
       id: "mock-stream-thinking-2",
       type: "thinking",
       content: `### 正在检查流式 step 的单块滚动
@@ -402,7 +418,7 @@ export function createMockAgentSession(): AgentSession {
     ],
     webAttachments: [],
     messages: [userMessage, assistantMessage, followupUserMessage, followupAssistantMessage, richMockUserMessage, streamingAssistantMessage],
-    pendingPermissionIds: [],
+    pendingPermissionIds: ["mock-permission-1"],
     diagnostics: [
       {
         id: "mock-diag-1",
