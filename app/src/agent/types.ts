@@ -124,14 +124,38 @@ export interface AgentDiagnosticEntry {
   createdAt: string;
 }
 
+export interface AgentProviderRuntimeInfo {
+  processId?: string;
+  command?: string;
+  args?: string[];
+  initialized?: boolean;
+  protocolVersion?: number | string;
+  agentInfo?: {
+    name?: string;
+    version?: string;
+  };
+  agentCapabilities?: Record<string, unknown>;
+  authMethods?: unknown[];
+}
+
+export interface AgentChoiceOption {
+  id: string;
+  label: string;
+  description?: string;
+}
+
 export interface AgentSession {
   id: string;
   providerId: AgentProviderId;
   providerSessionId?: string;
+  providerRuntime?: AgentProviderRuntimeInfo;
   title: string;
   cwd: string;
   modelId?: string;
   modeId?: string;
+  availableModels?: AgentChoiceOption[];
+  availableModes?: AgentChoiceOption[];
+  configOptions?: unknown[];
   status: AgentSessionStatus;
   draft: string;
   testLogText: string;

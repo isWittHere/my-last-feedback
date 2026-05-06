@@ -13,7 +13,8 @@ interface AgentSessionHeaderProps {
   sessions: AgentSession[];
   activeSessionId: string | null;
   onSelectSession: (sessionId: string) => void;
-  onReset: () => void;
+  onStartAcp: (sessionId: string) => Promise<void>;
+  onStopAcp: (sessionId: string) => Promise<void>;
 }
 
 function basename(value: string): string {
@@ -26,11 +27,14 @@ function sessionStatusClass(status: AgentSession["status"]): string {
   return "responded";
 }
 
-export function AgentSessionHeader({ session, sessions, activeSessionId, onSelectSession, onReset }: AgentSessionHeaderProps) {
+export function AgentSessionHeader({ session, sessions, activeSessionId, onSelectSession, onStartAcp, onStopAcp }: AgentSessionHeaderProps) {
   const { t } = useTranslation();
   const [expanded, setExpanded] = useState(false);
   const providerName = session.providerId === "opencode" ? "OpenCode" : session.providerId;
   const providerColor = "#0d9488";
+  const processId = session.providerRuntime?.processId;
+  const isStarting = session.status === "starting";
+  const isConnected = Boolean(processId);
 
   return (
     <div className={`agent-console-header${expanded ? " expanded" : ""}`} data-preview-overlay>
@@ -62,11 +66,17 @@ export function AgentSessionHeader({ session, sessions, activeSessionId, onSelec
             </div>
           )}
           {!expanded && <><AgentDiffIndicator session={session} /><AgentContextIndicator session={session} /></>}
+          <button
+            type="button"
+            className={`agent-console-topbar-action${isConnected ? " active" : ""}`}
+            onClick={() => { void (isConnected ? onStopAcp(session.id) : onStartAcp(session.id)); }}
+            title={isConnected ? t("agentConsole.stopProvider", "Stop OpenCode ACP") : t("agentConsole.startProvider", "Start OpenCode ACP")}
+            disabled={isStarting}
+          >
+            <Icon name={isStarting ? "spinner" : isConnected ? "close" : "play"} size={13} />
+          </button>
           <button type="button" className="agent-console-topbar-action" onClick={() => setExpanded((value) => !value)} title={expanded ? t("agentConsole.collapseHeader", "Collapse details") : t("agentConsole.expandHeader", "Expand details")} aria-expanded={expanded}>
             <Icon name="chevron-down" size={13} style={{ transform: expanded ? "rotate(180deg)" : undefined }} />
-          </button>
-          <button type="button" className="agent-console-topbar-action" onClick={onReset} title={t("agentConsole.resetMock", "Reset mock session")}>
-            <Icon name="refresh" size={13} />
           </button>
         </div>
       </div>

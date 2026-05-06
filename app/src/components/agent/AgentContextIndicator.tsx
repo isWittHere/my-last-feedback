@@ -33,6 +33,7 @@ export function AgentContextIndicator({ session }: { session: AgentSession }) {
   );
 
   if (contextIndicatorMode === "hidden") return null;
+  if (session.messages.length === 0 || summary.totalTokens === 0) return null;
 
   return (
     <div className="agent-context-indicator-wrap">
@@ -51,7 +52,7 @@ export function AgentContextIndicator({ session }: { session: AgentSession }) {
         </div>
         <div className="agent-context-popover-grid">
           <span>{t("agentConsole.model", "Model")}</span>
-          <strong>{session.modelId || "opencode/mock"}</strong>
+          <strong>{session.modelId || t("agentConsole.unknown", "Unknown")}</strong>
           <span>{t("agentConsole.window", "Window")}</span>
           <strong>{windowLabel}</strong>
           <span>{t("agentConsole.used", "Used")}</span>

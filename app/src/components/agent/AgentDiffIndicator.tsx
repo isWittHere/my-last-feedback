@@ -45,6 +45,7 @@ export function AgentDiffIndicator({ session }: { session: AgentSession }) {
   const panelSegments = buildDiffSegments(compactAdditions, compactDeletions, 48);
 
   if (diffIndicatorMode === "hidden") return null;
+  if (summary.changedFiles === 0 && summary.fileChangeBlocks === 0 && summary.additions === 0 && summary.deletions === 0) return null;
 
   return (
     <div className="agent-diff-indicator-wrap" style={diffVisualStyle}>

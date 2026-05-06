@@ -1,4 +1,5 @@
 mod ipc;
+mod agent_process;
 mod mlc;
 mod preview_browser;
 mod project_resources;
@@ -26,6 +27,7 @@ use preview_browser::{
     PreviewBrowserState,
 };
 use terminal::{terminal_create, terminal_kill, terminal_list, terminal_read_buffer, terminal_resize, terminal_write, TerminalManager};
+use agent_process::{agent_process_kill, agent_process_list, agent_process_start, agent_process_write, AgentProcessManager};
 
 /// Global app state shared by persistent-mode commands
 pub struct AppState {
@@ -648,6 +650,7 @@ pub fn run() {
     let session_mgr = session::create_session_manager(data_dir.clone());
     let mlra_writer: SharedMlraWriter = std::sync::Arc::new(tokio::sync::Mutex::new(None));
     let terminal_mgr = TerminalManager::default();
+    let agent_process_mgr = AgentProcessManager::default();
 
     let builder = tauri::Builder::default();
     // In debug builds, skip single-instance enforcement so dev binary and installed
@@ -671,6 +674,7 @@ pub fn run() {
         .manage(mlra_writer.clone())
         .manage(PreviewBrowserState::default())
         .manage(terminal_mgr.clone())
+        .manage(agent_process_mgr.clone())
         .invoke_handler(tauri::generate_handler![
             set_auto_focus_new_request,
             get_auto_focus_new_request,
@@ -721,11 +725,16 @@ pub fn run() {
             terminal_write,
             terminal_resize,
             terminal_kill,
+            agent_process_start,
+            agent_process_write,
+            agent_process_kill,
+            agent_process_list,
             send_to_mlra_daemon,
         ])
         .setup(move |app| {
             let app_handle = app.handle().clone();
             let terminal_state = terminal_mgr.clone();
+            let agent_process_state = agent_process_mgr.clone();
 
             let mgr = session_mgr.clone();
             let handle = app_handle.clone();
@@ -779,6 +788,7 @@ pub fn run() {
                         }
                         "quit" => {
                             terminal_state.kill_all();
+                            agent_process_state.kill_all();
                             ipc::cleanup_lock_file();
                             std::process::exit(0);
                         }

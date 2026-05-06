@@ -2,8 +2,6 @@ import type { AgentSession } from "./types";
 import { collectAgentStepTokenStats, type AgentStepTokenStat } from "./steps";
 
 const MODEL_CONTEXT_LIMITS: Record<string, number> = {
-  "mock-model": 128_000,
-  "opencode/mock": 128_000,
   "gpt-4.1": 1_000_000,
   "claude-sonnet": 200_000,
 };
@@ -21,7 +19,7 @@ export interface AgentTokenStatsSummary {
 }
 
 export function getAgentModelContextLimit(modelId?: string): number | null {
-  if (!modelId) return MODEL_CONTEXT_LIMITS["opencode/mock"];
+  if (!modelId) return null;
   return MODEL_CONTEXT_LIMITS[modelId] ?? null;
 }
 

@@ -6,7 +6,7 @@ import { PromptIcon } from "./PromptIcons";
 import { McpConfigHelper } from "./McpConfigHelper";
 import { CallerManager } from "./CallerManager";
 import { Icon, MlcLogoIcon } from "./Icons";
-import { createMockAgentSession } from "../agent/mockData";
+import { createAgentSession } from "../agent/sessionFactory";
 import { AgentSessionHeader } from "./agent/AgentSessionHeader";
 import { invoke } from "@tauri-apps/api/core";
 import { applyTheme, getStoredTheme, type Theme } from "../theme";
@@ -86,8 +86,7 @@ export function SettingsDialog({ open, onClose }: { open: boolean; onClose: () =
   const [agentConsoleSettings, setAgentConsoleSettings] = useState<AgentConsoleSettings>(getAgentConsoleSettings);
   const [zoomSettings, setZoomSettings] = useState<ZoomSettings>(getZoomSettings);
   const [submittedViewSettings, setSubmittedViewSettings] = useState<SubmittedViewSettings>(getSubmittedViewSettings);
-  const [acpPreviewResetKey, setAcpPreviewResetKey] = useState(0);
-  const acpPreviewSession = useMemo(() => createMockAgentSession(), [acpPreviewResetKey]);
+  const acpPreviewSession = useMemo(() => createAgentSession(), []);
   const prompts = useFeedbackStore((s) => s.prompts);
   const disabledPrompts = useFeedbackStore((s) => s.disabledPrompts);
   const showPromptButtons = useFeedbackStore((s) => s.showPromptButtons);
@@ -324,12 +323,12 @@ export function SettingsDialog({ open, onClose }: { open: boolean; onClose: () =
     return (
       <div className="settings-acp-preview" aria-label={t("settings.acpPreview", "ACP preview")}>
         <AgentSessionHeader
-          key={acpPreviewResetKey}
           session={acpPreviewSession}
           sessions={[acpPreviewSession]}
           activeSessionId={acpPreviewSession.id}
           onSelectSession={() => {}}
-          onReset={() => setAcpPreviewResetKey((value) => value + 1)}
+          onStartAcp={async () => {}}
+          onStopAcp={async () => {}}
         />
       </div>
     );

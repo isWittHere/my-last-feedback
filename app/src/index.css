@@ -2636,6 +2636,17 @@ body,
   border-color: var(--color-border-subtle);
 }
 
+.agent-console-topbar-action.active {
+  color: var(--color-success);
+  border-color: color-mix(in srgb, var(--color-success) 35%, transparent);
+  background: color-mix(in srgb, var(--color-success) 12%, transparent);
+}
+
+.agent-console-topbar-action:disabled {
+  opacity: 0.55;
+  cursor: wait;
+}
+
 .agent-console-topbar-action svg {
   transition: transform 0.15s ease;
 }
@@ -2672,6 +2683,51 @@ body,
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
+}
+
+.agent-header-runtime,
+.agent-header-diagnostic {
+  min-width: 0;
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  font-size: 11px;
+  color: var(--color-text-muted);
+  overflow: hidden;
+}
+
+.agent-header-runtime {
+  flex: 0 0 auto;
+  max-width: 180px;
+}
+
+.agent-header-runtime span,
+.agent-header-diagnostic span {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.agent-header-runtime-version {
+  color: var(--color-text-faint);
+}
+
+.agent-header-diagnostic {
+  flex: 1 1 140px;
+  max-width: 260px;
+}
+
+.agent-header-diagnostic-info svg {
+  color: var(--color-accent);
+}
+
+.agent-header-diagnostic-warn svg {
+  color: var(--color-warning);
+}
+
+.agent-header-diagnostic-error svg {
+  color: var(--color-danger);
 }
 
 .agent-console-title-block,

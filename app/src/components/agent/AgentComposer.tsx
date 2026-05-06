@@ -4,7 +4,7 @@ import { readText as readClipboardText } from "@tauri-apps/plugin-clipboard-mana
 import { useAgentStore } from "../../store/agentStore";
 import { useFeedbackStore, type DockColumnId, type DockTabId, type GitActionType } from "../../store/feedbackStore";
 import { hasAgentComposerContent } from "../../agent/composer";
-import type { AgentSession } from "../../agent/types";
+import type { AgentChoiceOption, AgentSession } from "../../agent/types";
 import { Icon, MlcLogoIcon } from "../Icons";
 import type { PromptCommandOption } from "../../composer/promptCommands";
 import { SharedComposerInput } from "../composer/SharedComposerInput";
@@ -17,34 +17,35 @@ const AGENT_COMMANDS: PromptCommandOption[] = [
   { id: "test", name: "Test", description: "Run or prepare validation steps", content: "/test ", icon: "play" },
 ];
 
-const MODE_OPTIONS = ["plan", "build", "review", "debug"];
-const MODEL_OPTIONS = ["mock-model", "opencode/mock", "gpt-4.1", "claude-sonnet"];
 const AGENT_COMPOSER_CALLER_ID = "agent-console";
 const DOCK_COLUMN_IDS: DockColumnId[] = ["leftSidebar", "leftPage", "rightPage", "rightSidebar"];
 
-function AgentSelectButton({ label, value, options, onSelect }: { label: string; value: string; options: string[]; onSelect: (value: string) => void }) {
+function AgentSelectButton({ label, value, options, onSelect }: { label: string; value: string; options: AgentChoiceOption[]; onSelect: (value: string) => void }) {
   const [open, setOpen] = useState(false);
+  const selected = options.find((option) => option.id === value);
+  const displayValue = selected?.label || value;
   return (
     <div className="agent-composer-select-wrap">
-      <button type="button" className="btn agent-composer-select" onClick={() => setOpen((current) => !current)} title={`${label}: ${value}`}>
+      <button type="button" className="btn agent-composer-select" onClick={() => setOpen((current) => !current)} title={`${label}: ${displayValue}`}>
         <span className="agent-composer-select-label">{label}</span>
-        <span className="agent-composer-select-value">{value}</span>
+        <span className="agent-composer-select-value">{displayValue}</span>
         <Icon name="chevron-down" size={10} />
       </button>
       {open && (
         <div className="agent-composer-select-menu" data-preview-overlay>
           {options.map((option) => (
             <button
-              key={option}
+              key={option.id}
               type="button"
-              className={option === value ? "active" : ""}
+              className={option.id === value ? "active" : ""}
+              title={option.description || option.label}
               onClick={() => {
-                onSelect(option);
+                onSelect(option.id);
                 setOpen(false);
               }}
             >
-              <span>{option}</span>
-              {option === value ? <Icon name="check" size={11} /> : null}
+              <span>{option.label}</span>
+              {option.id === value ? <Icon name="check" size={11} /> : null}
             </button>
           ))}
         </div>
@@ -71,7 +72,7 @@ export function AgentComposer({ session }: { session: AgentSession }) {
   const updateTestLog = useAgentStore((state) => state.updateTestLog);
   const setGitAction = useAgentStore((state) => state.setGitAction);
   const updateGitBranchName = useAgentStore((state) => state.updateGitBranchName);
-  const sendMockPrompt = useAgentStore((state) => state.sendMockPrompt);
+  const sendAgentPrompt = useAgentStore((state) => state.sendAgentPrompt);
   const dockLayout = useFeedbackStore((state) => state.dockLayout);
   const setFocusedComposer = useFeedbackStore((state) => state.setFocusedComposer);
   const setMlcActiveWorkspacePath = useFeedbackStore((state) => state.setMlcActiveWorkspacePath);
@@ -130,8 +131,8 @@ export function AgentComposer({ session }: { session: AgentSession }) {
   }, [findDockColumnForTab, focusAgentComposer, moveDockTabToColumn, setDockActiveTab, setDockColumnCollapsed]);
 
   const send = useCallback(() => {
-    sendMockPrompt(session.id);
-  }, [sendMockPrompt, session.id]);
+    void sendAgentPrompt(session.id);
+  }, [sendAgentPrompt, session.id]);
 
   const handleAttachLogClick = useCallback(async () => {
     const wasHidden = !showTestLog;
@@ -299,12 +300,14 @@ export function AgentComposer({ session }: { session: AgentSession }) {
     </>
   );
 
-  const bottomLeftSlot = (
+  const modeOptions = session.availableModes || [];
+  const modelOptions = session.availableModels || [];
+  const bottomLeftSlot = session.providerRuntime?.initialized && (modeOptions.length > 0 || modelOptions.length > 0) ? (
     <div className="agent-composer-selectors">
-      <AgentSelectButton label={t("agentConsole.mode", "Mode")} value={session.modeId || MODE_OPTIONS[0]} options={MODE_OPTIONS} onSelect={(mode) => setSessionMode(session.id, mode)} />
-      <AgentSelectButton label={t("agentConsole.model", "Model")} value={session.modelId || MODEL_OPTIONS[0]} options={MODEL_OPTIONS} onSelect={(model) => setSessionModel(session.id, model)} />
+      {modeOptions.length > 0 ? <AgentSelectButton label={t("agentConsole.mode", "Mode")} value={session.modeId || modeOptions[0].id} options={modeOptions} onSelect={(mode) => setSessionMode(session.id, mode)} /> : null}
+      {modelOptions.length > 0 ? <AgentSelectButton label={t("agentConsole.model", "Model")} value={session.modelId || modelOptions[0].id} options={modelOptions} onSelect={(model) => setSessionModel(session.id, model)} /> : null}
     </div>
-  );
+  ) : null;
 
   const submitControl = (
     <button type="button" className="agent-send-button" onClick={send} disabled={!hasContent} title={t("agentConsole.send", "Send")}>
