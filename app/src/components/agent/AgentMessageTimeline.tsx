@@ -19,14 +19,27 @@ export function AgentMessageTimeline({ session }: { session: AgentSession }) {
   const endRef = useRef<HTMLDivElement>(null);
   const scrollRef = useRef<HTMLDivElement>(null);
   const messagesRef = useRef(session.messages);
+  const shouldAutoFollowRef = useRef(true);
   const [stickyUserContent, setStickyUserContent] = useState<string | null>(null);
   const [stickyUserMsgId, setStickyUserMsgId] = useState<string | null>(null);
+  const isStreaming = session.messages.some((message) => message.status === "streaming");
 
   messagesRef.current = session.messages;
 
+  const checkNearBottom = useCallback(() => {
+    const container = scrollRef.current;
+    if (!container) return true;
+    return container.scrollHeight - container.scrollTop - container.clientHeight <= 140;
+  }, []);
+
+  const scrollToEnd = useCallback((behavior: ScrollBehavior = "auto") => {
+    endRef.current?.scrollIntoView({ block: "end", behavior });
+  }, []);
+
   useEffect(() => {
-    endRef.current?.scrollIntoView({ block: "end" });
-  }, [session.messages.length]);
+    shouldAutoFollowRef.current = true;
+    scrollToEnd();
+  }, [session.messages.length, scrollToEnd]);
 
   useEffect(() => {
     const handleFocusMessage = (event: Event) => {
@@ -72,13 +85,47 @@ export function AgentMessageTimeline({ session }: { session: AgentSession }) {
     target?.scrollIntoView({ behavior: "smooth", block: "start" });
   }, [stickyUserMsgId]);
 
+  const handleTimelineScroll = useCallback(() => {
+    updateStickyUserMessage();
+    if (isStreaming) shouldAutoFollowRef.current = checkNearBottom();
+  }, [checkNearBottom, isStreaming, updateStickyUserMessage]);
+
   useEffect(() => {
     const frame = requestAnimationFrame(updateStickyUserMessage);
     return () => cancelAnimationFrame(frame);
   }, [session.messages, updateStickyUserMessage]);
 
+  useEffect(() => {
+    if (!isStreaming) return;
+    if (shouldAutoFollowRef.current) {
+      const frame = requestAnimationFrame(() => scrollToEnd());
+      return () => cancelAnimationFrame(frame);
+    }
+  }, [isStreaming, scrollToEnd, session.messages]);
+
+  useEffect(() => {
+    const container = scrollRef.current;
+    if (!container || !isStreaming) return;
+    shouldAutoFollowRef.current = checkNearBottom();
+    let frame = 0;
+    const followContentGrowth = () => {
+      if (!shouldAutoFollowRef.current) return;
+      if (frame) cancelAnimationFrame(frame);
+      frame = requestAnimationFrame(() => {
+        frame = 0;
+        scrollToEnd();
+      });
+    };
+    const observer = new MutationObserver(followContentGrowth);
+    observer.observe(container, { childList: true, characterData: true, subtree: true });
+    return () => {
+      observer.disconnect();
+      if (frame) cancelAnimationFrame(frame);
+    };
+  }, [checkNearBottom, isStreaming, scrollToEnd]);
+
   return (
-    <div className="agent-message-timeline" ref={scrollRef} onScroll={updateStickyUserMessage}>
+    <div className="agent-message-timeline" ref={scrollRef} onScroll={handleTimelineScroll}>
       <div className="agent-sticky-user-anchor">
         {stickyUserContent && (
           <button type="button" className="agent-sticky-user-bar" onClick={scrollToStickyMessage} title={stickyUserContent}>

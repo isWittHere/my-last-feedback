@@ -281,6 +281,8 @@
     "acpIndicatorHidden": "Hidden",
     "acpIndicatorText": "Text only",
     "acpIndicatorTextAndGraphic": "Text and graphic",
+    "acpSmoothStreamingOutput": "Smooth streaming output",
+    "acpSmoothStreamingOutputDesc": "Pace Agent text updates on the frontend so fast ACP chunks still appear progressively.",
     "acpDiffVisualAdjustment": "Diff visual adjustment",
     "acpDiffVisualAdjustmentDesc": "Tune diff colors and compact topbar text position.",
     "acpDiffColorPreset": "Diff color preset",

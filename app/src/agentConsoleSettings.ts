@@ -22,6 +22,7 @@ export interface AgentDiffVisualSettings {
 export interface AgentConsoleSettings {
   diffIndicatorMode: AgentTopbarIndicatorMode;
   contextIndicatorMode: AgentTopbarIndicatorMode;
+  smoothStreamingOutput: boolean;
   diffVisual: AgentDiffVisualSettings;
 }
 
@@ -37,6 +38,7 @@ const CHANGE_EVENT = "mlfb-agent-console-settings-changed";
 const DEFAULT_SETTINGS: AgentConsoleSettings = {
   diffIndicatorMode: "textAndGraphic",
   contextIndicatorMode: "textAndGraphic",
+  smoothStreamingOutput: false,
   diffVisual: {
     colorPresetId: "classic",
     additionsOffsetX: 0,
@@ -82,6 +84,7 @@ export function getAgentConsoleSettings(): AgentConsoleSettings {
     cachedSettings = {
       diffIndicatorMode: isIndicatorMode(parsed.diffIndicatorMode) ? parsed.diffIndicatorMode : DEFAULT_SETTINGS.diffIndicatorMode,
       contextIndicatorMode: isIndicatorMode(parsed.contextIndicatorMode) ? parsed.contextIndicatorMode : DEFAULT_SETTINGS.contextIndicatorMode,
+      smoothStreamingOutput: typeof parsed.smoothStreamingOutput === "boolean" ? parsed.smoothStreamingOutput : DEFAULT_SETTINGS.smoothStreamingOutput,
       diffVisual: {
         colorPresetId: isColorPresetId(parsedDiffVisual?.colorPresetId) ? parsedDiffVisual.colorPresetId : DEFAULT_SETTINGS.diffVisual.colorPresetId,
         additionsOffsetX: parsedDiffVisual?.additionsOffsetX == null ? legacyOffsetX : clampTextOffset(parsedDiffVisual.additionsOffsetX),

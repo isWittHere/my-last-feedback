@@ -10,7 +10,6 @@ import {
   installGlobalErrorHandlers,
 } from "../common/mcp-bootstrap.mjs";
 import { registerInteractiveFeedback } from "./tools/interactive-feedback.mjs";
-import { registerWhoami } from "./tools/whoami.mjs";
 import { cancelAllActiveSessions, activeSessions } from "./app-ipc.mjs";
 
 installGlobalErrorHandlers("MLFB");
@@ -20,7 +19,6 @@ await bootstrapMcpServer({
   version: "1.0.0",
   register(server) {
     registerInteractiveFeedback(server);
-    registerWhoami(server);
   },
 });
 

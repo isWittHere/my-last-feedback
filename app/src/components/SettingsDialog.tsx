@@ -189,6 +189,14 @@ export function SettingsDialog({ open, onClose }: { open: boolean; onClose: () =
     });
   }, []);
 
+  const handleAgentSmoothStreamingToggle = useCallback(() => {
+    setAgentConsoleSettings((prev) => {
+      const next = { ...prev, smoothStreamingOutput: !prev.smoothStreamingOutput };
+      saveAgentConsoleSettings(next);
+      return next;
+    });
+  }, []);
+
   const handleAgentDiffColorPresetChange = useCallback((colorPresetId: AgentDiffColorPresetId) => {
     setAgentConsoleSettings((prev) => {
       const next = { ...prev, diffVisual: { ...prev.diffVisual, colorPresetId } };
@@ -852,6 +860,21 @@ export function SettingsDialog({ open, onClose }: { open: boolean; onClose: () =
                 {renderAcpPreview()}
                 <div className="settings-section settings-acp-section">
                   <div className="settings-row settings-row-stacked">
+                    <div className="settings-row">
+                      <div className="settings-row-info">
+                        <span className="settings-label">{t("settings.acpSmoothStreamingOutput", "Smooth streaming output")}</span>
+                        <span className="settings-sublabel">{t("settings.acpSmoothStreamingOutputDesc", "Pace Agent text updates on the frontend so fast ACP chunks still appear progressively.")}</span>
+                      </div>
+                      <button
+                        type="button"
+                        className={`settings-toggle${agentConsoleSettings.smoothStreamingOutput ? " settings-toggle-on" : ""}`}
+                        onClick={handleAgentSmoothStreamingToggle}
+                        aria-label={t("settings.acpSmoothStreamingOutput", "Smooth streaming output")}
+                        aria-pressed={agentConsoleSettings.smoothStreamingOutput}
+                      >
+                        <span className="settings-toggle-knob" />
+                      </button>
+                    </div>
                     <div className="settings-row-info">
                       <span className="settings-label">{t("settings.acpTopbarIndicators", "Topbar indicators")}</span>
                       <span className="settings-sublabel">{t("settings.acpTopbarIndicatorsDesc", "Configure how Agent Console diff and context indicators appear in the topbar.")}</span>

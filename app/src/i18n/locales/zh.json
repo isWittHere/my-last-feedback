@@ -281,6 +281,8 @@
     "acpIndicatorHidden": "不显示",
     "acpIndicatorText": "仅文本",
     "acpIndicatorTextAndGraphic": "文本和图形",
+    "acpSmoothStreamingOutput": "平滑流式输出",
+    "acpSmoothStreamingOutputDesc": "由前端分批显示 Agent 文本，使快速 ACP chunk 也能渐进呈现。",
     "acpDiffVisualAdjustment": "Diff 视觉调整",
     "acpDiffVisualAdjustmentDesc": "调整 diff 配色与顶栏紧凑文本位置。",
     "acpDiffColorPreset": "Diff 色卡",

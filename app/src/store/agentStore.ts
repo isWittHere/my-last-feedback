@@ -5,6 +5,7 @@ import { hasAgentComposerContent } from "../agent/composer";
 import { createOpenCodeAcpStartOptions, createOpenCodeInitializeParams } from "../agent/opencode/provider";
 import { createAgentSession } from "../agent/sessionFactory";
 import { buildSubmittedComposerPayload } from "../composer/submittedFeedback";
+import { getAgentConsoleSettings } from "../agentConsoleSettings";
 import { setOpenCodePreferredModel, syncOpenCodeModels } from "../openCodeSettings";
 import type { AgentChoiceOption, AgentContentBlock, AgentDiagnosticEntry, AgentMessage, AgentSession } from "../agent/types";
 import type { GitAction, ImageAttachment, MlcAttachment, WebAttachment } from "./feedbackStore";
@@ -15,6 +16,30 @@ interface AgentAcpRuntimeEntry {
 }
 
 const acpRuntimes = new Map<string, AgentAcpRuntimeEntry>();
+const STREAM_FLUSH_INTERVAL_MS = 40;
+const STREAM_DRAIN_INTERVAL_MS = 16;
+const STREAM_RATE_WINDOW_MS = 900;
+const STREAM_RATE_MULTIPLIER = 1.35;
+const STREAM_BASE_CHARS_PER_TICK = 16;
+const STREAM_MAX_CHARS_PER_TICK = 160;
+const STREAM_DRAIN_TICK_TARGET = 4;
+const STREAM_DRAIN_MIN_CHARS_PER_TICK = 160;
+const STREAM_DRAIN_MAX_CHARS_PER_TICK = 1400;
+
+interface PacedTextBuffer {
+  sessionId: string;
+  phase: "process" | "result";
+  messageId?: string;
+  pending: string;
+  draining: boolean;
+  inputWindowStartedAt: number;
+  inputCharsInWindow: number;
+  lastInputAt: number;
+  timer: ReturnType<typeof setTimeout> | null;
+  waiters: Array<() => void>;
+}
+
+const pacedTextBuffers = new Map<string, PacedTextBuffer>();
 
 interface AgentStoreState {
   sessions: AgentSession[];
@@ -213,7 +238,54 @@ function extractTextContent(content: unknown): string {
   return value.type === "text" && typeof value.text === "string" ? value.text : "";
 }
 
-function appendAssistantTextChunk(session: AgentSession, phase: "process" | "result", text: string, messageId?: string): AgentSession {
+function isRecord(value: unknown): value is Record<string, unknown> {
+  return Boolean(value) && typeof value === "object" && !Array.isArray(value);
+}
+
+function insertProcessBlock(blocks: AgentContentBlock[], block: AgentContentBlock): AgentContentBlock[] {
+  const firstResultIndex = blocks.findIndex((item) => item.origin.phase === "result");
+  if (firstResultIndex < 0) return [...blocks, block];
+  return [...blocks.slice(0, firstResultIndex), block, ...blocks.slice(firstResultIndex)];
+}
+
+function toolStatusFromAcp(status: unknown): "pending" | "running" | "completed" | "failed" | undefined {
+  if (status === "pending") return "pending";
+  if (status === "running" || status === "in_progress") return "running";
+  if (status === "completed") return "completed";
+  if (status === "failed" || status === "error") return "failed";
+  return undefined;
+}
+
+function extractToolContentText(content: unknown): string {
+  if (typeof content === "string") return content;
+  if (Array.isArray(content)) {
+    return content
+      .map((item) => {
+        if (!isRecord(item)) return "";
+        if (item.type === "content") return extractToolContentText(item.content);
+        return extractTextContent(item);
+      })
+      .filter(Boolean)
+      .join("\n");
+  }
+  if (isRecord(content)) return extractTextContent(content);
+  return "";
+}
+
+function extractToolResult(update: Record<string, unknown>): string | undefined {
+  const rawOutput = isRecord(update.rawOutput) ? update.rawOutput : undefined;
+  if (typeof rawOutput?.output === "string" && rawOutput.output) return rawOutput.output;
+  const contentText = extractToolContentText(update.content);
+  return contentText || undefined;
+}
+
+function toolArgsFromRawInput(rawInput: unknown): Record<string, unknown> | undefined {
+  if (rawInput == null) return undefined;
+  if (isRecord(rawInput)) return rawInput;
+  return { input: rawInput };
+}
+
+function appendAssistantTextChunkImmediate(session: AgentSession, phase: "process" | "result", text: string, messageId?: string): AgentSession {
   if (!text) return session;
   const messages = [...session.messages];
   const lastMessage = messages[messages.length - 1];
@@ -225,13 +297,13 @@ function appendAssistantTextChunk(session: AgentSession, phase: "process" | "res
 
   const targetType = phase === "process" ? "thinking" : "text";
   const blockIndex = assistantMessage.blocks.findIndex((block) => block.type === targetType && block.origin.phase === phase);
-  const blocks = [...assistantMessage.blocks];
+  let blocks = [...assistantMessage.blocks];
   if (blockIndex >= 0) {
     const block = blocks[blockIndex];
     if (block.type === "text") blocks[blockIndex] = { ...block, content: block.content + text, updatedAt: nowIso() };
     if (block.type === "thinking") blocks[blockIndex] = { ...block, content: block.content + text, status: "running", updatedAt: nowIso() };
   } else if (phase === "process") {
-    blocks.push({
+    blocks = insertProcessBlock(blocks, {
       id: newId("agent_thinking"),
       type: "thinking",
       content: text,
@@ -244,6 +316,201 @@ function appendAssistantTextChunk(session: AgentSession, phase: "process" | "res
   }
 
   messages[messages.length - 1] = { ...assistantMessage, blocks, updatedAt: nowIso() };
+  return { ...session, messages, updatedAt: nowIso() };
+}
+
+function pacedBufferKey(sessionId: string, phase: "process" | "result", messageId?: string): string {
+  return `${sessionId}:${messageId || "active"}:${phase}`;
+}
+
+function charsForBacklog(length: number): number {
+  if (length > 1200) return STREAM_MAX_CHARS_PER_TICK;
+  if (length > 600) return 64;
+  if (length > 240) return 32;
+  return STREAM_BASE_CHARS_PER_TICK;
+}
+
+function notePacedBufferInput(buffer: PacedTextBuffer, textLength: number) {
+  const time = Date.now();
+  if (time - buffer.inputWindowStartedAt > STREAM_RATE_WINDOW_MS) {
+    buffer.inputWindowStartedAt = time;
+    buffer.inputCharsInWindow = 0;
+  }
+  buffer.inputCharsInWindow += textLength;
+  buffer.lastInputAt = time;
+}
+
+function charsForPacedBuffer(buffer: PacedTextBuffer): number {
+  if (buffer.draining) {
+    const catchUpSize = Math.ceil(buffer.pending.length / STREAM_DRAIN_TICK_TARGET);
+    return Math.min(STREAM_DRAIN_MAX_CHARS_PER_TICK, Math.max(STREAM_DRAIN_MIN_CHARS_PER_TICK, catchUpSize));
+  }
+
+  const elapsed = Math.max(1, Date.now() - buffer.inputWindowStartedAt);
+  const upstreamCharsPerTick = Math.ceil((buffer.inputCharsInWindow / elapsed) * STREAM_FLUSH_INTERVAL_MS * STREAM_RATE_MULTIPLIER);
+  return Math.max(charsForBacklog(buffer.pending.length), Math.min(STREAM_MAX_CHARS_PER_TICK, upstreamCharsPerTick));
+}
+
+function resolvePacedBuffer(buffer: PacedTextBuffer) {
+  for (const resolve of buffer.waiters.splice(0)) resolve();
+}
+
+function flushPacedTextBuffer(key: string) {
+  const buffer = pacedTextBuffers.get(key);
+  if (!buffer) return;
+  buffer.timer = null;
+  const releaseLength = Math.min(charsForPacedBuffer(buffer), buffer.pending.length);
+  const text = buffer.pending.slice(0, releaseLength);
+  buffer.pending = buffer.pending.slice(releaseLength);
+
+  if (text) {
+    useAgentStore.setState((state) => ({
+      sessions: updateSession(state.sessions, buffer.sessionId, (session) => appendAssistantTextChunkImmediate(session, buffer.phase, text, buffer.messageId)),
+    }));
+  }
+
+  if (buffer.pending) {
+    buffer.timer = setTimeout(() => flushPacedTextBuffer(key), buffer.draining ? STREAM_DRAIN_INTERVAL_MS : STREAM_FLUSH_INTERVAL_MS);
+    return;
+  }
+  pacedTextBuffers.delete(key);
+  resolvePacedBuffer(buffer);
+}
+
+function appendAssistantTextChunk(session: AgentSession, phase: "process" | "result", text: string, messageId?: string): AgentSession {
+  if (!text) return session;
+  if (!getAgentConsoleSettings().smoothStreamingOutput) {
+    return appendAssistantTextChunkImmediate(session, phase, text, messageId);
+  }
+
+  const key = pacedBufferKey(session.id, phase, messageId);
+  const buffer = pacedTextBuffers.get(key) || {
+    sessionId: session.id,
+    phase,
+    messageId,
+    pending: "",
+    draining: false,
+    inputWindowStartedAt: Date.now(),
+    inputCharsInWindow: 0,
+    lastInputAt: Date.now(),
+    timer: null,
+    waiters: [],
+  };
+  buffer.pending += text;
+  notePacedBufferInput(buffer, text.length);
+  pacedTextBuffers.set(key, buffer);
+  if (!buffer.timer) {
+    buffer.timer = setTimeout(() => flushPacedTextBuffer(key), STREAM_FLUSH_INTERVAL_MS);
+  }
+  return session;
+}
+
+function waitForPacedTextBuffers(sessionId: string): Promise<void> {
+  const buffers = [...pacedTextBuffers.values()].filter((buffer) => buffer.sessionId === sessionId);
+  if (buffers.length === 0) return Promise.resolve();
+  return Promise.all(buffers.map((buffer) => new Promise<void>((resolve) => buffer.waiters.push(resolve)))).then(() => undefined);
+}
+
+function drainPacedTextBuffers(sessionId: string): Promise<void> {
+  const buffers = [...pacedTextBuffers.entries()].filter(([, buffer]) => buffer.sessionId === sessionId);
+  if (buffers.length === 0) return Promise.resolve();
+  for (const [key, buffer] of buffers) {
+    buffer.draining = true;
+    if (buffer.timer) clearTimeout(buffer.timer);
+    buffer.timer = setTimeout(() => flushPacedTextBuffer(key), 0);
+  }
+  return waitForPacedTextBuffers(sessionId);
+}
+
+function clearPacedTextBuffers(sessionId?: string) {
+  for (const [key, buffer] of pacedTextBuffers) {
+    if (sessionId && buffer.sessionId !== sessionId) continue;
+    if (buffer.timer) clearTimeout(buffer.timer);
+    pacedTextBuffers.delete(key);
+    resolvePacedBuffer(buffer);
+  }
+}
+
+function applyAcpToolCallUpdate(session: AgentSession, update: Record<string, unknown>, messageId?: string): AgentSession {
+  const toolCallId = typeof update.toolCallId === "string" && update.toolCallId ? update.toolCallId : undefined;
+  if (!toolCallId) return appendDiagnosticToSession(session, "warn", "ACP tool update did not include a toolCallId.");
+
+  const messages = [...session.messages];
+  const blockId = `agent_tool_${toolCallId}`;
+  let targetMessageIndex = -1;
+  for (let index = messages.length - 1; index >= 0; index -= 1) {
+    const message = messages[index];
+    if (message.role === "assistant" && message.blocks.some((block) => block.type === "tool_call" && block.id === blockId)) {
+      targetMessageIndex = index;
+      break;
+    }
+  }
+  if (targetMessageIndex < 0) {
+    for (let index = messages.length - 1; index >= 0; index -= 1) {
+      const message = messages[index];
+      if (message.role === "assistant" && message.status === "streaming") {
+        targetMessageIndex = index;
+        break;
+      }
+    }
+  }
+  if (targetMessageIndex < 0) {
+    for (let index = messages.length - 1; index >= 0; index -= 1) {
+      const message = messages[index];
+      if (message.role === "assistant") {
+        targetMessageIndex = index;
+        break;
+      }
+    }
+  }
+
+  let assistantMessage = targetMessageIndex >= 0 ? messages[targetMessageIndex] : null;
+  if (!assistantMessage) {
+    assistantMessage = createStreamingAssistantMessage(messageId);
+    messages.push(assistantMessage);
+    targetMessageIndex = messages.length - 1;
+  }
+
+  const status = toolStatusFromAcp(update.status);
+  const title = typeof update.title === "string" && update.title ? update.title : undefined;
+  const kind = typeof update.kind === "string" && update.kind ? update.kind : undefined;
+  const name = kind || title || toolCallId;
+  const label = title || kind || toolCallId;
+  const args = toolArgsFromRawInput(update.rawInput);
+  const result = extractToolResult(update);
+  let blocks = [...assistantMessage.blocks];
+  const blockIndex = blocks.findIndex((block) => block.type === "tool_call" && block.id === blockId);
+
+  if (blockIndex >= 0) {
+    const block = blocks[blockIndex];
+    if (block.type === "tool_call") {
+      blocks[blockIndex] = {
+        ...block,
+        name: name || block.name,
+        title: title || block.title,
+        label: label || block.label,
+        status: status || block.status,
+        args: args || block.args,
+        result: result || block.result,
+        updatedAt: nowIso(),
+      };
+    }
+  } else {
+    blocks = insertProcessBlock(blocks, {
+      id: blockId,
+      type: "tool_call",
+      name,
+      title,
+      label,
+      status: status || "pending",
+      args,
+      result,
+      origin: { phase: "process", placement: "standalone" },
+      createdAt: nowIso(),
+    });
+  }
+
+  messages[targetMessageIndex] = { ...assistantMessage, blocks, updatedAt: nowIso() };
   return { ...session, messages, updatedAt: nowIso() };
 }
 
@@ -298,6 +565,9 @@ function applyAcpSessionUpdate(session: AgentSession, params: unknown): AgentSes
   }
   if (updateType === "agent_thought_chunk") {
     return appendAssistantTextChunk(session, "process", extractTextContent(value.content), messageId);
+  }
+  if (updateType === "tool_call" || updateType === "tool_call_update") {
+    return applyAcpToolCallUpdate(session, value, messageId);
   }
   if (updateType === "user_message_chunk") {
     return session;
@@ -563,6 +833,7 @@ export const useAgentStore = create<AgentStoreState>((set, get) => ({
     if (!processId) return;
     const runtime = acpRuntimes.get(processId);
     acpRuntimes.delete(processId);
+    clearPacedTextBuffers(sessionId);
     await runtime?.client.stop().catch(() => undefined);
     set((state) => ({
       sessions: updateSession(state.sessions, sessionId, (item) => appendDiagnosticToSession({
@@ -670,6 +941,7 @@ export const useAgentStore = create<AgentStoreState>((set, get) => ({
         sessionId: providerSessionId,
         prompt: [{ type: "text", text: submittedPrompt.historyText || submittedPrompt.markdown }],
       }, 10 * 60 * 1000);
+      await drainPacedTextBuffers(sessionId);
 
       set((state) => ({
         sessions: updateSession(state.sessions, sessionId, (item) => ({
@@ -679,6 +951,7 @@ export const useAgentStore = create<AgentStoreState>((set, get) => ({
       }));
     } catch (error) {
       const message = error instanceof Error ? error.message : String(error);
+      await drainPacedTextBuffers(sessionId);
       set((state) => ({
         sessions: updateSession(state.sessions, sessionId, (item) => appendDiagnosticToSession({
           ...failStreamingAssistant(item, message),
@@ -707,6 +980,7 @@ export const useAgentStore = create<AgentStoreState>((set, get) => ({
       void runtime.client.stop().catch(() => undefined);
     }
     acpRuntimes.clear();
+    clearPacedTextBuffers();
     set(() => ({
       sessions: [createAgentSession()],
       activeSessionId: "agent-session-opencode",
