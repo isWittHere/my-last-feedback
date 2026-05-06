@@ -1,5 +1,5 @@
 import { getFriendlyName } from "../components/friendlyName";
-import type { AgentSession } from "./types";
+import type { AgentProviderId, AgentSession } from "./types";
 
 export interface AgentSessionIdentity {
   providerName: string;
@@ -41,7 +41,7 @@ function codeFromSeed(seed: string): string {
 
 export function getAgentSessionIdentity(session: AgentSession, language: "en" | "zh" = "en"): AgentSessionIdentity {
   const providerName = formatProviderName(session.providerRuntime?.agentInfo?.name || session.providerId);
-  if (!session.providerSessionId) {
+  if (!session.providerSessionId || session.providerSessionState === "provisional") {
     return {
       providerName,
       name: "opencode",
@@ -50,7 +50,11 @@ export function getAgentSessionIdentity(session: AgentSession, language: "en" | 
     };
   }
 
-  const code = codeFromSeed(`${session.providerId}:${session.providerSessionId}`);
+  return getAgentProviderSessionIdentity(session.providerId, session.providerSessionId, language, providerName);
+}
+
+export function getAgentProviderSessionIdentity(providerId: AgentProviderId, providerSessionId: string, language: "en" | "zh" = "en", providerName = formatProviderName(providerId)): AgentSessionIdentity {
+  const code = codeFromSeed(`${providerId}:${providerSessionId}`);
   const colorIndex = hashString(code) % AVATAR_COLORS.length;
   return {
     providerName,

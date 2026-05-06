@@ -26,20 +26,30 @@ function AgentSelectButton({ label, value, options, onSelect }: { label: string;
   const selected = options.find((option) => option.id === value);
   const displayValue = selected?.label || value;
   return (
-    <div className="agent-composer-select-wrap">
-      <button type="button" className="btn agent-composer-select" onClick={() => setOpen((current) => !current)} title={`${label}: ${displayValue}`}>
+    <div
+      className="agent-composer-select-wrap"
+      onBlur={(event) => {
+        const nextFocus = event.relatedTarget as Node | null;
+        if (!event.currentTarget.contains(nextFocus)) setOpen(false);
+      }}
+      onKeyDown={(event) => {
+        if (event.key === "Escape") setOpen(false);
+      }}
+    >
+      <button type="button" className="btn agent-composer-select" onClick={() => setOpen((current) => !current)} aria-haspopup="listbox" aria-expanded={open} aria-label={`${label}: ${displayValue}`}>
         <span className="agent-composer-select-label">{label}</span>
         <span className="agent-composer-select-value">{displayValue}</span>
         <Icon name="chevron-down" size={10} />
       </button>
       {open && (
-        <div className="agent-composer-select-menu" data-preview-overlay>
+        <div className="agent-composer-select-menu" role="listbox" data-preview-overlay>
           {options.map((option) => (
             <button
               key={option.id}
               type="button"
               className={option.id === value ? "active" : ""}
-              title={option.description || option.label}
+              role="option"
+              aria-selected={option.id === value}
               onClick={() => {
                 onSelect(option.id);
                 setOpen(false);

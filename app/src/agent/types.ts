@@ -3,6 +3,7 @@ import type { GitAction, ImageAttachment, MlcAttachment, WebAttachment } from ".
 export type AgentProviderId = "opencode";
 
 export type AgentSessionStatus = "idle" | "starting" | "running" | "cancelling" | "disconnected" | "error";
+export type AgentProviderSessionState = "provisional" | "active" | "restored";
 
 export type AgentBlockPhase = "process" | "result";
 export type AgentBlockPlacement = "inline" | "standalone";
@@ -160,6 +161,7 @@ export interface AgentSession {
   id: string;
   providerId: AgentProviderId;
   providerSessionId?: string;
+  providerSessionState?: AgentProviderSessionState;
   providerRuntime?: AgentProviderRuntimeInfo;
   title: string;
   cwd: string;

@@ -235,9 +235,39 @@ function applyAcpSessionSetupResult(session: AgentSession, result: AcpNewSession
   };
 }
 
-function runtimeForSession(session: AgentSession | undefined): AgentAcpRuntimeEntry | null {
+function runtimeForSession(session: AgentSession | undefined, sessions: AgentSession[] = []): AgentAcpRuntimeEntry | null {
   const processId = session?.providerRuntime?.processId;
-  return processId ? acpRuntimes.get(processId) || null : null;
+  if (processId) return acpRuntimes.get(processId) || null;
+  if (!session) return null;
+  const providerRuntimeSession = sessions.find((item) => item.providerId === session.providerId && item.providerRuntime?.processId && item.providerRuntime.initialized);
+  const providerProcessId = providerRuntimeSession?.providerRuntime?.processId;
+  return providerProcessId ? acpRuntimes.get(providerProcessId) || null : null;
+}
+
+function initializedProviderSession(providerId: AgentProviderId, sessions: AgentSession[]): AgentSession | undefined {
+  return sessions.find((session) => session.providerId === providerId && session.providerRuntime?.processId && session.providerRuntime.initialized);
+}
+
+function hasLocalSessionContent(session: AgentSession): boolean {
+  return Boolean(
+    session.messages.length > 0 ||
+    session.draft.trim() ||
+    session.testLogText.trim() ||
+    session.gitAction ||
+    session.images.length > 0 ||
+    session.mlcAttachments.length > 0 ||
+    session.webAttachments.length > 0 ||
+    session.diagnostics.some((entry) => entry.level !== "info")
+  );
+}
+
+function isReusableProvisionalSession(session: AgentSession, providerId: AgentProviderId): boolean {
+  return session.providerId === providerId &&
+    session.providerSessionState === "provisional" &&
+    !hasLocalSessionContent(session) &&
+    session.status !== "running" &&
+    session.status !== "starting" &&
+    session.status !== "cancelling";
 }
 
 function describeAcpSessionSetup(result: AcpNewSessionResult): string {
@@ -836,7 +866,7 @@ export const useAgentStore = create<AgentStoreState>((set, get) => ({
       sessions: updateSession(state.sessions, sessionId, (session) => ({ ...session, modeId, updatedAt: nowIso() })),
     }));
     const session = get().sessions.find((item) => item.id === sessionId);
-    const runtime = runtimeForSession(session);
+    const runtime = runtimeForSession(session, get().sessions);
     if (!runtime || !session?.providerSessionId) return;
     void runtime.client.request("session/set_mode", { sessionId: session.providerSessionId, modeId })
       .catch((error) => get().appendAgentDiagnostic(sessionId, "error", `Failed to set ACP mode: ${error instanceof Error ? error.message : String(error)}`));
@@ -848,7 +878,7 @@ export const useAgentStore = create<AgentStoreState>((set, get) => ({
       sessions: updateSession(state.sessions, sessionId, (session) => ({ ...session, modelId, contextUsage: undefined, updatedAt: nowIso() })),
     }));
     const session = get().sessions.find((item) => item.id === sessionId);
-    const runtime = runtimeForSession(session);
+    const runtime = runtimeForSession(session, get().sessions);
     if (!runtime || !session?.providerSessionId) return;
     void runtime.client.request("session/set_model", { sessionId: session.providerSessionId, modelId })
       .catch((error) => get().appendAgentDiagnostic(sessionId, "error", `Failed to set ACP model: ${error instanceof Error ? error.message : String(error)}`));
@@ -1001,30 +1031,58 @@ export const useAgentStore = create<AgentStoreState>((set, get) => ({
       get().appendAgentDiagnostic(sessionId, "info", "Sending ACP initialize request...");
       const initializeResult = await client.request<AcpInitializeResult>("initialize", createOpenCodeInitializeParams());
       get().appendAgentDiagnostic(sessionId, "info", `ACP initialize returned${initializeResult.agentInfo?.version ? `: OpenCode ${initializeResult.agentInfo.version}` : "."}`);
-      get().appendAgentDiagnostic(sessionId, "info", "Creating OpenCode ACP session...");
-      const sessionResult = await client.request<AcpNewSessionResult>("session/new", {
-        cwd: info.cwd,
-        mcpServers: [],
-      });
-      set((state) => ({
-        sessions: updateSession(state.sessions, sessionId, (item) => appendDiagnosticToSession({
-          ...applyAcpSessionSetupResult(item, sessionResult),
-          status: "idle",
-          providerRuntime: {
-            ...item.providerRuntime,
-            initialized: true,
-            protocolVersion: initializeResult.protocolVersion,
-            agentInfo: initializeResult.agentInfo,
-            agentCapabilities: initializeResult.agentCapabilities,
-            authMethods: initializeResult.authMethods,
-          },
-        }, "info", `${describeAcpSessionSetup(sessionResult)}.`)),
-      }));
-      const configuredSession = get().sessions.find((item) => item.id === sessionId);
-      if (configuredSession?.providerSessionId && configuredSession.modelId && configuredSession.modelId !== sessionResult.models?.currentModelId) {
-        await client.request("session/set_model", { sessionId: configuredSession.providerSessionId, modelId: configuredSession.modelId })
-          .then(() => get().appendAgentDiagnostic(sessionId, "info", `OpenCode model selected: ${configuredSession.modelId}`))
-          .catch((error) => get().appendAgentDiagnostic(sessionId, "warn", `Failed to apply preferred OpenCode model: ${error instanceof Error ? error.message : String(error)}`));
+      const canLoadExistingSession = Boolean(
+        session.providerSessionId &&
+        session.providerSessionState !== "provisional" &&
+        providerLoadSessionCapability({
+          ...session,
+          providerRuntime: { ...session.providerRuntime, agentCapabilities: initializeResult.agentCapabilities },
+        }) === "supported"
+      );
+      if (canLoadExistingSession) {
+        get().appendAgentDiagnostic(sessionId, "info", "Loading OpenCode ACP session...");
+        const sessionResult = await client.request<AcpNewSessionResult>("session/load", {
+          sessionId: session.providerSessionId,
+          cwd: info.cwd,
+          mcpServers: [],
+        });
+        set((state) => ({
+          sessions: updateSession(state.sessions, sessionId, (item) => appendDiagnosticToSession({
+            ...applyAcpSessionSetupResult(item, sessionResult),
+            providerSessionState: item.providerSessionState || "restored",
+            status: "idle",
+            providerRuntime: {
+              ...item.providerRuntime,
+              initialized: true,
+              protocolVersion: initializeResult.protocolVersion,
+              agentInfo: initializeResult.agentInfo,
+              agentCapabilities: initializeResult.agentCapabilities,
+              authMethods: initializeResult.authMethods,
+            },
+          }, "info", `OpenCode ACP session loaded: ${sessionResult.sessionId || session.providerSessionId}.`)),
+        }));
+        const configuredSession = get().sessions.find((item) => item.id === sessionId);
+        if (configuredSession?.providerSessionId && configuredSession.modelId && configuredSession.modelId !== sessionResult.models?.currentModelId) {
+          await client.request("session/set_model", { sessionId: configuredSession.providerSessionId, modelId: configuredSession.modelId })
+            .then(() => get().appendAgentDiagnostic(sessionId, "info", `OpenCode model selected: ${configuredSession.modelId}`))
+            .catch((error) => get().appendAgentDiagnostic(sessionId, "warn", `Failed to apply preferred OpenCode model: ${error instanceof Error ? error.message : String(error)}`));
+        }
+      } else {
+        set((state) => ({
+          sessions: updateSession(state.sessions, sessionId, (item) => appendDiagnosticToSession({
+            ...item,
+            status: "idle",
+            providerRuntime: {
+              ...item.providerRuntime,
+              initialized: true,
+              protocolVersion: initializeResult.protocolVersion,
+              agentInfo: initializeResult.agentInfo,
+              agentCapabilities: initializeResult.agentCapabilities,
+              authMethods: initializeResult.authMethods,
+            },
+            updatedAt: nowIso(),
+          }, "info", "OpenCode ACP provider initialized. Session will be created on first prompt.")),
+        }));
       }
     } catch (error) {
       const message = error instanceof Error ? error.message : String(error);
@@ -1123,13 +1181,12 @@ export const useAgentStore = create<AgentStoreState>((set, get) => ({
 
     try {
       session = get().sessions.find((item) => item.id === sessionId);
-      if (!session?.providerRuntime?.initialized) {
+      if (!runtimeForSession(session, get().sessions)) {
         await get().startOpenCodeAcp(sessionId);
       }
       session = get().sessions.find((item) => item.id === sessionId);
-      const processId = session?.providerRuntime?.processId;
-      if (!session || !processId) throw new Error("OpenCode ACP provider is not connected");
-      const runtime = acpRuntimes.get(processId);
+      if (!session) throw new Error("OpenCode ACP provider is not connected");
+      const runtime = runtimeForSession(session, get().sessions);
       if (!runtime) throw new Error("OpenCode ACP runtime is not available");
 
       let providerSessionId = session.providerSessionId;
@@ -1142,6 +1199,7 @@ export const useAgentStore = create<AgentStoreState>((set, get) => ({
         set((state) => ({
           sessions: updateSession(state.sessions, sessionId, (item) => appendDiagnosticToSession({
             ...applyAcpSessionSetupResult(item, result),
+            providerSessionState: "provisional",
           }, "info", `OpenCode ACP session created: ${providerSessionId}`)),
         }));
         const configuredSession = get().sessions.find((item) => item.id === sessionId);
@@ -1152,6 +1210,14 @@ export const useAgentStore = create<AgentStoreState>((set, get) => ({
         }
       }
 
+      set((state) => ({
+        sessions: updateSession(state.sessions, sessionId, (item) => ({
+          ...item,
+          providerSessionState: "active",
+          updatedAt: nowIso(),
+        })),
+      }));
+
       await runtime.client.request("session/prompt", {
         sessionId: providerSessionId,
         prompt: [{ type: "text", text: submittedPrompt.historyText || submittedPrompt.markdown }],
@@ -1161,6 +1227,7 @@ export const useAgentStore = create<AgentStoreState>((set, get) => ({
       set((state) => ({
         sessions: updateSession(state.sessions, sessionId, (item) => ({
           ...completeStreamingAssistant(item),
+          providerSessionState: "active",
           status: "idle",
         })),
       }));
@@ -1195,7 +1262,7 @@ export const useAgentStore = create<AgentStoreState>((set, get) => ({
       },
     }));
     if (capability === "unsupported") return;
-    const runtime = runtimeForSession(session);
+    const runtime = runtimeForSession(session, get().sessions);
     if (!session || !runtime || !session.providerRuntime?.initialized) {
       set((state) => ({
         providerSessionLists: {
@@ -1253,15 +1320,37 @@ export const useAgentStore = create<AgentStoreState>((set, get) => ({
   },
 
   restoreProviderSession: async (providerId, providerSessionId) => {
-    const session = get().sessions.find((item) => item.providerId === providerId) || get().getActiveSession();
-    const runtime = runtimeForSession(session);
-    const loadCapability = providerLoadSessionCapability(session);
-    if (!session || !runtime || !session.providerRuntime?.initialized) {
+    const state = get();
+    const runtimeOwner = initializedProviderSession(providerId, state.sessions);
+    const existingSession = state.sessions.find((item) => item.providerId === providerId && item.providerSessionId === providerSessionId && item.providerSessionState !== "provisional");
+    if (existingSession) {
+      set((state) => ({
+        activeSessionId: existingSession.id,
+        sessions: runtimeOwner?.providerRuntime ? updateSession(state.sessions, existingSession.id, (item) => ({
+          ...item,
+          providerRuntime: runtimeOwner.providerRuntime,
+          updatedAt: nowIso(),
+        })) : state.sessions,
+      }));
+      return;
+    }
+
+    const session = runtimeOwner || state.sessions.find((item) => item.providerId === providerId) || state.getActiveSession();
+    const runtime = runtimeForSession(session, state.sessions);
+    const loadCapability = providerLoadSessionCapability(runtimeOwner || session);
+    if (!session || !runtime || !runtimeOwner?.providerRuntime?.initialized) {
       throw new Error("Start the provider before restoring ACP sessions.");
     }
     if (loadCapability !== "supported") {
       throw new Error("Provider does not advertise ACP session/load support.");
     }
+
+    const listItem = state.providerSessionLists[providerId]?.sessions.find((item) => item.sessionId === providerSessionId);
+    const activeSession = state.getActiveSession();
+    const reusableSession = activeSession && isReusableProvisionalSession(activeSession, providerId)
+      ? activeSession
+      : state.sessions.find((item) => isReusableProvisionalSession(item, providerId));
+    const targetSessionId = reusableSession?.id || newId("agent_session");
 
     const result = await runtime.client.request<AcpNewSessionResult>("session/load", {
       sessionId: providerSessionId,
@@ -1269,11 +1358,38 @@ export const useAgentStore = create<AgentStoreState>((set, get) => ({
       mcpServers: [],
     });
     set((state) => ({
-      activeSessionId: session.id,
-      sessions: updateSession(state.sessions, session.id, (item) => appendDiagnosticToSession({
-        ...applyAcpSessionSetupResult(item, { ...result, sessionId: result.sessionId || providerSessionId }),
-        status: "idle",
-      }, "info", `ACP session restored: ${providerSessionId}`)),
+      activeSessionId: targetSessionId,
+      sessions: reusableSession
+        ? updateSession(state.sessions, reusableSession.id, (item) => appendDiagnosticToSession({
+          ...applyAcpSessionSetupResult({
+            ...item,
+            title: listItem?.title || item.title,
+            cwd: listItem?.cwd || item.cwd || session.cwd,
+            providerRuntime: runtimeOwner.providerRuntime || item.providerRuntime,
+          }, { ...result, sessionId: result.sessionId || providerSessionId }),
+          providerSessionState: "restored",
+          status: "idle",
+        }, "info", `ACP session restored: ${providerSessionId}`))
+        : [...state.sessions, appendDiagnosticToSession({
+          ...applyAcpSessionSetupResult({
+            ...createAgentSession(),
+            id: targetSessionId,
+            providerId,
+            title: listItem?.title || session.title,
+            cwd: listItem?.cwd || session.cwd,
+            providerRuntime: runtimeOwner.providerRuntime || session.providerRuntime,
+            modelId: session.modelId,
+            modeId: session.modeId,
+            availableModels: session.availableModels || [],
+            availableModes: session.availableModes || [],
+            configOptions: session.configOptions || [],
+            status: "idle",
+            createdAt: nowIso(),
+            updatedAt: nowIso(),
+          }, { ...result, sessionId: result.sessionId || providerSessionId }),
+          providerSessionState: "restored",
+          status: "idle",
+        }, "info", `ACP session restored: ${providerSessionId}`)],
     }));
   },
 

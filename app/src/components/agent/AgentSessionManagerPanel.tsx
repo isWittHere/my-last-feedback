@@ -1,8 +1,10 @@
 import { useMemo, useState } from "react";
 import { useTranslation } from "react-i18next";
-import type { AgentProviderId } from "../../agent/types";
+import { getAgentProviderSessionIdentity, getAgentSessionIdentity, type AgentSessionIdentity } from "../../agent/sessionIdentity";
+import type { AgentProviderId, AgentSession } from "../../agent/types";
 import { useAgentStore } from "../../store/agentStore";
 import { Icon } from "../Icons";
+import { IdenticonAvatar } from "../IdenticonAvatar";
 import { OpenCodeInitialAvatar } from "./OpenCodeInitialAvatar";
 
 function isRecord(value: unknown): value is Record<string, unknown> {
@@ -34,10 +36,41 @@ function providerLabel(providerId: AgentProviderId): string {
   return providerId === "opencode" ? "OpenCode" : providerId;
 }
 
-function localSessionIcon(status: string): string {
-  if (status === "error" || status === "disconnected") return "circle-x";
-  if (status === "running" || status === "starting" || status === "cancelling") return "spinner";
-  return "circle-check";
+function hasLocalSessionActivity(session: AgentSession): boolean {
+  return Boolean(
+    session.messages.length > 0 ||
+    session.draft.trim() ||
+    session.testLogText.trim() ||
+    session.gitAction ||
+    session.images.length > 0 ||
+    session.mlcAttachments.length > 0 ||
+    session.webAttachments.length > 0
+  );
+}
+
+function isUnstartedLocalSession(session: AgentSession): boolean {
+  return (!session.providerSessionId || session.providerSessionState === "provisional") && !hasLocalSessionActivity(session);
+}
+
+function sessionStatusTone(status: AgentSession["status"]): string {
+  if (status === "running" || status === "starting" || status === "cancelling") return "running";
+  if (status === "error") return "error";
+  if (status === "disconnected") return "muted";
+  return "ready";
+}
+
+function HistorySessionAvatar({ identity, status }: { identity: AgentSessionIdentity; status?: AgentSession["status"] }) {
+  const title = identity.code ? `${identity.name} (${identity.code})` : identity.providerName;
+  return (
+    <span className="agent-session-history-avatar" title={title}>
+      {identity.code ? (
+        <IdenticonAvatar alias={identity.code} color={identity.color} size={16} />
+      ) : (
+        <OpenCodeInitialAvatar size={16} />
+      )}
+      {status ? <span className={`agent-session-history-status-dot ${sessionStatusTone(status)}`} /> : null}
+    </span>
+  );
 }
 
 export function AgentSessionManagerPanel() {
@@ -115,6 +148,14 @@ export function AgentSessionManagerPanel() {
       <div className="agent-session-manager-provider-list">
         {providers.map((providerId) => {
           const providerSessions = sessions.filter((session) => session.providerId === providerId);
+          const nonEmptyLocalSessions = providerSessions.filter((session) => !isUnstartedLocalSession(session));
+          const visibleLocalSessions = nonEmptyLocalSessions.length > 0 ? nonEmptyLocalSessions : providerSessions.slice(0, 1);
+          const meaningfulProviderSessionIds = new Set(providerSessions
+            .filter((session) => session.providerSessionId && session.providerSessionState !== "provisional")
+            .map((session) => session.providerSessionId));
+          const provisionalProviderSessionIds = new Set(providerSessions
+            .filter((session) => session.providerSessionId && session.providerSessionState === "provisional")
+            .map((session) => session.providerSessionId));
           const primarySession = providerSessions[0];
           const runtime = primarySession?.providerRuntime;
           const isConnected = Boolean(runtime?.processId);
@@ -123,6 +164,13 @@ export function AgentSessionManagerPanel() {
           const loadSupported = loadSessionSupported(runtime?.agentCapabilities);
           const listCapability = listState?.capability || "unknown";
           const loadCapability = loadSupported ? "supported" : "unsupported";
+          const remoteSessions = listState?.sessions || [];
+          const visibleRemoteSessions = remoteSessions.filter((item) => {
+            if (meaningfulProviderSessionIds.has(item.sessionId)) return true;
+            if (provisionalProviderSessionIds.has(item.sessionId)) return false;
+            return true;
+          });
+          const hiddenEmptySessionCount = remoteSessions.length - visibleRemoteSessions.length;
           const refreshKey = `${providerId}:refresh`;
           const loadMoreKey = `${providerId}:more`;
 
@@ -168,23 +216,26 @@ export function AgentSessionManagerPanel() {
 
               <div className="agent-session-manager-local-list">
                 <div className="agent-session-manager-section-title">{t("agentSessions.localSessions", "Frontend sessions")}</div>
-                {providerSessions.map((session) => (
-                  <button
-                    key={session.id}
-                    type="button"
-                    className={`agent-session-history-item${session.id === activeSessionId ? " active" : ""}`}
-                    onClick={() => setActiveSession(session.id)}
-                  >
-                    <div className="agent-session-history-row1">
-                      <span className="agent-session-history-icon"><Icon name={localSessionIcon(session.status)} size={11} /></span>
-                      <span className="agent-session-history-name">{session.title}</span>
-                    </div>
-                    <div className="agent-session-history-row2">
-                      <span className="agent-session-history-time">{formatDate(session.updatedAt, i18n.language)}</span>
-                      <span className="agent-session-history-id">{session.providerSessionId ? shortId(session.providerSessionId) : t("agentSessions.noProviderSession", "no provider session")}</span>
-                    </div>
-                  </button>
-                ))}
+                {visibleLocalSessions.map((session) => {
+                  const identity = getAgentSessionIdentity(session, i18n.language.startsWith("zh") ? "zh" : "en");
+                  return (
+                    <button
+                      key={session.id}
+                      type="button"
+                      className={`agent-session-history-item${session.id === activeSessionId ? " active" : ""}${isUnstartedLocalSession(session) ? " provisional" : ""}`}
+                      onClick={() => setActiveSession(session.id)}
+                    >
+                      <div className="agent-session-history-row1">
+                        <HistorySessionAvatar identity={identity} status={session.status} />
+                        <span className="agent-session-history-name">{session.title}</span>
+                      </div>
+                      <div className="agent-session-history-row2">
+                        <span className="agent-session-history-time">{formatDate(session.updatedAt, i18n.language)}</span>
+                        <span className="agent-session-history-id">{isUnstartedLocalSession(session) ? t("agentSessions.provisionalSession", "not started") : session.providerSessionId ? shortId(session.providerSessionId) : t("agentSessions.noProviderSession", "no provider session")}</span>
+                      </div>
+                    </button>
+                  );
+                })}
               </div>
 
               <div className="agent-session-manager-remote-list">
@@ -195,22 +246,49 @@ export function AgentSessionManagerPanel() {
                   <div className="agent-session-manager-empty error">{errorLabel(listState.error)}</div>
                 ) : listState?.status === "loading" && listState.sessions.length === 0 ? (
                   <div className="agent-session-manager-empty">{t("agentSessions.loading", "Loading sessions...")}</div>
-                ) : listState?.sessions.length ? (
+                ) : visibleRemoteSessions.length ? (
                   <>
-                    {listState.sessions.map((item) => {
+                    {visibleRemoteSessions.map((item) => {
                       const restoreKey = `${providerId}:restore:${item.sessionId}`;
+                      const identity = getAgentProviderSessionIdentity(providerId, item.sessionId, i18n.language.startsWith("zh") ? "zh" : "en", providerLabel(providerId));
+                      const boundSession = providerSessions.find((session) => session.providerSessionId === item.sessionId && session.providerSessionState !== "provisional");
+                      const isActiveRemoteSession = boundSession?.id === activeSessionId;
+                      const canSwitch = Boolean(boundSession || loadSupported);
+                      const restoreTitle = boundSession
+                        ? t("agentSessions.switchSession", "Switch session")
+                        : loadSupported ? t("agentSessions.restore", "Restore session") : t("agentSessions.loadUnsupported", "Provider does not advertise session/load");
+                      const handleRestore = () => {
+                        if (!canSwitch || busyAction !== null) return;
+                        void runAction(restoreKey, () => restoreProviderSession(providerId, item.sessionId));
+                      };
                       return (
-                        <div key={item.sessionId} className="agent-session-history-item agent-session-history-remote">
+                        <div
+                          key={item.sessionId}
+                          className={`agent-session-history-item agent-session-history-remote${isActiveRemoteSession ? " active" : ""}${canSwitch ? " switchable" : ""}`}
+                          role="button"
+                          tabIndex={canSwitch ? 0 : -1}
+                          onClick={handleRestore}
+                          onKeyDown={(event) => {
+                            if (event.key === "Enter" || event.key === " ") {
+                              event.preventDefault();
+                              handleRestore();
+                            }
+                          }}
+                          title={restoreTitle}
+                        >
                           <div className="agent-session-history-row1">
-                            <span className="agent-session-history-icon"><Icon name="message" size={11} /></span>
+                            <HistorySessionAvatar identity={identity} />
                             <span className="agent-session-history-name" title={item.title || item.sessionId}>{item.title || shortId(item.sessionId)}</span>
                             <span className="agent-session-history-actions">
                               <button
                                 type="button"
                                 className="session-item-cancel"
-                                onClick={() => runAction(restoreKey, () => restoreProviderSession(providerId, item.sessionId))}
-                                disabled={!loadSupported || busyAction !== null}
-                                title={loadSupported ? t("agentSessions.restore", "Restore session") : t("agentSessions.loadUnsupported", "Provider does not advertise session/load")}
+                                onClick={(event) => {
+                                  event.stopPropagation();
+                                  handleRestore();
+                                }}
+                                disabled={!canSwitch || busyAction !== null}
+                                title={restoreTitle}
                               >
                                 <Icon name={busyAction === restoreKey ? "spinner" : "arrow-right-left"} size={11} />
                               </button>
@@ -237,7 +315,7 @@ export function AgentSessionManagerPanel() {
                     ) : null}
                   </>
                 ) : (
-                  <div className="agent-session-manager-empty">{isInitialized ? t("agentSessions.refreshEmpty", "Refresh to discover provider sessions.") : t("agentSessions.startFirst", "Start the provider first.")}</div>
+                  <div className="agent-session-manager-empty">{hiddenEmptySessionCount > 0 ? t("agentSessions.onlyEmptySessions", "Only empty sessions found.") : isInitialized ? t("agentSessions.refreshEmpty", "Refresh to discover provider sessions.") : t("agentSessions.startFirst", "Start the provider first.")}</div>
                 )}
               </div>
             </section>

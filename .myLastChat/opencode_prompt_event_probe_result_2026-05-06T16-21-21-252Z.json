@@ -1,0 +1,548 @@
+{
+  "ok": false,
+  "startedAt": "2026-05-06T16:21:21.252Z",
+  "finishedAt": "2026-05-06T16:21:27.912Z",
+  "workspace": "E:\\Dev\\my-last-feedback",
+  "baseUrl": "http://127.0.0.1:8461",
+  "username": "opencode",
+  "passwordSet": true,
+  "spawned": true,
+  "pid": 16532,
+  "promptProvided": true,
+  "keepSession": false,
+  "results": [
+    {
+      "name": "server.spawn",
+      "ok": true,
+      "at": "2026-05-06T16:21:21.278Z",
+      "summary": "opencode serve --hostname 127.0.0.1 --port 8461",
+      "pid": 16532,
+      "baseUrl": "http://127.0.0.1:8461"
+    },
+    {
+      "name": "global.health",
+      "ok": true,
+      "at": "2026-05-06T16:21:23.151Z",
+      "summary": "version=1.14.39",
+      "data": {
+        "healthy": true,
+        "version": "1.14.39"
+      }
+    },
+    {
+      "name": "provider.list",
+      "ok": true,
+      "at": "2026-05-06T16:21:23.662Z",
+      "summary": "all=117 connected=2",
+      "connected": [
+        "opencode-go",
+        "opencode"
+      ]
+    },
+    {
+      "name": "prompt.model",
+      "ok": true,
+      "at": "2026-05-06T16:21:23.664Z",
+      "summary": "opencode/minimax-m2.5-free",
+      "model": {
+        "providerID": "opencode",
+        "modelID": "minimax-m2.5-free"
+      }
+    },
+    {
+      "name": "session.create",
+      "ok": true,
+      "at": "2026-05-06T16:21:23.677Z",
+      "summary": "sessionID=ses_201e7eda9ffeGjyWb8mjbYxvL3 title=New session - 2026-05-06T16:21:23.670Z",
+      "data": {
+        "id": "ses_201e7eda9ffeGjyWb8mjbYxvL3",
+        "slug": "crisp-planet",
+        "version": "1.14.39",
+        "projectID": "a3f933c1f2b122b47d0b4c1fad302202effe8a94",
+        "directory": "E:\\Dev\\my-last-feedback",
+        "path": "",
+        "title": "New session - 2026-05-06T16:21:23.670Z",
+        "time": {
+          "created": 1778084483670,
+          "updated": 1778084483670
+        }
+      }
+    },
+    {
+      "name": "session.permission.readonly",
+      "ok": true,
+      "at": "2026-05-06T16:21:23.686Z",
+      "summary": "rules=7",
+      "permission": [
+        {
+          "permission": "glob",
+          "pattern": "*",
+          "action": "allow"
+        },
+        {
+          "permission": "grep",
+          "pattern": "*",
+          "action": "allow"
+        },
+        {
+          "permission": "read",
+          "pattern": "*",
+          "action": "allow"
+        },
+        {
+          "permission": "list",
+          "pattern": "*",
+          "action": "allow"
+        },
+        {
+          "permission": "external_directory",
+          "pattern": "*",
+          "action": "deny"
+        },
+        {
+          "permission": "edit",
+          "pattern": "*",
+          "action": "deny"
+        },
+        {
+          "permission": "bash",
+          "pattern": "*",
+          "action": "deny"
+        }
+      ]
+    },
+    {
+      "name": "session.prompt_async",
+      "ok": true,
+      "at": "2026-05-06T16:21:23.947Z",
+      "summary": "accepted sessionID=ses_201e7eda9ffeGjyWb8mjbYxvL3",
+      "body": {
+        "parts": [
+          {
+            "type": "text",
+            "text": "Use the Grep tool exactly once with the invalid regex pattern [ against package.json, then stop."
+          }
+        ],
+        "model": {
+          "providerID": "opencode",
+          "modelID": "minimax-m2.5-free"
+        }
+      }
+    },
+    {
+      "name": "prompt.completion.event",
+      "ok": true,
+      "at": "2026-05-06T16:21:27.873Z",
+      "summary": "message.updated",
+      "event": {
+        "raw": {
+          "id": "evt_dfe182206001Kgmtanienw3wf3",
+          "type": "message.updated",
+          "properties": {
+            "sessionID": "ses_201e7eda9ffeGjyWb8mjbYxvL3",
+            "info": {
+              "id": "msg_dfe18137a001oWFLo0EQf16wQq",
+              "parentID": "msg_dfe18136e001EYkj0fTRPvqQGy",
+              "role": "assistant",
+              "mode": "build",
+              "agent": "build",
+              "path": {
+                "cwd": "E:\\Dev\\my-last-feedback",
+                "root": "E:\\Dev\\my-last-feedback"
+              },
+              "cost": 0,
+              "tokens": {
+                "total": 7974,
+                "input": 6048,
+                "output": 86,
+                "reasoning": 0,
+                "cache": {
+                  "write": 0,
+                  "read": 1840
+                }
+              },
+              "modelID": "minimax-m2.5-free",
+              "providerID": "opencode",
+              "time": {
+                "created": 1778084483962
+              },
+              "sessionID": "ses_201e7eda9ffeGjyWb8mjbYxvL3",
+              "finish": "tool-calls"
+            }
+          }
+        },
+        "type": "message.updated",
+        "properties": {
+          "sessionID": "ses_201e7eda9ffeGjyWb8mjbYxvL3",
+          "info": {
+            "id": "msg_dfe18137a001oWFLo0EQf16wQq",
+            "parentID": "msg_dfe18136e001EYkj0fTRPvqQGy",
+            "role": "assistant",
+            "mode": "build",
+            "agent": "build",
+            "path": {
+              "cwd": "E:\\Dev\\my-last-feedback",
+              "root": "E:\\Dev\\my-last-feedback"
+            },
+            "cost": 0,
+            "tokens": {
+              "total": 7974,
+              "input": 6048,
+              "output": 86,
+              "reasoning": 0,
+              "cache": {
+                "write": 0,
+                "read": 1840
+              }
+            },
+            "modelID": "minimax-m2.5-free",
+            "providerID": "opencode",
+            "time": {
+              "created": 1778084483962
+            },
+            "sessionID": "ses_201e7eda9ffeGjyWb8mjbYxvL3",
+            "finish": "tool-calls"
+          }
+        }
+      }
+    },
+    {
+      "name": "session.messages.after_prompt",
+      "ok": true,
+      "at": "2026-05-06T16:21:27.880Z",
+      "summary": "messages=2",
+      "data": [
+        {
+          "info": {
+            "role": "user",
+            "time": {
+              "created": 1778084483950
+            },
+            "agent": "build",
+            "model": {
+              "providerID": "opencode",
+              "modelID": "minimax-m2.5-free"
+            },
+            "summary": {
+              "diffs": []
+            },
+            "id": "msg_dfe18136e001EYkj0fTRPvqQGy",
+            "sessionID": "ses_201e7eda9ffeGjyWb8mjbYxvL3"
+          },
+          "parts": [
+            {
+              "type": "text",
+              "text": "Use the Grep tool exactly once with the invalid regex pattern [ against package.json, then stop.",
+              "id": "prt_dfe18136f00169q7kfF7UjJE9k",
+              "sessionID": "ses_201e7eda9ffeGjyWb8mjbYxvL3",
+              "messageID": "msg_dfe18136e001EYkj0fTRPvqQGy"
+            }
+          ]
+        },
+        {
+          "info": {
+            "parentID": "msg_dfe18136e001EYkj0fTRPvqQGy",
+            "role": "assistant",
+            "mode": "build",
+            "agent": "build",
+            "path": {
+              "cwd": "E:\\Dev\\my-last-feedback",
+              "root": "E:\\Dev\\my-last-feedback"
+            },
+            "cost": 0,
+            "tokens": {
+              "total": 7974,
+              "input": 6048,
+              "output": 86,
+              "reasoning": 0,
+              "cache": {
+                "write": 0,
+                "read": 1840
+              }
+            },
+            "modelID": "minimax-m2.5-free",
+            "providerID": "opencode",
+            "time": {
+              "created": 1778084483962
+            },
+            "finish": "tool-calls",
+            "id": "msg_dfe18137a001oWFLo0EQf16wQq",
+            "sessionID": "ses_201e7eda9ffeGjyWb8mjbYxvL3"
+          },
+          "parts": [
+            {
+              "snapshot": "e9be4bcae94763f5a7af104dd5182b8c1e160a27",
+              "type": "step-start",
+              "id": "prt_dfe181e9d001ui5AfpgY7zxhh3",
+              "sessionID": "ses_201e7eda9ffeGjyWb8mjbYxvL3",
+              "messageID": "msg_dfe18137a001oWFLo0EQf16wQq"
+            },
+            {
+              "type": "reasoning",
+              "text": "The user wants me to use the Grep tool exactly once with an invalid regex pattern \"[ against package.json. Let me do that.\n\nOn Windows, I need to use the full path. Let me find the package.json first.\n",
+              "time": {
+                "start": 1778084486832,
+                "end": 1778084487081
+              },
+              "metadata": {
+                "anthropic": {
+                  "signature": "a692775dcf4ec6459b8a0886e23cdc2a2f53f42e3b06e14e3aaa33465e18d06d"
+                }
+              },
+              "id": "prt_dfe181eb0001T1jTkDmRwcVxYz",
+              "sessionID": "ses_201e7eda9ffeGjyWb8mjbYxvL3",
+              "messageID": "msg_dfe18137a001oWFLo0EQf16wQq"
+            },
+            {
+              "type": "tool",
+              "tool": "grep",
+              "callID": "call_function_hs9c38il606g_1",
+              "state": {
+                "status": "completed",
+                "input": {
+                  "path": "E:\\Dev\\my-last-feedback",
+                  "pattern": "["
+                },
+                "output": "No files found",
+                "metadata": {
+                  "matches": 0,
+                  "truncated": false
+                },
+                "title": "[",
+                "time": {
+                  "start": 1778084487108,
+                  "end": 1778084487146
+                }
+              },
+              "id": "prt_dfe181fab001uuLqG663XGCRpv",
+              "sessionID": "ses_201e7eda9ffeGjyWb8mjbYxvL3",
+              "messageID": "msg_dfe18137a001oWFLo0EQf16wQq"
+            },
+            {
+              "reason": "tool-calls",
+              "snapshot": "e9be4bcae94763f5a7af104dd5182b8c1e160a27",
+              "type": "step-finish",
+              "tokens": {
+                "total": 7974,
+                "input": 6048,
+                "output": 86,
+                "reasoning": 0,
+                "cache": {
+                  "write": 0,
+                  "read": 1840
+                }
+              },
+              "cost": 0,
+              "id": "prt_dfe182204001tVHHZ0pEYAq6C1",
+              "sessionID": "ses_201e7eda9ffeGjyWb8mjbYxvL3",
+              "messageID": "msg_dfe18137a001oWFLo0EQf16wQq"
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "name": "session.todo.after_prompt",
+      "ok": true,
+      "at": "2026-05-06T16:21:27.900Z",
+      "summary": "todos=0",
+      "data": []
+    },
+    {
+      "name": "tool.expected",
+      "ok": true,
+      "at": "2026-05-06T16:21:27.901Z",
+      "summary": "grep seen",
+      "expectedTool": "grep",
+      "matchingTool": {
+        "tool": "grep",
+        "callID": "call_function_hs9c38il606g_1",
+        "status": "pending",
+        "input": {}
+      }
+    },
+    {
+      "name": "tool.status",
+      "ok": false,
+      "at": "2026-05-06T16:21:27.901Z",
+      "summary": "grep not error",
+      "expectedTool": "grep",
+      "expectedToolStatus": "error"
+    },
+    {
+      "name": "prompt.model_response",
+      "ok": true,
+      "at": "2026-05-06T16:21:27.902Z",
+      "summary": "textDelta=201",
+      "textDelta": "The user wants me to use the Grep tool exactly once with an invalid regex pattern \"[ against package.json. Let me do that.\n\nOn Windows, I need to use the full path. Let me find the package.json first.\n"
+    },
+    {
+      "name": "events.instance.summary",
+      "ok": true,
+      "at": "2026-05-06T16:21:27.902Z",
+      "summary": "{\"message.updated\":4,\"message.part.updated\":8,\"session.updated\":2,\"session.status\":2,\"session.diff\":1,\"message.part.delta\":2}",
+      "data": {
+        "counts": {
+          "message.updated": 4,
+          "message.part.updated": 8,
+          "session.updated": 2,
+          "session.status": 2,
+          "session.diff": 1,
+          "message.part.delta": 2
+        },
+        "textDelta": "The user wants me to use the Grep tool exactly once with an invalid regex pattern \"[ against package.json. Let me do that.\n\nOn Windows, I need to use the full path. Let me find the package.json first.\n",
+        "partTypes": [
+          "text",
+          "step-start",
+          "reasoning",
+          "reasoning",
+          "tool",
+          "tool",
+          "tool",
+          "step-finish"
+        ],
+        "toolEvents": [
+          {
+            "tool": "grep",
+            "callID": "call_function_hs9c38il606g_1",
+            "status": "pending",
+            "input": {}
+          },
+          {
+            "tool": "grep",
+            "callID": "call_function_hs9c38il606g_1",
+            "status": "running",
+            "input": {
+              "path": "E:\\Dev\\my-last-feedback",
+              "pattern": "["
+            }
+          },
+          {
+            "tool": "grep",
+            "callID": "call_function_hs9c38il606g_1",
+            "status": "completed",
+            "title": "[",
+            "input": {
+              "path": "E:\\Dev\\my-last-feedback",
+              "pattern": "["
+            },
+            "output": "No files found",
+            "metadata": {
+              "matches": 0,
+              "truncated": false
+            }
+          }
+        ],
+        "toolStatusCounts": {
+          "grep:pending": 1,
+          "grep:running": 1,
+          "grep:completed": 1
+        },
+        "permissionRequests": [],
+        "statusEvents": [
+          {
+            "type": "session.status",
+            "status": {
+              "type": "busy"
+            }
+          },
+          {
+            "type": "session.status",
+            "status": {
+              "type": "busy"
+            }
+          }
+        ],
+        "total": 19,
+        "errors": []
+      }
+    },
+    {
+      "name": "events.global.summary",
+      "ok": true,
+      "at": "2026-05-06T16:21:27.903Z",
+      "summary": "{\"message.updated\":4,\"message.part.updated\":8,\"session.updated\":2,\"session.status\":2,\"session.diff\":1,\"message.part.delta\":2}",
+      "data": {
+        "counts": {
+          "message.updated": 4,
+          "message.part.updated": 8,
+          "session.updated": 2,
+          "session.status": 2,
+          "session.diff": 1,
+          "message.part.delta": 2
+        },
+        "textDelta": "The user wants me to use the Grep tool exactly once with an invalid regex pattern \"[ against package.json. Let me do that.\n\nOn Windows, I need to use the full path. Let me find the package.json first.\n",
+        "partTypes": [
+          "text",
+          "step-start",
+          "reasoning",
+          "reasoning",
+          "tool",
+          "tool",
+          "tool",
+          "step-finish"
+        ],
+        "toolEvents": [
+          {
+            "tool": "grep",
+            "callID": "call_function_hs9c38il606g_1",
+            "status": "pending",
+            "input": {}
+          },
+          {
+            "tool": "grep",
+            "callID": "call_function_hs9c38il606g_1",
+            "status": "running",
+            "input": {
+              "path": "E:\\Dev\\my-last-feedback",
+              "pattern": "["
+            }
+          },
+          {
+            "tool": "grep",
+            "callID": "call_function_hs9c38il606g_1",
+            "status": "completed",
+            "title": "[",
+            "input": {
+              "path": "E:\\Dev\\my-last-feedback",
+              "pattern": "["
+            },
+            "output": "No files found",
+            "metadata": {
+              "matches": 0,
+              "truncated": false
+            }
+          }
+        ],
+        "toolStatusCounts": {
+          "grep:pending": 1,
+          "grep:running": 1,
+          "grep:completed": 1
+        },
+        "permissionRequests": [],
+        "statusEvents": [
+          {
+            "type": "session.status",
+            "status": {
+              "type": "busy"
+            }
+          },
+          {
+            "type": "session.status",
+            "status": {
+              "type": "busy"
+            }
+          }
+        ],
+        "total": 19,
+        "errors": []
+      }
+    },
+    {
+      "name": "session.delete",
+      "ok": true,
+      "at": "2026-05-06T16:21:27.911Z",
+      "summary": "deleted=true"
+    }
+  ]
+}
