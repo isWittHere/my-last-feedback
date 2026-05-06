@@ -15,6 +15,7 @@ interface AgentSessionHeaderProps {
   onSelectSession: (sessionId: string) => void;
   onStartAcp: (sessionId: string) => Promise<void>;
   onStopAcp: (sessionId: string) => Promise<void>;
+  previewMode?: boolean;
 }
 
 function basename(value: string): string {
@@ -27,7 +28,7 @@ function sessionStatusClass(status: AgentSession["status"]): string {
   return "responded";
 }
 
-export function AgentSessionHeader({ session, sessions, activeSessionId, onSelectSession, onStartAcp, onStopAcp }: AgentSessionHeaderProps) {
+export function AgentSessionHeader({ session, sessions, activeSessionId, onSelectSession, onStartAcp, onStopAcp, previewMode = false }: AgentSessionHeaderProps) {
   const { t } = useTranslation();
   const [expanded, setExpanded] = useState(false);
   const providerName = session.providerId === "opencode" ? "OpenCode" : session.providerId;
@@ -37,7 +38,7 @@ export function AgentSessionHeader({ session, sessions, activeSessionId, onSelec
   const isConnected = Boolean(processId);
 
   return (
-    <div className={`agent-console-header${expanded ? " expanded" : ""}`} data-preview-overlay>
+    <div className={`agent-console-header${expanded ? " expanded" : ""}${previewMode ? " agent-console-header-preview" : ""}`} data-preview-overlay>
       <div className="agent-console-header-main">
         <div className="agent-console-topbar-caller">
           <IdenticonAvatar alias={providerName} color={providerColor} size={18} />
@@ -65,22 +66,26 @@ export function AgentSessionHeader({ session, sessions, activeSessionId, onSelec
               })}
             </div>
           )}
-          {!expanded && <><AgentDiffIndicator session={session} /><AgentContextIndicator session={session} /></>}
-          <button
-            type="button"
-            className={`agent-console-topbar-action${isConnected ? " active" : ""}`}
-            onClick={() => { void (isConnected ? onStopAcp(session.id) : onStartAcp(session.id)); }}
-            title={isConnected ? t("agentConsole.stopProvider", "Stop OpenCode ACP") : t("agentConsole.startProvider", "Start OpenCode ACP")}
-            disabled={isStarting}
-          >
-            <Icon name={isStarting ? "spinner" : isConnected ? "close" : "play"} size={13} />
-          </button>
-          <button type="button" className="agent-console-topbar-action" onClick={() => setExpanded((value) => !value)} title={expanded ? t("agentConsole.collapseHeader", "Collapse details") : t("agentConsole.expandHeader", "Expand details")} aria-expanded={expanded}>
-            <Icon name="chevron-down" size={13} style={{ transform: expanded ? "rotate(180deg)" : undefined }} />
-          </button>
+          {(!expanded || previewMode) && <><AgentDiffIndicator session={session} /><AgentContextIndicator session={session} /></>}
+          {!previewMode && (
+            <>
+              <button
+                type="button"
+                className={`agent-console-topbar-action${isConnected ? " active" : ""}`}
+                onClick={() => { void (isConnected ? onStopAcp(session.id) : onStartAcp(session.id)); }}
+                title={isConnected ? t("agentConsole.stopProvider", "Stop OpenCode ACP") : t("agentConsole.startProvider", "Start OpenCode ACP")}
+                disabled={isStarting}
+              >
+                <Icon name={isStarting ? "spinner" : isConnected ? "close" : "play"} size={13} />
+              </button>
+              <button type="button" className="agent-console-topbar-action" onClick={() => setExpanded((value) => !value)} title={expanded ? t("agentConsole.collapseHeader", "Collapse details") : t("agentConsole.expandHeader", "Expand details")} aria-expanded={expanded}>
+                <Icon name="chevron-down" size={13} style={{ transform: expanded ? "rotate(180deg)" : undefined }} />
+              </button>
+            </>
+          )}
         </div>
       </div>
-      {expanded && <AgentHeaderDetailsRow session={session} />}
+      {expanded && !previewMode && <AgentHeaderDetailsRow session={session} />}
     </div>
   );
 }

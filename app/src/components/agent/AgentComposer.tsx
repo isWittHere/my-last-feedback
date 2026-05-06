@@ -4,6 +4,7 @@ import { readText as readClipboardText } from "@tauri-apps/plugin-clipboard-mana
 import { useAgentStore } from "../../store/agentStore";
 import { useFeedbackStore, type DockColumnId, type DockTabId, type GitActionType } from "../../store/feedbackStore";
 import { hasAgentComposerContent } from "../../agent/composer";
+import { getEnabledOpenCodeModels, useOpenCodeSettings } from "../../openCodeSettings";
 import type { AgentChoiceOption, AgentSession } from "../../agent/types";
 import { Icon, MlcLogoIcon } from "../Icons";
 import type { PromptCommandOption } from "../../composer/promptCommands";
@@ -79,6 +80,7 @@ export function AgentComposer({ session }: { session: AgentSession }) {
   const setDockActiveTab = useFeedbackStore((state) => state.setDockActiveTab);
   const setDockColumnCollapsed = useFeedbackStore((state) => state.setDockColumnCollapsed);
   const moveDockTabToColumn = useFeedbackStore((state) => state.moveDockTabToColumn);
+  useOpenCodeSettings();
   const commandOptions = useMemo(() => AGENT_COMMANDS, []);
   const hasContent = hasAgentComposerContent(session);
 
@@ -301,7 +303,7 @@ export function AgentComposer({ session }: { session: AgentSession }) {
   );
 
   const modeOptions = session.availableModes || [];
-  const modelOptions = session.availableModels || [];
+  const modelOptions = getEnabledOpenCodeModels(session.availableModels || [], session.modelId);
   const bottomLeftSlot = session.providerRuntime?.initialized && (modeOptions.length > 0 || modelOptions.length > 0) ? (
     <div className="agent-composer-selectors">
       {modeOptions.length > 0 ? <AgentSelectButton label={t("agentConsole.mode", "Mode")} value={session.modeId || modeOptions[0].id} options={modeOptions} onSelect={(mode) => setSessionMode(session.id, mode)} /> : null}

@@ -142,6 +142,17 @@ export interface AgentChoiceOption {
   id: string;
   label: string;
   description?: string;
+  contextLimit?: number;
+}
+
+export interface AgentContextUsage {
+  usedTokens: number;
+  contextLimit: number;
+  cost?: {
+    amount?: number;
+    currency?: string;
+  };
+  updatedAt: string;
 }
 
 export interface AgentSession {
@@ -155,6 +166,7 @@ export interface AgentSession {
   modeId?: string;
   availableModels?: AgentChoiceOption[];
   availableModes?: AgentChoiceOption[];
+  contextUsage?: AgentContextUsage;
   configOptions?: unknown[];
   status: AgentSessionStatus;
   draft: string;

@@ -5,6 +5,7 @@ import { hasAgentComposerContent } from "../agent/composer";
 import { createOpenCodeAcpStartOptions, createOpenCodeInitializeParams } from "../agent/opencode/provider";
 import { createAgentSession } from "../agent/sessionFactory";
 import { buildSubmittedComposerPayload } from "../composer/submittedFeedback";
+import { setOpenCodePreferredModel, syncOpenCodeModels } from "../openCodeSettings";
 import type { AgentChoiceOption, AgentContentBlock, AgentDiagnosticEntry, AgentMessage, AgentSession } from "../agent/types";
 import type { GitAction, ImageAttachment, MlcAttachment, WebAttachment } from "./feedbackStore";
 
@@ -106,12 +107,35 @@ function normalizeAcpMethod(method: string): string {
   return method.replace(/[\/_-]/g, "").toLowerCase();
 }
 
-function toChoiceOption(id: unknown, label: unknown, description: unknown): AgentChoiceOption | null {
+function finitePositiveNumber(value: unknown): number | undefined {
+  return typeof value === "number" && Number.isFinite(value) && value > 0 ? value : undefined;
+}
+
+function extractModelContextLimit(model: unknown): number | undefined {
+  if (!model || typeof model !== "object") return undefined;
+  const value = model as Record<string, unknown>;
+  const meta = value._meta && typeof value._meta === "object" ? value._meta as Record<string, unknown> : undefined;
+  const limit = value.limit && typeof value.limit === "object" ? value.limit as Record<string, unknown> : undefined;
+  const metaLimit = meta?.limit && typeof meta.limit === "object" ? meta.limit as Record<string, unknown> : undefined;
+  return finitePositiveNumber(value.contextLimit)
+    ?? finitePositiveNumber(value.context)
+    ?? finitePositiveNumber(value.maxInputTokens)
+    ?? finitePositiveNumber(value.max_input_tokens)
+    ?? finitePositiveNumber(limit?.context)
+    ?? finitePositiveNumber(meta?.contextLimit)
+    ?? finitePositiveNumber(meta?.context)
+    ?? finitePositiveNumber(meta?.maxInputTokens)
+    ?? finitePositiveNumber(meta?.max_input_tokens)
+    ?? finitePositiveNumber(metaLimit?.context);
+}
+
+function toChoiceOption(id: unknown, label: unknown, description: unknown, source?: unknown): AgentChoiceOption | null {
   if (typeof id !== "string" || !id) return null;
   return {
     id,
     label: typeof label === "string" && label ? label : id,
     description: typeof description === "string" && description ? description : undefined,
+    contextLimit: extractModelContextLimit(source),
   };
 }
 
@@ -129,7 +153,7 @@ function choicesFromConfigOption(option: unknown): AgentChoiceOption[] {
     .map((item) => {
       if (!item || typeof item !== "object") return null;
       const optionValue = item as Record<string, unknown>;
-      return toChoiceOption(optionValue.value, optionValue.name, optionValue.description);
+      return toChoiceOption(optionValue.value, optionValue.name, optionValue.description, optionValue);
     })
     .filter((choice): choice is AgentChoiceOption => Boolean(choice));
 }
@@ -146,7 +170,7 @@ function applyAcpSessionSetupResult(session: AgentSession, result: AcpNewSession
   const modeConfig = configOptions.find((option) => optionCategory(option) === "mode");
   const availableModels = Array.isArray(result.models?.availableModels)
     ? result.models.availableModels
-      .map((model) => toChoiceOption(model.modelId, model.name, model.description))
+      .map((model) => toChoiceOption(model.modelId, model.name, model.description, model))
       .filter((option): option is AgentChoiceOption => Boolean(option))
     : choicesFromConfigOption(modelConfig).length > 0 ? choicesFromConfigOption(modelConfig) : session.availableModels || [];
   const availableModes = Array.isArray(result.modes?.availableModes)
@@ -154,7 +178,9 @@ function applyAcpSessionSetupResult(session: AgentSession, result: AcpNewSession
       .map((mode) => toChoiceOption(mode.id, mode.name, mode.description))
       .filter((option): option is AgentChoiceOption => Boolean(option))
     : choicesFromConfigOption(modeConfig).length > 0 ? choicesFromConfigOption(modeConfig) : session.availableModes || [];
-  const modelId = result.models?.currentModelId || currentValueFromConfigOption(modelConfig) || session.modelId || availableModels[0]?.id;
+  const serverModelId = result.models?.currentModelId || currentValueFromConfigOption(modelConfig) || session.modelId || availableModels[0]?.id;
+  const openCodeSettings = availableModels.length > 0 ? syncOpenCodeModels(availableModels, serverModelId) : null;
+  const modelId = openCodeSettings?.preferredModelId || serverModelId;
   const modeId = result.modes?.currentModeId || currentValueFromConfigOption(modeConfig) || session.modeId || availableModes[0]?.id;
 
   return {
@@ -164,6 +190,7 @@ function applyAcpSessionSetupResult(session: AgentSession, result: AcpNewSession
     modeId,
     availableModels,
     availableModes,
+    contextUsage: session.modelId === modelId ? session.contextUsage : undefined,
     configOptions: configOptions.length > 0 ? configOptions : session.configOptions,
     updatedAt: nowIso(),
   };
@@ -275,6 +302,25 @@ function applyAcpSessionUpdate(session: AgentSession, params: unknown): AgentSes
   if (updateType === "user_message_chunk") {
     return session;
   }
+  if (updateType === "usage_update") {
+    const usedTokens = finitePositiveNumber(value.used);
+    const contextLimit = finitePositiveNumber(value.size);
+    if (!usedTokens || !contextLimit) return appendDiagnosticToSession(session, "info", "ACP usage update did not include context size.");
+    const cost = value.cost && typeof value.cost === "object" ? value.cost as Record<string, unknown> : undefined;
+    return {
+      ...session,
+      contextUsage: {
+        usedTokens,
+        contextLimit,
+        cost: cost ? {
+          amount: finitePositiveNumber(cost.amount),
+          currency: typeof cost.currency === "string" ? cost.currency : undefined,
+        } : undefined,
+        updatedAt: nowIso(),
+      },
+      updatedAt: nowIso(),
+    };
+  }
   return appendDiagnosticToSession(session, "info", `ACP update: ${updateType || "unknown"}`);
 }
 
@@ -312,8 +358,9 @@ export const useAgentStore = create<AgentStoreState>((set, get) => ({
   },
 
   setSessionModel: (sessionId, modelId) => {
+    setOpenCodePreferredModel(modelId);
     set((state) => ({
-      sessions: updateSession(state.sessions, sessionId, (session) => ({ ...session, modelId, updatedAt: nowIso() })),
+      sessions: updateSession(state.sessions, sessionId, (session) => ({ ...session, modelId, contextUsage: undefined, updatedAt: nowIso() })),
     }));
     const session = get().sessions.find((item) => item.id === sessionId);
     const runtime = runtimeForSession(session);
@@ -488,6 +535,12 @@ export const useAgentStore = create<AgentStoreState>((set, get) => ({
           },
         }, "info", `${describeAcpSessionSetup(sessionResult)}.`)),
       }));
+      const configuredSession = get().sessions.find((item) => item.id === sessionId);
+      if (configuredSession?.providerSessionId && configuredSession.modelId && configuredSession.modelId !== sessionResult.models?.currentModelId) {
+        await client.request("session/set_model", { sessionId: configuredSession.providerSessionId, modelId: configuredSession.modelId })
+          .then(() => get().appendAgentDiagnostic(sessionId, "info", `OpenCode model selected: ${configuredSession.modelId}`))
+          .catch((error) => get().appendAgentDiagnostic(sessionId, "warn", `Failed to apply preferred OpenCode model: ${error instanceof Error ? error.message : String(error)}`));
+      }
     } catch (error) {
       const message = error instanceof Error ? error.message : String(error);
       await client.stop().catch(() => undefined);
@@ -605,6 +658,12 @@ export const useAgentStore = create<AgentStoreState>((set, get) => ({
             ...applyAcpSessionSetupResult(item, result),
           }, "info", `OpenCode ACP session created: ${providerSessionId}`)),
         }));
+        const configuredSession = get().sessions.find((item) => item.id === sessionId);
+        if (configuredSession?.providerSessionId && configuredSession.modelId && configuredSession.modelId !== result.models?.currentModelId) {
+          await runtime.client.request("session/set_model", { sessionId: configuredSession.providerSessionId, modelId: configuredSession.modelId })
+            .then(() => get().appendAgentDiagnostic(sessionId, "info", `OpenCode model selected: ${configuredSession.modelId}`))
+            .catch((error) => get().appendAgentDiagnostic(sessionId, "warn", `Failed to apply preferred OpenCode model: ${error instanceof Error ? error.message : String(error)}`));
+        }
       }
 
       await runtime.client.request("session/prompt", {

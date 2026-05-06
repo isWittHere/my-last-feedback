@@ -6,7 +6,7 @@ import { PromptIcon } from "./PromptIcons";
 import { McpConfigHelper } from "./McpConfigHelper";
 import { CallerManager } from "./CallerManager";
 import { Icon, MlcLogoIcon } from "./Icons";
-import { createAgentSession } from "../agent/sessionFactory";
+import { createMockAgentSession } from "../agent/mockData";
 import { AgentSessionHeader } from "./agent/AgentSessionHeader";
 import { invoke } from "@tauri-apps/api/core";
 import { applyTheme, getStoredTheme, type Theme } from "../theme";
@@ -15,12 +15,13 @@ import { getSubmittedViewSettings, saveSubmittedViewSettings, SUBMITTED_VIEW_SEC
 import { getTerminalSettings, saveTerminalSettings, type TerminalSettings, type TerminalShellId } from "../terminalSettings";
 import { getComposerSettings, saveComposerSettings, type ComposerSettings } from "../composerSettings";
 import { AGENT_DIFF_COLOR_PRESETS, getAgentConsoleSettings, saveAgentConsoleSettings, type AgentConsoleSettings, type AgentDiffColorPresetId, type AgentTopbarIndicatorMode } from "../agentConsoleSettings";
+import { getOpenCodeSettings, setOpenCodeModelEnabled, setOpenCodeModelFavorite, setOpenCodePreferredModel, type OpenCodeSettings } from "../openCodeSettings";
 import { SESSION_LIST_MODE_OPTIONS } from "../sessionNavigationSettings";
 import { SessionNavigationModeIcon } from "./SessionNavigationModeIcon";
 import { AppSelect, type AppSelectOption } from "./AppSelect";
 
-type Tab = "general" | "display" | "callers" | "submitted" | "prompts" | "sessionNavigation" | "layoutPanels" | "acp" | "terminal" | "resources" | "notification" | "about";
-type SettingsGroupId = "mlfb" | "layout";
+type Tab = "general" | "display" | "callers" | "submitted" | "prompts" | "sessionNavigation" | "layoutPanels" | "acpConsole" | "openCode" | "terminal" | "resources" | "notification" | "about";
+type SettingsGroupId = "mlfb" | "acp" | "layout";
 
 const SETTINGS_DOCK_COLUMN_IDS: DockColumnId[] = ["leftSidebar", "leftPage", "rightPage", "rightSidebar"];
 const SETTINGS_DOCK_TAB_IDS: DockTabId[] = ["mlc", "mlcPreview", "resources", "previewBrowser", "previewInfo", "agentConsole", "terminal"];
@@ -74,7 +75,7 @@ applyZoomSettings();
 export function SettingsDialog({ open, onClose }: { open: boolean; onClose: () => void }) {
   const { t } = useTranslation();
   const [tab, setTab] = useState<Tab>("general");
-  const [collapsedGroups, setCollapsedGroups] = useState<Record<SettingsGroupId, boolean>>({ mlfb: false, layout: false });
+  const [collapsedGroups, setCollapsedGroups] = useState<Record<SettingsGroupId, boolean>>({ mlfb: false, acp: false, layout: false });
   const [draggedDockTab, setDraggedDockTab] = useState<DockTabId | null>(null);
   const [theme, setTheme] = useState<Theme>(getStoredTheme);
   const [autostart, setAutostart] = useState(false);
@@ -84,9 +85,11 @@ export function SettingsDialog({ open, onClose }: { open: boolean; onClose: () =
   const [terminalSettings, setTerminalSettings] = useState<TerminalSettings>(getTerminalSettings);
   const [composerSettings, setComposerSettings] = useState<ComposerSettings>(getComposerSettings);
   const [agentConsoleSettings, setAgentConsoleSettings] = useState<AgentConsoleSettings>(getAgentConsoleSettings);
+  const [openCodeSettings, setOpenCodeSettings] = useState<OpenCodeSettings>(getOpenCodeSettings);
+  const [openCodeModelQuery, setOpenCodeModelQuery] = useState("");
   const [zoomSettings, setZoomSettings] = useState<ZoomSettings>(getZoomSettings);
   const [submittedViewSettings, setSubmittedViewSettings] = useState<SubmittedViewSettings>(getSubmittedViewSettings);
-  const acpPreviewSession = useMemo(() => createAgentSession(), []);
+  const acpPreviewSession = useMemo(() => createMockAgentSession(), []);
   const prompts = useFeedbackStore((s) => s.prompts);
   const disabledPrompts = useFeedbackStore((s) => s.disabledPrompts);
   const showPromptButtons = useFeedbackStore((s) => s.showPromptButtons);
@@ -111,6 +114,7 @@ export function SettingsDialog({ open, onClose }: { open: boolean; onClose: () =
     setTerminalSettings(getTerminalSettings());
     setComposerSettings(getComposerSettings());
     setAgentConsoleSettings(getAgentConsoleSettings());
+    setOpenCodeSettings(getOpenCodeSettings());
     setSubmittedViewSettings(getSubmittedViewSettings());
     invoke<boolean>("get_autostart").then(setAutostart).catch(() => {});
   }, [open]);
@@ -201,6 +205,26 @@ export function SettingsDialog({ open, onClose }: { open: boolean; onClose: () =
       return next;
     });
   }, []);
+
+  const handleOpenCodeModelEnabledChange = useCallback((modelId: string, enabled: boolean) => {
+    setOpenCodeSettings(setOpenCodeModelEnabled(modelId, enabled));
+  }, []);
+
+  const handleOpenCodeModelFavoriteChange = useCallback((modelId: string, favorite: boolean) => {
+    setOpenCodeSettings(setOpenCodeModelFavorite(modelId, favorite));
+  }, []);
+
+  const handleOpenCodePreferredModelChange = useCallback((modelId: string) => {
+    setOpenCodeSettings(setOpenCodePreferredModel(modelId));
+  }, []);
+
+  const filteredOpenCodeModels = useMemo(() => {
+    const query = openCodeModelQuery.trim().toLowerCase();
+    const models = query
+      ? openCodeSettings.models.filter((model) => `${model.label} ${model.id} ${model.description || ""}`.toLowerCase().includes(query))
+      : openCodeSettings.models;
+    return [...models].sort((a, b) => Number(b.favorite) - Number(a.favorite) || Number(b.enabled) - Number(a.enabled) || a.label.localeCompare(b.label));
+  }, [openCodeModelQuery, openCodeSettings.models]);
 
   const handleZoomChange = useCallback((key: keyof ZoomSettings, value: number) => {
     setZoomSettings((prev) => {
@@ -329,7 +353,92 @@ export function SettingsDialog({ open, onClose }: { open: boolean; onClose: () =
           onSelectSession={() => {}}
           onStartAcp={async () => {}}
           onStopAcp={async () => {}}
+          previewMode
         />
+      </div>
+    );
+  };
+
+  const renderOpenCodeModelLibrary = () => {
+    const enabledCount = openCodeSettings.models.filter((model) => model.enabled).length;
+    const favoriteCount = openCodeSettings.models.filter((model) => model.favorite).length;
+    const preferredModel = openCodeSettings.models.find((model) => model.id === openCodeSettings.preferredModelId);
+    return (
+      <div className="settings-section settings-opencode-section">
+        <div className="settings-row settings-row-stacked">
+          <div className="settings-row-info">
+            <span className="settings-label">{t("settings.openCodeModelLibrary", "OpenCode model library")}</span>
+            <span className="settings-sublabel">{t("settings.openCodeModelLibraryDesc", "Models are discovered from the real ACP session. Enable the models that should appear in the compact Agent Console switcher.")}</span>
+          </div>
+          <div className="settings-opencode-summary-row">
+            <span>{t("settings.openCodeModelsTotal", "{{count}} models", { count: openCodeSettings.models.length })}</span>
+            <span>{t("settings.openCodeModelsEnabled", "{{count}} enabled", { count: enabledCount })}</span>
+            <span>{t("settings.openCodeModelsFavorite", "{{count}} favorites", { count: favoriteCount })}</span>
+            {preferredModel && <span>{t("settings.openCodePreferredModel", "Default: {{model}}", { model: preferredModel.label })}</span>}
+          </div>
+          <div className="settings-opencode-toolbar">
+            <Icon name="search" size={13} />
+            <input
+              value={openCodeModelQuery}
+              onChange={(event) => setOpenCodeModelQuery(event.target.value)}
+              placeholder={t("settings.openCodeSearchModels", "Search models...")}
+              className="settings-opencode-search"
+            />
+          </div>
+          {openCodeSettings.models.length === 0 ? (
+            <div className="settings-opencode-empty">
+              <Icon name="robot" size={15} />
+              <span>{t("settings.openCodeModelLibraryEmpty", "Connect OpenCode ACP once to discover available models.")}</span>
+            </div>
+          ) : (
+            <div className="settings-opencode-model-list">
+              <div className="settings-opencode-model-head">
+                <span>{t("settings.openCodeModel", "Model")}</span>
+                <span>{t("settings.openCodeDefault", "Default")}</span>
+                <span>{t("settings.openCodeEnabled", "Enabled")}</span>
+              </div>
+              {filteredOpenCodeModels.map((model) => {
+                const isPreferred = openCodeSettings.preferredModelId === model.id;
+                return (
+                  <div key={model.id} className="settings-opencode-model-item">
+                    <div className="settings-opencode-model-info">
+                      <button
+                        type="button"
+                        className={`settings-opencode-star${model.favorite ? " active" : ""}`}
+                        title={model.favorite ? t("settings.openCodeRemoveFavorite", "Remove favorite") : t("settings.openCodeAddFavorite", "Add favorite")}
+                        onClick={() => handleOpenCodeModelFavoriteChange(model.id, !model.favorite)}
+                      >
+                        <Icon name={model.favorite ? "star-full" : "star-empty"} size={13} />
+                      </button>
+                      <span className="settings-opencode-model-title-stack">
+                        <span className="settings-opencode-model-name">{model.label}</span>
+                        <span className="settings-opencode-model-id">{model.id}</span>
+                        {model.description && <span className="settings-opencode-model-desc">{model.description}</span>}
+                      </span>
+                    </div>
+                    <button
+                      type="button"
+                      className={`settings-opencode-default-button${isPreferred ? " active" : ""}`}
+                      onClick={() => handleOpenCodePreferredModelChange(model.id)}
+                      title={isPreferred ? t("settings.openCodeCurrentDefault", "Current default") : t("settings.openCodeSetDefault", "Set as default")}
+                    >
+                      {isPreferred ? <Icon name="check" size={12} /> : <Icon name="pin" size={12} />}
+                      <span>{isPreferred ? t("settings.openCodeDefaultActive", "Default") : t("settings.openCodeSetDefaultShort", "Set")}</span>
+                    </button>
+                    <button
+                      type="button"
+                      className={`settings-toggle settings-toggle-sm${model.enabled ? " settings-toggle-on" : ""}`}
+                      onClick={() => handleOpenCodeModelEnabledChange(model.id, !model.enabled)}
+                      title={model.enabled ? t("settings.openCodeDisableModel", "Hide from switcher") : t("settings.openCodeEnableModel", "Show in switcher")}
+                    >
+                      <span className="settings-toggle-knob" />
+                    </button>
+                  </div>
+                );
+              })}
+            </div>
+          )}
+        </div>
       </div>
     );
   };
@@ -433,10 +542,15 @@ export function SettingsDialog({ open, onClose }: { open: boolean; onClose: () =
                 {renderSettingsNavItem("sessionNavigation", "list-tree", t("settings.sessionNavigation", "Session navigation"), true)}
               </>
             ))}
-            {renderSettingsNavGroup("layout", t("settings.layout", "Layout"), ["layoutPanels", "acp", "terminal", "resources"], (
+            {renderSettingsNavGroup("acp", t("settings.acp", "ACP"), ["acpConsole", "openCode"], (
+              <>
+                {renderSettingsNavItem("acpConsole", "robot", t("settings.acpConsoleDisplay", "Navigation bar"), true)}
+                {renderSettingsNavItem("openCode", "code", t("settings.openCode", "OpenCode"), true)}
+              </>
+            ))}
+            {renderSettingsNavGroup("layout", t("settings.layout", "Layout"), ["layoutPanels", "terminal", "resources"], (
               <>
                 {renderSettingsNavItem("layoutPanels", "page-sidebar", t("settings.panelManagement", "Panel management"), true)}
-                {renderSettingsNavItem("acp", "robot", t("settings.acp", "ACP"), true)}
                 {renderSettingsNavItem("terminal", "terminal", t("settings.terminal", "Terminal"), true)}
                 {renderSettingsNavItem("resources", "folder", t("settings.resourceExplorer", "Resource explorer"), true)}
               </>
@@ -446,7 +560,7 @@ export function SettingsDialog({ open, onClose }: { open: boolean; onClose: () =
           </div>
 
           {/* Content */}
-          <div className={`settings-content${tab === "acp" ? " settings-content-acp" : ""}`}>
+          <div className={`settings-content${tab === "acpConsole" ? " settings-content-acp" : ""}`}>
             {tab === "general" && (
               <div className="settings-section">
                 <div className="settings-row">
@@ -733,7 +847,7 @@ export function SettingsDialog({ open, onClose }: { open: boolean; onClose: () =
               </div>
             )}
 
-            {tab === "acp" && (
+            {tab === "acpConsole" && (
               <>
                 {renderAcpPreview()}
                 <div className="settings-section settings-acp-section">
@@ -801,6 +915,8 @@ export function SettingsDialog({ open, onClose }: { open: boolean; onClose: () =
                 </div>
               </>
             )}
+
+            {tab === "openCode" && renderOpenCodeModelLibrary()}
 
             {tab === "resources" && (
               <div className="settings-section">
