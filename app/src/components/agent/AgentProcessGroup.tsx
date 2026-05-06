@@ -143,7 +143,7 @@ interface AgentFocusStepEventDetail {
 }
 
 export function AgentProcessGroup({ blocks, messageId, isStreaming = false, projectDirectory }: { blocks: AgentContentBlock[]; messageId?: string; isStreaming?: boolean; projectDirectory?: string }) {
-  const steps = useMemo(() => buildAgentProcessSteps(blocks, messageId), [blocks, messageId]);
+  const steps = useMemo(() => buildAgentProcessSteps(blocks, messageId, isStreaming ? "streaming" : "complete"), [blocks, messageId, isStreaming]);
   const hasBusyStep = steps.some((step) => step.status === "pending" || step.status === "running");
   const [expanded, setExpanded] = useState(isStreaming || hasBusyStep);
   const [mode, setMode] = useState<ProcessViewMode>("tabs");

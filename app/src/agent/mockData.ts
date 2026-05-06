@@ -10,6 +10,50 @@ function resultOrigin() {
   return { phase: "result" as const, placement: "standalone" as const };
 }
 
+const MOCK_AGENT_CONSOLE_DIFF = `diff --git a/app/src/components/agent/AgentProcessGroup.tsx b/app/src/components/agent/AgentProcessGroup.tsx
+index 3f2c8ac..9a7f1de 100644
+--- a/app/src/components/agent/AgentProcessGroup.tsx
++++ b/app/src/components/agent/AgentProcessGroup.tsx
+@@ -78,11 +78,17 @@ function StepDetail({ step, projectDirectory }: StepDetailProps) {
+-  if (step.kind === "tool") return <pre>{JSON.stringify(step.args, null, 2)}</pre>;
+-  if (step.kind === "task_list") return <TaskList tasks={step.tasks} />;
++  if (step.kind === "tool") {
++    return <ToolCallDetail args={step.args} result={step.result} />;
++  }
++  if (step.kind === "task_list") {
++    return <TaskList tasks={step.tasks} compact={false} />;
++  }
+   return null;
+ }
+@@ -132,6 +138,10 @@ export function AgentProcessGroup(props: AgentProcessGroupProps) {
+   const [activeIndex, setActiveIndex] = useState(0);
++  const [showTopShadow, setShowTopShadow] = useState(false);
++  const [showBottomShadow, setShowBottomShadow] = useState(false);
++  const scrollRef = useRef<HTMLDivElement>(null);
++
+   const visibleSteps = useMemo(() => buildAgentProcessSteps(props.blocks), [props.blocks]);
+   return <ProcessTabs steps={visibleSteps} activeIndex={activeIndex} />;
+ }
+diff --git a/app/src/index.css b/app/src/index.css
+index 16c43af..6b7241c 100644
+--- a/app/src/index.css
++++ b/app/src/index.css
+@@ -2014,9 +2014,14 @@
+ .agent-process-step-detail {
+-  padding: 10px;
+-  max-height: none;
+-  overflow: visible;
++  position: relative;
++  padding: 8px 10px;
++  max-height: 260px;
++  overflow: auto;
++  scrollbar-width: thin;
+ }
++
++.agent-process-step-detail.has-shadow-bottom::after {
++  opacity: 1;
++}`;
+
 export function createMockAssistantBlocks(prompt = "实现 ACP Agent Console 静态面板"): AgentContentBlock[] {
   return [
     {
@@ -129,6 +173,25 @@ type AgentBlockPlacement = "inline" | "standalone";
       changeType: "edit",
       status: "applied",
       summary: "对齐 CBZWW 的 process block 展示行为。",
+      origin: processOrigin("mock-run-1"),
+      createdAt: MOCK_CREATED_AT,
+    },
+    {
+      id: "mock-file-change-2",
+      type: "file_change",
+      path: "app/src/index.css",
+      changeType: "edit",
+      status: "applied",
+      summary: "补充 process step 内部滚动、阴影和紧凑间距。",
+      origin: processOrigin("mock-run-1"),
+      createdAt: MOCK_CREATED_AT,
+    },
+    {
+      id: "mock-diff-artifact-1",
+      type: "artifact",
+      title: "Agent Console UI diff",
+      kind: "diff",
+      content: MOCK_AGENT_CONSOLE_DIFF,
       origin: processOrigin("mock-run-1"),
       createdAt: MOCK_CREATED_AT,
     },

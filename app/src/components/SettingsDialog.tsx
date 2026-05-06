@@ -1,4 +1,4 @@
-import { useState, useEffect, useCallback, type DragEvent as ReactDragEvent, type ReactNode } from "react";
+import { useState, useEffect, useCallback, useMemo, type DragEvent as ReactDragEvent, type ReactNode } from "react";
 import { useTranslation } from "react-i18next";
 import i18n from "../i18n";
 import { useFeedbackStore, type DockColumnId, type DockTabId } from "../store/feedbackStore";
@@ -6,24 +6,34 @@ import { PromptIcon } from "./PromptIcons";
 import { McpConfigHelper } from "./McpConfigHelper";
 import { CallerManager } from "./CallerManager";
 import { Icon, MlcLogoIcon } from "./Icons";
+import { createMockAgentSession } from "../agent/mockData";
+import { AgentSessionHeader } from "./agent/AgentSessionHeader";
 import { invoke } from "@tauri-apps/api/core";
 import { applyTheme, getStoredTheme, type Theme } from "../theme";
 import { getNotificationSettings, saveNotificationSettings, syncAutoFocusNewRequest, type NotificationSettings } from "../notificationSettings";
 import { getSubmittedViewSettings, saveSubmittedViewSettings, SUBMITTED_VIEW_SECTION_CONFIGS, type SubmittedViewSectionId, type SubmittedViewSettings } from "../submittedViewSettings";
 import { getTerminalSettings, saveTerminalSettings, type TerminalSettings, type TerminalShellId } from "../terminalSettings";
 import { getComposerSettings, saveComposerSettings, type ComposerSettings } from "../composerSettings";
+import { AGENT_DIFF_COLOR_PRESETS, getAgentConsoleSettings, saveAgentConsoleSettings, type AgentConsoleSettings, type AgentDiffColorPresetId, type AgentTopbarIndicatorMode } from "../agentConsoleSettings";
 import { SESSION_LIST_MODE_OPTIONS } from "../sessionNavigationSettings";
 import { SessionNavigationModeIcon } from "./SessionNavigationModeIcon";
 import { AppSelect, type AppSelectOption } from "./AppSelect";
 
-type Tab = "general" | "display" | "callers" | "submitted" | "prompts" | "sessionNavigation" | "layoutPanels" | "terminal" | "resources" | "notification" | "about";
+type Tab = "general" | "display" | "callers" | "submitted" | "prompts" | "sessionNavigation" | "layoutPanels" | "acp" | "terminal" | "resources" | "notification" | "about";
 type SettingsGroupId = "mlfb" | "layout";
 
 const SETTINGS_DOCK_COLUMN_IDS: DockColumnId[] = ["leftSidebar", "leftPage", "rightPage", "rightSidebar"];
 const SETTINGS_DOCK_TAB_IDS: DockTabId[] = ["mlc", "mlcPreview", "resources", "previewBrowser", "previewInfo", "agentConsole", "terminal"];
+const AGENT_TOPBAR_INDICATOR_MODE_OPTIONS: AgentTopbarIndicatorMode[] = ["hidden", "text", "textAndGraphic"];
 
 function isSettingsDockTabId(value: string): value is DockTabId {
   return SETTINGS_DOCK_TAB_IDS.includes(value as DockTabId);
+}
+
+function AgentTopbarIndicatorModeIcon({ mode }: { mode: AgentTopbarIndicatorMode }) {
+  if (mode === "hidden") return <Icon name="eye-off" size={15} />;
+  if (mode === "text") return <Icon name="list" size={15} />;
+  return <Icon name="sort" size={15} />;
 }
 
 export interface ZoomSettings {
@@ -69,11 +79,15 @@ export function SettingsDialog({ open, onClose }: { open: boolean; onClose: () =
   const [theme, setTheme] = useState<Theme>(getStoredTheme);
   const [autostart, setAutostart] = useState(false);
   const [confirmClear, setConfirmClear] = useState(false);
+  const [diffOffsetCollapsed, setDiffOffsetCollapsed] = useState(true);
   const [notifSettings, setNotifSettings] = useState<NotificationSettings>(getNotificationSettings);
   const [terminalSettings, setTerminalSettings] = useState<TerminalSettings>(getTerminalSettings);
   const [composerSettings, setComposerSettings] = useState<ComposerSettings>(getComposerSettings);
+  const [agentConsoleSettings, setAgentConsoleSettings] = useState<AgentConsoleSettings>(getAgentConsoleSettings);
   const [zoomSettings, setZoomSettings] = useState<ZoomSettings>(getZoomSettings);
   const [submittedViewSettings, setSubmittedViewSettings] = useState<SubmittedViewSettings>(getSubmittedViewSettings);
+  const [acpPreviewResetKey, setAcpPreviewResetKey] = useState(0);
+  const acpPreviewSession = useMemo(() => createMockAgentSession(), [acpPreviewResetKey]);
   const prompts = useFeedbackStore((s) => s.prompts);
   const disabledPrompts = useFeedbackStore((s) => s.disabledPrompts);
   const showPromptButtons = useFeedbackStore((s) => s.showPromptButtons);
@@ -97,6 +111,7 @@ export function SettingsDialog({ open, onClose }: { open: boolean; onClose: () =
     setNotifSettings(getNotificationSettings());
     setTerminalSettings(getTerminalSettings());
     setComposerSettings(getComposerSettings());
+    setAgentConsoleSettings(getAgentConsoleSettings());
     setSubmittedViewSettings(getSubmittedViewSettings());
     invoke<boolean>("get_autostart").then(setAutostart).catch(() => {});
   }, [open]);
@@ -163,6 +178,31 @@ export function SettingsDialog({ open, onClose }: { open: boolean; onClose: () =
     });
   }, []);
 
+  const handleAgentIndicatorModeChange = useCallback((key: keyof AgentConsoleSettings, value: AgentTopbarIndicatorMode) => {
+    setAgentConsoleSettings((prev) => {
+      const next = { ...prev, [key]: value };
+      saveAgentConsoleSettings(next);
+      return next;
+    });
+  }, []);
+
+  const handleAgentDiffColorPresetChange = useCallback((colorPresetId: AgentDiffColorPresetId) => {
+    setAgentConsoleSettings((prev) => {
+      const next = { ...prev, diffVisual: { ...prev.diffVisual, colorPresetId } };
+      saveAgentConsoleSettings(next);
+      return next;
+    });
+  }, []);
+
+  const handleAgentDiffTextOffsetChange = useCallback((key: "additionsOffsetX" | "additionsOffsetY" | "deletionsOffsetX" | "deletionsOffsetY", value: number) => {
+    const boundedValue = Math.max(-4, Math.min(4, Math.round(value * 2) / 2));
+    setAgentConsoleSettings((prev) => {
+      const next = { ...prev, diffVisual: { ...prev.diffVisual, [key]: boundedValue } };
+      saveAgentConsoleSettings(next);
+      return next;
+    });
+  }, []);
+
   const handleZoomChange = useCallback((key: keyof ZoomSettings, value: number) => {
     setZoomSettings((prev) => {
       const next = { ...prev, [key]: value };
@@ -219,6 +259,78 @@ export function SettingsDialog({ open, onClose }: { open: boolean; onClose: () =
           <span>{label}</span>
         </button>
         {!collapsed && <div className="settings-nav-group-items">{children}</div>}
+      </div>
+    );
+  };
+
+  const agentIndicatorModeLabel = (mode: AgentTopbarIndicatorMode) => {
+    if (mode === "hidden") return t("settings.acpIndicatorHidden", "Hidden");
+    if (mode === "text") return t("settings.acpIndicatorText", "Text only");
+    return t("settings.acpIndicatorTextAndGraphic", "Text and graphic");
+  };
+
+  const renderAgentIndicatorModeGroup = (key: keyof AgentConsoleSettings, currentMode: AgentTopbarIndicatorMode, ariaLabel: string) => (
+    <div className="cm-column-mode-group settings-acp-mode-group" role="group" aria-label={ariaLabel}>
+      {AGENT_TOPBAR_INDICATOR_MODE_OPTIONS.map((mode) => {
+        const label = agentIndicatorModeLabel(mode);
+        return (
+          <button
+            key={mode}
+            type="button"
+            className={`cm-column-mode-button settings-acp-mode-button${currentMode === mode ? " active" : ""}`}
+            title={label}
+            aria-label={`${ariaLabel}: ${label}`}
+            onClick={() => handleAgentIndicatorModeChange(key, mode)}
+          >
+            <AgentTopbarIndicatorModeIcon mode={mode} />
+          </button>
+        );
+      })}
+    </div>
+  );
+
+  const renderAgentDiffOffsetControl = (label: string, key: "additionsOffsetX" | "additionsOffsetY" | "deletionsOffsetX" | "deletionsOffsetY") => {
+    const value = agentConsoleSettings.diffVisual[key];
+    const displayValue = Number.isInteger(value) ? String(value) : value.toFixed(1);
+    return (
+      <div className="settings-acp-offset-row">
+        <span className="settings-acp-offset-label">{label}</span>
+        <div className="settings-acp-offset-stepper" role="group" aria-label={label}>
+          <button
+            type="button"
+            className="settings-acp-offset-button"
+            disabled={value <= -4}
+            onClick={() => handleAgentDiffTextOffsetChange(key, value - 0.5)}
+            aria-label={`${label} -0.5px`}
+          >
+            -
+          </button>
+          <span className="settings-acp-offset-value">{displayValue}px</span>
+          <button
+            type="button"
+            className="settings-acp-offset-button"
+            disabled={value >= 4}
+            onClick={() => handleAgentDiffTextOffsetChange(key, value + 0.5)}
+            aria-label={`${label} +0.5px`}
+          >
+            +
+          </button>
+        </div>
+      </div>
+    );
+  };
+
+  const renderAcpPreview = () => {
+    return (
+      <div className="settings-acp-preview" aria-label={t("settings.acpPreview", "ACP preview")}>
+        <AgentSessionHeader
+          key={acpPreviewResetKey}
+          session={acpPreviewSession}
+          sessions={[acpPreviewSession]}
+          activeSessionId={acpPreviewSession.id}
+          onSelectSession={() => {}}
+          onReset={() => setAcpPreviewResetKey((value) => value + 1)}
+        />
       </div>
     );
   };
@@ -322,9 +434,10 @@ export function SettingsDialog({ open, onClose }: { open: boolean; onClose: () =
                 {renderSettingsNavItem("sessionNavigation", "list-tree", t("settings.sessionNavigation", "Session navigation"), true)}
               </>
             ))}
-            {renderSettingsNavGroup("layout", t("settings.layout", "Layout"), ["layoutPanels", "terminal", "resources"], (
+            {renderSettingsNavGroup("layout", t("settings.layout", "Layout"), ["layoutPanels", "acp", "terminal", "resources"], (
               <>
                 {renderSettingsNavItem("layoutPanels", "page-sidebar", t("settings.panelManagement", "Panel management"), true)}
+                {renderSettingsNavItem("acp", "robot", t("settings.acp", "ACP"), true)}
                 {renderSettingsNavItem("terminal", "terminal", t("settings.terminal", "Terminal"), true)}
                 {renderSettingsNavItem("resources", "folder", t("settings.resourceExplorer", "Resource explorer"), true)}
               </>
@@ -334,7 +447,7 @@ export function SettingsDialog({ open, onClose }: { open: boolean; onClose: () =
           </div>
 
           {/* Content */}
-          <div className="settings-content">
+          <div className={`settings-content${tab === "acp" ? " settings-content-acp" : ""}`}>
             {tab === "general" && (
               <div className="settings-section">
                 <div className="settings-row">
@@ -619,6 +732,75 @@ export function SettingsDialog({ open, onClose }: { open: boolean; onClose: () =
                   </div>
                 </div>
               </div>
+            )}
+
+            {tab === "acp" && (
+              <>
+                {renderAcpPreview()}
+                <div className="settings-section settings-acp-section">
+                  <div className="settings-row settings-row-stacked">
+                    <div className="settings-row-info">
+                      <span className="settings-label">{t("settings.acpTopbarIndicators", "Topbar indicators")}</span>
+                      <span className="settings-sublabel">{t("settings.acpTopbarIndicatorsDesc", "Configure how Agent Console diff and context indicators appear in the topbar.")}</span>
+                    </div>
+                    <div className="settings-acp-indicator-list">
+                      <div className="settings-acp-indicator-row">
+                        <span className="settings-acp-indicator-label">{t("settings.acpDiffIndicator", "Diff indicator")}</span>
+                        {renderAgentIndicatorModeGroup("diffIndicatorMode", agentConsoleSettings.diffIndicatorMode, t("settings.acpDiffIndicator", "Diff indicator"))}
+                      </div>
+                      <div className="settings-acp-indicator-row">
+                        <span className="settings-acp-indicator-label">{t("settings.acpContextIndicator", "Context indicator")}</span>
+                        {renderAgentIndicatorModeGroup("contextIndicatorMode", agentConsoleSettings.contextIndicatorMode, t("settings.acpContextIndicator", "Context indicator"))}
+                      </div>
+                    </div>
+                    <div className="settings-acp-visual-group">
+                      <div className="settings-row-info">
+                        <span className="settings-label">{t("settings.acpDiffVisualAdjustment", "Diff visual adjustment")}</span>
+                        <span className="settings-sublabel">{t("settings.acpDiffVisualAdjustmentDesc", "Tune diff colors and compact topbar text position.")}</span>
+                      </div>
+                      <div className="settings-acp-color-presets" role="group" aria-label={t("settings.acpDiffColorPreset", "Diff color preset")}>
+                        {AGENT_DIFF_COLOR_PRESETS.map((preset) => {
+                          const label = t(preset.labelKey, preset.defaultLabel);
+                          return (
+                            <button
+                              key={preset.id}
+                              type="button"
+                              className={`settings-acp-color-preset${agentConsoleSettings.diffVisual.colorPresetId === preset.id ? " active" : ""}`}
+                              title={label}
+                              aria-label={`${t("settings.acpDiffColorPreset", "Diff color preset")}: ${label}`}
+                              onClick={() => handleAgentDiffColorPresetChange(preset.id)}
+                            >
+                              <span style={{ background: preset.additions }} />
+                              <span style={{ background: preset.deletions }} />
+                            </button>
+                          );
+                        })}
+                      </div>
+                      <div className="settings-acp-offset-panel">
+                        <button
+                          type="button"
+                          className="settings-acp-offset-toggle"
+                          onClick={() => setDiffOffsetCollapsed((value) => !value)}
+                          aria-expanded={!diffOffsetCollapsed}
+                        >
+                          <Icon name={diffOffsetCollapsed ? "chevron-right" : "chevron-down"} size={13} />
+                          <span>{t("settings.acpDiffTextOffsetAdvanced", "Text offset fine tuning")}</span>
+                        </button>
+                        {!diffOffsetCollapsed && (
+                          <div className="settings-acp-offset-list">
+                            <div className="settings-acp-offset-title">{t("settings.acpDiffAddTextOffset", "Addition text offset")}</div>
+                            {renderAgentDiffOffsetControl(t("settings.acpDiffTextOffsetX", "Horizontal offset"), "additionsOffsetX")}
+                            {renderAgentDiffOffsetControl(t("settings.acpDiffTextOffsetY", "Vertical offset"), "additionsOffsetY")}
+                            <div className="settings-acp-offset-title">{t("settings.acpDiffDeleteTextOffset", "Deletion text offset")}</div>
+                            {renderAgentDiffOffsetControl(t("settings.acpDiffTextOffsetX", "Horizontal offset"), "deletionsOffsetX")}
+                            {renderAgentDiffOffsetControl(t("settings.acpDiffTextOffsetY", "Vertical offset"), "deletionsOffsetY")}
+                          </div>
+                        )}
+                      </div>
+                    </div>
+                  </div>
+                </div>
+              </>
             )}
 
             {tab === "resources" && (

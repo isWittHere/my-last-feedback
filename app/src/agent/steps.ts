@@ -81,7 +81,7 @@ function tokenTextForBlocks(blocks: AgentContentBlock[]): string {
   }).filter(Boolean).join("\n");
 }
 
-export function buildAgentProcessSteps(blocks: AgentContentBlock[], messageId?: string): AgentStepItem[] {
+export function buildAgentProcessSteps(blocks: AgentContentBlock[], messageId?: string, messageStatus?: AgentMessage["status"]): AgentStepItem[] {
   const steps: AgentStepItem[] = [];
   for (const block of blocks) {
     if (block.type === "thinking") {
@@ -112,13 +112,16 @@ export function buildAgentProcessSteps(blocks: AgentContentBlock[], messageId?: 
     if (block.type === "task_list" && block.tasks.length > 0) {
       const completedCount = block.tasks.filter((task) => task.status === "completed").length;
       const hasRunningTask = block.tasks.some((task) => task.status === "in-progress");
+      const status: AgentStepStatus = messageStatus === "streaming"
+        ? hasRunningTask ? "running" : completedCount < block.tasks.length ? "pending" : "completed"
+        : "completed";
       steps.push({
         id: block.id,
         messageId,
         blockIds: [block.id],
         kind: "task_list",
         label: block.title || `待办事项 (${completedCount}/${block.tasks.length})`,
-        status: hasRunningTask ? "running" : "completed",
+        status,
         tasks: block.tasks,
       });
       continue;
@@ -186,7 +189,7 @@ export function collectAgentStepTokenStats(session: AgentSession): AgentStepToke
     }
     if (message.role !== "assistant") continue;
     const { processBlocks, resultBlocks } = splitAgentMessageBlocks(message);
-    const steps = buildAgentProcessSteps(processBlocks, message.id);
+    const steps = buildAgentProcessSteps(processBlocks, message.id, message.status);
     for (const step of steps) {
       stats.push({
         id: `${message.id}:${step.id}`,
