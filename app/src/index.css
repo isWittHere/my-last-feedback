@@ -2746,9 +2746,9 @@ body,
 .agent-task-panel {
   flex: 0 0 auto;
   min-width: 0;
-  border-top: 0px solid var(--color-border-subtle);
-  border-bottom: 1px solid var(--color-border-subtle);
-  background: var(--color-bg-input-raised);
+  border-top: 1px solid var(--color-border-subtle);
+  border-bottom: 0;
+  background: color-mix(in srgb, var(--color-bg-surface) 92%, var(--color-bg-base));
   padding: 0;
 }
 
@@ -2836,10 +2836,6 @@ body,
 
 .agent-task-panel-row[data-status="in-progress"] svg {
   animation: spin 7s linear infinite;
-}
-
-.agent-task-panel + .agent-composer-area {
-  border-top: 0;
 }
 
 .agent-message-timeline {
@@ -3405,7 +3401,7 @@ body,
   min-height: 0;
   display: flex;
   flex-direction: column;
-  border-top: 1px solid var(--color-border-subtle);
+  border-top: 0;
   background: var(--color-bg-input-raised);
 }
 

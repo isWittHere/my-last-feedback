@@ -92,10 +92,10 @@ export function AgentConsolePanel() {
       <div ref={containerRef} className="agent-console-resizable-body">
         <div className="agent-console-timeline-region panel-card" style={{ flex: `0 0 calc(${panelSizes[0] * 100}% - 1px)`, minHeight: 48 }}>
           <AgentMessageTimeline session={activeSession} />
+          <AgentTaskPanel session={activeSession} />
         </div>
         <div className="resize-handle" onMouseDown={(event) => handleMouseDown(0, event)} />
         <div ref={inputPanelRef} className="agent-console-input-region panel-card panel-feedback panel-feedback-editable" data-tooltip-placement="top" style={{ flex: `0 0 ${panelSizes[1] * 100}%`, minHeight: 92, position: "relative" }}>
-          <AgentTaskPanel session={activeSession} />
           <div className="agent-composer-area">
             <AgentActionBar session={activeSession} />
             <AgentComposer session={activeSession} />
