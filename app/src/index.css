@@ -2682,7 +2682,9 @@ body,
 .agent-composer-actions,
 .agent-approval-row,
 .agent-approval-row-main,
-.agent-approval-row-actions {
+.agent-approval-row-actions,
+.agent-current-status-row-main,
+.agent-current-status-row-actions {
   display: inline-flex;
   align-items: center;
 }
@@ -2955,6 +2957,37 @@ body,
 .agent-approval-row-actions {
   flex: 0 0 auto;
   gap: 6px;
+}
+
+.agent-current-status-row-meta,
+.agent-current-status-file-chip,
+.agent-current-status-diff-meta {
+  min-width: 0;
+  color: var(--color-text-muted);
+}
+
+.agent-current-status-file-chip {
+  max-width: min(18rem, 38vw);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.agent-current-status-diff-meta {
+  flex: 0 0 auto;
+  font-variant-numeric: tabular-nums;
+}
+
+.agent-current-status-row[data-status-kind="thinking"] .agent-current-status-row-icon,
+.agent-current-status-row[data-status-kind="tool_running"] .agent-current-status-row-icon {
+  animation: spin 7s linear infinite;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .agent-current-status-row[data-status-kind="thinking"] .agent-current-status-row-icon,
+  .agent-current-status-row[data-status-kind="tool_running"] .agent-current-status-row-icon {
+    animation: none;
+  }
 }
 
 .agent-approval-allow-wrap {

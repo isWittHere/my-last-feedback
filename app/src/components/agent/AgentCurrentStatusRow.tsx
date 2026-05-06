@@ -1,0 +1,142 @@
+import { useEffect, useMemo, useRef, useState } from "react";
+import { useTranslation } from "react-i18next";
+import { formatCompactTokenCount } from "../../agent/tokenStats";
+import type { AgentApprovalCurrentStatus, AgentCurrentStatus, AgentEditFileSummary } from "../../agent/currentStatus";
+import { getAgentCurrentStatus } from "../../agent/currentStatus";
+import type { AgentPermissionOption, AgentSession } from "../../agent/types";
+import { useAgentStore } from "../../store/agentStore";
+import { Icon } from "../Icons";
+
+function AgentApprovalActions({ sessionId, requestId, options }: { sessionId: string; requestId: string; options: AgentPermissionOption[] }) {
+  const { t } = useTranslation();
+  const [allowMenuOpen, setAllowMenuOpen] = useState(false);
+  const allowMenuRef = useRef<HTMLDivElement>(null);
+  const resolveMockPermission = useAgentStore((state) => state.resolveMockPermission);
+
+  useEffect(() => {
+    if (!allowMenuOpen) return;
+    const closeIfOutside = (target: EventTarget | null) => {
+      if (allowMenuRef.current && target instanceof Node && !allowMenuRef.current.contains(target)) setAllowMenuOpen(false);
+    };
+    const handleMouseDown = (event: MouseEvent) => closeIfOutside(event.target);
+    const handleFocusIn = (event: FocusEvent) => closeIfOutside(event.target);
+    const handleKeyDown = (event: KeyboardEvent) => {
+      if (event.key === "Escape") setAllowMenuOpen(false);
+    };
+    document.addEventListener("mousedown", handleMouseDown);
+    document.addEventListener("focusin", handleFocusIn);
+    document.addEventListener("keydown", handleKeyDown);
+    return () => {
+      document.removeEventListener("mousedown", handleMouseDown);
+      document.removeEventListener("focusin", handleFocusIn);
+      document.removeEventListener("keydown", handleKeyDown);
+    };
+  }, [allowMenuOpen]);
+
+  const fallbackOptions: AgentPermissionOption[] = [
+    { id: "once", label: t("agentConsole.allowOnce", "Allow once"), kind: "allow_once" },
+    { id: "session", label: t("agentConsole.allowSession", "Allow for this session"), kind: "allow_session" },
+    { id: "always", label: t("agentConsole.allowAlways", "Always allow"), kind: "allow_always" },
+    { id: "reject", label: t("agentConsole.reject", "Reject"), kind: "reject_once" },
+  ];
+  const resolvedOptions = options.length ? options : fallbackOptions;
+  const allowOptions = resolvedOptions.filter((option) => option.kind === "allow_once" || option.kind === "allow_session" || option.kind === "allow_always");
+  const primaryAllowOption = allowOptions.find((option) => option.kind === "allow_once") || allowOptions[0];
+  const secondaryAllowOptions = allowOptions.filter((option) => option.id !== primaryAllowOption?.id);
+  const rejectOption = resolvedOptions.find((option) => option.kind === "reject_once");
+  const resolve = (optionId: string) => {
+    setAllowMenuOpen(false);
+    resolveMockPermission(sessionId, requestId, optionId);
+  };
+
+  return (
+    <div className="agent-approval-row-actions agent-current-status-row-actions">
+      {rejectOption && (
+        <button type="button" className="agent-approval-action-reject" onClick={() => resolve(rejectOption.id)}>
+          {rejectOption.label}
+        </button>
+      )}
+      {primaryAllowOption && (
+        <div ref={allowMenuRef} className="agent-approval-allow-wrap" data-preview-overlay>
+          <div className="agent-approval-split-button">
+            <button type="button" className="agent-approval-action-allow-main" onClick={() => resolve(primaryAllowOption.id)} title={primaryAllowOption.label}>
+              {t("agentConsole.allow", "Allow")}
+            </button>
+            <button type="button" className="agent-approval-action-allow-caret" onClick={() => setAllowMenuOpen((value) => !value)} title={t("agentConsole.moreAllowOptions", "More allow options")}>
+              <Icon name="chevron-down" size={13} />
+            </button>
+          </div>
+          {allowMenuOpen && secondaryAllowOptions.length > 0 && (
+            <div className="app-select-panel agent-approval-allow-menu" data-preview-overlay>
+              {secondaryAllowOptions.map((option) => (
+                <button key={option.id} type="button" className="app-select-option" onClick={() => resolve(option.id)}>
+                  {option.label}
+                </button>
+              ))}
+            </div>
+          )}
+        </div>
+      )}
+    </div>
+  );
+}
+
+function formatFileSummary(t: ReturnType<typeof useTranslation>["t"], fileSummary: AgentEditFileSummary): string {
+  if (fileSummary.primaryPath) return fileSummary.primaryPath;
+  return t("agentConsole.currentStatusFilesChanged", "{{count}} files", { count: fileSummary.changedFiles });
+}
+
+function AgentApprovalStatusRow({ session, status }: { session: AgentSession; status: AgentApprovalCurrentStatus }) {
+  const { t } = useTranslation();
+  const label = status.variant === "apply_edit" ? t("agentConsole.currentStatusApplyEdit", "Apply edits") : t("agentConsole.requestApproval", "Request approval");
+  const title = status.title || t("agentConsole.permissionPending", "Permission request pending");
+  const fileSummaryLabel = status.fileSummary ? formatFileSummary(t, status.fileSummary) : null;
+  const diffSummaryLabel = status.fileSummary && !status.fileSummary.estimated && (status.fileSummary.additions > 0 || status.fileSummary.deletions > 0)
+    ? t("agentConsole.currentStatusDiffCompact", "+{{additions}} -{{deletions}}", { additions: status.fileSummary.additions, deletions: status.fileSummary.deletions })
+    : null;
+
+  return (
+    <section className="agent-approval-row agent-current-status-row" data-status-kind="approval" data-status-variant={status.variant} data-preview-overlay>
+      <div className="agent-approval-row-main agent-current-status-row-main">
+        <Icon name="shield" size={13} />
+        <span className="agent-approval-row-label agent-silver-shimmer-text">{label}</span>
+        <span className="agent-approval-row-title">{title}</span>
+        {fileSummaryLabel && <span className="agent-current-status-file-chip" title={fileSummaryLabel}>{fileSummaryLabel}</span>}
+        {diffSummaryLabel && <span className="agent-current-status-diff-meta">{diffSummaryLabel}</span>}
+        {status.extraCount > 0 && <span className="agent-approval-row-count">{t("agentConsole.approvalMoreCount", "+{{count}} more", { count: status.extraCount })}</span>}
+      </div>
+      <AgentApprovalActions sessionId={session.id} requestId={status.requestId} options={status.options} />
+    </section>
+  );
+}
+
+function AgentActivityStatusRow({ status }: { status: Exclude<AgentCurrentStatus, AgentApprovalCurrentStatus | null> }) {
+  const { t } = useTranslation();
+  const statusCopy = status.kind === "thinking"
+    ? t("agentConsole.currentStatusThinking", "Thinking")
+    : status.kind === "output"
+      ? t("agentConsole.currentStatusOutput", "Outputting")
+      : t("agentConsole.currentStatusRunningTool", "Running tool");
+  const tokenCount = status.kind === "thinking" || status.kind === "output" ? status.tokenCount : 0;
+  const tokenLabel = tokenCount > 0 ? t("agentConsole.currentStatusTokenCount", "{{value}} tokens", { value: formatCompactTokenCount(tokenCount) }) : null;
+  const detail = status.kind === "tool_running" ? status.label : tokenLabel;
+  const iconName = status.kind === "thinking" ? "spinner" : status.kind === "output" ? "message-dot" : "wrench";
+
+  return (
+    <section className="agent-approval-row agent-current-status-row" data-status-kind={status.kind} data-preview-overlay>
+      <div className="agent-approval-row-main agent-current-status-row-main">
+        <Icon name={iconName} size={13} className="agent-current-status-row-icon" />
+        <span className="agent-approval-row-label agent-silver-shimmer-text">{statusCopy}</span>
+        {detail && <span className="agent-current-status-row-meta">{detail}</span>}
+      </div>
+    </section>
+  );
+}
+
+export function AgentCurrentStatusRow({ session }: { session: AgentSession }) {
+  const status = useMemo(() => getAgentCurrentStatus(session), [session]);
+
+  if (!status) return null;
+  if (status.kind === "approval") return <AgentApprovalStatusRow session={session} status={status} />;
+  return <AgentActivityStatusRow status={status} />;
+}

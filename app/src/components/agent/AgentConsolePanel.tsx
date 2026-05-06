@@ -1,7 +1,7 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 import { useAgentStore } from "../../store/agentStore";
-import { AgentApprovalRow } from "./AgentApprovalRow";
 import { AgentComposer } from "./AgentComposer";
+import { AgentCurrentStatusRow } from "./AgentCurrentStatusRow";
 import { AgentMessageTimeline } from "./AgentMessageTimeline";
 import { AgentSessionHeader } from "./AgentSessionHeader";
 import { AgentTaskPanel } from "./AgentTaskPanel";
@@ -93,7 +93,7 @@ export function AgentConsolePanel() {
         <div className="agent-console-timeline-region panel-card" style={{ flex: `0 0 calc(${panelSizes[0] * 100}% - 1px)`, minHeight: 48 }}>
           <AgentMessageTimeline session={activeSession} />
           <div className="agent-session-status-stack">
-            <AgentApprovalRow session={activeSession} />
+            <AgentCurrentStatusRow session={activeSession} />
             <AgentTaskPanel session={activeSession} />
           </div>
         </div>
