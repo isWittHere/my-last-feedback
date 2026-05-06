@@ -80,3 +80,18 @@ export interface AcpNewSessionResult {
   configOptions?: unknown[] | null;
   [key: string]: unknown;
 }
+
+export interface AcpSessionListItem {
+  sessionId: string;
+  cwd?: string | null;
+  title?: string | null;
+  updatedAt?: string | null;
+  _meta?: Record<string, unknown> | null;
+  [key: string]: unknown;
+}
+
+export interface AcpSessionListResult {
+  sessions?: AcpSessionListItem[] | null;
+  nextCursor?: string | null;
+  [key: string]: unknown;
+}

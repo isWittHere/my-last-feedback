@@ -1943,6 +1943,280 @@ body,
   font-weight: 700;
 }
 
+.agent-session-manager-panel {
+  height: 100%;
+  min-height: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  padding: 8px 8px 6px;
+  overflow: auto;
+  background: var(--color-bg);
+}
+
+.agent-session-manager-header {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  padding: 2px 2px 2px;
+}
+
+.agent-session-manager-title-row,
+.agent-session-manager-provider-name,
+.agent-session-manager-actions,
+.agent-session-manager-load-more {
+  display: flex;
+  align-items: center;
+}
+
+.agent-session-manager-title-row {
+  gap: 6px;
+  font-size: 13px;
+  font-weight: 700;
+  color: var(--color-text);
+}
+
+.agent-session-manager-subtitle {
+  font-size: 11px;
+  color: var(--color-text-muted);
+  line-height: 1.35;
+}
+
+.agent-session-manager-protocol,
+.agent-session-manager-provider {
+  padding: 8px;
+  border-radius: var(--radius-sm);
+}
+
+.agent-session-manager-section-title {
+  font-size: 11px;
+  font-weight: 700;
+  text-transform: uppercase;
+  color: var(--color-text-muted);
+  margin: 2px 0 4px;
+}
+
+.agent-session-manager-flow {
+  display: grid;
+  gap: 4px;
+  font-size: 11px;
+  color: var(--color-text-muted);
+}
+
+.agent-session-manager-flow strong {
+  color: var(--color-text);
+  font-weight: 700;
+}
+
+.agent-session-manager-error,
+.agent-session-manager-empty {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  min-height: 28px;
+  padding: 6px 8px;
+  border: 1px solid var(--color-border-subtle);
+  border-radius: var(--radius-sm);
+  color: var(--color-text-muted);
+  font-size: 11px;
+  background: color-mix(in srgb, var(--color-bg-surface) 82%, transparent);
+}
+
+.agent-session-manager-error,
+.agent-session-manager-empty.error {
+  color: var(--color-danger, #ef4444);
+  border-color: color-mix(in srgb, var(--color-danger, #ef4444) 28%, var(--color-border-subtle));
+}
+
+.agent-session-manager-provider-list,
+.agent-session-manager-local-list,
+.agent-session-manager-remote-list {
+  display: flex;
+  flex-direction: column;
+  gap: 5px;
+}
+
+.agent-session-manager-local-list,
+.agent-session-manager-remote-list {
+  gap: 3px;
+}
+
+.agent-session-manager-provider-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  min-width: 0;
+}
+
+.agent-session-manager-provider-name {
+  gap: 7px;
+  min-width: 0;
+}
+
+.agent-session-manager-provider-name > div {
+  display: flex;
+  flex-direction: column;
+  min-width: 0;
+}
+
+.agent-session-manager-provider-name strong,
+.agent-session-history-name {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.agent-session-manager-provider-name strong {
+  font-size: 12px;
+  color: var(--color-text);
+}
+
+.agent-session-manager-provider-name span {
+  font-size: 11px;
+  color: var(--color-text-muted);
+}
+
+.agent-session-manager-actions {
+  gap: 4px;
+  flex-shrink: 0;
+}
+
+.agent-session-manager-capabilities {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 5px;
+  margin: 6px 0 5px;
+}
+
+.agent-session-manager-capabilities span {
+  border: 1px solid var(--color-border-subtle);
+  border-radius: 4px;
+  padding: 2px 5px;
+  font-size: 11px;
+  color: var(--color-text-muted);
+  background: var(--color-bg-surface);
+}
+
+.agent-session-manager-capabilities span[data-state="supported"] {
+  color: var(--color-success, #22c55e);
+  border-color: color-mix(in srgb, var(--color-success, #22c55e) 35%, var(--color-border-subtle));
+}
+
+.agent-session-manager-capabilities span[data-state="unsupported"] {
+  color: var(--color-text-muted);
+  opacity: 0.72;
+}
+
+.agent-session-history-item {
+  display: flex;
+  flex-direction: column;
+  gap: 1px;
+  width: 100%;
+  min-width: 0;
+  padding: 5px 8px;
+  border: none;
+  border-radius: 4px;
+  background: transparent;
+  color: var(--color-text-primary);
+  text-align: left;
+  cursor: pointer;
+  font-size: 12px;
+  transition: background 0.12s;
+}
+
+.agent-session-history-remote {
+  cursor: default;
+}
+
+.agent-session-history-item:hover {
+  background: rgba(255, 255, 255, 0.05);
+}
+
+.agent-session-history-item.active {
+  background: rgba(255, 255, 255, 0.08);
+}
+
+.agent-session-history-item.active:hover {
+  background: rgba(255, 255, 255, 0.12);
+}
+
+.agent-session-history-row1 {
+  display: flex;
+  align-items: center;
+  gap: 5px;
+  min-width: 0;
+}
+
+.agent-session-history-row2 {
+  display: flex;
+  align-items: center;
+  gap: 5px;
+  padding-left: 17px;
+  min-width: 0;
+}
+
+.agent-session-history-icon {
+  flex: 0 0 12px;
+  width: 12px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  color: var(--color-text-muted);
+}
+
+.agent-session-history-name {
+  flex: 1;
+  min-width: 0;
+  font-size: 12px;
+  font-weight: 500;
+  color: var(--color-text-primary);
+}
+
+.agent-session-history-time,
+.agent-session-history-id,
+.agent-session-history-cwd {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  font-size: 11px;
+  color: var(--color-text-muted);
+}
+
+.agent-session-history-id {
+  flex-shrink: 0;
+}
+
+.agent-session-history-cwd {
+  flex: 1;
+}
+
+.agent-session-history-actions {
+  display: flex;
+  align-items: center;
+  gap: 2px;
+  margin-left: auto;
+  visibility: hidden;
+}
+
+.agent-session-history-item:hover .agent-session-history-actions {
+  visibility: visible;
+}
+
+.agent-session-manager-load-more {
+  justify-content: center;
+  gap: 5px;
+  width: 100%;
+  border: 1px solid var(--color-border-subtle);
+  border-radius: var(--radius-sm);
+  padding: 6px;
+  background: var(--color-bg-surface);
+  color: var(--color-text);
+  font-size: 11px;
+  cursor: pointer;
+}
+
 .agent-token-topbar {
   position: relative;
   flex: 1;
@@ -6417,6 +6691,15 @@ body,
   background: rgba(0, 0, 0, 0.07);
 }
 [data-theme="light"] .session-item-active:hover {
+  background: rgba(0, 0, 0, 0.10);
+}
+[data-theme="light"] .agent-session-history-item:hover {
+  background: rgba(0, 0, 0, 0.04);
+}
+[data-theme="light"] .agent-session-history-item.active {
+  background: rgba(0, 0, 0, 0.07);
+}
+[data-theme="light"] .agent-session-history-item.active:hover {
   background: rgba(0, 0, 0, 0.10);
 }
 [data-theme="light"] .session-item-delete:hover {

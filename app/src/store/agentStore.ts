@@ -1,6 +1,6 @@
 import { create } from "zustand";
 import { AcpClient } from "../agent/acp/client";
-import type { AcpInitializeResult, AcpNewSessionResult } from "../agent/acp/types";
+import type { AcpInitializeResult, AcpNewSessionResult, AcpSessionListItem, AcpSessionListResult } from "../agent/acp/types";
 import { hasAgentComposerContent } from "../agent/composer";
 import { createOpenCodeAcpStartOptions, createOpenCodeInitializeParams } from "../agent/opencode/provider";
 import { createAgentSession } from "../agent/sessionFactory";
@@ -8,7 +8,18 @@ import { buildSubmittedComposerPayload } from "../composer/submittedFeedback";
 import { getAgentConsoleSettings } from "../agentConsoleSettings";
 import { setOpenCodePreferredModel, syncOpenCodeModels } from "../openCodeSettings";
 import type { AgentChoiceOption, AgentContentBlock, AgentDiagnosticEntry, AgentMessage, AgentSession } from "../agent/types";
+import type { AgentProviderId } from "../agent/types";
 import type { GitAction, ImageAttachment, MlcAttachment, WebAttachment } from "./feedbackStore";
+
+export interface AgentProviderSessionListState {
+  providerId: AgentProviderId;
+  status: "idle" | "loading" | "ready" | "error" | "unsupported";
+  capability: "supported" | "unsupported" | "unknown";
+  sessions: AcpSessionListItem[];
+  nextCursor?: string | null;
+  error?: string;
+  updatedAt?: string;
+}
 
 interface AgentAcpRuntimeEntry {
   sessionId: string;
@@ -44,6 +55,7 @@ const pacedTextBuffers = new Map<string, PacedTextBuffer>();
 interface AgentStoreState {
   sessions: AgentSession[];
   activeSessionId: string | null;
+  providerSessionLists: Partial<Record<AgentProviderId, AgentProviderSessionListState>>;
   getActiveSession: () => AgentSession | null;
   setActiveSession: (sessionId: string) => void;
   setSessionMode: (sessionId: string, modeId: string) => void;
@@ -69,6 +81,8 @@ interface AgentStoreState {
   receiveAgentProcessExit: (processId: string, exitCode: number | null) => void;
   receiveAgentProcessError: (processId: string, message: string) => void;
   sendAgentPrompt: (sessionId: string) => Promise<void>;
+  refreshProviderSessions: (providerId: AgentProviderId, cursor?: string | null) => Promise<void>;
+  restoreProviderSession: (providerId: AgentProviderId, providerSessionId: string) => Promise<void>;
   resolveMockPermission: (sessionId: string, requestId: string, optionId: string) => void;
   resetAgentSession: () => void;
 }
@@ -240,6 +254,53 @@ function extractTextContent(content: unknown): string {
 
 function isRecord(value: unknown): value is Record<string, unknown> {
   return Boolean(value) && typeof value === "object" && !Array.isArray(value);
+}
+
+function providerSessionListCapability(session: AgentSession | undefined): AgentProviderSessionListState["capability"] {
+  const capabilities = session?.providerRuntime?.agentCapabilities;
+  if (!isRecord(capabilities)) return "unknown";
+  const sessionCapabilities = isRecord(capabilities.sessionCapabilities) ? capabilities.sessionCapabilities : undefined;
+  if (isRecord(sessionCapabilities?.list)) return "supported";
+  if (sessionCapabilities && "list" in sessionCapabilities) return "unsupported";
+  return "unknown";
+}
+
+function providerLoadSessionCapability(session: AgentSession | undefined): "supported" | "unsupported" | "unknown" {
+  const capabilities = session?.providerRuntime?.agentCapabilities;
+  if (!isRecord(capabilities)) return "unknown";
+  if (capabilities.loadSession === true) return "supported";
+  if ("loadSession" in capabilities) return "unsupported";
+  return "unknown";
+}
+
+function normalizeAcpSessionListResult(result: unknown): { sessions: AcpSessionListItem[]; nextCursor?: string | null } {
+  const rawSessions = Array.isArray(result)
+    ? result
+    : isRecord(result) && Array.isArray(result.sessions)
+      ? result.sessions
+      : [];
+  const sessions = rawSessions
+    .filter(isRecord)
+    .map((item) => ({
+      ...item,
+      sessionId: typeof item.sessionId === "string" ? item.sessionId : typeof item.id === "string" ? item.id : "",
+      cwd: typeof item.cwd === "string" ? item.cwd : null,
+      title: typeof item.title === "string" ? item.title : null,
+      updatedAt: typeof item.updatedAt === "string" ? item.updatedAt : null,
+      _meta: isRecord(item._meta) ? item._meta : null,
+    }))
+    .filter((item): item is AcpSessionListItem => Boolean(item.sessionId));
+  return {
+    sessions,
+    nextCursor: isRecord(result) && typeof result.nextCursor === "string" ? result.nextCursor : null,
+  };
+}
+
+function isMethodUnavailableError(error: unknown): boolean {
+  if (!error || typeof error !== "object") return false;
+  const value = error as { message?: unknown; code?: unknown };
+  const message = typeof value.message === "string" ? value.message.toLowerCase() : "";
+  return value.code === -32601 || message.includes("method not found") || message.includes("not implemented") || message.includes("unknown method");
 }
 
 function insertProcessBlock(blocks: AgentContentBlock[], block: AgentContentBlock): AgentContentBlock[] {
@@ -761,6 +822,7 @@ function updateSession(sessions: AgentSession[], sessionId: string, updater: (se
 export const useAgentStore = create<AgentStoreState>((set, get) => ({
   sessions: [createAgentSession()],
   activeSessionId: "agent-session-opencode",
+  providerSessionLists: {},
 
   getActiveSession: () => {
     const state = get();
@@ -1114,6 +1176,107 @@ export const useAgentStore = create<AgentStoreState>((set, get) => ({
     }
   },
 
+  refreshProviderSessions: async (providerId, cursor = null) => {
+    const session = get().sessions.find((item) => item.providerId === providerId) || get().getActiveSession();
+    const capability = providerSessionListCapability(session);
+    const existing = get().providerSessionLists[providerId];
+    set((state) => ({
+      providerSessionLists: {
+        ...state.providerSessionLists,
+        [providerId]: {
+          providerId,
+          status: capability === "unsupported" ? "unsupported" : "loading",
+          capability,
+          sessions: cursor ? existing?.sessions || [] : [],
+          nextCursor: cursor,
+          error: capability === "unsupported" ? "Provider does not advertise ACP session/list support." : undefined,
+          updatedAt: existing?.updatedAt,
+        },
+      },
+    }));
+    if (capability === "unsupported") return;
+    const runtime = runtimeForSession(session);
+    if (!session || !runtime || !session.providerRuntime?.initialized) {
+      set((state) => ({
+        providerSessionLists: {
+          ...state.providerSessionLists,
+          [providerId]: {
+            providerId,
+            status: "error",
+            capability,
+            sessions: existing?.sessions || [],
+            nextCursor: existing?.nextCursor,
+            error: "Start the provider before listing ACP sessions.",
+            updatedAt: existing?.updatedAt,
+          },
+        },
+      }));
+      return;
+    }
+
+    try {
+      const result = await runtime.client.request<AcpSessionListResult>("session/list", {
+        cwd: session.cwd || undefined,
+        cursor: cursor || undefined,
+      });
+      const normalized = normalizeAcpSessionListResult(result);
+      set((state) => ({
+        providerSessionLists: {
+          ...state.providerSessionLists,
+          [providerId]: {
+            providerId,
+            status: "ready",
+            capability: capability === "unknown" ? "supported" : capability,
+            sessions: cursor ? [...(existing?.sessions || []), ...normalized.sessions] : normalized.sessions,
+            nextCursor: normalized.nextCursor,
+            updatedAt: nowIso(),
+          },
+        },
+      }));
+    } catch (error) {
+      const unsupported = isMethodUnavailableError(error);
+      set((state) => ({
+        providerSessionLists: {
+          ...state.providerSessionLists,
+          [providerId]: {
+            providerId,
+            status: unsupported ? "unsupported" : "error",
+            capability: unsupported ? "unsupported" : capability,
+            sessions: existing?.sessions || [],
+            nextCursor: existing?.nextCursor,
+            error: error instanceof Error ? error.message : String(error),
+            updatedAt: existing?.updatedAt,
+          },
+        },
+      }));
+    }
+  },
+
+  restoreProviderSession: async (providerId, providerSessionId) => {
+    const session = get().sessions.find((item) => item.providerId === providerId) || get().getActiveSession();
+    const runtime = runtimeForSession(session);
+    const loadCapability = providerLoadSessionCapability(session);
+    if (!session || !runtime || !session.providerRuntime?.initialized) {
+      throw new Error("Start the provider before restoring ACP sessions.");
+    }
+    if (loadCapability !== "supported") {
+      throw new Error("Provider does not advertise ACP session/load support.");
+    }
+
+    const result = await runtime.client.request<AcpNewSessionResult>("session/load", {
+      sessionId: providerSessionId,
+      cwd: session.cwd,
+      mcpServers: [],
+    });
+    set((state) => ({
+      activeSessionId: session.id,
+      sessions: updateSession(state.sessions, session.id, (item) => appendDiagnosticToSession({
+        ...applyAcpSessionSetupResult(item, { ...result, sessionId: result.sessionId || providerSessionId }),
+        status: "idle",
+      }, "info", `ACP session restored: ${providerSessionId}`)),
+    }));
+  },
+
   resolveMockPermission: (sessionId, requestId, optionId) => set((state) => ({
     sessions: updateSession(state.sessions, sessionId, (session) => ({
       ...session,
@@ -1137,6 +1300,7 @@ export const useAgentStore = create<AgentStoreState>((set, get) => ({
     set(() => ({
       sessions: [createAgentSession()],
       activeSessionId: "agent-session-opencode",
+      providerSessionLists: {},
     }));
   },
 }));

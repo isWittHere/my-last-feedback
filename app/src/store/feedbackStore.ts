@@ -152,7 +152,7 @@ export interface FocusedComposer {
 }
 
 export type MlcPanelPosition = "left" | "right";
-export type SidePanelTab = "mlc" | "resources" | "mlcPreview" | "previewBrowser" | "previewInfo" | "agentConsole" | "terminal";
+export type SidePanelTab = "mlc" | "resources" | "mlcPreview" | "previewBrowser" | "previewInfo" | "agentConsole" | "agentSessions" | "terminal";
 export type DockColumnId = "leftSidebar" | "leftPage" | "rightPage" | "rightSidebar";
 export type DockTabId = SidePanelTab;
 export type DockTabBarPosition = "top" | "bottom";
@@ -392,8 +392,8 @@ function loadResourceIconTheme(): ResourceIconTheme {
 }
 
 const DOCK_COLUMN_IDS: DockColumnId[] = ["leftSidebar", "leftPage", "rightPage", "rightSidebar"];
-const KNOWN_DOCK_TABS: DockTabId[] = ["mlc", "resources", "mlcPreview", "previewBrowser", "previewInfo", "agentConsole", "terminal"];
-const DEFAULT_DOCK_TABS: DockTabId[] = ["mlc", "mlcPreview", "resources", "previewBrowser", "previewInfo", "agentConsole", "terminal"];
+const KNOWN_DOCK_TABS: DockTabId[] = ["mlc", "resources", "mlcPreview", "previewBrowser", "previewInfo", "agentConsole", "agentSessions", "terminal"];
+const DEFAULT_DOCK_TABS: DockTabId[] = ["mlc", "mlcPreview", "resources", "previewBrowser", "previewInfo", "agentConsole", "agentSessions", "terminal"];
 
 function isDockTabId(value: unknown): value is DockTabId {
   return typeof value === "string" && KNOWN_DOCK_TABS.includes(value as DockTabId);
@@ -468,7 +468,7 @@ function migrateLegacyDockLayout(): DockLayoutState {
     collapsed: !legacyVisible,
   });
   columns.rightPage = createDockColumn({
-    tabIds: ["agentConsole", "terminal"],
+    tabIds: ["agentConsole", "agentSessions", "terminal"],
     activeTabId: "agentConsole",
     width: legacyWidth,
     tabBarPosition: legacyTabBarPosition,
@@ -501,7 +501,7 @@ function loadDockLayout(): DockLayoutState {
       }
       for (const tabId of DEFAULT_DOCK_TABS) {
         if (seen.has(tabId)) continue;
-        const fallbackColumnId = tabId === "terminal" || tabId === "agentConsole"
+        const fallbackColumnId = tabId === "terminal" || tabId === "agentConsole" || tabId === "agentSessions"
           ? "rightPage"
           : tabId === "mlcPreview" || tabId === "previewBrowser"
           ? DOCK_COLUMN_IDS.find((columnId) => columns[columnId].tabIds.includes("mlc")) || "rightSidebar"
