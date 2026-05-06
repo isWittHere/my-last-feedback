@@ -10,6 +10,11 @@ function messageText(message: AgentSession["messages"][number]): string {
     .trim();
 }
 
+  interface AgentFocusStepEventDetail {
+    messageId: string;
+    stepId?: string;
+  }
+
 export function AgentMessageTimeline({ session }: { session: AgentSession }) {
   const endRef = useRef<HTMLDivElement>(null);
   const scrollRef = useRef<HTMLDivElement>(null);
@@ -22,6 +27,19 @@ export function AgentMessageTimeline({ session }: { session: AgentSession }) {
   useEffect(() => {
     endRef.current?.scrollIntoView({ block: "end" });
   }, [session.messages.length]);
+
+  useEffect(() => {
+    const handleFocusMessage = (event: Event) => {
+      const detail = (event as CustomEvent<AgentFocusStepEventDetail>).detail;
+      if (!detail?.messageId || detail.stepId) return;
+      const container = scrollRef.current;
+      if (!container) return;
+      const target = container.querySelector(`[data-msg-id="${CSS.escape(detail.messageId)}"]`);
+      target?.scrollIntoView({ behavior: "smooth", block: "center" });
+    };
+    window.addEventListener("mlfb-agent-focus-step", handleFocusMessage);
+    return () => window.removeEventListener("mlfb-agent-focus-step", handleFocusMessage);
+  }, []);
 
   const updateStickyUserMessage = useCallback(() => {
     const container = scrollRef.current;

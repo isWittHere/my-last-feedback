@@ -2,6 +2,7 @@ import { useTranslation } from "react-i18next";
 import type { AgentSession } from "../../agent/types";
 import { Icon } from "../Icons";
 import { IdenticonAvatar } from "../IdenticonAvatar";
+import { AgentTokenStatsTopbar } from "./AgentTokenStatsTopbar";
 
 interface AgentSessionHeaderProps {
   session: AgentSession;
@@ -13,12 +14,6 @@ interface AgentSessionHeaderProps {
 
 function basename(value: string): string {
   return value.replace(/\\/g, "/").split("/").filter(Boolean).pop() || value;
-}
-
-function sessionStatusIcon(status: AgentSession["status"]): string {
-  if (status === "running" || status === "starting" || status === "cancelling") return "spinner";
-  if (status === "error" || status === "disconnected") return "warning";
-  return "circle-check";
 }
 
 function sessionStatusClass(status: AgentSession["status"]): string {
@@ -38,27 +33,28 @@ export function AgentSessionHeader({ session, sessions, activeSessionId, onSelec
         <IdenticonAvatar alias={providerName} color={providerColor} size={18} />
         <span className="agent-console-topbar-caller-name" style={{ color: providerColor }}>{providerName}</span>
       </div>
-      <div className="agent-console-topbar-list" role="tablist" aria-label={t("agentConsole.sessions", "Agent sessions")}>
-        {sessions.map((item) => {
-          const isActive = item.id === activeSessionId;
-          const title = `${item.title || t("agentConsole.title", "Agent Console")} · ${basename(item.cwd)}`;
-          return (
-            <button
-              key={item.id}
-              type="button"
-              className={`agent-console-topbar-item agent-console-topbar-item-${sessionStatusClass(item.status)}${isActive ? " active" : ""}`}
-              onClick={() => onSelectSession(item.id)}
-              title={title}
-              aria-label={title}
-              aria-selected={isActive}
-              role="tab"
-            >
-              <Icon name={sessionStatusIcon(item.status)} size={11} />
-            </button>
-          );
-        })}
-      </div>
+      <AgentTokenStatsTopbar session={session} />
       <div className="agent-console-topbar-actions">
+        {sessions.length > 1 && (
+          <div className="agent-console-session-switcher" role="tablist" aria-label={t("agentConsole.sessions", "Agent sessions")}>
+            {sessions.map((item) => {
+              const isActive = item.id === activeSessionId;
+              const title = `${item.title || t("agentConsole.title", "Agent Console")} · ${basename(item.cwd)}`;
+              return (
+                <button
+                  key={item.id}
+                  type="button"
+                  className={`agent-console-session-dot agent-console-session-dot-${sessionStatusClass(item.status)}${isActive ? " active" : ""}`}
+                  onClick={() => onSelectSession(item.id)}
+                  title={title}
+                  aria-label={title}
+                  aria-selected={isActive}
+                  role="tab"
+                />
+              );
+            })}
+          </div>
+        )}
         <span className="agent-console-topbar-meta" title={session.cwd}>{basename(session.cwd)}</span>
         {session.modelId ? <span className="agent-console-topbar-meta">{session.modelId}</span> : null}
         <button type="button" className="agent-console-topbar-action" onClick={onReset} title={t("agentConsole.resetMock", "Reset mock session")}>

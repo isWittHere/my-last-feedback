@@ -1,5 +1,6 @@
 import type { CSSProperties } from "react";
 import type { AgentContentBlock, AgentMessage } from "../../agent/types";
+import { splitAgentMessageBlocks } from "../../agent/steps";
 import { MarkdownContent } from "../MarkdownContent";
 import { Icon } from "../Icons";
 import { IdenticonAvatar } from "../IdenticonAvatar";
@@ -10,16 +11,6 @@ function blockText(block: AgentContentBlock): string {
   if (block.type === "error") return block.message;
   if (block.type === "artifact") return block.content;
   return "";
-}
-
-function splitBlocks(message: AgentMessage): { processBlocks: AgentContentBlock[]; resultBlocks: AgentContentBlock[] } {
-  if (message.role !== "assistant") return { processBlocks: [], resultBlocks: message.blocks };
-  const firstResultIndex = message.blocks.findIndex((block) => block.origin.phase === "result");
-  if (firstResultIndex < 0) return { processBlocks: message.blocks, resultBlocks: [] };
-  return {
-    processBlocks: message.blocks.slice(0, firstResultIndex),
-    resultBlocks: message.blocks.slice(firstResultIndex),
-  };
 }
 
 function ResultBlocks({ blocks, projectDirectory }: { blocks: AgentContentBlock[]; projectDirectory: string }) {
@@ -58,7 +49,7 @@ function actorInfo(message: AgentMessage): { alias: string; color: string; says:
 }
 
 export function AgentMessageItem({ message, projectDirectory }: { message: AgentMessage; projectDirectory: string }) {
-  const { processBlocks, resultBlocks } = splitBlocks(message);
+  const { processBlocks, resultBlocks } = splitAgentMessageBlocks(message);
   const { alias, color, says } = actorInfo(message);
   const userText = message.role === "user" ? resultBlocks.map(blockText).join("\n\n") : "";
   const isStreaming = message.status === "streaming";
@@ -74,7 +65,7 @@ export function AgentMessageItem({ message, projectDirectory }: { message: Agent
           <MarkdownContent markdown={userText} projectDirectory={projectDirectory} className="agent-user-markdown" variant="feedback" enableComposerTokens />
         ) : (
           <>
-            <AgentProcessGroup blocks={processBlocks} isStreaming={isStreaming} projectDirectory={projectDirectory} />
+            <AgentProcessGroup blocks={processBlocks} messageId={message.id} isStreaming={isStreaming} projectDirectory={projectDirectory} />
             <ResultBlocks blocks={resultBlocks} projectDirectory={projectDirectory} />
           </>
         )}

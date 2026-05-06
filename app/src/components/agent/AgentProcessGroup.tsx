@@ -1,21 +1,10 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
-import type { AgentContentBlock, AgentTaskItem } from "../../agent/types";
+import type { AgentContentBlock } from "../../agent/types";
+import { buildAgentProcessSteps, type AgentStepItem } from "../../agent/steps";
 import { Icon } from "../Icons";
 import { MarkdownContent } from "../MarkdownContent";
 
 type ProcessViewMode = "timeline" | "tabs";
-type StepKind = "thinking" | "tool" | "task_list" | "artifacts" | "permission" | "error";
-
-interface StepItem {
-  kind: StepKind;
-  label: string;
-  status: "pending" | "running" | "completed" | "failed";
-  detail?: string;
-  args?: Record<string, unknown>;
-  result?: string;
-  tasks?: AgentTaskItem[];
-  blocks?: AgentContentBlock[];
-}
 
 function cleanResultForDisplay(raw: string): string {
   try {
@@ -74,61 +63,7 @@ function formatScalar(value: unknown): string {
   return JSON.stringify(value, null, 2);
 }
 
-function extractSteps(blocks: AgentContentBlock[]): StepItem[] {
-  const steps: StepItem[] = [];
-  for (const block of blocks) {
-    if (block.type === "thinking") {
-      steps.push({ kind: "thinking", label: "思考", status: block.status === "running" ? "running" : "completed", detail: block.content });
-      continue;
-    }
-    if (block.type === "tool_call") {
-      steps.push({
-        kind: "tool",
-        label: block.label || block.title || (typeof block.args?.label === "string" ? block.args.label : block.name),
-        status: block.status || "completed",
-        args: block.args,
-        result: block.result,
-      });
-      continue;
-    }
-    if (block.type === "task_list" && block.tasks.length > 0) {
-      const completedCount = block.tasks.filter((task) => task.status === "completed").length;
-      const hasRunningTask = block.tasks.some((task) => task.status === "in-progress");
-      steps.push({
-        kind: "task_list",
-        label: block.title || `待办事项 (${completedCount}/${block.tasks.length})`,
-        status: hasRunningTask ? "running" : "completed",
-        tasks: block.tasks,
-      });
-      continue;
-    }
-    if (block.type === "artifact" || block.type === "file_change") {
-      const lastStep = steps[steps.length - 1];
-      if (lastStep?.kind === "artifacts") {
-        lastStep.blocks = [...(lastStep.blocks || []), block];
-        lastStep.label = `产物 (${lastStep.blocks.length})`;
-      } else {
-        steps.push({ kind: "artifacts", label: "产物 (1)", status: "completed", blocks: [block] });
-      }
-      continue;
-    }
-    if (block.type === "permission") {
-      steps.push({
-        kind: "permission",
-        label: block.title,
-        status: block.status === "pending" ? "pending" : "completed",
-        detail: block.status === "pending" ? "等待用户确认" : "权限请求已处理",
-      });
-      continue;
-    }
-    if (block.type === "error") {
-      steps.push({ kind: "error", label: "错误", status: "failed", detail: block.detail || block.message });
-    }
-  }
-  return steps;
-}
-
-function stepIconName(step: StepItem): string {
+function stepIconName(step: AgentStepItem): string {
   if (step.kind === "thinking") return "message-dot";
   if (step.kind === "tool") return "wrench";
   if (step.kind === "task_list") return "checklist";
@@ -137,7 +72,7 @@ function stepIconName(step: StepItem): string {
   return "file-text";
 }
 
-function stepHasContent(step: StepItem): boolean {
+function stepHasContent(step: AgentStepItem): boolean {
   if (step.kind === "thinking") return Boolean(step.detail);
   if (step.kind === "tool") return Boolean(step.args || step.result);
   if (step.kind === "task_list") return Boolean(step.tasks?.length);
@@ -145,7 +80,7 @@ function stepHasContent(step: StepItem): boolean {
   return Boolean(step.detail);
 }
 
-function StepDetail({ step, projectDirectory }: { step: StepItem; projectDirectory?: string }) {
+function StepDetail({ step, projectDirectory }: { step: AgentStepItem; projectDirectory?: string }) {
   if (step.kind === "thinking" && step.detail) {
     return <MarkdownContent markdown={step.detail} projectDirectory={projectDirectory} className="agent-process-markdown" variant="feedback" enableComposerTokens />;
   }
@@ -202,13 +137,19 @@ function StepDetail({ step, projectDirectory }: { step: StepItem; projectDirecto
   return null;
 }
 
-export function AgentProcessGroup({ blocks, isStreaming = false, projectDirectory }: { blocks: AgentContentBlock[]; isStreaming?: boolean; projectDirectory?: string }) {
-  const steps = useMemo(() => extractSteps(blocks), [blocks]);
+interface AgentFocusStepEventDetail {
+  messageId: string;
+  stepId?: string;
+}
+
+export function AgentProcessGroup({ blocks, messageId, isStreaming = false, projectDirectory }: { blocks: AgentContentBlock[]; messageId?: string; isStreaming?: boolean; projectDirectory?: string }) {
+  const steps = useMemo(() => buildAgentProcessSteps(blocks, messageId), [blocks, messageId]);
   const hasBusyStep = steps.some((step) => step.status === "pending" || step.status === "running");
   const [expanded, setExpanded] = useState(isStreaming || hasBusyStep);
   const [mode, setMode] = useState<ProcessViewMode>("tabs");
   const [activeIndex, setActiveIndex] = useState(0);
   const [openSteps, setOpenSteps] = useState<Record<number, boolean>>({});
+  const groupRef = useRef<HTMLElement>(null);
   const stepScrollRef = useRef<HTMLDivElement>(null);
   const tabScrollRef = useRef<HTMLDivElement>(null);
   const wasStreamingRef = useRef(false);
@@ -268,6 +209,27 @@ export function AgentProcessGroup({ blocks, isStreaming = false, projectDirector
   useEffect(() => {
     if (activeIndex >= steps.length) setActiveIndex(Math.max(0, steps.length - 1));
   }, [activeIndex, steps.length]);
+
+  useEffect(() => {
+    if (!messageId) return;
+    const handleFocusStep = (event: Event) => {
+      const detail = (event as CustomEvent<AgentFocusStepEventDetail>).detail;
+      if (!detail || detail.messageId !== messageId) return;
+      if (!detail.stepId) return;
+      const targetStepId = detail.stepId;
+      const targetIndex = steps.findIndex((step) => step.id === targetStepId || step.blockIds.includes(targetStepId));
+      if (targetIndex < 0) return;
+      setExpanded(true);
+      setMode("tabs");
+      setActiveIndex(targetIndex);
+      setOpenSteps((current) => ({ ...current, [targetIndex]: true }));
+      requestAnimationFrame(() => {
+        groupRef.current?.scrollIntoView({ behavior: "smooth", block: "center" });
+      });
+    };
+    window.addEventListener("mlfb-agent-focus-step", handleFocusStep);
+    return () => window.removeEventListener("mlfb-agent-focus-step", handleFocusStep);
+  }, [messageId, steps]);
 
   const toggleStep = useCallback((index: number) => {
     setOpenSteps((current) => ({ ...current, [index]: !current[index] }));
@@ -359,7 +321,7 @@ export function AgentProcessGroup({ blocks, isStreaming = false, projectDirector
   const activeStep = steps[activeIndex] || steps[0];
 
   return (
-    <section className="agent-process-stream" data-expanded={expanded} data-mode={mode} data-streaming={isStreaming || hasBusyStep}>
+    <section ref={groupRef} className="agent-process-stream" data-expanded={expanded} data-mode={mode} data-streaming={isStreaming || hasBusyStep}>
       <div className="agent-process-stream-head">
         <button type="button" className="agent-process-summary" onClick={() => setExpanded((value) => !value)}>
           <span>{summary}</span>

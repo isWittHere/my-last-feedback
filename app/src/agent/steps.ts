@@ -1,0 +1,222 @@
+import type { AgentContentBlock, AgentMessage, AgentSession, AgentTaskItem } from "./types";
+
+export type AgentStepKind = "thinking" | "tool" | "task_list" | "artifacts" | "permission" | "error";
+export type AgentStepStatus = "pending" | "running" | "completed" | "failed";
+export type AgentTokenStatKind = AgentStepKind | "user" | "result";
+
+export interface AgentStepItem {
+  id: string;
+  messageId?: string;
+  blockIds: string[];
+  kind: AgentStepKind;
+  label: string;
+  status: AgentStepStatus;
+  detail?: string;
+  args?: Record<string, unknown>;
+  result?: string;
+  tasks?: AgentTaskItem[];
+  blocks?: AgentContentBlock[];
+}
+
+export interface AgentStepTokenStat {
+  id: string;
+  messageId: string;
+  blockIds: string[];
+  kind: AgentTokenStatKind;
+  label: string;
+  status: AgentStepStatus;
+  tokenCount: number;
+  estimated: boolean;
+  index: number;
+  target: "message" | "step";
+  stepId?: string;
+}
+
+function stringifyForStats(value: unknown): string {
+  if (typeof value === "string") return value;
+  if (value == null) return "";
+  try { return JSON.stringify(value); } catch { return String(value); }
+}
+
+export function estimateTokenCount(text: string): number {
+  const normalized = text.trim();
+  if (!normalized) return 0;
+  let asciiCharacters = 0;
+  let nonAsciiCharacters = 0;
+  for (const character of Array.from(normalized.replace(/\s+/g, " "))) {
+    if (character.trim().length === 0) continue;
+    if (character.charCodeAt(0) <= 0x7f) asciiCharacters += 1;
+    else nonAsciiCharacters += 1;
+  }
+  return Math.max(1, Math.ceil(asciiCharacters / 4) + nonAsciiCharacters);
+}
+
+function tokenTextForStep(step: AgentStepItem): string {
+  if (step.kind === "thinking") return [step.label, step.detail].filter(Boolean).join("\n");
+  if (step.kind === "tool") return [step.label, stringifyForStats(step.args), step.result].filter(Boolean).join("\n");
+  if (step.kind === "task_list") return [step.label, ...(step.tasks || []).map((task) => task.title)].join("\n");
+  if (step.kind === "permission" || step.kind === "error") return [step.label, step.detail].filter(Boolean).join("\n");
+  return [
+    step.label,
+    ...(step.blocks || []).map((block) => {
+      if (block.type === "artifact") return [block.title, block.content].join("\n");
+      if (block.type === "file_change") return [block.path, block.summary].filter(Boolean).join("\n");
+      return "";
+    }),
+  ].filter(Boolean).join("\n");
+}
+
+function tokenTextForBlocks(blocks: AgentContentBlock[]): string {
+  return blocks.map((block) => {
+    if (block.type === "text") return block.content;
+    if (block.type === "thinking") return block.content;
+    if (block.type === "tool_call") return [block.label || block.title || block.name, stringifyForStats(block.args), block.result].filter(Boolean).join("\n");
+    if (block.type === "task_list") return [block.title, ...block.tasks.map((task) => task.title)].filter(Boolean).join("\n");
+    if (block.type === "artifact") return [block.title, block.content].join("\n");
+    if (block.type === "file_change") return [block.path, block.summary].filter(Boolean).join("\n");
+    if (block.type === "permission") return block.title;
+    if (block.type === "citation") return block.sources.map((source) => `${source.title} ${source.uri}`).join("\n");
+    if (block.type === "error") return [block.message, block.detail].filter(Boolean).join("\n");
+    return "";
+  }).filter(Boolean).join("\n");
+}
+
+export function buildAgentProcessSteps(blocks: AgentContentBlock[], messageId?: string): AgentStepItem[] {
+  const steps: AgentStepItem[] = [];
+  for (const block of blocks) {
+    if (block.type === "thinking") {
+      steps.push({
+        id: block.id,
+        messageId,
+        blockIds: [block.id],
+        kind: "thinking",
+        label: "思考",
+        status: block.status === "running" ? "running" : "completed",
+        detail: block.content,
+      });
+      continue;
+    }
+    if (block.type === "tool_call") {
+      steps.push({
+        id: block.id,
+        messageId,
+        blockIds: [block.id],
+        kind: "tool",
+        label: block.label || block.title || (typeof block.args?.label === "string" ? block.args.label : block.name),
+        status: block.status || "completed",
+        args: block.args,
+        result: block.result,
+      });
+      continue;
+    }
+    if (block.type === "task_list" && block.tasks.length > 0) {
+      const completedCount = block.tasks.filter((task) => task.status === "completed").length;
+      const hasRunningTask = block.tasks.some((task) => task.status === "in-progress");
+      steps.push({
+        id: block.id,
+        messageId,
+        blockIds: [block.id],
+        kind: "task_list",
+        label: block.title || `待办事项 (${completedCount}/${block.tasks.length})`,
+        status: hasRunningTask ? "running" : "completed",
+        tasks: block.tasks,
+      });
+      continue;
+    }
+    if (block.type === "artifact" || block.type === "file_change") {
+      const lastStep = steps[steps.length - 1];
+      if (lastStep?.kind === "artifacts") {
+        lastStep.blocks = [...(lastStep.blocks || []), block];
+        lastStep.blockIds = [...lastStep.blockIds, block.id];
+        lastStep.label = `产物 (${lastStep.blocks.length})`;
+      } else {
+        steps.push({ id: block.id, messageId, blockIds: [block.id], kind: "artifacts", label: "产物 (1)", status: "completed", blocks: [block] });
+      }
+      continue;
+    }
+    if (block.type === "permission") {
+      steps.push({
+        id: block.id,
+        messageId,
+        blockIds: [block.id],
+        kind: "permission",
+        label: block.title,
+        status: block.status === "pending" ? "pending" : "completed",
+        detail: block.status === "pending" ? "等待用户确认" : "权限请求已处理",
+      });
+      continue;
+    }
+    if (block.type === "error") {
+      steps.push({ id: block.id, messageId, blockIds: [block.id], kind: "error", label: "错误", status: "failed", detail: block.detail || block.message });
+    }
+  }
+  return steps;
+}
+
+export function splitAgentMessageBlocks(message: AgentMessage): { processBlocks: AgentContentBlock[]; resultBlocks: AgentContentBlock[] } {
+  if (message.role !== "assistant") return { processBlocks: [], resultBlocks: message.blocks };
+  const firstResultIndex = message.blocks.findIndex((block) => block.origin.phase === "result");
+  if (firstResultIndex < 0) return { processBlocks: message.blocks, resultBlocks: [] };
+  return {
+    processBlocks: message.blocks.slice(0, firstResultIndex),
+    resultBlocks: message.blocks.slice(firstResultIndex),
+  };
+}
+
+export function collectAgentStepTokenStats(session: AgentSession): AgentStepTokenStat[] {
+  const stats: AgentStepTokenStat[] = [];
+  for (const message of session.messages) {
+    if (message.role === "user") {
+      const tokenCount = estimateTokenCount(tokenTextForBlocks(message.blocks));
+      if (tokenCount > 0) {
+        stats.push({
+          id: `${message.id}:user`,
+          messageId: message.id,
+          blockIds: message.blocks.map((block) => block.id),
+          kind: "user",
+          label: "用户输入",
+          status: "completed",
+          tokenCount,
+          estimated: true,
+          index: stats.length,
+          target: "message",
+        });
+      }
+      continue;
+    }
+    if (message.role !== "assistant") continue;
+    const { processBlocks, resultBlocks } = splitAgentMessageBlocks(message);
+    const steps = buildAgentProcessSteps(processBlocks, message.id);
+    for (const step of steps) {
+      stats.push({
+        id: `${message.id}:${step.id}`,
+        messageId: message.id,
+        blockIds: step.blockIds,
+        kind: step.kind,
+        label: step.label,
+        status: step.status,
+        tokenCount: estimateTokenCount(tokenTextForStep(step)),
+        estimated: true,
+        index: stats.length,
+        target: "step",
+        stepId: step.id,
+      });
+    }
+    const resultTokenCount = estimateTokenCount(tokenTextForBlocks(resultBlocks));
+    if (resultTokenCount > 0) {
+      stats.push({
+        id: `${message.id}:result`,
+        messageId: message.id,
+        blockIds: resultBlocks.map((block) => block.id),
+        kind: "result",
+        label: "Agent 输出",
+        status: message.status === "streaming" ? "running" : message.status === "error" ? "failed" : "completed",
+        tokenCount: resultTokenCount,
+        estimated: true,
+        index: stats.length,
+        target: "message",
+      });
+    }
+  }
+  return stats;
+}
