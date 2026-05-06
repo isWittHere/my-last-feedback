@@ -4021,6 +4021,21 @@ body,
   cursor: pointer;
 }
 
+.agent-send-button-abort {
+  border-color: #dc2626;
+  background: #dc2626;
+}
+
+.agent-send-button-abort:hover:not(:disabled) {
+  border-color: #b91c1c;
+  background: #b91c1c;
+}
+
+.agent-send-button-cancelling {
+  border-color: #991b1b;
+  background: #991b1b;
+}
+
 .agent-send-button:disabled {
   opacity: 0.45;
   cursor: default;

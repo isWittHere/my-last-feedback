@@ -326,9 +326,11 @@ export function AgentComposer({ session }: { session: AgentSession }) {
     </div>
   ) : null;
 
-  const isRunning = session.status === "running" || session.status === "cancelling";
+  const isCancelling = session.status === "cancelling";
+  const isRunning = session.status === "running" || isCancelling;
+  const sendButtonClassName = `agent-send-button${isRunning ? " agent-send-button-abort" : ""}${isCancelling ? " agent-send-button-cancelling" : ""}`;
   const submitControl = (
-    <button type="button" className="agent-send-button" onClick={isRunning ? abort : send} disabled={isRunning ? session.status === "cancelling" : !hasContent} title={isRunning ? t("agentConsole.abort", "Abort") : t("agentConsole.send", "Send")}>
+    <button type="button" className={sendButtonClassName} onClick={isRunning ? abort : send} disabled={isRunning ? isCancelling : !hasContent} title={isCancelling ? t("agentConsole.status.cancelling", "Cancelling") : isRunning ? t("agentConsole.abort", "Abort") : t("agentConsole.send", "Send")}>
       <Icon name={isRunning ? "circle-x" : "send"} size={15} />
     </button>
   );

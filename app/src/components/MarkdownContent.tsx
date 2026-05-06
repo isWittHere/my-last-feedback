@@ -2,6 +2,9 @@ import { Children, useCallback, type ComponentProps, type ReactNode } from "reac
 import ReactMarkdown from "react-markdown";
 import remarkGfm from "remark-gfm";
 import remarkBreaks from "remark-breaks";
+import remarkMath from "remark-math";
+import rehypeKatex from "rehype-katex";
+import "katex/dist/katex.min.css";
 import { PrismLight as SyntaxHighlighter } from "react-syntax-highlighter";
 import { useTranslation } from "react-i18next";
 import { oneDark } from "react-syntax-highlighter/dist/esm/styles/prism";
@@ -227,7 +230,8 @@ export function MarkdownContent({ markdown, projectDirectory, className, variant
   return (
     <div className={rootClassName} style={{ userSelect: "text" }}>
       <ReactMarkdown
-        remarkPlugins={[remarkGfm, remarkBreaks]}
+        remarkPlugins={[remarkGfm, remarkBreaks, remarkMath]}
+        rehypePlugins={[rehypeKatex]}
         components={{ code: CodeBlock, a: LinkRendererWithDir, p: ParagraphRenderer, li: ListItemRenderer, td: TableCellRenderer, th: TableHeaderRenderer }}
       >
         {markdown}

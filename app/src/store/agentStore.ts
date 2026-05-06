@@ -703,6 +703,10 @@ function completeStreamingAssistant(session: AgentSession): AgentSession {
   };
 }
 
+function isOpenCodeAbortError(error: { name?: string } | undefined): boolean {
+  return error?.name === "MessageAbortedError";
+}
+
 function failStreamingAssistant(session: AgentSession, message: string): AgentSession {
   const completed = completeStreamingAssistant(session);
   const messages = [...completed.messages];
@@ -773,6 +777,7 @@ function applyOpenCodeBusEvent(session: AgentSession, event: OpenCodeBusEvent): 
   for (const normalized of normalizeOpenCodeEvent(event)) {
     if (normalized.type !== "unknown" && normalized.sessionId && normalized.sessionId !== nextSession.providerSessionId) continue;
     if (normalized.type === "text.delta") {
+      if (nextSession.status === "cancelling") continue;
       nextSession = appendAssistantTextChunk(nextSession, normalized.phase, normalized.delta, normalized.messageId, normalized.partId);
       continue;
     }
@@ -795,6 +800,7 @@ function applyOpenCodeBusEvent(session: AgentSession, event: OpenCodeBusEvent): 
       continue;
     }
     if (normalized.type === "session.status") {
+      if (normalized.status === "idle") clearPacedTextBuffers(nextSession.id);
       nextSession = {
         ...(normalized.status === "idle" ? completeStreamingAssistant(nextSession) : nextSession),
         status: normalized.status === "idle" ? "idle" : normalized.status === "running" ? "running" : nextSession.status,
@@ -803,7 +809,8 @@ function applyOpenCodeBusEvent(session: AgentSession, event: OpenCodeBusEvent): 
       continue;
     }
     if (normalized.type === "session.error") {
-      const isAbort = normalized.error.name === "MessageAbortedError";
+      const isAbort = isOpenCodeAbortError(normalized.error);
+      if (isAbort) clearPacedTextBuffers(nextSession.id);
       nextSession = {
         ...(isAbort ? completeStreamingAssistant(nextSession) : failStreamingAssistant(nextSession, normalized.error.message || normalized.error.name || "OpenCode session error")),
         status: isAbort ? "idle" : "error",
@@ -812,6 +819,7 @@ function applyOpenCodeBusEvent(session: AgentSession, event: OpenCodeBusEvent): 
       continue;
     }
     if (normalized.type === "message.updated") {
+      const isAbortUpdate = isOpenCodeAbortError(normalized.info?.error);
       const modelId = normalized.modelId || openCodeModelIdFromInfo(normalized.info) || nextSession.modelId;
       if (modelId) {
         const contextLimit = contextLimitForModel(nextSession.availableModels, modelId) ?? nextSession.contextUsage?.contextLimit;
@@ -826,6 +834,11 @@ function applyOpenCodeBusEvent(session: AgentSession, event: OpenCodeBusEvent): 
         };
       }
       if (normalized.info?.agent || normalized.info?.mode) nextSession = { ...nextSession, modeId: normalized.info.agent || normalized.info.mode, updatedAt: nowIso() };
+      if (isAbortUpdate) {
+        clearPacedTextBuffers(nextSession.id);
+        nextSession = { ...completeStreamingAssistant(nextSession), status: "idle", updatedAt: nowIso() };
+        continue;
+      }
       if (normalized.status === "complete") nextSession = completeStreamingAssistant(nextSession);
       if (normalized.status === "error") nextSession = { ...nextSession, status: "error", updatedAt: nowIso() };
     }
@@ -1239,6 +1252,7 @@ export const useAgentStore = create<AgentStoreState>((set, get) => ({
     if (!session) return;
     const httpRuntime = openCodeHttpRuntimeForSession(session, get().sessions);
     if (httpRuntime && session.providerSessionId) {
+      clearPacedTextBuffers(sessionId);
       set((state) => ({
         sessions: updateSession(state.sessions, sessionId, (item) => appendDiagnosticToSession({
           ...item,
@@ -1248,6 +1262,13 @@ export const useAgentStore = create<AgentStoreState>((set, get) => ({
       }));
       try {
         await httpRuntime.runtime.client.abort(session.providerSessionId);
+        set((state) => ({
+          sessions: updateSession(state.sessions, sessionId, (item) => ({
+            ...completeStreamingAssistant(item),
+            status: item.status === "cancelling" ? "idle" : item.status,
+            updatedAt: nowIso(),
+          })),
+        }));
       } catch (error) {
         set((state) => ({
           sessions: updateSession(state.sessions, sessionId, (item) => appendDiagnosticToSession({
