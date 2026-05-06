@@ -1,0 +1,70 @@
+import { useTranslation } from "react-i18next";
+import type { AgentSession } from "../../agent/types";
+import { Icon } from "../Icons";
+import { IdenticonAvatar } from "../IdenticonAvatar";
+
+interface AgentSessionHeaderProps {
+  session: AgentSession;
+  sessions: AgentSession[];
+  activeSessionId: string | null;
+  onSelectSession: (sessionId: string) => void;
+  onReset: () => void;
+}
+
+function basename(value: string): string {
+  return value.replace(/\\/g, "/").split("/").filter(Boolean).pop() || value;
+}
+
+function sessionStatusIcon(status: AgentSession["status"]): string {
+  if (status === "running" || status === "starting" || status === "cancelling") return "spinner";
+  if (status === "error" || status === "disconnected") return "warning";
+  return "circle-check";
+}
+
+function sessionStatusClass(status: AgentSession["status"]): string {
+  if (status === "running" || status === "starting" || status === "cancelling") return "pending";
+  if (status === "error" || status === "disconnected") return "cancelled";
+  return "responded";
+}
+
+export function AgentSessionHeader({ session, sessions, activeSessionId, onSelectSession, onReset }: AgentSessionHeaderProps) {
+  const { t } = useTranslation();
+  const providerName = session.providerId === "opencode" ? "OpenCode" : session.providerId;
+  const providerColor = "#0d9488";
+
+  return (
+    <div className="agent-console-header" data-preview-overlay>
+      <div className="agent-console-topbar-caller">
+        <IdenticonAvatar alias={providerName} color={providerColor} size={18} />
+        <span className="agent-console-topbar-caller-name" style={{ color: providerColor }}>{providerName}</span>
+      </div>
+      <div className="agent-console-topbar-list" role="tablist" aria-label={t("agentConsole.sessions", "Agent sessions")}>
+        {sessions.map((item) => {
+          const isActive = item.id === activeSessionId;
+          const title = `${item.title || t("agentConsole.title", "Agent Console")} · ${basename(item.cwd)}`;
+          return (
+            <button
+              key={item.id}
+              type="button"
+              className={`agent-console-topbar-item agent-console-topbar-item-${sessionStatusClass(item.status)}${isActive ? " active" : ""}`}
+              onClick={() => onSelectSession(item.id)}
+              title={title}
+              aria-label={title}
+              aria-selected={isActive}
+              role="tab"
+            >
+              <Icon name={sessionStatusIcon(item.status)} size={11} />
+            </button>
+          );
+        })}
+      </div>
+      <div className="agent-console-topbar-actions">
+        <span className="agent-console-topbar-meta" title={session.cwd}>{basename(session.cwd)}</span>
+        {session.modelId ? <span className="agent-console-topbar-meta">{session.modelId}</span> : null}
+        <button type="button" className="agent-console-topbar-action" onClick={onReset} title={t("agentConsole.resetMock", "Reset mock session")}>
+          <Icon name="refresh" size={13} />
+        </button>
+      </div>
+    </div>
+  );
+}

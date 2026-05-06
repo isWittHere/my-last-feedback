@@ -12,16 +12,16 @@ import { collectSubmittedResourceLinks, type SubmittedResourceLink } from "../co
 import { CatppuccinResourceIcon } from "./CatppuccinResourceIcon";
 
 const DOCK_COLUMN_IDS: DockColumnId[] = ["leftSidebar", "leftPage", "rightPage", "rightSidebar"];
-const GIT_ACTION_TYPES: GitActionType[] = ["commit-before", "commit", "commit-push", "create-branch"];
+export const GIT_ACTION_TYPES: GitActionType[] = ["commit-before", "commit", "commit-push", "create-branch"];
 
-function gitActionLabelKey(type: GitActionType) {
+export function gitActionLabelKey(type: GitActionType) {
   if (type === "commit-before") return "commitBefore";
   if (type === "commit-push") return "commitPush";
   if (type === "create-branch") return "createBranch";
   return "commit";
 }
 
-function GitActionOptionIcon({ type, size = 12 }: { type: GitActionType; size?: number }) {
+export function GitActionOptionIcon({ type, size = 12 }: { type: GitActionType; size?: number }) {
   const iconPairs: Record<GitActionType, [string, string]> = {
     "commit-before": ["git-commit", "arrow-right"],
     commit: ["clock", "git-commit"],
@@ -508,7 +508,7 @@ export function AttachmentTagBar({
 }
 
 /** Image tag with hover preview */
-function ImageTag({ img, onRemove, readonly }: { img: import("../store/feedbackStore").ImageAttachment; onRemove: () => void; readonly?: boolean }) {
+export function ImageTag({ img, onRemove, readonly }: { img: import("../store/feedbackStore").ImageAttachment; onRemove: () => void; readonly?: boolean }) {
   const { t } = useTranslation();
   const [showPreview, setShowPreview] = useState(false);
   const tagRef = useRef<HTMLDivElement>(null);
@@ -621,7 +621,7 @@ function ImageTag({ img, onRemove, readonly }: { img: import("../store/feedbackS
 }
 
 /** Test log tag with hover preview */
-function TestLogTag({
+export function TestLogTag({
   showTestLog, setShowTestLog, testLogRef, testLogText, callerColor,
 }: {
   showTestLog: boolean;
@@ -703,7 +703,7 @@ function TestLogTag({
 }
 
 /** Git action tag in the attachment tag area */
-function GitActionTag({
+export function GitActionTag({
   gitAction,
   showGitPanel,
   setShowGitPanel,
@@ -756,7 +756,7 @@ function GitActionTag({
   );
 }
 
-function MlcAttachmentTag({ attachment, onRemove, readonly }: { attachment: MlcAttachment; onRemove: () => void; readonly?: boolean }) {
+export function MlcAttachmentTag({ attachment, onRemove, readonly }: { attachment: MlcAttachment; onRemove: () => void; readonly?: boolean }) {
   const { t } = useTranslation();
   const cleanPath = attachment.filePath.replace(/^\\\\\?\\UNC\\/i, "\\\\").replace(/^\\\\\?\\/i, "");
   const tagRef = useRef<HTMLDivElement>(null);
@@ -828,7 +828,7 @@ function MlcAttachmentTag({ attachment, onRemove, readonly }: { attachment: MlcA
   );
 }
 
-function WebAttachmentTag({ attachment, onRemove, readonly }: { attachment: WebAttachment; onRemove: () => void; readonly?: boolean }) {
+export function WebAttachmentTag({ attachment, onRemove, readonly }: { attachment: WebAttachment; onRemove: () => void; readonly?: boolean }) {
   const title = webAttachmentLabel(attachment);
   const detail = attachment.kind === "console"
     ? `${attachment.consoleEntries?.length || 0} entries`
@@ -996,7 +996,7 @@ export function ReadonlyTagBar({ session }: { session: import("../store/feedback
   );
 }
 
-function ResourceAttachmentTag({ link }: { link: SubmittedResourceLink }) {
+export function ResourceAttachmentTag({ link }: { link: SubmittedResourceLink }) {
   const { t } = useTranslation();
   const resourceIconTheme = useFeedbackStore((state) => state.resourceIconTheme);
   const openResource = () => {

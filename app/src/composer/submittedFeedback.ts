@@ -1,5 +1,5 @@
 import { formatWebAttachments } from "../browser/webAttachmentFormat";
-import type { Session, ImageAttachment, MlcAttachment } from "../store/feedbackStore";
+import type { Session, ImageAttachment, MlcAttachment, WebAttachment, QuestionItem, GitAction } from "../store/feedbackStore";
 import { parseComposerTextTokens } from "./composerTokens";
 import { formatSlashCommandExpansions } from "./commandExpansion";
 import type { PromptCommandLike } from "./promptCommands";
@@ -17,6 +17,24 @@ export interface SubmittedFeedbackResult {
   markdown: string;
   historyText: string;
   imageList: Array<{ path: string; name: string; data_url?: string }>;
+}
+
+export interface SubmittedComposerDraft {
+  text: string;
+  projectDirectory?: string;
+  images?: ImageAttachment[];
+  mlcAttachments?: MlcAttachment[];
+  webAttachments?: WebAttachment[];
+  testLogText?: string;
+  commandLogs?: string;
+  questions?: QuestionItem[];
+  gitAction?: GitAction | null;
+}
+
+export interface SubmittedComposerPayloadOptions extends SubmittedFeedbackOptions {
+  mainHeading?: string;
+  quickActionHeading?: string;
+  includePayloadRouting?: boolean;
 }
 
 export interface SubmittedResourceLink {
@@ -86,12 +104,12 @@ function formatImageSummary(images: ImageAttachment[], language?: string): strin
   ].join("\n");
 }
 
-function formatQuestionAnswers(session: Session, language?: string): string | null {
-  const answeredQuestions = session.questions?.filter(
+function formatQuestionAnswers(questions: QuestionItem[] | undefined, language?: string): string | null {
+  const answeredQuestions = questions?.filter(
     (question) => question.answer.trim() || (question.selectedOptions && question.selectedOptions.length > 0),
   );
   if (!answeredQuestions || answeredQuestions.length === 0) return null;
-  const tableRows = session.questions.map((question, index) => {
+  const tableRows = (questions || []).map((question, index) => {
     const selected = question.selectedOptions && question.selectedOptions.length > 0 ? question.selectedOptions.join(", ") : submittedText(language, "notSelected");
     const answer = question.answer.trim() || "-";
     return `| ${index + 1} | ${tableCell(question.label)} | ${tableCell(selected)} | ${tableCell(answer)} |`;
@@ -105,17 +123,17 @@ function formatQuestionAnswers(session: Session, language?: string): string | nu
   ].join("\n");
 }
 
-function formatGitAction(session: Session): string | null {
-  if (!session.gitAction) return null;
+function formatGitAction(gitAction: GitAction | null | undefined): string | null {
+  if (!gitAction) return null;
   const gitMessages: Record<string, string> = {
     "commit-before": "Please execute git add and git commit now before performing any other requested operation.",
     commit: "Please complete the requested operation first, then execute git add and git commit once to back up the resulting changes.",
     "commit-push": "Please execute git add, git commit, and git push now before performing any other requested operation.",
-    "create-branch": session.gitAction.branchName
-      ? `Please create a new branch "${session.gitAction.branchName}" and switch to it now before performing any other requested operation.`
+    "create-branch": gitAction.branchName
+      ? `Please create a new branch "${gitAction.branchName}" and switch to it now before performing any other requested operation.`
       : "Please create a new branch and switch to it now before performing any other requested operation.",
   };
-  return `## Git Action\n${gitMessages[session.gitAction.type]}`;
+  return `## Git Action\n${gitMessages[gitAction.type]}`;
 }
 
 function formatPayloadRouting(callerAlias?: string | null, transferAlias?: string | null): string | null {
@@ -231,41 +249,48 @@ export function augmentReadonlySubmittedFeedback(
   return augmentSystemSection([base, ...appendedSections].filter(Boolean).join("\n\n"), options);
 }
 
-export function buildSubmittedFeedback(session: Session, options: SubmittedFeedbackOptions): SubmittedFeedbackResult {
+export function buildSubmittedComposerPayload(draft: SubmittedComposerDraft, options: SubmittedComposerPayloadOptions): SubmittedFeedbackResult {
   const sections: string[] = [];
-  const trimmedFeedback = session.feedbackText.trim();
+  const trimmedFeedback = draft.text.trim();
   const quickAction = options.quickAction?.trim();
+  const images = draft.images || [];
+  const mlcAttachments = draft.mlcAttachments || [];
+  const webAttachments = draft.webAttachments || [];
+  const mainHeading = options.mainHeading || "User Feedback";
+  const quickActionHeading = options.quickActionHeading || "User Requirement";
 
   if (trimmedFeedback) {
-    sections.push(`## User Feedback\n${trimmedFeedback}`);
+    sections.push(`## ${mainHeading}\n${trimmedFeedback}`);
     const slashCommandExpansions = formatSlashCommandExpansions(trimmedFeedback, options.prompts);
     if (slashCommandExpansions) sections.push(slashCommandExpansions);
   }
-  if (quickAction) sections.push(`## User Requirement\n${quickAction}`);
+  if (quickAction) sections.push(`## ${quickActionHeading}\n${quickAction}`);
 
-  const questionAnswers = formatQuestionAnswers(session, options.language);
+  const questionAnswers = formatQuestionAnswers(draft.questions, options.language);
   if (questionAnswers) sections.push(questionAnswers);
 
-  const gitAction = formatGitAction(session);
+  const gitAction = formatGitAction(draft.gitAction);
   if (gitAction) sections.push(gitAction);
 
-  if (session.testLogText.trim()) sections.push(`## Attachment: Test Logs\n${fence(session.testLogText)}`);
-  if (session.commandLogs.trim()) sections.push(`## Attachment: Command Logs\n${fence(session.commandLogs)}`);
+  if ((draft.testLogText || "").trim()) sections.push(`## Attachment: Test Logs\n${fence(draft.testLogText || "")}`);
+  if ((draft.commandLogs || "").trim()) sections.push(`## Attachment: Command Logs\n${fence(draft.commandLogs || "")}`);
 
-  const imageSummary = formatImageSummary(session.images, options.language);
+  const imageSummary = formatImageSummary(images, options.language);
   if (imageSummary) sections.push(imageSummary);
 
-  const resourceLinks = formatResourceLinks([trimmedFeedback, quickAction].filter(Boolean).join("\n\n"), session.projectDirectory);
+  const resourceLinks = formatResourceLinks([trimmedFeedback, quickAction].filter(Boolean).join("\n\n"), draft.projectDirectory);
   if (resourceLinks) sections.push(resourceLinks);
 
-  const mlcReferences = formatMlcReferences(session.mlcAttachments || []);
+  const mlcReferences = formatMlcReferences(mlcAttachments);
   if (mlcReferences) sections.push(mlcReferences);
 
-  const webReferences = formatWebAttachments(session.webAttachments || []);
+  const webReferences = formatWebAttachments(webAttachments);
   if (webReferences) sections.push(webReferences);
 
-  const routing = formatPayloadRouting(options.callerAlias, options.transferAlias);
-  if (routing) sections.push(routing);
+  if (options.includePayloadRouting !== false) {
+    const routing = formatPayloadRouting(options.callerAlias, options.transferAlias);
+    if (routing) sections.push(routing);
+  }
 
   if (options.includeSystemReminder !== false) {
     sections.push(formatSystemMessages(options));
@@ -274,6 +299,20 @@ export function buildSubmittedFeedback(session: Session, options: SubmittedFeedb
   return {
     markdown: sections.join("\n\n"),
     historyText: trimmedFeedback,
-    imageList: session.images.map((image) => ({ path: image.path, name: image.name, data_url: image.dataUrl })),
+    imageList: images.map((image) => ({ path: image.path, name: image.name, data_url: image.dataUrl })),
   };
+}
+
+export function buildSubmittedFeedback(session: Session, options: SubmittedFeedbackOptions): SubmittedFeedbackResult {
+  return buildSubmittedComposerPayload({
+    text: session.feedbackText,
+    projectDirectory: session.projectDirectory,
+    images: session.images,
+    mlcAttachments: session.mlcAttachments || [],
+    webAttachments: session.webAttachments || [],
+    testLogText: session.testLogText,
+    commandLogs: session.commandLogs,
+    questions: session.questions,
+    gitAction: session.gitAction,
+  }, options);
 }

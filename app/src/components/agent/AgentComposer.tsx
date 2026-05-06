@@ -1,0 +1,343 @@
+import { useCallback, useMemo, useRef, useState } from "react";
+import { useTranslation } from "react-i18next";
+import { readText as readClipboardText } from "@tauri-apps/plugin-clipboard-manager";
+import { useAgentStore } from "../../store/agentStore";
+import { useFeedbackStore, type DockColumnId, type DockTabId, type GitActionType } from "../../store/feedbackStore";
+import { hasAgentComposerContent } from "../../agent/composer";
+import type { AgentSession } from "../../agent/types";
+import { Icon, MlcLogoIcon } from "../Icons";
+import type { PromptCommandOption } from "../../composer/promptCommands";
+import { SharedComposerInput } from "../composer/SharedComposerInput";
+import { GIT_ACTION_TYPES, GitActionOptionIcon, GitActionTag, TestLogTag, gitActionLabelKey } from "../CallerPanelParts";
+
+const AGENT_COMMANDS: PromptCommandOption[] = [
+  { id: "plan", name: "Plan", description: "Plan the agent task before editing", content: "/plan ", icon: "checklist" },
+  { id: "edit", name: "Edit", description: "Implement the requested change", content: "/edit ", icon: "edit" },
+  { id: "review", name: "Review", description: "Review current code and risks", content: "/review ", icon: "search" },
+  { id: "test", name: "Test", description: "Run or prepare validation steps", content: "/test ", icon: "play" },
+];
+
+const MODE_OPTIONS = ["plan", "build", "review", "debug"];
+const MODEL_OPTIONS = ["mock-model", "opencode/mock", "gpt-4.1", "claude-sonnet"];
+const AGENT_COMPOSER_CALLER_ID = "agent-console";
+const DOCK_COLUMN_IDS: DockColumnId[] = ["leftSidebar", "leftPage", "rightPage", "rightSidebar"];
+
+function AgentSelectButton({ label, value, options, onSelect }: { label: string; value: string; options: string[]; onSelect: (value: string) => void }) {
+  const [open, setOpen] = useState(false);
+  return (
+    <div className="agent-composer-select-wrap">
+      <button type="button" className="btn agent-composer-select" onClick={() => setOpen((current) => !current)} title={`${label}: ${value}`}>
+        <span className="agent-composer-select-label">{label}</span>
+        <span className="agent-composer-select-value">{value}</span>
+        <Icon name="chevron-down" size={10} />
+      </button>
+      {open && (
+        <div className="agent-composer-select-menu" data-preview-overlay>
+          {options.map((option) => (
+            <button
+              key={option}
+              type="button"
+              className={option === value ? "active" : ""}
+              onClick={() => {
+                onSelect(option);
+                setOpen(false);
+              }}
+            >
+              <span>{option}</span>
+              {option === value ? <Icon name="check" size={11} /> : null}
+            </button>
+          ))}
+        </div>
+      )}
+    </div>
+  );
+}
+
+export function AgentComposer({ session }: { session: AgentSession }) {
+  const { t } = useTranslation();
+  const testLogRef = useRef<HTMLTextAreaElement>(null);
+  const branchInputRef = useRef<HTMLInputElement>(null);
+  const [showTestLog, setShowTestLog] = useState(false);
+  const [showGitPanel, setShowGitPanel] = useState(false);
+  const updateDraft = useAgentStore((state) => state.updateDraft);
+  const setSessionMode = useAgentStore((state) => state.setSessionMode);
+  const setSessionModel = useAgentStore((state) => state.setSessionModel);
+  const addImage = useAgentStore((state) => state.addImage);
+  const removeImage = useAgentStore((state) => state.removeImage);
+  const clearImages = useAgentStore((state) => state.clearImages);
+  const removeMlcAttachment = useAgentStore((state) => state.removeMlcAttachment);
+  const clearMlcAttachments = useAgentStore((state) => state.clearMlcAttachments);
+  const removeWebAttachment = useAgentStore((state) => state.removeWebAttachment);
+  const updateTestLog = useAgentStore((state) => state.updateTestLog);
+  const setGitAction = useAgentStore((state) => state.setGitAction);
+  const updateGitBranchName = useAgentStore((state) => state.updateGitBranchName);
+  const sendMockPrompt = useAgentStore((state) => state.sendMockPrompt);
+  const dockLayout = useFeedbackStore((state) => state.dockLayout);
+  const setFocusedComposer = useFeedbackStore((state) => state.setFocusedComposer);
+  const setMlcActiveWorkspacePath = useFeedbackStore((state) => state.setMlcActiveWorkspacePath);
+  const setDockActiveTab = useFeedbackStore((state) => state.setDockActiveTab);
+  const setDockColumnCollapsed = useFeedbackStore((state) => state.setDockColumnCollapsed);
+  const moveDockTabToColumn = useFeedbackStore((state) => state.moveDockTabToColumn);
+  const commandOptions = useMemo(() => AGENT_COMMANDS, []);
+  const hasContent = hasAgentComposerContent(session);
+
+  const findDockColumnForTab = useCallback((tabId: DockTabId): DockColumnId | null => (
+    DOCK_COLUMN_IDS.find((columnId) => dockLayout.columns[columnId].tabIds.includes(tabId)) || null
+  ), [dockLayout.columns]);
+
+  const focusAgentComposer = useCallback(() => {
+    setFocusedComposer({
+      callerId: AGENT_COMPOSER_CALLER_ID,
+      sessionId: session.id,
+      projectDirectory: session.cwd,
+      kind: "agent",
+      focusedAt: new Date().toISOString(),
+    });
+  }, [session.cwd, session.id, setFocusedComposer]);
+
+  const openResourcesPanel = useCallback(() => {
+    focusAgentComposer();
+    setMlcActiveWorkspacePath(session.cwd);
+    const resourcesColumnId = findDockColumnForTab("resources");
+    const targetColumnId = resourcesColumnId || "rightSidebar";
+    if (!resourcesColumnId) moveDockTabToColumn("resources", targetColumnId);
+    setDockColumnCollapsed(targetColumnId, false);
+    setDockActiveTab(targetColumnId, "resources");
+  }, [findDockColumnForTab, focusAgentComposer, moveDockTabToColumn, session.cwd, setDockActiveTab, setDockColumnCollapsed, setMlcActiveWorkspacePath]);
+
+  const openMlcPanel = useCallback(() => {
+    focusAgentComposer();
+    setMlcActiveWorkspacePath(session.cwd);
+    const mlcColumnId = findDockColumnForTab("mlc");
+    const targetColumnId = mlcColumnId || "rightSidebar";
+    if (!mlcColumnId) moveDockTabToColumn("mlc", targetColumnId);
+    setDockColumnCollapsed(targetColumnId, false);
+    setDockActiveTab(targetColumnId, "mlc");
+  }, [findDockColumnForTab, focusAgentComposer, moveDockTabToColumn, session.cwd, setDockActiveTab, setDockColumnCollapsed, setMlcActiveWorkspacePath]);
+
+  const openPreviewPanel = useCallback(() => {
+    focusAgentComposer();
+    const previewColumnId = findDockColumnForTab("previewBrowser");
+    const previewInfoColumnId = findDockColumnForTab("previewInfo");
+    const targetColumnId = previewColumnId && previewColumnId !== previewInfoColumnId ? previewColumnId : "leftPage";
+    if (previewColumnId !== targetColumnId) moveDockTabToColumn("previewBrowser", targetColumnId);
+    const infoTargetColumnId = previewInfoColumnId && previewInfoColumnId !== targetColumnId ? previewInfoColumnId : "rightSidebar";
+    if (previewInfoColumnId !== infoTargetColumnId) moveDockTabToColumn("previewInfo", infoTargetColumnId);
+    setDockColumnCollapsed(targetColumnId, false);
+    setDockColumnCollapsed(infoTargetColumnId, false);
+    setDockActiveTab(targetColumnId, "previewBrowser");
+    if (infoTargetColumnId !== targetColumnId) setDockActiveTab(infoTargetColumnId, "previewInfo");
+  }, [findDockColumnForTab, focusAgentComposer, moveDockTabToColumn, setDockActiveTab, setDockColumnCollapsed]);
+
+  const send = useCallback(() => {
+    sendMockPrompt(session.id);
+  }, [sendMockPrompt, session.id]);
+
+  const handleAttachLogClick = useCallback(async () => {
+    const wasHidden = !showTestLog;
+    setShowTestLog((current) => !current);
+    if (!wasHidden) return;
+    if (!session.testLogText.trim()) {
+      try {
+        const text = await readClipboardText();
+        if (text && text.length > 50) updateTestLog(session.id, text);
+      } catch { /* clipboard access denied or empty */ }
+    }
+    setTimeout(() => testLogRef.current?.focus(), 50);
+  }, [session.id, session.testLogText, showTestLog, updateTestLog]);
+
+  const handleGitActionClick = useCallback((type: GitActionType) => {
+    const isSelected = session.gitAction?.type === type;
+    if (isSelected) {
+      setGitAction(session.id, null);
+      return;
+    }
+    setGitAction(session.id, { type, branchName: type === "create-branch" ? "" : undefined });
+    if (type === "create-branch") setTimeout(() => branchInputRef.current?.focus(), 50);
+  }, [session.gitAction?.type, session.id, setGitAction]);
+
+  const attachmentActionButtons = (
+    <>
+      <button
+        type="button"
+        className="btn"
+        style={{
+          background: showTestLog ? "var(--color-primary)" : undefined,
+          borderColor: showTestLog ? "var(--color-primary)" : undefined,
+          color: showTestLog ? "#fff" : undefined,
+        }}
+        onClick={handleAttachLogClick}
+      >
+        <Icon name="terminal" size={12} />
+        <span className="attachment-action-label">{t("testLog.attach", "Attach Log")}</span>
+        {session.testLogText.length > 0 && (
+          <span className="attachment-action-meta" style={{ color: showTestLog ? "rgba(255,255,255,0.7)" : "var(--color-text-muted)" }}>{session.testLogText.length}</span>
+        )}
+      </button>
+      <button
+        type="button"
+        className="btn"
+        style={{
+          background: showGitPanel ? "var(--color-primary)" : undefined,
+          borderColor: showGitPanel ? "var(--color-primary)" : undefined,
+          color: showGitPanel ? "#fff" : undefined,
+        }}
+        onClick={() => setShowGitPanel((current) => !current)}
+      >
+        <Icon name="git-commit" size={12} />
+        <span className="attachment-action-label">{t("gitAction.button", "Git Action")}</span>
+      </button>
+      <button type="button" className="btn" title={t("resources.openPanel", "Open project resources")} onClick={openResourcesPanel}>
+        <Icon name="folder" size={12} />
+        <span className="attachment-action-label">{t("resources.button", "Resources")}</span>
+      </button>
+      <button type="button" className="btn" title={t("previewBrowser.openPanel", "Open preview browser")} onClick={openPreviewPanel}>
+        <Icon name="globe" size={12} />
+        <span className="attachment-action-label">{t("previewBrowser.button", "Preview")}</span>
+        {session.webAttachments.length > 0 && (
+          <span className="attachment-action-meta" style={{ color: "var(--color-text-muted)" }}>{session.webAttachments.length}</span>
+        )}
+      </button>
+      <button type="button" className="btn" title={t("mlc.openPanel", "Open My Last Chat references")} onClick={openMlcPanel}>
+        <MlcLogoIcon size={12} />
+        <span className="attachment-action-label">{t("mlc.button", "MLC")}</span>
+        {session.mlcAttachments.length > 0 && (
+          <span className="attachment-action-meta" style={{ color: "var(--color-text-muted)" }}>{session.mlcAttachments.length}</span>
+        )}
+      </button>
+    </>
+  );
+
+  const attachmentMiddleTags = (
+    <>
+      {(session.testLogText.trim() || showTestLog) && (
+        <TestLogTag showTestLog={showTestLog} setShowTestLog={setShowTestLog} testLogRef={testLogRef} testLogText={session.testLogText} callerColor="var(--color-primary)" />
+      )}
+      {session.gitAction && (
+        <GitActionTag gitAction={session.gitAction} showGitPanel={showGitPanel} setShowGitPanel={setShowGitPanel} callerColor="var(--color-primary)" onRemove={() => setGitAction(session.id, null)} />
+      )}
+    </>
+  );
+
+  const expandedAttachmentPanels = (
+    <>
+      {showTestLog && (
+        <div className="px-3 pb-1">
+          <div
+            className="rounded-lg"
+            style={{
+              border: "1px solid var(--color-border)",
+              background: "var(--color-bg-input-raised)",
+              maxHeight: 125,
+              overflowY: "auto",
+            }}
+          >
+            <textarea
+              ref={testLogRef}
+              value={session.testLogText}
+              onChange={(event) => updateTestLog(session.id, event.target.value)}
+              placeholder={t("testLog.placeholder", "Paste test output or logs here...")}
+              className="input-area panel-testlog"
+              style={{ minHeight: 82, resize: "vertical", border: 0, borderRadius: 0 }}
+            />
+          </div>
+        </div>
+      )}
+      {showGitPanel && (
+        <div className="px-3 pb-1">
+          <div
+            className="rounded-lg flex flex-wrap items-center gap-1.5 p-2"
+            style={{
+              border: "1px solid var(--color-border)",
+              background: "var(--color-bg-input-raised)",
+            }}
+          >
+            {GIT_ACTION_TYPES.map((type) => {
+              const isSelected = session.gitAction?.type === type;
+              return (
+                <button
+                  key={type}
+                  type="button"
+                  className="btn"
+                  style={{
+                    fontSize: 11,
+                    padding: "3px 10px",
+                    background: isSelected ? "var(--color-primary)" : undefined,
+                    borderColor: isSelected ? "var(--color-primary)" : undefined,
+                    color: isSelected ? "#fff" : undefined,
+                  }}
+                  onClick={() => handleGitActionClick(type)}
+                >
+                  <GitActionOptionIcon type={type} />
+                  {t(`gitAction.${gitActionLabelKey(type)}`)}
+                </button>
+              );
+            })}
+            {session.gitAction?.type === "create-branch" && (
+              <input
+                ref={branchInputRef}
+                type="text"
+                value={session.gitAction.branchName || ""}
+                onChange={(event) => updateGitBranchName(session.id, event.target.value)}
+                placeholder={t("gitAction.branchPlaceholder", "Branch name (optional)")}
+                className="input-area"
+                style={{
+                  fontSize: 11,
+                  padding: "3px 8px",
+                  height: 26,
+                  minWidth: 120,
+                  maxWidth: 200,
+                  borderRadius: 6,
+                  border: "1px solid var(--color-border)",
+                  background: "var(--color-bg-input-raised)",
+                }}
+              />
+            )}
+          </div>
+        </div>
+      )}
+    </>
+  );
+
+  const bottomLeftSlot = (
+    <div className="agent-composer-selectors">
+      <AgentSelectButton label={t("agentConsole.mode", "Mode")} value={session.modeId || MODE_OPTIONS[0]} options={MODE_OPTIONS} onSelect={(mode) => setSessionMode(session.id, mode)} />
+      <AgentSelectButton label={t("agentConsole.model", "Model")} value={session.modelId || MODEL_OPTIONS[0]} options={MODEL_OPTIONS} onSelect={(model) => setSessionModel(session.id, model)} />
+    </div>
+  );
+
+  const submitControl = (
+    <button type="button" className="agent-send-button" onClick={send} disabled={!hasContent} title={t("agentConsole.send", "Send")}>
+      <Icon name="send" size={15} />
+    </button>
+  );
+
+  return (
+    <SharedComposerInput
+      id={session.id}
+      value={session.draft}
+      projectDirectory={session.cwd}
+      placeholder={t("agentConsole.placeholder", "Ask the agent to work in this workspace...")}
+      commands={commandOptions}
+      images={session.images}
+      mlcAttachments={session.mlcAttachments}
+      webAttachments={session.webAttachments}
+      onChange={(value) => updateDraft(session.id, value)}
+      onFocus={focusAgentComposer}
+      onAddImage={(image) => addImage(session.id, image)}
+      onRemoveImage={(path) => removeImage(session.id, path)}
+      onClearImages={() => clearImages(session.id)}
+      onRemoveMlcAttachment={(filePath) => removeMlcAttachment(session.id, filePath)}
+      onClearMlcAttachments={() => clearMlcAttachments(session.id)}
+      onRemoveWebAttachment={(attachmentId) => removeWebAttachment(session.id, attachmentId)}
+      onSubmit={send}
+      attachmentActionButtons={attachmentActionButtons}
+      attachmentMiddleTags={attachmentMiddleTags}
+      hasAttachmentMiddleTags={Boolean(session.testLogText.trim() || showTestLog || session.gitAction)}
+      expandedAttachmentPanels={expandedAttachmentPanels}
+      bottomLeftSlot={bottomLeftSlot}
+      submitControl={submitControl}
+      insertEventTarget={{ callerId: AGENT_COMPOSER_CALLER_ID, sessionId: session.id, kind: "agent" }}
+    />
+  );
+}

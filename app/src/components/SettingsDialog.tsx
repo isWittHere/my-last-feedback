@@ -20,7 +20,7 @@ type Tab = "general" | "display" | "callers" | "submitted" | "prompts" | "sessio
 type SettingsGroupId = "mlfb" | "layout";
 
 const SETTINGS_DOCK_COLUMN_IDS: DockColumnId[] = ["leftSidebar", "leftPage", "rightPage", "rightSidebar"];
-const SETTINGS_DOCK_TAB_IDS: DockTabId[] = ["mlc", "mlcPreview", "resources", "previewBrowser", "previewInfo", "terminal"];
+const SETTINGS_DOCK_TAB_IDS: DockTabId[] = ["mlc", "mlcPreview", "resources", "previewBrowser", "previewInfo", "agentConsole", "terminal"];
 
 function isSettingsDockTabId(value: string): value is DockTabId {
   return SETTINGS_DOCK_TAB_IDS.includes(value as DockTabId);
@@ -235,6 +235,7 @@ export function SettingsDialog({ open, onClose }: { open: boolean; onClose: () =
     if (tabId === "mlcPreview") return t("mlcPreview.title", "MLC Preview");
     if (tabId === "previewBrowser") return t("previewBrowser.title", "Preview Browser");
     if (tabId === "previewInfo") return t("previewBrowser.infoTitle", "Preview Info");
+    if (tabId === "agentConsole") return t("agentConsole.title", "Agent Console");
     if (tabId === "terminal") return t("terminal.title", "Terminal");
     return t("resources.title", "Project resources");
   };
@@ -244,6 +245,7 @@ export function SettingsDialog({ open, onClose }: { open: boolean; onClose: () =
     if (tabId === "mlcPreview") return <Icon name="file-text" size={13} />;
     if (tabId === "previewBrowser") return <Icon name="globe" size={13} />;
     if (tabId === "previewInfo") return <Icon name="code" size={13} />;
+    if (tabId === "agentConsole") return <Icon name="robot" size={13} />;
     if (tabId === "terminal") return <Icon name="terminal" size={13} />;
     return <Icon name="folder" size={13} />;
   };

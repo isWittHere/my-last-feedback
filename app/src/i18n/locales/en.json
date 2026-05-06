@@ -84,6 +84,29 @@
     "fix": "Fix",
     "explain": "Explain"
   },
+  "agentConsole": {
+    "title": "Agent Console",
+    "placeholder": "Ask the agent to work in this workspace...",
+    "send": "Send",
+    "mockMode": "Mock mode",
+    "resetMock": "Reset mock session",
+    "processWorking": "Working",
+    "processComplete": "Process",
+    "steps": "steps",
+    "timeline": "Timeline",
+    "tabs": "Tabs",
+    "permissionPending": "Permission request pending",
+    "allowOnce": "Allow once",
+    "reject": "Reject",
+    "status": {
+      "idle": "Idle",
+      "starting": "Starting",
+      "running": "Running",
+      "cancelling": "Cancelling",
+      "disconnected": "Disconnected",
+      "error": "Error"
+    }
+  },
   "enhancement": {
     "label": "Enable interactive_feedback enhanced reminder"
   },

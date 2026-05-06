@@ -2,6 +2,7 @@ import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { useTranslation } from "react-i18next";
 import { invoke } from "@tauri-apps/api/core";
 import { useFeedbackStore, type MlcAttachment, type SelectedMlcDocument } from "../store/feedbackStore";
+import { useAgentStore } from "../store/agentStore";
 import { AppSelect, type AppSelectOption } from "./AppSelect";
 import { Icon, MlcLogoIcon } from "./Icons";
 import { MLC_TYPE_TABS, getMlcTypeColor, getMlcTypeConfig, getMlcTypeLabel } from "./mlcTypeConfig";
@@ -136,6 +137,7 @@ export function MlcSidePanel() {
   const openDockTab = useFeedbackStore((state) => state.openDockTab);
   const addSessionMlcAttachment = useFeedbackStore((state) => state.addSessionMlcAttachment);
   const addQueuedDraftMlcAttachment = useFeedbackStore((state) => state.addQueuedDraftMlcAttachment);
+  const addAgentMlcAttachment = useAgentStore((state) => state.addMlcAttachment);
 
   const [query, setQuery] = useState("");
   const [selectedType, setSelectedType] = useState("all");
@@ -259,9 +261,10 @@ export function MlcSidePanel() {
   const handleAttach = useCallback((document: MlcDocument) => {
     if (!focusedComposer) return;
     const attachment = toAttachment(document);
-    if (focusedComposer.kind === "queuedDraft") addQueuedDraftMlcAttachment(focusedComposer.callerId, attachment);
+    if (focusedComposer.kind === "agent" && focusedComposer.sessionId) addAgentMlcAttachment(focusedComposer.sessionId, attachment);
+    else if (focusedComposer.kind === "queuedDraft") addQueuedDraftMlcAttachment(focusedComposer.callerId, attachment);
     else if (focusedComposer.sessionId) addSessionMlcAttachment(focusedComposer.sessionId, attachment);
-  }, [addQueuedDraftMlcAttachment, addSessionMlcAttachment, focusedComposer]);
+  }, [addAgentMlcAttachment, addQueuedDraftMlcAttachment, addSessionMlcAttachment, focusedComposer]);
 
   const handleSelectDocument = useCallback((document: MlcDocument) => {
     setSelectedMlcDocument(toSelectedDocument(document));

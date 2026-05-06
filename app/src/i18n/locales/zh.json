@@ -84,6 +84,29 @@
     "fix": "修复",
     "explain": "解释"
   },
+  "agentConsole": {
+    "title": "Agent Console",
+    "placeholder": "让智能体在当前工作区执行任务...",
+    "send": "发送",
+    "mockMode": "Mock 模式",
+    "resetMock": "重置 mock 会话",
+    "processWorking": "工作中",
+    "processComplete": "过程",
+    "steps": "步骤",
+    "timeline": "时间线",
+    "tabs": "标签",
+    "permissionPending": "有权限请求待处理",
+    "allowOnce": "允许一次",
+    "reject": "拒绝",
+    "status": {
+      "idle": "空闲",
+      "starting": "启动中",
+      "running": "运行中",
+      "cancelling": "取消中",
+      "disconnected": "已断开",
+      "error": "错误"
+    }
+  },
   "enhancement": {
     "label": "启用 interactive_feedback 增强提醒"
   },

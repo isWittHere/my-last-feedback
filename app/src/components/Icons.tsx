@@ -114,6 +114,9 @@ const ICONS: Record<string, IconDef> = {
   "circle-check": {
     paths: '<circle cx="12" cy="12" r="10" /><polyline points="16 8.5 10.5 15 8 12" />',
   },
+  circle: {
+    paths: '<circle cx="12" cy="12" r="10" />',
+  },
   "circle-x": {
     paths: '<circle cx="12" cy="12" r="10" /><line x1="15" y1="9" x2="9" y2="15" /><line x1="9" y1="9" x2="15" y2="15" />',
   },
@@ -211,6 +214,12 @@ const ICONS: Record<string, IconDef> = {
   },
   menu: {
     paths: '<line x1="3" y1="6" x2="21" y2="6" /><line x1="3" y1="12" x2="21" y2="12" /><line x1="3" y1="18" x2="21" y2="18" />',
+  },
+  list: {
+    paths: '<line x1="8" y1="6" x2="21" y2="6" /><line x1="8" y1="12" x2="21" y2="12" /><line x1="8" y1="18" x2="21" y2="18" /><line x1="3" y1="6" x2="3.01" y2="6" /><line x1="3" y1="12" x2="3.01" y2="12" /><line x1="3" y1="18" x2="3.01" y2="18" />',
+  },
+  rows: {
+    paths: '<rect x="3" y="4" width="18" height="6" rx="1" /><rect x="3" y="14" width="18" height="6" rx="1" />',
   },
   pause: {
     paths: '<rect x="6" y="4" width="4" height="16" /><rect x="14" y="4" width="4" height="16" />',

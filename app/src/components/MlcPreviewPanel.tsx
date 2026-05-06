@@ -2,6 +2,7 @@ import { useCallback, useEffect, useMemo, useRef, useState, type CSSProperties }
 import { useTranslation } from "react-i18next";
 import { invoke } from "@tauri-apps/api/core";
 import { useFeedbackStore, type MlcAttachment } from "../store/feedbackStore";
+import { useAgentStore } from "../store/agentStore";
 import { Icon, MlcLogoIcon } from "./Icons";
 import { MarkdownHeadingNav, parseMarkdownHeadings } from "./MarkdownHeadingNav";
 import { MarkdownContent } from "./MarkdownContent";
@@ -33,6 +34,7 @@ export function MlcPreviewPanel() {
   const focusedComposer = useFeedbackStore((state) => state.focusedComposer);
   const addSessionMlcAttachment = useFeedbackStore((state) => state.addSessionMlcAttachment);
   const addQueuedDraftMlcAttachment = useFeedbackStore((state) => state.addQueuedDraftMlcAttachment);
+  const addAgentMlcAttachment = useAgentStore((state) => state.addMlcAttachment);
   const [content, setContent] = useState<MlcDocumentContent | null>(null);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -101,9 +103,10 @@ export function MlcPreviewPanel() {
       title: selectedDocument.title,
       description: selectedDocument.description,
     };
-    if (focusedComposer.kind === "queuedDraft") addQueuedDraftMlcAttachment(focusedComposer.callerId, attachment);
+    if (focusedComposer.kind === "agent" && focusedComposer.sessionId) addAgentMlcAttachment(focusedComposer.sessionId, attachment);
+    else if (focusedComposer.kind === "queuedDraft") addQueuedDraftMlcAttachment(focusedComposer.callerId, attachment);
     else if (focusedComposer.sessionId) addSessionMlcAttachment(focusedComposer.sessionId, attachment);
-  }, [addQueuedDraftMlcAttachment, addSessionMlcAttachment, focusedComposer, selectedDocument]);
+  }, [addAgentMlcAttachment, addQueuedDraftMlcAttachment, addSessionMlcAttachment, focusedComposer, selectedDocument]);
 
   if (!selectedDocument) {
     return (

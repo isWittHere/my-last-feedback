@@ -13,6 +13,7 @@ import { ProjectResourcePanel } from "./ProjectResourcePanel";
 import { PreviewBrowserViewPanel } from "./PreviewBrowserViewPanel";
 import { PreviewBrowserInfoPanel } from "./PreviewBrowserInfoPanel";
 import { TerminalPanel } from "./TerminalPanel";
+import { AgentConsolePanel } from "./agent/AgentConsolePanel";
 import { usePreviewBrowserStore } from "../store/previewBrowserStore";
 
 const DOCK_COLUMN_LABELS: Record<DockColumnId, string> = {
@@ -37,6 +38,7 @@ function dockTabLabel(tabId: DockTabId, translate: (key: string, defaultValue: s
   if (tabId === "mlcPreview") return translate("mlcPreview.title", "MLC Preview");
   if (tabId === "previewBrowser") return translate("previewBrowser.title", "Preview Browser");
   if (tabId === "previewInfo") return translate("previewBrowser.infoTitle", "Preview Info");
+  if (tabId === "agentConsole") return translate("agentConsole.title", "Agent Console");
   if (tabId === "terminal") return translate("terminal.title", "Terminal");
   return translate("resources.title", "Project resources");
 }
@@ -46,12 +48,13 @@ function dockTabIcon(tabId: DockTabId): ReactNode {
   if (tabId === "mlcPreview") return <Icon name="file-text" size={16} />;
   if (tabId === "previewBrowser") return <Icon name="globe" size={16} />;
     if (tabId === "previewInfo") return <Icon name="code" size={16} />;
+  if (tabId === "agentConsole") return <Icon name="robot" size={16} />;
   if (tabId === "terminal") return <Icon name="terminal" size={16} />;
   return <Icon name="folder" size={16} />;
 }
 
 function isDockTabId(value: string): value is DockTabId {
-  return value === "mlc" || value === "resources" || value === "mlcPreview" || value === "previewBrowser" || value === "previewInfo" || value === "terminal";
+  return value === "mlc" || value === "resources" || value === "mlcPreview" || value === "previewBrowser" || value === "previewInfo" || value === "agentConsole" || value === "terminal";
 }
 
 function dockColumnTargetIcon(columnId: DockColumnId): ReactNode {
@@ -67,6 +70,7 @@ function DockTabContent({ tabId }: { tabId: DockTabId | null }) {
   if (tabId === "mlcPreview") return <MlcPreviewPanel />;
   if (tabId === "previewBrowser") return <PreviewBrowserViewPanel />;
   if (tabId === "previewInfo") return <PreviewBrowserInfoPanel />;
+  if (tabId === "agentConsole") return <AgentConsolePanel />;
   if (tabId === "terminal") return <TerminalPanel />;
   return null;
 }

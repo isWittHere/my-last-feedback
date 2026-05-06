@@ -1,6 +1,7 @@
 import { create } from "zustand";
 import { invoke } from "@tauri-apps/api/core";
 import { useFeedbackStore, type ElementScreenshotRef, type ImageAttachment, type PickedElement, type WebAttachment, type WebConsoleEntry } from "./feedbackStore";
+import { useAgentStore } from "./agentStore";
 
 export type PreviewLoadStatus = "idle" | "loading" | "loaded" | "error";
 export type PreviewPickerMode = "off" | "arming" | "active";
@@ -102,6 +103,10 @@ function addAttachmentToFocusedTarget(attachment: WebAttachment): boolean {
   const feedback = useFeedbackStore.getState();
   const target = feedback.focusedComposer;
   if (!target) return false;
+  if (target.kind === "agent" && target.sessionId) {
+    useAgentStore.getState().addWebAttachment(target.sessionId, attachment);
+    return true;
+  }
   if (target.kind === "queuedDraft") {
     feedback.addQueuedDraftWebAttachment(target.callerId, attachment);
     return true;
@@ -115,6 +120,10 @@ function addImageToFocusedTarget(image: ImageAttachment): boolean {
   const feedback = useFeedbackStore.getState();
   const target = feedback.focusedComposer;
   if (!target) return false;
+  if (target.kind === "agent" && target.sessionId) {
+    useAgentStore.getState().addImage(target.sessionId, image);
+    return true;
+  }
   if (target.kind === "queuedDraft") {
     feedback.addQueuedDraftImage(target.callerId, image);
     return true;
