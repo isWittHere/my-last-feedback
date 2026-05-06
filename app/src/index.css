@@ -1907,6 +1907,33 @@ body,
   flex: 0 1 auto;
 }
 
+.agent-console-session-avatar {
+  position: relative;
+  flex: 0 0 auto;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 18px;
+  height: 18px;
+  padding: 0;
+  border: 0;
+  background: transparent;
+  color: inherit;
+  cursor: pointer;
+}
+
+.agent-console-session-avatar-check {
+  position: absolute;
+  top: 50%;
+  left: 50%;
+  transform: translate(-50%, -50%);
+  pointer-events: none;
+}
+
+.agent-console-session-avatar-static {
+  cursor: default;
+}
+
 .agent-console-topbar-caller-name {
   min-width: 0;
   overflow: hidden;

@@ -1,11 +1,14 @@
 import type { CSSProperties } from "react";
+import { useTranslation } from "react-i18next";
 import { useAgentConsoleSettings } from "../../agentConsoleSettings";
-import type { AgentContentBlock, AgentMessage } from "../../agent/types";
+import { getAgentSessionIdentity } from "../../agent/sessionIdentity";
+import type { AgentContentBlock, AgentMessage, AgentSession } from "../../agent/types";
 import { splitAgentMessageBlocks } from "../../agent/steps";
 import { MarkdownContent } from "../MarkdownContent";
 import { Icon } from "../Icons";
 import { IdenticonAvatar } from "../IdenticonAvatar";
 import { AgentProcessGroup } from "./AgentProcessGroup";
+import { OpenCodeInitialAvatar } from "./OpenCodeInitialAvatar";
 
 function blockText(block: AgentContentBlock): string {
   if (block.type === "text") return block.content;
@@ -43,16 +46,18 @@ function ResultBlocks({ blocks, projectDirectory }: { blocks: AgentContentBlock[
   );
 }
 
-function actorInfo(message: AgentMessage): { alias: string; color: string; says: string } {
-  if (message.role === "user") return { alias: "You", color: "#7c8cff", says: "你说:" };
-  if (message.role === "system") return { alias: "System", color: "#f59e0b", says: "系统:" };
-  return { alias: message.modelId || "OpenCode", color: "#0d9488", says: `${message.modelId || "OpenCode"} 说:` };
+function actorInfo(session: AgentSession, message: AgentMessage, language: "en" | "zh"): { alias: string; color: string; says: string; avatarKind: "opencode" | "identicon" } {
+  if (message.role === "user") return { alias: "You", color: "#7c8cff", says: "你说:", avatarKind: "identicon" };
+  if (message.role === "system") return { alias: "System", color: "#f59e0b", says: "系统:", avatarKind: "identicon" };
+  const identity = getAgentSessionIdentity(session, language);
+  return { alias: identity.code || identity.name, color: identity.color, says: `${identity.name} 说:`, avatarKind: identity.code ? "identicon" : "opencode" };
 }
 
-export function AgentMessageItem({ message, projectDirectory }: { message: AgentMessage; projectDirectory: string }) {
+export function AgentMessageItem({ session, message, projectDirectory }: { session: AgentSession; message: AgentMessage; projectDirectory: string }) {
+  const { i18n } = useTranslation();
   const { showMessageSpeakerLine } = useAgentConsoleSettings();
   const { processBlocks, resultBlocks } = splitAgentMessageBlocks(message);
-  const { alias, color, says } = actorInfo(message);
+  const { alias, color, says, avatarKind } = actorInfo(session, message, i18n.language.startsWith("zh") ? "zh" : "en");
   const userText = message.role === "user" ? resultBlocks.map(blockText).join("\n\n") : "";
   const isStreaming = message.status === "streaming";
 
@@ -61,7 +66,7 @@ export function AgentMessageItem({ message, projectDirectory }: { message: Agent
       <div className="agent-message-main" style={{ "--agent-actor-color": color } as CSSProperties}>
         {showMessageSpeakerLine && (
           <header className="agent-message-speaker">
-            <IdenticonAvatar alias={alias} color={color} size={22} />
+            {avatarKind === "opencode" ? <OpenCodeInitialAvatar size={22} /> : <IdenticonAvatar alias={alias} color={color} size={22} />}
             <span>{says}</span>
           </header>
         )}

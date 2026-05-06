@@ -134,7 +134,7 @@ export function AgentMessageTimeline({ session }: { session: AgentSession }) {
         )}
       </div>
       {session.messages.map((message) => (
-        <AgentMessageItem key={message.id} message={message} projectDirectory={session.cwd} />
+        <AgentMessageItem key={message.id} session={session} message={message} projectDirectory={session.cwd} />
       ))}
       <div ref={endRef} />
     </div>

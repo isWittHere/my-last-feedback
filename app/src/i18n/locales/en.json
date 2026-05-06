@@ -91,6 +91,8 @@
     "mockMode": "Mock mode",
     "resetMock": "Reset mock session",
     "resetSession": "Reset agent session",
+    "copySessionCode": "Click to copy code: {{code}}",
+    "sessionCodeCopied": "Copied!",
     "startProvider": "Start OpenCode ACP",
     "stopProvider": "Stop OpenCode ACP",
     "providerDisconnected": "ACP disconnected",

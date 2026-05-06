@@ -91,6 +91,8 @@
     "mockMode": "Mock 模式",
     "resetMock": "重置 mock 会话",
     "resetSession": "重置 Agent 会话",
+    "copySessionCode": "点击复制短码：{{code}}",
+    "sessionCodeCopied": "已复制！",
     "startProvider": "启动 OpenCode ACP",
     "stopProvider": "停止 OpenCode ACP",
     "providerDisconnected": "ACP 未连接",
