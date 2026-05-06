@@ -2910,6 +2910,34 @@ body,
   white-space: nowrap;
 }
 
+.agent-task-panel-row .agent-task-priority,
+.agent-process-task-row .agent-task-priority {
+  flex: 0 0 auto;
+  min-width: 16px;
+  padding: 0 4px;
+  border-radius: var(--radius-xs);
+  font-size: 10px;
+  line-height: 15px;
+  text-align: center;
+  color: var(--color-text-muted);
+  background: color-mix(in srgb, var(--color-text-muted) 12%, transparent);
+}
+
+.agent-task-priority[data-priority="high"] {
+  color: var(--color-danger);
+  background: color-mix(in srgb, var(--color-danger) 14%, transparent);
+}
+
+.agent-task-priority[data-priority="medium"] {
+  color: var(--color-warning);
+  background: color-mix(in srgb, var(--color-warning) 14%, transparent);
+}
+
+.agent-task-priority[data-priority="low"] {
+  color: var(--color-text-muted);
+  background: color-mix(in srgb, var(--color-text-muted) 12%, transparent);
+}
+
 .agent-task-panel-row[data-status="completed"] {
   color: var(--color-text-muted);
   opacity: 0.72;

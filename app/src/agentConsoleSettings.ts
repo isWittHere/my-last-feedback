@@ -2,6 +2,7 @@ import { useSyncExternalStore } from "react";
 
 export type AgentTopbarIndicatorMode = "hidden" | "text" | "textAndGraphic";
 export type AgentDiffColorPresetId = "classic" | "soft" | "vscode";
+export type AgentProcessStepDefaultMode = "tabs" | "timeline";
 
 export interface AgentDiffColorPreset {
   id: AgentDiffColorPresetId;
@@ -23,6 +24,8 @@ export interface AgentConsoleSettings {
   diffIndicatorMode: AgentTopbarIndicatorMode;
   contextIndicatorMode: AgentTopbarIndicatorMode;
   smoothStreamingOutput: boolean;
+  processStepDefaultMode: AgentProcessStepDefaultMode;
+  showMessageSpeakerLine: boolean;
   diffVisual: AgentDiffVisualSettings;
 }
 
@@ -39,6 +42,8 @@ const DEFAULT_SETTINGS: AgentConsoleSettings = {
   diffIndicatorMode: "textAndGraphic",
   contextIndicatorMode: "textAndGraphic",
   smoothStreamingOutput: false,
+  processStepDefaultMode: "tabs",
+  showMessageSpeakerLine: true,
   diffVisual: {
     colorPresetId: "classic",
     additionsOffsetX: 0,
@@ -57,6 +62,10 @@ function isIndicatorMode(value: unknown): value is AgentTopbarIndicatorMode {
 
 function isColorPresetId(value: unknown): value is AgentDiffColorPresetId {
   return AGENT_DIFF_COLOR_PRESETS.some((preset) => preset.id === value);
+}
+
+function isProcessStepDefaultMode(value: unknown): value is AgentProcessStepDefaultMode {
+  return value === "tabs" || value === "timeline";
 }
 
 function clampTextOffset(value: unknown): number {
@@ -85,6 +94,8 @@ export function getAgentConsoleSettings(): AgentConsoleSettings {
       diffIndicatorMode: isIndicatorMode(parsed.diffIndicatorMode) ? parsed.diffIndicatorMode : DEFAULT_SETTINGS.diffIndicatorMode,
       contextIndicatorMode: isIndicatorMode(parsed.contextIndicatorMode) ? parsed.contextIndicatorMode : DEFAULT_SETTINGS.contextIndicatorMode,
       smoothStreamingOutput: typeof parsed.smoothStreamingOutput === "boolean" ? parsed.smoothStreamingOutput : DEFAULT_SETTINGS.smoothStreamingOutput,
+      processStepDefaultMode: isProcessStepDefaultMode(parsed.processStepDefaultMode) ? parsed.processStepDefaultMode : DEFAULT_SETTINGS.processStepDefaultMode,
+      showMessageSpeakerLine: typeof parsed.showMessageSpeakerLine === "boolean" ? parsed.showMessageSpeakerLine : DEFAULT_SETTINGS.showMessageSpeakerLine,
       diffVisual: {
         colorPresetId: isColorPresetId(parsedDiffVisual?.colorPresetId) ? parsedDiffVisual.colorPresetId : DEFAULT_SETTINGS.diffVisual.colorPresetId,
         additionsOffsetX: parsedDiffVisual?.additionsOffsetX == null ? legacyOffsetX : clampTextOffset(parsedDiffVisual.additionsOffsetX),

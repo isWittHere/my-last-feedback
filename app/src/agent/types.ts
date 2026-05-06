@@ -62,6 +62,7 @@ export interface AgentTaskItem {
   id: string;
   title: string;
   status: "not-started" | "in-progress" | "completed";
+  priority?: "high" | "medium" | "low";
 }
 
 export interface AgentTaskListBlock extends AgentBlockBase {

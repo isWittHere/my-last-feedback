@@ -1,10 +1,11 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { useAgentConsoleSettings, type AgentProcessStepDefaultMode } from "../../agentConsoleSettings";
 import type { AgentContentBlock } from "../../agent/types";
 import { buildAgentProcessSteps, type AgentStepItem } from "../../agent/steps";
 import { Icon } from "../Icons";
 import { MarkdownContent } from "../MarkdownContent";
 
-type ProcessViewMode = "timeline" | "tabs";
+type ProcessViewMode = AgentProcessStepDefaultMode;
 
 function cleanResultForDisplay(raw: string): string {
   try {
@@ -109,6 +110,7 @@ function StepDetail({ step, projectDirectory }: { step: AgentStepItem; projectDi
           <div key={task.id} className="agent-process-task-row" data-status={task.status}>
             <Icon name={task.status === "completed" ? "check" : task.status === "in-progress" ? "spinner" : "minus"} size={12} />
             <span>{task.title}</span>
+            {task.priority && <span className="agent-task-priority" data-priority={task.priority}>{task.priority === "high" ? "高" : task.priority === "medium" ? "中" : "低"}</span>}
           </div>
         ))}
       </div>
@@ -143,10 +145,11 @@ interface AgentFocusStepEventDetail {
 }
 
 export function AgentProcessGroup({ blocks, messageId, isStreaming = false, projectDirectory }: { blocks: AgentContentBlock[]; messageId?: string; isStreaming?: boolean; projectDirectory?: string }) {
+  const { processStepDefaultMode } = useAgentConsoleSettings();
   const steps = useMemo(() => buildAgentProcessSteps(blocks, messageId, isStreaming ? "streaming" : "complete"), [blocks, messageId, isStreaming]);
   const hasBusyStep = steps.some((step) => step.status === "pending" || step.status === "running");
   const [expanded, setExpanded] = useState(isStreaming || hasBusyStep);
-  const [mode, setMode] = useState<ProcessViewMode>("tabs");
+  const [mode, setMode] = useState<ProcessViewMode>(processStepDefaultMode);
   const [activeIndex, setActiveIndex] = useState(0);
   const [openSteps, setOpenSteps] = useState<Record<number, boolean>>({});
   const groupRef = useRef<HTMLElement>(null);
@@ -209,6 +212,10 @@ export function AgentProcessGroup({ blocks, messageId, isStreaming = false, proj
   useEffect(() => {
     if (activeIndex >= steps.length) setActiveIndex(Math.max(0, steps.length - 1));
   }, [activeIndex, steps.length]);
+
+  useEffect(() => {
+    setMode(processStepDefaultMode);
+  }, [messageId, processStepDefaultMode]);
 
   useEffect(() => {
     if (!messageId) return;

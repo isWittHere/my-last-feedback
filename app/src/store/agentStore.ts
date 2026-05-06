@@ -285,6 +285,71 @@ function toolArgsFromRawInput(rawInput: unknown): Record<string, unknown> | unde
   return { input: rawInput };
 }
 
+function stableHash(value: string): string {
+  let hash = 0x811c9dc5;
+  for (let index = 0; index < value.length; index += 1) {
+    hash ^= value.charCodeAt(index);
+    hash = Math.imul(hash, 0x01000193) >>> 0;
+  }
+  return hash.toString(16);
+}
+
+function taskStatusFromAcp(status: unknown): "not-started" | "in-progress" | "completed" {
+  if (status === "in_progress" || status === "in-progress" || status === "running") return "in-progress";
+  if (status === "completed" || status === "cancelled") return "completed";
+  return "not-started";
+}
+
+function taskPriorityFromAcp(priority: unknown): "high" | "medium" | "low" | undefined {
+  return priority === "high" || priority === "medium" || priority === "low" ? priority : undefined;
+}
+
+function taskEntriesFromUnknown(value: unknown): Array<{ content: string; status: unknown; priority: unknown }> {
+  if (!Array.isArray(value)) return [];
+  return value
+    .map((item) => {
+      if (!isRecord(item)) return null;
+      const content = typeof item.content === "string" ? item.content : typeof item.title === "string" ? item.title : "";
+      if (!content.trim()) return null;
+      return { content, status: item.status, priority: item.priority };
+    })
+    .filter((item): item is { content: string; status: unknown; priority: unknown } => Boolean(item));
+}
+
+function todoEntriesFromToolUpdate(update: Record<string, unknown>): Array<{ content: string; status: unknown; priority: unknown }> {
+  const rawInput = isRecord(update.rawInput) ? update.rawInput : undefined;
+  const inputTodos = taskEntriesFromUnknown(rawInput?.todos);
+  if (inputTodos.length > 0) return inputTodos;
+
+  const rawOutput = isRecord(update.rawOutput) ? update.rawOutput : undefined;
+  if (typeof rawOutput?.output === "string") {
+    try {
+      const parsed = JSON.parse(rawOutput.output) as unknown;
+      const outputTodos = taskEntriesFromUnknown(parsed);
+      if (outputTodos.length > 0) return outputTodos;
+    } catch {}
+  }
+
+  const contentText = extractToolContentText(update.content);
+  if (contentText) {
+    try {
+      const parsed = JSON.parse(contentText) as unknown;
+      return taskEntriesFromUnknown(parsed);
+    } catch {}
+  }
+  return [];
+}
+
+function isTodoToolUpdate(update: Record<string, unknown>): boolean {
+  const title = typeof update.title === "string" ? update.title.toLowerCase() : "";
+  const rawInput = isRecord(update.rawInput) ? update.rawInput : undefined;
+  return title === "todowrite" || Array.isArray(rawInput?.todos);
+}
+
+function taskListTitle(completedCount: number, totalCount: number): string {
+  return `待办事项 (${completedCount}/${totalCount})`;
+}
+
 function appendAssistantTextChunkImmediate(session: AgentSession, phase: "process" | "result", text: string, messageId?: string): AgentSession {
   if (!text) return session;
   const messages = [...session.messages];
@@ -514,6 +579,87 @@ function applyAcpToolCallUpdate(session: AgentSession, update: Record<string, un
   return { ...session, messages, updatedAt: nowIso() };
 }
 
+function applyAcpTaskListUpdate(session: AgentSession, entries: Array<{ content: string; status: unknown; priority: unknown }>, messageId?: string): AgentSession {
+  if (entries.length === 0) return session;
+  const tasks = entries.map((entry, index) => ({
+    id: `agent_task_${index}_${stableHash(entry.content)}`,
+    title: entry.content,
+    status: taskStatusFromAcp(entry.status),
+    priority: taskPriorityFromAcp(entry.priority),
+  }));
+  const completedCount = tasks.filter((task) => task.status === "completed").length;
+  const title = taskListTitle(completedCount, tasks.length);
+  const messages = [...session.messages];
+  let targetMessageIndex = -1;
+
+  for (let index = messages.length - 1; index >= 0; index -= 1) {
+    const message = messages[index];
+    if (message.role === "assistant" && message.blocks.some((block) => block.type === "task_list")) {
+      targetMessageIndex = index;
+      break;
+    }
+  }
+  if (targetMessageIndex < 0) {
+    for (let index = messages.length - 1; index >= 0; index -= 1) {
+      const message = messages[index];
+      if (message.role === "assistant" && message.status === "streaming") {
+        targetMessageIndex = index;
+        break;
+      }
+    }
+  }
+  if (targetMessageIndex < 0) {
+    for (let index = messages.length - 1; index >= 0; index -= 1) {
+      const message = messages[index];
+      if (message.role === "assistant") {
+        targetMessageIndex = index;
+        break;
+      }
+    }
+  }
+
+  let assistantMessage = targetMessageIndex >= 0 ? messages[targetMessageIndex] : null;
+  if (!assistantMessage) {
+    assistantMessage = createStreamingAssistantMessage(messageId);
+    messages.push(assistantMessage);
+    targetMessageIndex = messages.length - 1;
+  }
+
+  let blocks = [...assistantMessage.blocks];
+  const blockIndex = blocks.findIndex((block) => block.type === "task_list");
+  if (blockIndex >= 0) {
+    const block = blocks[blockIndex];
+    if (block.type === "task_list") {
+      blocks[blockIndex] = { ...block, title, tasks, updatedAt: nowIso() };
+    }
+  } else {
+    blocks = insertProcessBlock(blocks, {
+      id: newId("agent_task_list"),
+      type: "task_list",
+      title,
+      tasks,
+      origin: { phase: "process", placement: "standalone" },
+      createdAt: nowIso(),
+    });
+  }
+
+  messages[targetMessageIndex] = { ...assistantMessage, blocks, updatedAt: nowIso() };
+  return { ...session, messages, updatedAt: nowIso() };
+}
+
+function removeToolCallBlock(session: AgentSession, toolCallId: unknown): AgentSession {
+  if (typeof toolCallId !== "string" || !toolCallId) return session;
+  const blockId = `agent_tool_${toolCallId}`;
+  let changed = false;
+  const messages = session.messages.map((message) => {
+    const blocks = message.blocks.filter((block) => !(block.type === "tool_call" && block.id === blockId));
+    if (blocks.length === message.blocks.length) return message;
+    changed = true;
+    return { ...message, blocks, updatedAt: nowIso() };
+  });
+  return changed ? { ...session, messages, updatedAt: nowIso() } : session;
+}
+
 function completeStreamingAssistant(session: AgentSession): AgentSession {
   return {
     ...session,
@@ -566,7 +712,14 @@ function applyAcpSessionUpdate(session: AgentSession, params: unknown): AgentSes
   if (updateType === "agent_thought_chunk") {
     return appendAssistantTextChunk(session, "process", extractTextContent(value.content), messageId);
   }
+  if (updateType === "plan") {
+    return applyAcpTaskListUpdate(session, taskEntriesFromUnknown(value.entries), messageId);
+  }
   if (updateType === "tool_call" || updateType === "tool_call_update") {
+    if (isTodoToolUpdate(value)) {
+      const withTasks = applyAcpTaskListUpdate(session, todoEntriesFromToolUpdate(value), messageId);
+      return removeToolCallBlock(withTasks, value.toolCallId);
+    }
     return applyAcpToolCallUpdate(session, value, messageId);
   }
   if (updateType === "user_message_chunk") {

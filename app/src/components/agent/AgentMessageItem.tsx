@@ -1,4 +1,5 @@
 import type { CSSProperties } from "react";
+import { useAgentConsoleSettings } from "../../agentConsoleSettings";
 import type { AgentContentBlock, AgentMessage } from "../../agent/types";
 import { splitAgentMessageBlocks } from "../../agent/steps";
 import { MarkdownContent } from "../MarkdownContent";
@@ -49,6 +50,7 @@ function actorInfo(message: AgentMessage): { alias: string; color: string; says:
 }
 
 export function AgentMessageItem({ message, projectDirectory }: { message: AgentMessage; projectDirectory: string }) {
+  const { showMessageSpeakerLine } = useAgentConsoleSettings();
   const { processBlocks, resultBlocks } = splitAgentMessageBlocks(message);
   const { alias, color, says } = actorInfo(message);
   const userText = message.role === "user" ? resultBlocks.map(blockText).join("\n\n") : "";
@@ -57,10 +59,12 @@ export function AgentMessageItem({ message, projectDirectory }: { message: Agent
   return (
     <article className={`agent-message agent-message-${message.role}`} data-role={message.role} data-msg-id={message.id} data-status={message.status}>
       <div className="agent-message-main" style={{ "--agent-actor-color": color } as CSSProperties}>
-        <header className="agent-message-speaker">
-          <IdenticonAvatar alias={alias} color={color} size={22} />
-          <span>{says}</span>
-        </header>
+        {showMessageSpeakerLine && (
+          <header className="agent-message-speaker">
+            <IdenticonAvatar alias={alias} color={color} size={22} />
+            <span>{says}</span>
+          </header>
+        )}
         {message.role === "user" ? (
           <MarkdownContent markdown={userText} projectDirectory={projectDirectory} className="agent-user-markdown" variant="feedback" enableComposerTokens />
         ) : (

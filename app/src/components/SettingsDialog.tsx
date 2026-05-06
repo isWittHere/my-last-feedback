@@ -14,7 +14,7 @@ import { getNotificationSettings, saveNotificationSettings, syncAutoFocusNewRequ
 import { getSubmittedViewSettings, saveSubmittedViewSettings, SUBMITTED_VIEW_SECTION_CONFIGS, type SubmittedViewSectionId, type SubmittedViewSettings } from "../submittedViewSettings";
 import { getTerminalSettings, saveTerminalSettings, type TerminalSettings, type TerminalShellId } from "../terminalSettings";
 import { getComposerSettings, saveComposerSettings, type ComposerSettings } from "../composerSettings";
-import { AGENT_DIFF_COLOR_PRESETS, getAgentConsoleSettings, saveAgentConsoleSettings, type AgentConsoleSettings, type AgentDiffColorPresetId, type AgentTopbarIndicatorMode } from "../agentConsoleSettings";
+import { AGENT_DIFF_COLOR_PRESETS, getAgentConsoleSettings, saveAgentConsoleSettings, type AgentConsoleSettings, type AgentDiffColorPresetId, type AgentProcessStepDefaultMode, type AgentTopbarIndicatorMode } from "../agentConsoleSettings";
 import { getOpenCodeSettings, setOpenCodeModelEnabled, setOpenCodeModelFavorite, setOpenCodePreferredModel, type OpenCodeSettings } from "../openCodeSettings";
 import { SESSION_LIST_MODE_OPTIONS } from "../sessionNavigationSettings";
 import { SessionNavigationModeIcon } from "./SessionNavigationModeIcon";
@@ -26,6 +26,7 @@ type SettingsGroupId = "mlfb" | "acp" | "layout";
 const SETTINGS_DOCK_COLUMN_IDS: DockColumnId[] = ["leftSidebar", "leftPage", "rightPage", "rightSidebar"];
 const SETTINGS_DOCK_TAB_IDS: DockTabId[] = ["mlc", "mlcPreview", "resources", "previewBrowser", "previewInfo", "agentConsole", "terminal"];
 const AGENT_TOPBAR_INDICATOR_MODE_OPTIONS: AgentTopbarIndicatorMode[] = ["hidden", "text", "textAndGraphic"];
+const AGENT_PROCESS_STEP_MODE_OPTIONS: AgentProcessStepDefaultMode[] = ["tabs", "timeline"];
 
 function isSettingsDockTabId(value: string): value is DockTabId {
   return SETTINGS_DOCK_TAB_IDS.includes(value as DockTabId);
@@ -197,6 +198,22 @@ export function SettingsDialog({ open, onClose }: { open: boolean; onClose: () =
     });
   }, []);
 
+  const handleAgentMessageSpeakerToggle = useCallback(() => {
+    setAgentConsoleSettings((prev) => {
+      const next = { ...prev, showMessageSpeakerLine: !prev.showMessageSpeakerLine };
+      saveAgentConsoleSettings(next);
+      return next;
+    });
+  }, []);
+
+  const handleAgentProcessStepModeChange = useCallback((processStepDefaultMode: AgentProcessStepDefaultMode) => {
+    setAgentConsoleSettings((prev) => {
+      const next = { ...prev, processStepDefaultMode };
+      saveAgentConsoleSettings(next);
+      return next;
+    });
+  }, []);
+
   const handleAgentDiffColorPresetChange = useCallback((colorPresetId: AgentDiffColorPresetId) => {
     setAgentConsoleSettings((prev) => {
       const next = { ...prev, diffVisual: { ...prev.diffVisual, colorPresetId } };
@@ -314,6 +331,30 @@ export function SettingsDialog({ open, onClose }: { open: boolean; onClose: () =
             onClick={() => handleAgentIndicatorModeChange(key, mode)}
           >
             <AgentTopbarIndicatorModeIcon mode={mode} />
+          </button>
+        );
+      })}
+    </div>
+  );
+
+  const processStepModeLabel = (mode: AgentProcessStepDefaultMode) => mode === "tabs"
+    ? t("settings.acpProcessStepModeTabs", "Tabs")
+    : t("settings.acpProcessStepModeTimeline", "Timeline");
+
+  const renderAgentProcessStepModeGroup = () => (
+    <div className="settings-btn-group" role="group" aria-label={t("settings.acpProcessStepDefaultMode", "Step process default view")}> 
+      {AGENT_PROCESS_STEP_MODE_OPTIONS.map((mode) => {
+        const label = processStepModeLabel(mode);
+        return (
+          <button
+            key={mode}
+            type="button"
+            className={`settings-btn-option${agentConsoleSettings.processStepDefaultMode === mode ? " active" : ""}`}
+            onClick={() => handleAgentProcessStepModeChange(mode)}
+            title={label}
+          >
+            <Icon name={mode === "tabs" ? "rows" : "list"} size={13} />
+            <span>{label}</span>
           </button>
         );
       })}
@@ -871,6 +912,28 @@ export function SettingsDialog({ open, onClose }: { open: boolean; onClose: () =
                         onClick={handleAgentSmoothStreamingToggle}
                         aria-label={t("settings.acpSmoothStreamingOutput", "Smooth streaming output")}
                         aria-pressed={agentConsoleSettings.smoothStreamingOutput}
+                      >
+                        <span className="settings-toggle-knob" />
+                      </button>
+                    </div>
+                    <div className="settings-row">
+                      <div className="settings-row-info">
+                        <span className="settings-label">{t("settings.acpProcessStepDefaultMode", "Step process default view")}</span>
+                        <span className="settings-sublabel">{t("settings.acpProcessStepDefaultModeDesc", "Choose whether new Agent process steps open in tabs or timeline view by default.")}</span>
+                      </div>
+                      {renderAgentProcessStepModeGroup()}
+                    </div>
+                    <div className="settings-row">
+                      <div className="settings-row-info">
+                        <span className="settings-label">{t("settings.acpMessageSpeakerLine", "Message speaker line")}</span>
+                        <span className="settings-sublabel">{t("settings.acpMessageSpeakerLineDesc", "Show the avatar and speaker label above each Agent message.")}</span>
+                      </div>
+                      <button
+                        type="button"
+                        className={`settings-toggle${agentConsoleSettings.showMessageSpeakerLine ? " settings-toggle-on" : ""}`}
+                        onClick={handleAgentMessageSpeakerToggle}
+                        aria-label={t("settings.acpMessageSpeakerLine", "Message speaker line")}
+                        aria-pressed={agentConsoleSettings.showMessageSpeakerLine}
                       >
                         <span className="settings-toggle-knob" />
                       </button>

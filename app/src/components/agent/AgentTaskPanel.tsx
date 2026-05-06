@@ -19,6 +19,13 @@ function taskIconName(status: AgentTaskItem["status"]): string {
   return "minus";
 }
 
+function taskPriorityLabel(priority: AgentTaskItem["priority"]): string {
+  if (priority === "high") return "高";
+  if (priority === "medium") return "中";
+  if (priority === "low") return "低";
+  return "";
+}
+
 export function AgentTaskPanel({ session }: { session: AgentSession }) {
   const [expanded, setExpanded] = useState(false);
   const tasks = useMemo(() => latestTasks(session), [session]);
@@ -42,6 +49,7 @@ export function AgentTaskPanel({ session }: { session: AgentSession }) {
               <div key={task.id} className="agent-task-panel-row" data-status={task.status}>
                 <Icon name={taskIconName(task.status)} size={13} />
                 <span>{task.title}</span>
+                {task.priority && <span className="agent-task-priority" data-priority={task.priority}>{taskPriorityLabel(task.priority)}</span>}
               </div>
             ))}
           </div>
