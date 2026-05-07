@@ -141,6 +141,7 @@ function attachmentIconName(kind: AgentSubmittedAttachmentTag["kind"]): string {
 
 function hasResidualActiveProcessBlock(blocks: AgentContentBlock[]): boolean {
   return blocks.some((block) => {
+    if (block.staleRunningState) return true;
     if (block.type === "thinking") return block.status === "running";
     if (block.type === "compaction") return block.status === "running";
     if (block.type === "tool_call") return block.status === "running" || block.status === "pending";

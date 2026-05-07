@@ -194,6 +194,7 @@
     "stepStatus": {
       "pending": "Pending",
       "running": "Running",
+      "staleRunning": "Stale running state",
       "completed": "Completed",
       "failed": "Failed"
     },

@@ -20,6 +20,7 @@ export interface AgentBlockBase {
   origin: AgentBlockOrigin;
   createdAt: string;
   updatedAt?: string;
+  staleRunningState?: boolean;
 }
 
 export interface AgentTextBlock extends AgentBlockBase {

@@ -3,6 +3,7 @@ import type { AgentContentBlock, AgentMessage, AgentSession, AgentTaskItem } fro
 export type AgentStepKind = "thinking" | "compaction" | "tool" | "task_list" | "artifacts" | "permission" | "error";
 export type AgentStepStatus = "pending" | "running" | "completed" | "failed";
 export type AgentTokenStatKind = AgentStepKind | "user" | "result";
+export type AgentStepTone = "document_change" | "document_read" | "command_execution";
 
 export interface AgentStepItem {
   id: string;
@@ -17,6 +18,7 @@ export interface AgentStepItem {
   tasks?: AgentTaskItem[];
   blocks?: AgentContentBlock[];
   staleRunningState?: boolean;
+  tone?: AgentStepTone;
 }
 
 export interface AgentStepTokenStat {
@@ -31,6 +33,8 @@ export interface AgentStepTokenStat {
   index: number;
   target: "message" | "step";
   stepId?: string;
+  staleRunningState?: boolean;
+  tone?: AgentStepTone;
 }
 
 function stringifyForStats(value: unknown): string {
@@ -83,6 +87,22 @@ function tokenTextForBlocks(blocks: AgentContentBlock[]): string {
   }).filter(Boolean).join("\n");
 }
 
+function toolStepTone(block: Extract<AgentContentBlock, { type: "tool_call" }>): AgentStepTone | undefined {
+  const searchableText = [
+    block.name,
+    block.title,
+    block.label,
+    stringifyForStats(block.args),
+  ].filter(Boolean).join("\n").toLowerCase();
+  return /\b(edit|write|patch|apply|modify|replace|update|create|delete|remove|insert)\b|编辑|写入|修改|补丁|应用|创建|删除|新增/.test(searchableText)
+    ? "document_change"
+    : /\b(bash|shell|terminal|command|run|exec|execute|python|node|npm|pnpm|yarn|cargo|go|pytest|test|build)\b|执行|命令|运行|代码|测试|构建/.test(searchableText)
+      ? "command_execution"
+      : /\b(read|view|open|cat|grep|search|find|list|ls|glob|scan)\b|读取|查看|搜索|查找|列出|扫描/.test(searchableText)
+        ? "document_read"
+        : undefined;
+}
+
 function isActiveSessionStatus(status: AgentSession["status"]): boolean {
   return status === "starting" || status === "running" || status === "cancelling";
 }
@@ -92,7 +112,7 @@ export function buildAgentProcessSteps(blocks: AgentContentBlock[], messageId?: 
   const messageIsStreaming = messageStatus === "streaming";
   for (const block of blocks) {
     if (block.type === "thinking") {
-      const staleRunningState = !messageIsStreaming && block.status === "running";
+      const staleRunningState = Boolean(block.staleRunningState || (!messageIsStreaming && block.status === "running"));
       steps.push({
         id: block.id,
         messageId,
@@ -107,7 +127,7 @@ export function buildAgentProcessSteps(blocks: AgentContentBlock[], messageId?: 
     }
     if (block.type === "compaction") {
       const status: AgentStepStatus = block.status === "failed" ? "failed" : messageIsStreaming && block.status === "running" ? "running" : "completed";
-      const staleRunningState = block.status !== "failed" && !messageIsStreaming && block.status === "running";
+      const staleRunningState = Boolean(block.staleRunningState || (block.status !== "failed" && !messageIsStreaming && block.status === "running"));
       steps.push({
         id: block.id,
         messageId,
@@ -122,7 +142,7 @@ export function buildAgentProcessSteps(blocks: AgentContentBlock[], messageId?: 
     }
     if (block.type === "tool_call") {
       const status: AgentStepStatus = block.status === "failed" ? "failed" : messageIsStreaming ? block.status || "completed" : "completed";
-      const staleRunningState = block.status !== "failed" && !messageIsStreaming && (block.status === "running" || block.status === "pending");
+      const staleRunningState = Boolean(block.staleRunningState || (block.status !== "failed" && !messageIsStreaming && (block.status === "running" || block.status === "pending")));
       steps.push({
         id: block.id,
         messageId,
@@ -133,6 +153,7 @@ export function buildAgentProcessSteps(blocks: AgentContentBlock[], messageId?: 
         args: block.args,
         result: block.result,
         staleRunningState,
+        tone: toolStepTone(block),
       });
       continue;
     }
@@ -160,7 +181,7 @@ export function buildAgentProcessSteps(blocks: AgentContentBlock[], messageId?: 
         lastStep.blockIds = [...lastStep.blockIds, block.id];
         lastStep.label = `产物 (${lastStep.blocks.length})`;
       } else {
-        steps.push({ id: block.id, messageId, blockIds: [block.id], kind: "artifacts", label: "产物 (1)", status: "completed", blocks: [block] });
+        steps.push({ id: block.id, messageId, blockIds: [block.id], kind: "artifacts", label: "产物 (1)", status: "completed", blocks: [block], tone: "document_change" });
       }
       continue;
     }
@@ -229,6 +250,8 @@ export function collectAgentStepTokenStats(session: AgentSession): AgentStepToke
         index: stats.length,
         target: "step",
         stepId: step.id,
+        staleRunningState: step.staleRunningState,
+        tone: step.tone,
       });
     }
     const resultTokenCount = estimateTokenCount(tokenTextForBlocks(resultBlocks));

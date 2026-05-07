@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 import { useAgentConsoleSettings } from "../../agentConsoleSettings";
-import type { AgentSession } from "../../agent/types";
+import type { AgentContentBlock, AgentProviderMessagePart, AgentSession } from "../../agent/types";
 import { AgentMessageItem } from "./AgentMessageItem";
 import { AgentSessionHeader } from "./AgentSessionHeader";
 
@@ -28,12 +28,41 @@ function animateScrollTop(element: HTMLElement, targetTop: number) {
   requestAnimationFrame(step);
 }
 
-function messageText(message: AgentSession["messages"][number]): string {
-  return message.blocks
-    .map((block) => block.type === "text" ? block.content : "")
-    .filter(Boolean)
+function blockText(block: AgentContentBlock): string {
+  return block.type === "text" ? block.content : "";
+}
+
+function blocksText(blocks: AgentContentBlock[]): string {
+  return blocks.map(blockText).filter(Boolean).join("\n\n").trim();
+}
+
+function providerPromptText(parts: AgentProviderMessagePart[] | undefined): string {
+  return (parts || [])
+    .filter((part) => part.type === "text" && !part.synthetic && !part.ignored && typeof part.text === "string")
+    .map((part) => part.text || "")
     .join("\n\n")
     .trim();
+}
+
+function extractPromptSection(markdown: string): string {
+  const trimmedMarkdown = markdown.trim();
+  const promptHeading = /^##\s+(?:User Prompt|User Feedback|用户提示|用户反馈)\s*\n/i.exec(trimmedMarkdown);
+  if (!promptHeading) return "";
+  const contentStart = promptHeading[0].length;
+  const nextSectionIndex = trimmedMarkdown.slice(contentStart).search(/\n##\s+/);
+  const contentEnd = nextSectionIndex >= 0 ? contentStart + nextSectionIndex : trimmedMarkdown.length;
+  return trimmedMarkdown.slice(contentStart, contentEnd).trim();
+}
+
+function userPromptText(message: AgentSession["messages"][number]): string {
+  const draft = message.composerDraft?.trim();
+  if (draft) return draft;
+  const providerText = providerPromptText(message.providerParts);
+  if (providerText) return providerText;
+  const submittedPrompt = extractPromptSection(message.submittedMarkdown || "");
+  if (submittedPrompt) return submittedPrompt;
+  const rawText = blocksText(message.blocks);
+  return extractPromptSection(rawText) || rawText;
 }
 
   interface AgentFocusStepEventDetail {
@@ -103,7 +132,7 @@ export function AgentMessageTimeline({ session }: { session: AgentSession }) {
         const msgId = element.getAttribute("data-msg-id");
         const message = messagesRef.current.find((item) => item.id === msgId);
         if (message) {
-          nextContent = messageText(message);
+          nextContent = userPromptText(message);
           nextMsgId = message.id;
         }
       }
@@ -188,7 +217,6 @@ export function AgentMessageTimeline({ session }: { session: AgentSession }) {
               type="button"
               className={`agent-sticky-user-bar${stickyUserContent ? "" : " agent-sticky-user-bar-hidden"}`}
               onClick={scrollToStickyMessage}
-              title={stickyUserContent || undefined}
               tabIndex={stickyUserContent ? 0 : -1}
               aria-hidden={!stickyUserContent}
             >

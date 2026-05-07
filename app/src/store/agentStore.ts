@@ -1018,9 +1018,9 @@ function clearPacedTextBufferForPart(sessionId: string, phase: "process" | "resu
 
 function completeStreamingAssistant(session: AgentSession, providerMessageId?: string): AgentSession {
   const completeProcessBlock = (block: AgentContentBlock): AgentContentBlock => {
-    if (block.type === "thinking") return block.status === "completed" ? block : { ...block, status: "completed", updatedAt: nowIso() };
-    if (block.type === "compaction") return block.status === "running" ? { ...block, status: "completed", updatedAt: nowIso() } : block;
-    if (block.type === "tool_call" && (block.status === "running" || block.status === "pending")) return { ...block, status: "completed", updatedAt: nowIso() };
+    if (block.type === "thinking") return block.status === "completed" ? block : { ...block, status: "completed", staleRunningState: true, updatedAt: nowIso() };
+    if (block.type === "compaction") return block.status === "running" ? { ...block, status: "completed", staleRunningState: true, updatedAt: nowIso() } : block;
+    if (block.type === "tool_call" && (block.status === "running" || block.status === "pending")) return { ...block, status: "completed", staleRunningState: true, updatedAt: nowIso() };
     return block;
   };
   const hasActiveProcessBlock = (message: AgentMessage): boolean => message.blocks.some((block) => {

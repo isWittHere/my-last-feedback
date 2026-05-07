@@ -66,6 +66,7 @@ function formatScalar(value: unknown): string {
 }
 
 function stepIconName(step: AgentStepItem): string {
+  if (step.status === "failed") return "circle-x";
   if (step.kind === "thinking") return "message-dot";
   if (step.kind === "compaction") return "list-tree";
   if (step.kind === "tool") return "wrench";

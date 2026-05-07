@@ -391,6 +391,7 @@ function normalizeToolPart(part: OpenCodeMessagePart): AgentToolCallBlock | Agen
   const outputValue = state.output !== undefined ? state.output : part.output;
   const output = stringifyOutput(outputValue);
   const error = asString(state.error) || asString(part.error);
+  const staleRunningState = !error && (status === "running" || status === "pending") && Boolean(time?.end || time?.completed || outputValue !== undefined);
   if (toolName === "todowrite") {
     const metadata = asRecord(state.metadata || part.metadata);
     const todos = Array.isArray(input.todos)
@@ -420,6 +421,7 @@ function normalizeToolPart(part: OpenCodeMessagePart): AgentToolCallBlock | Agen
     status: normalizeToolStatus(status, error, outputValue, time),
     args: input,
     result: error || output,
+    ...(staleRunningState ? { staleRunningState } : {}),
   };
 }
 
@@ -440,6 +442,7 @@ function normalizeReasoningPart(part: OpenCodeMessagePart): AgentThinkingBlock {
   const time = asRecord(state.time || part.time);
   const status = asString(part.status) || asString(state.status);
   const completed = status === "completed" || Boolean(time.end || time.completed);
+  const staleRunningState = status === "running" && completed;
   return {
     id: asString(part.id) || `reasoning-${asString(part.messageID) || "part"}`,
     type: "thinking",
@@ -448,6 +451,7 @@ function normalizeReasoningPart(part: OpenCodeMessagePart): AgentThinkingBlock {
     updatedAt: time.end || time.completed ? timestampFromMs(time.end || time.completed) : undefined,
     content: asString(part.text) || asString(part.summary) || asString(state.text) || asString(state.summary) || "",
     status: completed ? "completed" : "running",
+    ...(staleRunningState ? { staleRunningState } : {}),
   };
 }
 

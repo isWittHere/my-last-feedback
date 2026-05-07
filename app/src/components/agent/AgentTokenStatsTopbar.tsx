@@ -7,22 +7,28 @@ import { getAgentTokenStatsSummary } from "../../agent/tokenStats";
 
 const TOKEN_ITEM_MIN_WIDTH = 14;
 const TOKEN_ITEM_MAX_WIDTH = 44;
+const TOKEN_ITEM_COMPACT_MIN_WIDTH = 9;
+const TOKEN_ITEM_COMPACT_MAX_WIDTH = 32;
 const TOKEN_ITEM_MIN_HEIGHT = 8;
 const TOKEN_ITEM_MAX_HEIGHT = 22;
 const TOKEN_ITEM_HEIGHT_LIMIT = 800;
 const TOKEN_ITEM_WIDTH_LIMIT = 8000;
 
-function getTokenItemShape(tokenCount: number) {
-  const heightProgress = Math.min(tokenCount, TOKEN_ITEM_HEIGHT_LIMIT) / TOKEN_ITEM_HEIGHT_LIMIT;
+function getTokenItemShape(tokenCount: number, kind: AgentTokenStatKind) {
+  const compactWidth = kind === "thinking" || kind === "tool";
+  const minWidth = compactWidth ? TOKEN_ITEM_COMPACT_MIN_WIDTH : TOKEN_ITEM_MIN_WIDTH;
+  const maxWidth = compactWidth ? TOKEN_ITEM_COMPACT_MAX_WIDTH : TOKEN_ITEM_MAX_WIDTH;
+  const heightTokenLimit = TOKEN_ITEM_HEIGHT_LIMIT * (minWidth / TOKEN_ITEM_MIN_WIDTH);
+  const heightProgress = Math.min(tokenCount, heightTokenLimit) / heightTokenLimit;
   const height = Math.round(TOKEN_ITEM_MIN_HEIGHT + (TOKEN_ITEM_MAX_HEIGHT - TOKEN_ITEM_MIN_HEIGHT) * heightProgress);
-  let width = TOKEN_ITEM_MIN_WIDTH;
+  let width = minWidth;
 
-  if (tokenCount > TOKEN_ITEM_HEIGHT_LIMIT) {
+  if (tokenCount > heightTokenLimit) {
     const widthProgress = Math.min(
-      tokenCount - TOKEN_ITEM_HEIGHT_LIMIT,
-      TOKEN_ITEM_WIDTH_LIMIT - TOKEN_ITEM_HEIGHT_LIMIT,
-    ) / (TOKEN_ITEM_WIDTH_LIMIT - TOKEN_ITEM_HEIGHT_LIMIT);
-    width = Math.round(TOKEN_ITEM_MIN_WIDTH + (TOKEN_ITEM_MAX_WIDTH - TOKEN_ITEM_MIN_WIDTH) * widthProgress);
+      tokenCount - heightTokenLimit,
+      TOKEN_ITEM_WIDTH_LIMIT - heightTokenLimit,
+    ) / (TOKEN_ITEM_WIDTH_LIMIT - heightTokenLimit);
+    width = Math.round(minWidth + (maxWidth - minWidth) * widthProgress);
   }
 
   return { width, height };
@@ -130,18 +136,18 @@ export function AgentTokenStatsTopbar({ session }: { session: AgentSession }) {
     <div ref={topbarRef} className="agent-token-topbar" aria-label={t("agentConsole.tokenStats", "Agent step token statistics")}>
       <div ref={listRef} className="agent-token-topbar-list" onWheel={handleWheel}>
         {displayStats.map((stat) => {
-          const shape = getTokenItemShape(stat.tokenCount);
+          const shape = getTokenItemShape(stat.tokenCount, stat.kind);
           const label = statLabel(stat.kind, stat.label, t);
           const title = `${stat.index + 1}. ${label}`;
           const kind = kindLabel(stat.kind, t);
-          const status = statusLabel(stat.status, t);
+          const status = stat.staleRunningState ? t("agentConsole.stepStatus.staleRunning", "Stale running state") : statusLabel(stat.status, t);
           const tokens = t(stat.estimated ? "agentConsole.estimatedTokens" : "agentConsole.tokens", stat.estimated ? "{{value}} estimated tokens" : "{{value}} tokens", { value: formatTokenCount(stat.tokenCount) });
           const ariaLabel = [title, `${kind} · ${status}`, tokens].join("\n");
           return (
             <button
               key={stat.id}
               type="button"
-              className={`agent-token-topbar-item agent-token-topbar-item-${stat.kind} agent-token-topbar-item-${stat.status}${stat.index === highlightedIndex ? " current" : ""}`}
+              className={`agent-token-topbar-item agent-token-topbar-item-${stat.kind}${stat.tone ? ` agent-token-topbar-tone-${stat.tone}` : ""} agent-token-topbar-item-${stat.status}${stat.staleRunningState ? " agent-token-topbar-item-stale-running" : ""}${stat.index === highlightedIndex ? " current" : ""}`}
               data-agent-token-current={stat.index === highlightedIndex ? "true" : undefined}
               aria-label={ariaLabel}
               onClick={() => focusAgentStat(stat.messageId, stat.target === "step" ? (stat.stepId || stat.blockIds[0]) : undefined)}
