@@ -80,7 +80,7 @@ function groupLabel(value: string, translate: (key: string, defaultValue: string
   const days = Math.floor((startOfToday - startOfCurrent) / 86400000);
   if (days <= 0) return translate("mlc.today", "Today");
   if (days === 1) return translate("mlc.yesterday", "Yesterday");
-  if (days < 7) return translate("mlc.lastWeek", "Last week");
+  if (days < 7) return translate("mlc.lastWeek", "Past week");
   return translate("mlc.earlier", "Earlier");
 }
 

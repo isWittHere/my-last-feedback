@@ -1,9 +1,11 @@
 import type { CSSProperties } from "react";
+import { useMemo, useState } from "react";
 import { useTranslation } from "react-i18next";
 import { useAgentConsoleSettings } from "../../agentConsoleSettings";
 import { getAgentSessionIdentity } from "../../agent/sessionIdentity";
 import type { AgentContentBlock, AgentMessage, AgentSession } from "../../agent/types";
 import { splitAgentMessageBlocks } from "../../agent/steps";
+import { useAgentStore } from "../../store/agentStore";
 import { MarkdownContent } from "../MarkdownContent";
 import { Icon } from "../Icons";
 import { IdenticonAvatar } from "../IdenticonAvatar";
@@ -53,12 +55,54 @@ function actorInfo(session: AgentSession, message: AgentMessage, language: "en" 
   return { alias: identity.code || identity.name, color: identity.color, says: `${identity.name} 说:`, avatarKind: identity.code ? "identicon" : "opencode" };
 }
 
+function AgentMessageActions({ session, message, copyText, disabled }: { session: AgentSession; message: AgentMessage; copyText: string; disabled?: boolean }) {
+  const { t } = useTranslation();
+  const [copied, setCopied] = useState(false);
+  const editAgentMessage = useAgentStore((state) => state.editAgentMessage);
+  const forkAgentSessionFromMessage = useAgentStore((state) => state.forkAgentSessionFromMessage);
+  const canActOnUserMessage = message.role === "user" && Boolean(session.providerSessionId);
+  const canCopy = Boolean(copyText.trim()) && !disabled;
+
+  const copy = () => {
+    if (!canCopy) return;
+    const write = navigator.clipboard?.writeText(copyText);
+    if (!write) return;
+    void write.then(() => {
+      setCopied(true);
+      window.setTimeout(() => setCopied(false), 1600);
+    });
+  };
+
+  if (!canCopy && !canActOnUserMessage) return null;
+
+  return (
+    <div className="agent-message-actions" aria-label={t("agentConsole.messageActions", "Message actions")}>
+      {canActOnUserMessage && (
+        <button type="button" className="agent-message-action" onClick={() => void editAgentMessage(session.id, message.id)} title={t("agentConsole.editAndRetry", "Edit and retry")} disabled={disabled || session.revertLoading}>
+          <Icon name="refresh" size={12} />
+        </button>
+      )}
+      {canActOnUserMessage && (
+        <button type="button" className="agent-message-action" onClick={() => void forkAgentSessionFromMessage(session.id, message.id)} title={t("agentConsole.forkFromMessage", "Fork from message")} disabled={disabled}>
+          <Icon name="git-branch" size={12} />
+        </button>
+      )}
+      {canCopy && (
+        <button type="button" className="agent-message-action" onClick={copy} title={copied ? t("agentConsole.messageCopied", "Copied") : message.role === "assistant" ? t("agentConsole.copyResponse", "Copy response") : t("agentConsole.copyMessage", "Copy message")}>
+          <Icon name={copied ? "check" : "copy"} size={12} />
+        </button>
+      )}
+    </div>
+  );
+}
+
 export function AgentMessageItem({ session, message, projectDirectory }: { session: AgentSession; message: AgentMessage; projectDirectory: string }) {
   const { i18n } = useTranslation();
   const { showMessageSpeakerLine } = useAgentConsoleSettings();
   const { processBlocks, resultBlocks } = splitAgentMessageBlocks(message);
   const { alias, color, says, avatarKind } = actorInfo(session, message, i18n.language.startsWith("zh") ? "zh" : "en");
   const userText = message.role === "user" ? resultBlocks.map(blockText).join("\n\n") : "";
+  const assistantText = useMemo(() => message.role === "assistant" ? resultBlocks.map(blockText).filter(Boolean).join("\n\n") : "", [message.role, resultBlocks]);
   const isStreaming = message.status === "streaming";
 
   return (
@@ -71,11 +115,15 @@ export function AgentMessageItem({ session, message, projectDirectory }: { sessi
           </header>
         )}
         {message.role === "user" ? (
-          <MarkdownContent markdown={userText} projectDirectory={projectDirectory} className="agent-user-markdown" variant="feedback" enableComposerTokens />
+          <>
+            <MarkdownContent markdown={userText} projectDirectory={projectDirectory} className="agent-user-markdown" variant="feedback" enableComposerTokens />
+            <AgentMessageActions session={session} message={message} copyText={userText} disabled={isStreaming} />
+          </>
         ) : (
           <>
             <AgentProcessGroup blocks={processBlocks} messageId={message.id} isStreaming={isStreaming} projectDirectory={projectDirectory} />
             <ResultBlocks blocks={resultBlocks} projectDirectory={projectDirectory} />
+            <AgentMessageActions session={session} message={message} copyText={assistantText} disabled={isStreaming} />
           </>
         )}
       </div>

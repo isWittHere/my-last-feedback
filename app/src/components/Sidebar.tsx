@@ -700,7 +700,7 @@ export function Sidebar({ mode, onModeChange }: { mode: SessionListMode; onModeC
           const groupLabels: Record<TimeGroup, string> = {
             today: t("sidebar.groupToday", "Today"),
             yesterday: t("sidebar.groupYesterday", "Yesterday"),
-            lastWeek: t("sidebar.groupLastWeek", "Last week"),
+            lastWeek: t("sidebar.groupLastWeek", "Past week"),
             earlier: t("sidebar.groupEarlier", "Earlier"),
           };
 

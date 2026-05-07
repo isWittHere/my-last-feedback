@@ -127,8 +127,20 @@ export interface AgentMessage {
   blocks: AgentContentBlock[];
   status: "streaming" | "complete" | "error";
   modelId?: string;
+  providerMessageId?: string;
+  providerParentMessageId?: string;
+  providerParts?: AgentProviderMessagePart[];
+  composerDraft?: string;
   createdAt: string;
   updatedAt?: string;
+}
+
+export interface AgentProviderMessagePart {
+  id?: string;
+  type?: string;
+  text?: string;
+  synthetic?: boolean;
+  ignored?: boolean;
 }
 
 export interface AgentDiagnosticEntry {
@@ -201,6 +213,18 @@ export interface AgentSession {
   sessionDiffError?: string;
   compacting?: boolean;
   compactError?: string;
+  revert?: {
+    messageId: string;
+    partId?: string;
+    diff?: AgentSessionFileDiff[];
+  };
+  revertLoading?: boolean;
+  revertError?: string;
+  draftSource?: {
+    kind: "message-edit" | "fork";
+    sourceSessionId: string;
+    sourceMessageId: string;
+  };
   diagnostics: AgentDiagnosticEntry[];
   createdAt: string;
   updatedAt: string;

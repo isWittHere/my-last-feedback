@@ -412,7 +412,7 @@ export function AgentSessionManagerPanel() {
                     const groupLabels: Record<TimeGroup, string> = {
                       today: t("sidebar.groupToday", "Today"),
                       yesterday: t("sidebar.groupYesterday", "Yesterday"),
-                      lastWeek: t("sidebar.groupLastWeek", "Last week"),
+                      lastWeek: t("sidebar.groupLastWeek", "Past week"),
                       earlier: t("sidebar.groupEarlier", "Earlier"),
                     };
                     const groups = new Map<TimeGroup, typeof sessionRows>();

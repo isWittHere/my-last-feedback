@@ -1,12 +1,12 @@
 import { create } from "zustand";
 import { hasAgentComposerContent } from "../agent/composer";
 import { normalizeOpenCodeEvent, normalizeOpenCodePart, normalizeOpenCodeTodos, startOpenCodeServerRuntime } from "../agent/opencode";
-import type { OpenCodeAgentInfo, OpenCodeBusEvent, OpenCodeCommandFilePart, OpenCodeCommandInfo, OpenCodeMessage, OpenCodeMessageInfo, OpenCodePermissionReply, OpenCodePermissionRule, OpenCodeProviderResponse, OpenCodeServerRuntime, OpenCodeSseConnection } from "../agent/opencode";
+import type { OpenCodeAgentInfo, OpenCodeBusEvent, OpenCodeCommandFilePart, OpenCodeCommandInfo, OpenCodeMessage, OpenCodeMessageInfo, OpenCodeMessagePart, OpenCodePermissionReply, OpenCodePermissionRule, OpenCodeProviderResponse, OpenCodeServerRuntime, OpenCodeSessionInfo, OpenCodeSseConnection } from "../agent/opencode";
 import { createAgentSession } from "../agent/sessionFactory";
 import { buildSubmittedComposerPayload } from "../composer/submittedFeedback";
 import { getAgentConsoleSettings } from "../agentConsoleSettings";
 import { setOpenCodePreferredModel, syncOpenCodeModels } from "../openCodeSettings";
-import type { AgentChoiceOption, AgentContentBlock, AgentContextUsage, AgentDiagnosticEntry, AgentMessage, AgentSession, AgentSessionFileDiff } from "../agent/types";
+import type { AgentChoiceOption, AgentContentBlock, AgentContextUsage, AgentDiagnosticEntry, AgentMessage, AgentProviderMessagePart, AgentSession, AgentSessionFileDiff } from "../agent/types";
 import type { AgentProviderId } from "../agent/types";
 import type { GitAction, ImageAttachment, MlcAttachment, WebAttachment } from "./feedbackStore";
 
@@ -93,6 +93,9 @@ interface AgentStoreState {
   receiveAgentProcessError: (processId: string, message: string) => void;
   sendAgentPrompt: (sessionId: string) => Promise<void>;
   abortAgentPrompt: (sessionId: string) => Promise<void>;
+  editAgentMessage: (sessionId: string, messageId: string) => Promise<void>;
+  restoreAgentRevertedMessage: (sessionId: string, messageId: string) => Promise<void>;
+  forkAgentSessionFromMessage: (sessionId: string, messageId: string) => Promise<void>;
   refreshProviderSessions: (providerId: AgentProviderId, cursor?: string | null) => Promise<void>;
   restoreProviderSession: (providerId: AgentProviderId, providerSessionId: string) => Promise<void>;
   renameProviderSession: (providerId: AgentProviderId, providerSessionId: string, title: string) => Promise<void>;
@@ -105,6 +108,10 @@ interface AgentStoreState {
 }
 
 function newId(prefix: string): string {
+  return `${prefix}_${crypto.randomUUID?.() || `${Date.now()}_${Math.random().toString(16).slice(2)}`}`;
+}
+
+function newOpenCodeId(prefix: "msg" | "prt"): string {
   return `${prefix}_${crypto.randomUUID?.() || `${Date.now()}_${Math.random().toString(16).slice(2)}`}`;
 }
 
@@ -122,12 +129,15 @@ function textBlock(content: string, phase: "process" | "result" = "result"): Age
   };
 }
 
-function createUserMessage(content: string): AgentMessage {
+function createUserMessage(content: string, options: Partial<Pick<AgentMessage, "id" | "providerMessageId" | "providerParts" | "composerDraft">> = {}): AgentMessage {
   return {
-    id: newId("agent_user_msg"),
+    id: options.id || newId("agent_user_msg"),
     role: "user",
     status: "complete",
     blocks: [textBlock(content)],
+    providerMessageId: options.providerMessageId || options.id,
+    providerParts: options.providerParts,
+    composerDraft: options.composerDraft,
     createdAt: nowIso(),
   };
 }
@@ -374,6 +384,50 @@ function openCodeContextUsageFromMessages(messages: OpenCodeMessage[], contextLi
   return openCodeContextUsageFromInfo(lastAssistantWithUsage?.info, contextLimit, totalCost);
 }
 
+function summarizeOpenCodeParts(parts: OpenCodeMessagePart[] | undefined): AgentProviderMessagePart[] {
+  return (parts || []).map((part) => ({
+    id: typeof part.id === "string" ? part.id : undefined,
+    type: typeof part.type === "string" ? part.type : undefined,
+    text: typeof part.text === "string" ? part.text : undefined,
+    synthetic: part.synthetic === true,
+    ignored: part.ignored === true,
+  }));
+}
+
+function promptDraftFromProviderParts(parts: AgentProviderMessagePart[] | undefined): string {
+  return (parts || [])
+    .filter((part) => part.type === "text" && !part.synthetic && !part.ignored && typeof part.text === "string")
+    .map((part) => part.text || "")
+    .join("\n\n")
+    .trim();
+}
+
+function messageDraftText(message: AgentMessage): string {
+  const draft = message.composerDraft?.trim();
+  if (draft) return draft;
+  const providerDraft = promptDraftFromProviderParts(message.providerParts);
+  if (providerDraft) return providerDraft;
+  return message.blocks
+    .map((block) => block.type === "text" ? block.content : "")
+    .filter(Boolean)
+    .join("\n\n")
+    .trim();
+}
+
+function messageProviderId(message: AgentMessage): string {
+  return message.providerMessageId || message.id;
+}
+
+function revertStateFromOpenCodeSession(session: OpenCodeSessionInfo | undefined): AgentSession["revert"] {
+  const messageId = session?.revert?.messageID;
+  if (!messageId) return undefined;
+  return {
+    messageId,
+    partId: session.revert?.partID,
+    diff: normalizeOpenCodeFileDiffs(session.revert?.diff || []),
+  };
+}
+
 function agentMessagesFromOpenCodeMessages(messages: OpenCodeMessage[]): AgentMessage[] {
   const mappedMessages = messages.map((message) => {
     const updatedTime = typeof message.info?.time?.updated === "number" ? message.info.time.updated : null;
@@ -385,11 +439,16 @@ function agentMessagesFromOpenCodeMessages(messages: OpenCodeMessage[]): AgentMe
       .map((block) => messageStatus === "complete" && (block.type === "thinking" || block.type === "compaction") ? { ...block, status: "completed" as const, updatedAt: block.updatedAt || nowIso() } : block);
     const isCompactionOnlyMessage = blocks.length > 0 && blocks.every((block) => block.type === "compaction");
     const role = message.info?.role === "user" && !isCompactionOnlyMessage ? "user" : "assistant";
+    const providerParts = summarizeOpenCodeParts(message.parts);
     return {
       id: message.info?.id || newId("msg"),
       role,
       status: messageStatus,
       blocks,
+      providerMessageId: message.info?.id,
+      providerParentMessageId: message.info?.parentID,
+      providerParts,
+      composerDraft: role === "user" ? promptDraftFromProviderParts(providerParts) : undefined,
       modelId: openCodeModelIdFromInfo(message.info),
       createdAt: message.info?.time?.created ? new Date(message.info.time.created).toISOString() : nowIso(),
       updatedAt: updatedTime ? new Date(updatedTime).toISOString() : nowIso(),
@@ -427,6 +486,21 @@ function mergeContiguousAssistantMessages(messages: AgentMessage[]): AgentMessag
     merged.push(message);
   }
   return merged;
+}
+
+function cleanupRevertedMessagesForSubmit(session: AgentSession): AgentSession {
+  const revertMessageId = session.revert?.messageId;
+  if (!revertMessageId) return session;
+  const revertIndex = session.messages.findIndex((message) => messageProviderId(message) === revertMessageId);
+  return {
+    ...session,
+    messages: revertIndex >= 0 ? session.messages.slice(0, revertIndex) : session.messages,
+    revert: undefined,
+    revertLoading: false,
+    revertError: undefined,
+    draftSource: undefined,
+    updatedAt: nowIso(),
+  };
 }
 
 function appendRestoredTaskList(messages: AgentMessage[], todos: unknown[], providerSessionId: string): AgentMessage[] {
@@ -1313,6 +1387,9 @@ export const useAgentStore = create<AgentStoreState>((set, get) => ({
       includeSystemReminder: false,
       includePayloadRouting: false,
     });
+    const composerDraft = session.draft;
+    const openCodeMessageId = newOpenCodeId("msg");
+    const openCodeTextPartId = newOpenCodeId("prt");
 
     try {
       if (session.providerId === "opencode") {
@@ -1368,6 +1445,7 @@ export const useAgentStore = create<AgentStoreState>((set, get) => ({
               providerSessionState: "active",
               status: "running",
               draft: "",
+              draftSource: undefined,
               testLogText: "",
               gitAction: null,
               images: [],
@@ -1411,18 +1489,30 @@ export const useAgentStore = create<AgentStoreState>((set, get) => ({
     }
 
     set((state) => ({
-      sessions: updateSession(state.sessions, sessionId, (item) => ({
-        ...item,
-        status: "running",
-        draft: "",
-        testLogText: "",
-        gitAction: null,
-        images: [],
-        mlcAttachments: [],
-        webAttachments: [],
-        messages: [...item.messages, createUserMessage(submittedPrompt.markdown), createStreamingAssistantMessage()],
-        updatedAt: nowIso(),
-      })),
+      sessions: updateSession(state.sessions, sessionId, (item) => {
+        const cleaned = cleanupRevertedMessagesForSubmit(item);
+        return {
+          ...cleaned,
+          status: "running",
+          draft: "",
+          draftSource: undefined,
+          testLogText: "",
+          gitAction: null,
+          images: [],
+          mlcAttachments: [],
+          webAttachments: [],
+          messages: [
+            ...cleaned.messages,
+            createUserMessage(submittedPrompt.markdown, {
+              id: openCodeMessageId,
+              providerParts: [{ id: openCodeTextPartId, type: "text", text: composerDraft }],
+              composerDraft,
+            }),
+            createStreamingAssistantMessage(),
+          ],
+          updatedAt: nowIso(),
+        };
+      }),
     }));
 
     try {
@@ -1456,7 +1546,8 @@ export const useAgentStore = create<AgentStoreState>((set, get) => ({
 
         const configuredSession = get().sessions.find((item) => item.id === sessionId) || session;
         await httpRuntime.runtime.client.promptAsync(providerSessionId, {
-          parts: [{ type: "text", text: submittedPrompt.historyText || submittedPrompt.markdown }],
+          messageID: openCodeMessageId,
+          parts: [{ id: openCodeTextPartId, type: "text", text: submittedPrompt.historyText || submittedPrompt.markdown }],
           model: openCodeModelFromSession(configuredSession),
           ...(configuredSession.modeId ? { agent: configuredSession.modeId } : {}),
         });
@@ -1520,6 +1611,148 @@ export const useAgentStore = create<AgentStoreState>((set, get) => ({
     set((state) => ({
       sessions: updateSession(state.sessions, sessionId, (item) => appendDiagnosticToSession(item, "warn", "Abort is not available for this session.")),
     }));
+  },
+
+  editAgentMessage: async (sessionId, messageId) => {
+    const session = get().sessions.find((item) => item.id === sessionId);
+    const message = session?.messages.find((item) => item.id === messageId);
+    const httpRuntime = openCodeHttpRuntimeForSession(session, get().sessions);
+    if (!session?.providerSessionId || !message || message.role !== "user" || !httpRuntime) return;
+    const providerMessageId = messageProviderId(message);
+    const draft = messageDraftText(message);
+    const previousDraft = session.draft;
+    const previousSource = session.draftSource;
+    const previousRevert = session.revert;
+    set((state) => ({
+      sessions: updateSession(state.sessions, sessionId, (item) => ({
+        ...item,
+        draft,
+        draftSource: { kind: "message-edit", sourceSessionId: sessionId, sourceMessageId: message.id },
+        revertLoading: true,
+        revertError: undefined,
+        updatedAt: nowIso(),
+      })),
+    }));
+    try {
+      if (session.status === "running" || session.status === "cancelling") {
+        clearPacedTextBuffers(session.id);
+        await httpRuntime.runtime.client.abort(session.providerSessionId).catch(() => false);
+      }
+      const updated = await httpRuntime.runtime.client.revertSession(session.providerSessionId, { messageID: providerMessageId });
+      set((state) => ({
+        sessions: updateSession(state.sessions, sessionId, (item) => ({
+          ...item,
+          revert: revertStateFromOpenCodeSession(updated) || { messageId: providerMessageId },
+          sessionDiffs: Array.isArray(updated.revert?.diff) ? normalizeOpenCodeFileDiffs(updated.revert.diff) : item.sessionDiffs,
+          revertLoading: false,
+          revertError: undefined,
+          status: item.status === "running" || item.status === "cancelling" ? "idle" : item.status,
+          updatedAt: nowIso(),
+        })),
+      }));
+    } catch (error) {
+      const detail = error instanceof Error ? error.message : String(error);
+      set((state) => ({
+        sessions: updateSession(state.sessions, sessionId, (item) => appendDiagnosticToSession({
+          ...item,
+          draft: previousDraft,
+          draftSource: previousSource,
+          revert: previousRevert,
+          revertLoading: false,
+          revertError: detail,
+          updatedAt: nowIso(),
+        }, "error", `Failed to edit message: ${detail}`)),
+      }));
+    }
+  },
+
+  restoreAgentRevertedMessage: async (sessionId, messageId) => {
+    const session = get().sessions.find((item) => item.id === sessionId);
+    const httpRuntime = openCodeHttpRuntimeForSession(session, get().sessions);
+    if (!session?.providerSessionId || !session.revert || !httpRuntime) return;
+    const revertIndex = session.messages.findIndex((message) => messageProviderId(message) === session.revert!.messageId);
+    if (revertIndex < 0) return;
+    const rolledUserMessages = session.messages.slice(revertIndex).filter((message) => message.role === "user");
+    const selectedIndex = rolledUserMessages.findIndex((message) => message.id === messageId || messageProviderId(message) === messageId);
+    const selected = selectedIndex >= 0 ? rolledUserMessages[selectedIndex] : undefined;
+    if (!selected) return;
+    const next = rolledUserMessages[selectedIndex + 1];
+    const previousDraft = session.draft;
+    const previousSource = session.draftSource;
+    const previousRevert = session.revert;
+    set((state) => ({
+      sessions: updateSession(state.sessions, sessionId, (item) => ({ ...item, revertLoading: true, revertError: undefined, updatedAt: nowIso() })),
+    }));
+    try {
+      const updated = next
+        ? await httpRuntime.runtime.client.revertSession(session.providerSessionId, { messageID: messageProviderId(next) })
+        : await httpRuntime.runtime.client.unrevertSession(session.providerSessionId);
+      set((state) => ({
+        sessions: updateSession(state.sessions, sessionId, (item) => ({
+          ...item,
+          revert: revertStateFromOpenCodeSession(updated),
+          sessionDiffs: Array.isArray(updated.revert?.diff) ? normalizeOpenCodeFileDiffs(updated.revert.diff) : item.sessionDiffs,
+          draft: next ? messageDraftText(next) : "",
+          draftSource: next ? { kind: "message-edit", sourceSessionId: sessionId, sourceMessageId: next.id } : undefined,
+          revertLoading: false,
+          revertError: undefined,
+          updatedAt: nowIso(),
+        })),
+      }));
+    } catch (error) {
+      const detail = error instanceof Error ? error.message : String(error);
+      set((state) => ({
+        sessions: updateSession(state.sessions, sessionId, (item) => appendDiagnosticToSession({
+          ...item,
+          draft: previousDraft,
+          draftSource: previousSource,
+          revert: previousRevert,
+          revertLoading: false,
+          revertError: detail,
+          updatedAt: nowIso(),
+        }, "error", `Failed to restore reverted message: ${detail}`)),
+      }));
+    }
+  },
+
+  forkAgentSessionFromMessage: async (sessionId, messageId) => {
+    const session = get().sessions.find((item) => item.id === sessionId);
+    const message = session?.messages.find((item) => item.id === messageId);
+    const httpRuntime = openCodeHttpRuntimeForSession(session, get().sessions);
+    if (!session?.providerSessionId || !message || message.role !== "user" || !httpRuntime) return;
+    const providerMessageId = messageProviderId(message);
+    const draft = messageDraftText(message);
+    try {
+      const forked = await httpRuntime.runtime.client.forkSession(session.providerSessionId, { messageID: providerMessageId });
+      const messages = await httpRuntime.runtime.client.messages(forked.id).catch(() => [] as OpenCodeMessage[]);
+      const todos = await httpRuntime.runtime.client.todos(forked.id).catch(() => []);
+      const newSessionId = get().createNewSession({ cwd: session.cwd });
+      const replayedMessages = appendRestoredTaskList(agentMessagesFromOpenCodeMessages(messages), todos, forked.id);
+      set((state) => ({
+        sessions: updateSession(state.sessions, newSessionId, (item) => ({
+          ...item,
+          title: forked.title || `${session.title} fork`,
+          providerSessionId: forked.id,
+          providerSessionState: "active",
+          providerRuntime: session.providerRuntime,
+          messages: replayedMessages,
+          draft,
+          draftSource: { kind: "fork", sourceSessionId: sessionId, sourceMessageId: message.id },
+          modelId: session.modelId,
+          modeId: session.modeId,
+          availableModels: session.availableModels || [],
+          availableModes: session.availableModes || [],
+          availableCommands: session.availableCommands || [],
+          configOptions: session.configOptions || [],
+          status: "idle",
+          updatedAt: nowIso(),
+        })),
+        activeSessionId: newSessionId,
+      }));
+    } catch (error) {
+      const detail = error instanceof Error ? error.message : String(error);
+      get().appendAgentDiagnostic(sessionId, "error", `Failed to fork session: ${detail}`);
+    }
   },
 
   refreshProviderSessions: async (providerId, cursor = null) => {
@@ -1647,6 +1880,7 @@ export const useAgentStore = create<AgentStoreState>((set, get) => ({
         httpRuntime.runtime.client.permissions().catch(() => []),
       ]);
       const providerSession = providerSessions.find((item) => item.id === providerSessionId);
+      const restoredRevert = revertStateFromOpenCodeSession(providerSession);
       const replayedMessages = appendRestoredTaskList(agentMessagesFromOpenCodeMessages(messages), todos, providerSessionId);
       const restoredSelection = openCodeSelectionFromMessages(messages);
       const restoredModelId = restoredSelection.modelId || session.modelId;
@@ -1672,6 +1906,9 @@ export const useAgentStore = create<AgentStoreState>((set, get) => ({
             sessionDiffs: normalizeOpenCodeFileDiffs(sessionDiffs),
             sessionDiffLoading: false,
             sessionDiffError: undefined,
+            revert: restoredRevert,
+            revertLoading: false,
+            revertError: undefined,
             status: "idle",
             updatedAt: nowIso(),
           }, "info", `Session restored: ${providerSessionId}`))
@@ -1694,6 +1931,9 @@ export const useAgentStore = create<AgentStoreState>((set, get) => ({
             sessionDiffs: normalizeOpenCodeFileDiffs(sessionDiffs),
             sessionDiffLoading: false,
             sessionDiffError: undefined,
+            revert: restoredRevert,
+            revertLoading: false,
+            revertError: undefined,
             status: "idle",
             createdAt: nowIso(),
             updatedAt: nowIso(),

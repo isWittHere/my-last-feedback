@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useRef, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { useAgentConsoleSettings } from "../../agentConsoleSettings";
 import type { AgentSession } from "../../agent/types";
 import { AgentMessageItem } from "./AgentMessageItem";
@@ -50,9 +50,15 @@ export function AgentMessageTimeline({ session }: { session: AgentSession }) {
   const shouldAutoFollowRef = useRef(true);
   const [stickyUserContent, setStickyUserContent] = useState<string | null>(null);
   const [stickyUserMsgId, setStickyUserMsgId] = useState<string | null>(null);
-  const isStreaming = session.messages.some((message) => message.status === "streaming");
+  const visibleMessages = useMemo(() => {
+    const revertMessageId = session.revert?.messageId;
+    if (!revertMessageId) return session.messages;
+    const revertIndex = session.messages.findIndex((message) => (message.providerMessageId || message.id) === revertMessageId);
+    return revertIndex >= 0 ? session.messages.slice(0, revertIndex) : session.messages;
+  }, [session.messages, session.revert?.messageId]);
+  const isStreaming = visibleMessages.some((message) => message.status === "streaming");
 
-  messagesRef.current = session.messages;
+  messagesRef.current = visibleMessages;
 
   const checkNearBottom = useCallback(() => {
     const container = scrollRef.current;
@@ -67,7 +73,7 @@ export function AgentMessageTimeline({ session }: { session: AgentSession }) {
   useEffect(() => {
     shouldAutoFollowRef.current = true;
     scrollToEnd();
-  }, [session.messages.length, scrollToEnd]);
+  }, [visibleMessages.length, scrollToEnd]);
 
   useEffect(() => {
     const handleFocusMessage = (event: Event) => {
@@ -147,7 +153,7 @@ export function AgentMessageTimeline({ session }: { session: AgentSession }) {
   useEffect(() => {
     const frame = requestAnimationFrame(updateStickyUserMessage);
     return () => cancelAnimationFrame(frame);
-  }, [session.messages, updateStickyUserMessage]);
+  }, [visibleMessages, updateStickyUserMessage]);
 
   useEffect(() => {
     if (!isStreaming) return;
@@ -155,7 +161,7 @@ export function AgentMessageTimeline({ session }: { session: AgentSession }) {
       const frame = requestAnimationFrame(() => scrollToEnd());
       return () => cancelAnimationFrame(frame);
     }
-  }, [isStreaming, scrollToEnd, session.messages]);
+  }, [isStreaming, scrollToEnd, visibleMessages]);
 
   useEffect(() => {
     const container = scrollRef.current;
@@ -197,7 +203,7 @@ export function AgentMessageTimeline({ session }: { session: AgentSession }) {
           </div>
         )}
       </div>
-      {session.messages.map((message) => (
+      {visibleMessages.map((message) => (
         <AgentMessageItem key={message.id} session={session} message={message} projectDirectory={session.cwd} />
       ))}
       <div ref={endRef} />

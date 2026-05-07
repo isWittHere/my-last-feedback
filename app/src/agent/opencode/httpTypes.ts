@@ -39,6 +39,11 @@ export interface OpenCodeSessionInfo {
   title?: string;
   time?: OpenCodeSessionTime;
   permission?: OpenCodePermissionRule[];
+  revert?: {
+    messageID?: string;
+    partID?: string;
+    diff?: OpenCodeFileDiff[];
+  };
   [key: string]: unknown;
 }
 
@@ -156,8 +161,11 @@ export interface OpenCodeSummarizeRequest {
 }
 
 export interface OpenCodePromptPart {
+  id?: string;
   type: "text";
   text: string;
+  synthetic?: boolean;
+  ignored?: boolean;
 }
 
 export interface OpenCodePromptModel {
@@ -178,9 +186,19 @@ export interface OpenCodeMessageTokens {
 }
 
 export interface OpenCodePromptRequest {
+  messageID?: string;
   parts: OpenCodePromptPart[];
   model?: OpenCodePromptModel;
   agent?: string;
+}
+
+export interface OpenCodeForkRequest {
+  messageID: string;
+}
+
+export interface OpenCodeRevertRequest {
+  messageID: string;
+  partID?: string;
 }
 
 export interface OpenCodeCommandFilePart {

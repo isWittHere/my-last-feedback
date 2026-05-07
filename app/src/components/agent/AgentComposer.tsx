@@ -58,6 +58,61 @@ function AgentSelectButton({ label, value, options, onSelect }: { label: string;
   );
 }
 
+function providerMessageId(message: AgentSession["messages"][number]): string {
+  return message.providerMessageId || message.id;
+}
+
+function messagePreview(message: AgentSession["messages"][number]): string {
+  const draft = message.composerDraft?.trim();
+  if (draft) return draft.replace(/\s+/g, " ");
+  return message.blocks
+    .map((block) => block.type === "text" ? block.content : "")
+    .filter(Boolean)
+    .join(" ")
+    .replace(/\s+/g, " ")
+    .trim();
+}
+
+function AgentRevertDock({ session }: { session: AgentSession }) {
+  const { t } = useTranslation();
+  const [expanded, setExpanded] = useState(false);
+  const restoreAgentRevertedMessage = useAgentStore((state) => state.restoreAgentRevertedMessage);
+  const revertMessageId = session.revert?.messageId;
+  const items = useMemo(() => {
+    if (!revertMessageId) return [];
+    const revertIndex = session.messages.findIndex((message) => providerMessageId(message) === revertMessageId);
+    const revertedMessages = revertIndex >= 0 ? session.messages.slice(revertIndex) : [];
+    return revertedMessages
+      .filter((message) => message.role === "user")
+      .map((message) => ({ id: message.id, text: messagePreview(message) || t("agentConsole.emptyMessage", "Empty message") }));
+  }, [revertMessageId, session.messages, t]);
+
+  if (!revertMessageId || items.length === 0) return null;
+
+  return (
+    <div className="agent-revert-dock">
+      <button type="button" className="agent-revert-dock-head" onClick={() => setExpanded((value) => !value)}>
+        <Icon name="refresh" size={12} />
+        <span>{t("agentConsole.revertedMessages", "{{count}} reverted messages", { count: items.length })}</span>
+        <Icon name="chevron-down" size={11} className="agent-revert-dock-caret" style={{ transform: expanded ? "rotate(180deg)" : undefined }} />
+      </button>
+      {expanded && (
+        <div className="agent-revert-dock-list">
+          {items.map((item) => (
+            <div key={item.id} className="agent-revert-dock-row">
+              <span>{item.text}</span>
+              <button type="button" className="btn" disabled={session.revertLoading} onClick={() => void restoreAgentRevertedMessage(session.id, item.id)}>
+                {t("agentConsole.restoreMessage", "Restore")}
+              </button>
+            </div>
+          ))}
+        </div>
+      )}
+      {session.revertError && <div className="agent-revert-dock-error">{session.revertError}</div>}
+    </div>
+  );
+}
+
 export function AgentComposer({ session }: { session: AgentSession }) {
   const { t } = useTranslation();
   const testLogRef = useRef<HTMLTextAreaElement>(null);
@@ -337,31 +392,35 @@ export function AgentComposer({ session }: { session: AgentSession }) {
   );
 
   return (
-    <SharedComposerInput
-      id={session.id}
-      value={session.draft}
-      projectDirectory={session.cwd}
-      placeholder={t("agentConsole.placeholder", "Ask the agent to work in this workspace...")}
-      commands={commandOptions}
-      images={session.images}
-      mlcAttachments={session.mlcAttachments}
-      webAttachments={session.webAttachments}
-      onChange={(value) => updateDraft(session.id, value)}
-      onFocus={focusAgentComposer}
-      onAddImage={(image) => addImage(session.id, image)}
-      onRemoveImage={(path) => removeImage(session.id, path)}
-      onClearImages={() => clearImages(session.id)}
-      onRemoveMlcAttachment={(filePath) => removeMlcAttachment(session.id, filePath)}
-      onClearMlcAttachments={() => clearMlcAttachments(session.id)}
-      onRemoveWebAttachment={(attachmentId) => removeWebAttachment(session.id, attachmentId)}
-      onSubmit={send}
-      attachmentActionButtons={attachmentActionButtons}
-      attachmentMiddleTags={attachmentMiddleTags}
-      hasAttachmentMiddleTags={Boolean(session.testLogText.trim() || showTestLog || session.gitAction)}
-      expandedAttachmentPanels={expandedAttachmentPanels}
-      bottomLeftSlot={bottomLeftSlot}
-      submitControl={submitControl}
-      insertEventTarget={{ callerId: AGENT_COMPOSER_CALLER_ID, sessionId: session.id, kind: "agent" }}
-    />
+    <>
+      <AgentRevertDock session={session} />
+      {session.draftSource && <div className="agent-draft-source-note">{session.draftSource.kind === "fork" ? t("agentConsole.forkDraftSource", "Draft from forked message") : t("agentConsole.editDraftSource", "Editing a previous message")}</div>}
+      <SharedComposerInput
+        id={session.id}
+        value={session.draft}
+        projectDirectory={session.cwd}
+        placeholder={t("agentConsole.placeholder", "Ask the agent to work in this workspace...")}
+        commands={commandOptions}
+        images={session.images}
+        mlcAttachments={session.mlcAttachments}
+        webAttachments={session.webAttachments}
+        onChange={(value) => updateDraft(session.id, value)}
+        onFocus={focusAgentComposer}
+        onAddImage={(image) => addImage(session.id, image)}
+        onRemoveImage={(path) => removeImage(session.id, path)}
+        onClearImages={() => clearImages(session.id)}
+        onRemoveMlcAttachment={(filePath) => removeMlcAttachment(session.id, filePath)}
+        onClearMlcAttachments={() => clearMlcAttachments(session.id)}
+        onRemoveWebAttachment={(attachmentId) => removeWebAttachment(session.id, attachmentId)}
+        onSubmit={send}
+        attachmentActionButtons={attachmentActionButtons}
+        attachmentMiddleTags={attachmentMiddleTags}
+        hasAttachmentMiddleTags={Boolean(session.testLogText.trim() || showTestLog || session.gitAction)}
+        expandedAttachmentPanels={expandedAttachmentPanels}
+        bottomLeftSlot={bottomLeftSlot}
+        submitControl={submitControl}
+        insertEventTarget={{ callerId: AGENT_COMPOSER_CALLER_ID, sessionId: session.id, kind: "agent" }}
+      />
+    </>
   );
 }
