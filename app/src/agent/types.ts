@@ -151,6 +151,14 @@ export interface AgentDiagnosticEntry {
   createdAt: string;
 }
 
+export type AgentOpenCodePermissionAction = "allow" | "ask" | "deny";
+
+export interface AgentOpenCodePermissionRule {
+  permission: string;
+  pattern: string;
+  action: AgentOpenCodePermissionAction;
+}
+
 export interface AgentProviderRuntimeInfo {
   transport?: "http";
   processId?: string;
@@ -209,6 +217,9 @@ export interface AgentSession {
   webAttachments: WebAttachment[];
   messages: AgentMessage[];
   pendingPermissionIds: string[];
+  openCodePermissionRules?: AgentOpenCodePermissionRule[];
+  openCodePermissionUpdating?: boolean;
+  openCodePermissionError?: string;
   sessionDiffs?: AgentSessionFileDiff[];
   sessionDiffLoading?: boolean;
   sessionDiffError?: string;

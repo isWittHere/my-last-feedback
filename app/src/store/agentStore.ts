@@ -5,7 +5,7 @@ import type { OpenCodeAgentInfo, OpenCodeBusEvent, OpenCodeCommandFilePart, Open
 import { createAgentSession } from "../agent/sessionFactory";
 import { buildSubmittedComposerPayload } from "../composer/submittedFeedback";
 import { getAgentConsoleSettings } from "../agentConsoleSettings";
-import { setOpenCodePreferredModel, syncOpenCodeModels } from "../openCodeSettings";
+import { getOpenCodeDefaultPermissionRules, setOpenCodePreferredModel, syncOpenCodeModels } from "../openCodeSettings";
 import type { AgentChoiceOption, AgentContentBlock, AgentContextUsage, AgentDiagnosticEntry, AgentMessage, AgentProviderMessagePart, AgentSession, AgentSessionFileDiff } from "../agent/types";
 import type { AgentProviderId } from "../agent/types";
 import type { GitAction, ImageAttachment, MlcAttachment, WebAttachment } from "./feedbackStore";
@@ -98,6 +98,8 @@ interface AgentStoreState {
   restoreProviderSession: (providerId: AgentProviderId, providerSessionId: string) => Promise<void>;
   renameProviderSession: (providerId: AgentProviderId, providerSessionId: string, title: string) => Promise<void>;
   deleteProviderSession: (providerId: AgentProviderId, providerSessionId: string) => Promise<void>;
+  updateOpenCodeSessionPermission: (sessionId: string, permission: string, action: "allow" | "ask" | "deny") => Promise<void>;
+  resetOpenCodeSessionPermissions: (sessionId: string) => Promise<void>;
   resolveAgentPermission: (sessionId: string, requestId: string, optionId: string) => void;
   refreshAgentSessionDiff: (sessionId: string) => Promise<void>;
   compactAgentSession: (sessionId: string) => Promise<void>;
@@ -210,34 +212,31 @@ function createOpenCodeHttpPort(): number {
   return 41000 + Math.floor(Math.random() * 12000);
 }
 
-function openCodeReadOnlyPermissionRules(): OpenCodePermissionRule[] {
-  return [
-    { permission: "glob", pattern: "*", action: "allow" },
-    { permission: "grep", pattern: "*", action: "allow" },
-    { permission: "read", pattern: "*", action: "allow" },
-    { permission: "list", pattern: "*", action: "allow" },
-    { permission: "external_directory", pattern: "*", action: "deny" },
-    { permission: "edit", pattern: "*", action: "ask" },
-    { permission: "bash", pattern: "*", action: "deny" },
-  ];
+function openCodeConfiguredPermissionRules(): OpenCodePermissionRule[] {
+  return getOpenCodeDefaultPermissionRules();
+}
+
+function appendOpenCodePermissionRule(rules: OpenCodePermissionRule[] | undefined, rule: OpenCodePermissionRule): OpenCodePermissionRule[] {
+  return [...(rules || []), rule];
 }
 
 function normalizeOpenCodeFileDiffs(diff: unknown[]): AgentSessionFileDiff[] {
   return diff
     .map((item) => (typeof item === "object" && item !== null ? item as Record<string, unknown> : null))
     .filter((item): item is Record<string, unknown> => Boolean(item))
-    .map((item) => {
+    .map((item): AgentSessionFileDiff => {
       const file = typeof item.file === "string" ? item.file : "";
       const patch = typeof item.patch === "string" ? item.patch : "";
       const additions = typeof item.additions === "number" ? item.additions : 0;
       const deletions = typeof item.deletions === "number" ? item.deletions : 0;
       const status = item.status;
+      const normalizedStatus = status === "added" || status === "deleted" || status === "modified" ? status : undefined;
       return {
         file,
         patch,
         additions,
         deletions,
-        ...(status === "added" || status === "deleted" || status === "modified" ? { status } : {}),
+        ...(normalizedStatus ? { status: normalizedStatus } : {}),
       };
     })
     .filter((item) => item.file);
@@ -433,7 +432,13 @@ function bindAssistantProviderMessageId(message: AgentMessage, providerMessageId
 }
 
 function findLatestAssistantAfterLastUser(messages: AgentMessage[]): number {
-  const lastUserIndex = messages.findLastIndex((message) => message.role === "user");
+  let lastUserIndex = -1;
+  for (let index = messages.length - 1; index >= 0; index -= 1) {
+    if (messages[index].role === "user") {
+      lastUserIndex = index;
+      break;
+    }
+  }
   for (let index = messages.length - 1; index > lastUserIndex; index -= 1) {
     if (messages[index].role === "assistant") return index;
   }
@@ -1541,9 +1546,18 @@ export const useAgentStore = create<AgentStoreState>((set, get) => ({
           if (!providerSessionId) {
             const created = await httpRuntime.runtime.client.createSession();
             providerSessionId = created.id;
-            await httpRuntime.runtime.client.updateSession(providerSessionId, { permission: openCodeReadOnlyPermissionRules() }).catch((error) => {
-              get().appendAgentDiagnostic(sessionId, "warn", `Failed to apply read-only permissions: ${error instanceof Error ? error.message : String(error)}`);
+            const permissionRules = openCodeConfiguredPermissionRules();
+            await httpRuntime.runtime.client.updateSession(providerSessionId, { permission: permissionRules }).catch((error) => {
+              get().appendAgentDiagnostic(sessionId, "warn", `Failed to apply OpenCode permissions: ${error instanceof Error ? error.message : String(error)}`);
             });
+            set((state) => ({
+              sessions: updateSession(state.sessions, sessionId, (item) => ({
+                ...item,
+                openCodePermissionRules: permissionRules,
+                openCodePermissionError: undefined,
+                updatedAt: nowIso(),
+              })),
+            }));
           }
 
           const configuredSession = get().sessions.find((item) => item.id === sessionId) || session;
@@ -1636,14 +1650,17 @@ export const useAgentStore = create<AgentStoreState>((set, get) => ({
         if (!providerSessionId) {
           const created = await httpRuntime.runtime.client.createSession();
           providerSessionId = created.id;
-          await httpRuntime.runtime.client.updateSession(providerSessionId, { permission: openCodeReadOnlyPermissionRules() }).catch((error) => {
-            get().appendAgentDiagnostic(sessionId, "warn", `Failed to apply read-only permissions: ${error instanceof Error ? error.message : String(error)}`);
+          const permissionRules = openCodeConfiguredPermissionRules();
+          await httpRuntime.runtime.client.updateSession(providerSessionId, { permission: permissionRules }).catch((error) => {
+            get().appendAgentDiagnostic(sessionId, "warn", `Failed to apply OpenCode permissions: ${error instanceof Error ? error.message : String(error)}`);
           });
           set((state) => ({
             sessions: updateSession(state.sessions, sessionId, (item) => appendDiagnosticToSession({
               ...item,
               providerSessionId,
               providerSessionState: "active",
+              openCodePermissionRules: permissionRules,
+              openCodePermissionError: undefined,
               title: item.title || created.title || item.title,
               updatedAt: nowIso(),
             }, "info", `Session created: ${providerSessionId}`)),
@@ -1898,6 +1915,8 @@ export const useAgentStore = create<AgentStoreState>((set, get) => ({
             providerRuntime: runtimeOwner?.providerRuntime || session.providerRuntime,
             providerSessionId,
             providerSessionState: "restored",
+            openCodePermissionRules: providerSession?.permission || item.openCodePermissionRules || [],
+            openCodePermissionError: undefined,
             messages: replayedMessages,
             modelId: restoredModelId,
             modeId: restoredModeId,
@@ -1920,6 +1939,8 @@ export const useAgentStore = create<AgentStoreState>((set, get) => ({
             providerRuntime: runtimeOwner?.providerRuntime || session.providerRuntime,
             providerSessionId,
             providerSessionState: "restored",
+            openCodePermissionRules: providerSession?.permission || [],
+            openCodePermissionError: undefined,
             messages: replayedMessages,
             modelId: restoredModelId,
             modeId: restoredModeId,
@@ -2030,6 +2051,88 @@ export const useAgentStore = create<AgentStoreState>((set, get) => ({
         sessions: cleaned.sessions,
       };
     });
+  },
+
+  updateOpenCodeSessionPermission: async (sessionId, permission, action) => {
+        const session = get().sessions.find((item) => item.id === sessionId);
+        const httpRuntime = openCodeHttpRuntimeForSession(session, get().sessions);
+        if (!session?.providerSessionId || !httpRuntime) {
+          get().appendAgentDiagnostic(sessionId, "warn", "OpenCode session is not ready for permission updates.");
+          return;
+        }
+        const rule: OpenCodePermissionRule = { permission, pattern: "*", action };
+        set((state) => ({
+          sessions: updateSession(state.sessions, sessionId, (item) => ({
+            ...item,
+            openCodePermissionUpdating: true,
+            openCodePermissionError: undefined,
+            updatedAt: nowIso(),
+          })),
+        }));
+        try {
+          const updated = await httpRuntime.runtime.client.updateSession(session.providerSessionId, { permission: [rule] });
+          const updatedRules = Array.isArray(updated.permission) ? updated.permission : appendOpenCodePermissionRule(session.openCodePermissionRules as OpenCodePermissionRule[] | undefined, rule);
+          set((state) => ({
+            sessions: updateSession(state.sessions, sessionId, (item) => appendDiagnosticToSession({
+              ...item,
+              openCodePermissionRules: updatedRules,
+              openCodePermissionUpdating: false,
+              openCodePermissionError: undefined,
+              updatedAt: nowIso(),
+            }, "info", `OpenCode permission updated: ${permission} -> ${action}`)),
+          }));
+        } catch (error) {
+          const message = error instanceof Error ? error.message : String(error);
+          set((state) => ({
+            sessions: updateSession(state.sessions, sessionId, (item) => appendDiagnosticToSession({
+              ...item,
+              openCodePermissionUpdating: false,
+              openCodePermissionError: message,
+              updatedAt: nowIso(),
+            }, "error", `Failed to update OpenCode permission: ${message}`)),
+          }));
+    }
+  },
+
+  resetOpenCodeSessionPermissions: async (sessionId) => {
+        const session = get().sessions.find((item) => item.id === sessionId);
+        const httpRuntime = openCodeHttpRuntimeForSession(session, get().sessions);
+        if (!session?.providerSessionId || !httpRuntime) {
+          get().appendAgentDiagnostic(sessionId, "warn", "OpenCode session is not ready for permission updates.");
+          return;
+        }
+        const permissionRules = openCodeConfiguredPermissionRules();
+        set((state) => ({
+          sessions: updateSession(state.sessions, sessionId, (item) => ({
+            ...item,
+            openCodePermissionUpdating: true,
+            openCodePermissionError: undefined,
+            updatedAt: nowIso(),
+          })),
+        }));
+        try {
+          const updated = await httpRuntime.runtime.client.updateSession(session.providerSessionId, { permission: permissionRules });
+          const updatedRules = Array.isArray(updated.permission) ? updated.permission : [...(session.openCodePermissionRules || []), ...permissionRules];
+          set((state) => ({
+            sessions: updateSession(state.sessions, sessionId, (item) => appendDiagnosticToSession({
+              ...item,
+              openCodePermissionRules: updatedRules,
+              openCodePermissionUpdating: false,
+              openCodePermissionError: undefined,
+              updatedAt: nowIso(),
+            }, "info", "OpenCode permissions reset to defaults.")),
+          }));
+        } catch (error) {
+          const message = error instanceof Error ? error.message : String(error);
+          set((state) => ({
+            sessions: updateSession(state.sessions, sessionId, (item) => appendDiagnosticToSession({
+              ...item,
+              openCodePermissionUpdating: false,
+              openCodePermissionError: message,
+              updatedAt: nowIso(),
+            }, "error", `Failed to reset OpenCode permissions: ${message}`)),
+          }));
+    }
   },
 
   resolveAgentPermission: (sessionId, requestId, optionId) => {

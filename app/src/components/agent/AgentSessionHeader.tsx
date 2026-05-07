@@ -8,6 +8,7 @@ import { IdenticonAvatar } from "../IdenticonAvatar";
 import { AgentContextIndicator } from "./AgentContextIndicator";
 import { AgentDiffIndicator } from "./AgentDiffIndicator";
 import { AgentHeaderDetailsRow } from "./AgentHeaderDetailsRow";
+import { AgentPermissionIndicator } from "./AgentPermissionIndicator";
 import { OpenCodeInitialAvatar } from "./OpenCodeInitialAvatar";
 import { AgentTokenStatsTopbar } from "./AgentTokenStatsTopbar";
 
@@ -60,6 +61,7 @@ export function AgentSessionHeader({ session, previewMode = false }: AgentSessio
         </div>
         <AgentTokenStatsTopbar session={session} />
         <div className="agent-console-topbar-actions">
+          {!previewMode && <AgentPermissionIndicator session={session} />}
           {(!expanded || previewMode) && <><AgentDiffIndicator session={session} /><AgentContextIndicator session={session} /></>}
           {!previewMode && (
             <>

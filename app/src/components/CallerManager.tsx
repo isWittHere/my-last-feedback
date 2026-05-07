@@ -5,6 +5,7 @@ import { useShallow } from "zustand/react/shallow";
 import { IdenticonAvatar } from "./IdenticonAvatar";
 import { useFriendlyName } from "./useFriendlyName";
 import { Icon } from "./Icons";
+import { SettingsSegmentedControl } from "./SettingsSegmentedControl";
 
 interface WorkspaceGroup {
   name: string;
@@ -241,19 +242,16 @@ export function CallerManager() {
               <span className="settings-label">{t("callerManager.callerColumns")}</span>
               <span className="settings-sublabel">{t("callerManager.callerColumnsHint")}</span>
             </div>
-            <div className="cm-column-mode-group" role="group" aria-label={t("callerManager.callerColumns")}>
-              {callerColumnModes.map((mode) => (
-                <button
-                  key={String(mode)}
-                  className={`cm-column-mode-button${callerColumnMode === mode ? " active" : ""}`}
-                  title={mode === "auto" ? t("callerManager.callerColumnsAuto") : `${mode}`}
-                  aria-label={`${t("callerManager.callerColumns")}: ${mode === "auto" ? t("callerManager.callerColumnsAuto") : mode}`}
-                  onClick={() => setCallerColumnMode(mode)}
-                >
-                  {renderCallerColumnModeIcon(mode)}
-                </button>
-              ))}
-            </div>
+            <SettingsSegmentedControl
+              ariaLabel={t("callerManager.callerColumns")}
+              value={String(callerColumnMode)}
+              onChange={(value) => setCallerColumnMode(value === "auto" ? "auto" : Number(value) as CallerColumnModeOption)}
+              className="settings-segmented-icon-only settings-segmented-visual-options settings-caller-column-options"
+              options={callerColumnModes.map((mode) => {
+                const label = mode === "auto" ? t("callerManager.callerColumnsAuto") : `${mode}`;
+                return { id: String(mode), label, icon: renderCallerColumnModeIcon(mode), ariaLabel: `${t("callerManager.callerColumns")}: ${label}` };
+              })}
+            />
           </div>
           <div className="settings-row">
             <div className="settings-row-info">
@@ -288,7 +286,7 @@ export function CallerManager() {
             <div className="settings-row-info">
               <span className="settings-label">{t("callerManager.cleanEmpty")}</span>
             </div>
-            <button className="settings-btn-option" style={{ fontSize: 10, padding: "2px 8px" }} onClick={handleCleanEmpty}>
+            <button className="settings-command-button" onClick={handleCleanEmpty}>
               {t("callerManager.cleanEmptyBtn")}
             </button>
           </div>
@@ -304,7 +302,7 @@ export function CallerManager() {
           <span style={{ fontSize: 11, color: "var(--color-text-secondary)" }}>
             {t("callerManager.mergeSelectTarget")}
           </span>
-          <button className="settings-btn-option" onClick={() => { setMergeSource(null); setMergeTarget(null); setMergeConfirm(false); }}>
+          <button className="settings-command-button" onClick={() => { setMergeSource(null); setMergeTarget(null); setMergeConfirm(false); }}>
             {t("callerManager.cancel")}
           </button>
         </div>
@@ -320,10 +318,10 @@ export function CallerManager() {
             })}
           </span>
           <div style={{ display: "flex", gap: 6, marginTop: 6 }}>
-            <button className="settings-btn-option danger active" style={{ border: "1px solid var(--color-border)", borderRadius: 4 }} onClick={handleMerge}>
+            <button className="settings-command-button danger active" onClick={handleMerge}>
               {t("callerManager.mergeConfirm")}
             </button>
-            <button className="settings-btn-option" style={{ border: "1px solid var(--color-border)", borderRadius: 4 }} onClick={() => { setMergeSource(null); setMergeTarget(null); setMergeConfirm(false); }}>
+            <button className="settings-command-button" onClick={() => { setMergeSource(null); setMergeTarget(null); setMergeConfirm(false); }}>
               {t("callerManager.cancel")}
             </button>
           </div>
@@ -343,10 +341,10 @@ export function CallerManager() {
               })}
             </span>
             <div style={{ display: "flex", gap: 6, marginTop: 6 }}>
-              <button className="settings-btn-option danger active" style={{ border: "1px solid var(--color-border)", borderRadius: 4 }} onClick={handleRemoveCaller}>
+              <button className="settings-command-button danger active" onClick={handleRemoveCaller}>
                 {t("callerManager.removeConfirm")}
               </button>
-              <button className="settings-btn-option" style={{ border: "1px solid var(--color-border)", borderRadius: 4 }} onClick={() => setRemoveConfirmId(null)}>
+              <button className="settings-command-button" onClick={() => setRemoveConfirmId(null)}>
                 {t("callerManager.cancel")}
               </button>
             </div>

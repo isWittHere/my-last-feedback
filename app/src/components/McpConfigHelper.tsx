@@ -3,6 +3,7 @@ import { useTranslation } from "react-i18next";
 import { invoke } from "@tauri-apps/api/core";
 import { writeText } from "@tauri-apps/plugin-clipboard-manager";
 import { Icon } from "./Icons";
+import { SettingsSegmentedControl } from "./SettingsSegmentedControl";
 
 type Client = "cursor" | "vscode" | "cline";
 type Format = "json" | "args";
@@ -98,36 +99,26 @@ export function McpConfigHelper({ compact }: { compact?: boolean }) {
       {/* Client selector */}
       <div className="mcp-config-row">
         <span className="mcp-config-label">{t("mcpConfig.client", "Client")}</span>
-        <div className="settings-btn-group">
-          {(["cursor", "vscode", "cline"] as Client[]).map((c) => (
-            <button
-              key={c}
-              className={`settings-btn-option${client === c ? " active" : ""}`}
-              onClick={() => setClient(c)}
-            >
-              {clientLabel(c)}
-            </button>
-          ))}
-        </div>
+        <SettingsSegmentedControl
+          ariaLabel={t("mcpConfig.client", "Client")}
+          value={client}
+          onChange={(value) => setClient(value as Client)}
+          options={(["cursor", "vscode", "cline"] as Client[]).map((c) => ({ id: c, label: clientLabel(c) }))}
+        />
       </div>
 
       {/* Format selector */}
       <div className="mcp-config-row">
         <span className="mcp-config-label">{t("mcpConfig.format", "Format")}</span>
-        <div className="settings-btn-group">
-          <button
-            className={`settings-btn-option${format === "json" ? " active" : ""}`}
-            onClick={() => setFormat("json")}
-          >
-            JSON
-          </button>
-          <button
-            className={`settings-btn-option${format === "args" ? " active" : ""}`}
-            onClick={() => setFormat("args")}
-          >
-            {t("mcpConfig.cmdArgs", "Cmd+Args")}
-          </button>
-        </div>
+        <SettingsSegmentedControl
+          ariaLabel={t("mcpConfig.format", "Format")}
+          value={format}
+          onChange={(value) => setFormat(value as Format)}
+          options={[
+            { id: "json", label: "JSON" },
+            { id: "args", label: t("mcpConfig.cmdArgs", "Cmd+Args") },
+          ]}
+        />
       </div>
 
       {/* Config file hint */}

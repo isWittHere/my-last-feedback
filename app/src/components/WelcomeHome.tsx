@@ -5,6 +5,7 @@ import i18n from "../i18n";
 import { useFeedbackStore } from "../store/feedbackStore";
 import { PromptIcon } from "./PromptIcons";
 import { McpConfigHelper } from "./McpConfigHelper";
+import { SettingsSegmentedControl } from "./SettingsSegmentedControl";
 
 type Theme = "dark" | "light";
 
@@ -68,39 +69,29 @@ export function WelcomeHome() {
           {/* Theme */}
           <div className="welcome-row">
             <span className="welcome-label">{t("settings.theme")}</span>
-            <div className="settings-btn-group">
-              <button
-                className={`settings-btn-option${theme === "dark" ? " active" : ""}`}
-                onClick={() => handleThemeChange("dark")}
-              >
-                {t("settings.themeDark")}
-              </button>
-              <button
-                className={`settings-btn-option${theme === "light" ? " active" : ""}`}
-                onClick={() => handleThemeChange("light")}
-              >
-                {t("settings.themeLight")}
-              </button>
-            </div>
+            <SettingsSegmentedControl
+              ariaLabel={t("settings.theme")}
+              value={theme}
+              onChange={(value) => handleThemeChange(value as Theme)}
+              options={[
+                { id: "dark", label: t("settings.themeDark") },
+                { id: "light", label: t("settings.themeLight") },
+              ]}
+            />
           </div>
 
           {/* Language */}
           <div className="welcome-row">
             <span className="welcome-label">{t("settings.language")}</span>
-            <div className="settings-btn-group">
-              <button
-                className={`settings-btn-option${i18n.language === "zh" ? " active" : ""}`}
-                onClick={() => { i18n.changeLanguage("zh"); localStorage.setItem("mlf-lang", "zh"); }}
-              >
-                中文
-              </button>
-              <button
-                className={`settings-btn-option${i18n.language === "en" ? " active" : ""}`}
-                onClick={() => { i18n.changeLanguage("en"); localStorage.setItem("mlf-lang", "en"); }}
-              >
-                EN
-              </button>
-            </div>
+            <SettingsSegmentedControl
+              ariaLabel={t("settings.language")}
+              value={i18n.language.startsWith("zh") ? "zh" : "en"}
+              onChange={(value) => { i18n.changeLanguage(value); localStorage.setItem("mlf-lang", value); }}
+              options={[
+                { id: "zh", label: "中文" },
+                { id: "en", label: "EN" },
+              ]}
+            />
           </div>
 
           {/* Prompts */}
