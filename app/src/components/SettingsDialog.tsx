@@ -16,13 +16,12 @@ import { getSubmittedViewSettings, saveSubmittedViewSettings, SUBMITTED_VIEW_SEC
 import { getTerminalSettings, saveTerminalSettings, type TerminalSettings, type TerminalShellId } from "../terminalSettings";
 import { getComposerSettings, saveComposerSettings, type ComposerSettings } from "../composerSettings";
 import { AGENT_DIFF_COLOR_PRESETS, getAgentConsoleSettings, saveAgentConsoleSettings, type AgentConsoleSettings, type AgentDiffColorPresetId, type AgentNavigationIndicatorOrder, type AgentProcessStepDefaultMode, type AgentTopbarIndicatorMode } from "../agentConsoleSettings";
-import { getOpenCodePermissionPresetAction, getOpenCodeSettings, OPEN_CODE_PERMISSION_DEFINITIONS, setOpenCodeDefaultPermissionAction, setOpenCodeModelEnabled, setOpenCodePreferredModel, type OpenCodePermissionAction, type OpenCodeSettings } from "../openCodeSettings";
+import { getOpenCodePermissionPresetAction, getOpenCodeSettings, OPEN_CODE_PERMISSION_DEFINITIONS, setOpenCodeDefaultPermissionAction, setOpenCodeModelEnabled, setOpenCodeModelFavorite, setOpenCodePreferredModel, type OpenCodePermissionAction, type OpenCodeSettings } from "../openCodeSettings";
 import { SESSION_LIST_MODE_OPTIONS } from "../sessionNavigationSettings";
 import { SessionNavigationModeIcon } from "./SessionNavigationModeIcon";
 import { AppSelect, type AppSelectOption } from "./AppSelect";
-import { SettingsSegmentedControl } from "./SettingsSegmentedControl";
 
-type Tab = "general" | "display" | "callers" | "submitted" | "prompts" | "sessionNavigation" | "layoutPanels" | "agentConsole" | "agentChat" | "agentSessionManager" | "openCode" | "openCodePermissions" | "terminal" | "resources" | "notification" | "about";
+type Tab = "general" | "display" | "callers" | "submitted" | "prompts" | "sessionNavigation" | "layoutPanels" | "agentConsole" | "agentChat" | "agentSessionManager" | "openCode" | "terminal" | "resources" | "notification" | "about";
 type SettingsGroupId = "mlfb" | "agent" | "layout";
 
 const SETTINGS_DOCK_COLUMN_IDS: DockColumnId[] = ["leftSidebar", "leftPage", "rightPage", "rightSidebar"];
@@ -31,80 +30,6 @@ const AGENT_TOPBAR_INDICATOR_MODE_OPTIONS: AgentTopbarIndicatorMode[] = ["hidden
 const AGENT_PROCESS_STEP_MODE_OPTIONS: AgentProcessStepDefaultMode[] = ["tabs", "timeline"];
 const AGENT_NAVIGATION_INDICATOR_ORDER_OPTIONS: AgentNavigationIndicatorOrder[] = ["leftToRight", "rightToLeft"];
 const OPEN_CODE_PERMISSION_ACTIONS: OpenCodePermissionAction[] = ["allow", "ask", "deny"];
-
-type OpenCodeModelItem = OpenCodeSettings["models"][number];
-
-function openCodeModelProviderId(modelId: string): string {
-  const [provider] = modelId.split("/");
-  return provider || "other";
-}
-
-function openCodeProviderLabel(providerId: string): string {
-  if (!providerId || providerId === "other") return "Other";
-  return providerId.charAt(0).toUpperCase() + providerId.slice(1);
-}
-
-function openCodeModelFamily(model: OpenCodeModelItem): { id: string; label: string } {
-  const rawModelId = model.id.split("/").slice(1).join("/") || model.id;
-  const source = `${model.label} ${rawModelId}`.toLowerCase();
-  if (/(^|[-:_/\s])free($|[-:_/\s])|:free|free[-_\s]?tier/.test(source)) return { id: "free", label: "Free" };
-  const normalized = source.replace(/[_/.:]+/g, "-").replace(/\s+/g, "-");
-  const familyRules: Array<[RegExp, string, string]> = [
-    [/claude/, "claude", "Claude"],
-    [/\bgpt-5\b/, "gpt-5", "GPT 5"],
-    [/\bgpt-4\.1\b|\bgpt-4-1\b/, "gpt-4-1", "GPT 4.1"],
-    [/\bgpt-4o\b|\bgpt-4-o\b/, "gpt-4o", "GPT 4o"],
-    [/\bgpt-4\b/, "gpt-4", "GPT 4"],
-    [/\bo[1-9]\b|\bo[1-9]-/, "openai-o", "OpenAI o-series"],
-    [/gemini-2-5|gemini-2\.5/, "gemini-2-5", "Gemini 2.5"],
-    [/gemini-2-0|gemini-2\.0/, "gemini-2-0", "Gemini 2.0"],
-    [/gemini/, "gemini", "Gemini"],
-    [/deepseek/, "deepseek", "DeepSeek"],
-    [/qwen|qwq/, "qwen", "Qwen"],
-    [/llama/, "llama", "Llama"],
-    [/mistral/, "mistral", "Mistral"],
-    [/mixtral/, "mixtral", "Mixtral"],
-    [/codestral/, "codestral", "Codestral"],
-    [/kimi|moonshot/, "kimi", "Kimi"],
-    [/grok/, "grok", "Grok"],
-    [/command/, "command", "Command"],
-    [/phi/, "phi", "Phi"],
-  ];
-  const matchedRule = familyRules.find(([pattern]) => pattern.test(normalized));
-  if (matchedRule) return { id: matchedRule[1], label: matchedRule[2] };
-  const fallback = rawModelId.split(/[\s:._/-]+/).filter(Boolean)[0] || model.label.split(/\s+/).filter(Boolean)[0] || "Other";
-  return { id: fallback.toLowerCase(), label: fallback.charAt(0).toUpperCase() + fallback.slice(1) };
-}
-
-function groupOpenCodeModelsByFamily(models: OpenCodeModelItem[]) {
-  const groups = new Map<string, { label: string; models: OpenCodeModelItem[] }>();
-  for (const model of models) {
-    const family = openCodeModelFamily(model);
-    const current = groups.get(family.id) || { label: family.label, models: [] };
-    groups.set(family.id, { ...current, models: [...current.models, model] });
-  }
-  return [...groups.entries()].map(([familyId, group]) => ({
-    familyId,
-    label: group.label,
-    models: group.models,
-    enabledCount: group.models.filter((model) => model.enabled).length,
-  })).sort((a, b) => Number(b.familyId === "free") - Number(a.familyId === "free"));
-}
-
-function groupOpenCodeModelsByProvider(models: OpenCodeModelItem[]) {
-  const groups = new Map<string, OpenCodeModelItem[]>();
-  for (const model of models) {
-    const providerId = openCodeModelProviderId(model.id);
-    groups.set(providerId, [...(groups.get(providerId) || []), model]);
-  }
-  return [...groups.entries()].map(([providerId, groupModels]) => ({
-    providerId,
-    label: openCodeProviderLabel(providerId),
-    models: groupModels,
-    enabledCount: groupModels.filter((model) => model.enabled).length,
-    families: groupOpenCodeModelsByFamily(groupModels),
-  }));
-}
 
 function isSettingsDockTabId(value: string): value is DockTabId {
   return SETTINGS_DOCK_TAB_IDS.includes(value as DockTabId);
@@ -375,6 +300,10 @@ export function SettingsDialog({ open, onClose }: { open: boolean; onClose: () =
     setOpenCodeSettings(setOpenCodeModelEnabled(modelId, enabled));
   }, []);
 
+  const handleOpenCodeModelFavoriteChange = useCallback((modelId: string, favorite: boolean) => {
+    setOpenCodeSettings(setOpenCodeModelFavorite(modelId, favorite));
+  }, []);
+
   const handleOpenCodePreferredModelChange = useCallback((modelId: string) => {
     setOpenCodeSettings(setOpenCodePreferredModel(modelId));
   }, []);
@@ -388,7 +317,7 @@ export function SettingsDialog({ open, onClose }: { open: boolean; onClose: () =
     const models = query
       ? openCodeSettings.models.filter((model) => `${model.label} ${model.id} ${model.description || ""}`.toLowerCase().includes(query))
       : openCodeSettings.models;
-    return models;
+    return [...models].sort((a, b) => Number(b.favorite) - Number(a.favorite) || Number(b.enabled) - Number(a.enabled) || a.label.localeCompare(b.label));
   }, [openCodeModelQuery, openCodeSettings.models]);
 
   const handleZoomChange = useCallback((key: keyof ZoomSettings, value: number) => {
@@ -458,16 +387,23 @@ export function SettingsDialog({ open, onClose }: { open: boolean; onClose: () =
   };
 
   const renderAgentIndicatorModeGroup = (key: keyof AgentConsoleSettings, currentMode: AgentTopbarIndicatorMode, ariaLabel: string) => (
-    <SettingsSegmentedControl
-      ariaLabel={ariaLabel}
-      value={currentMode}
-      onChange={(mode) => handleAgentIndicatorModeChange(key, mode as AgentTopbarIndicatorMode)}
-      className="settings-segmented-icon-only"
-      options={AGENT_TOPBAR_INDICATOR_MODE_OPTIONS.map((mode) => {
+    <div className="cm-column-mode-group settings-agent-mode-group" role="group" aria-label={ariaLabel}>
+      {AGENT_TOPBAR_INDICATOR_MODE_OPTIONS.map((mode) => {
         const label = agentIndicatorModeLabel(mode);
-        return { id: mode, label, icon: <AgentTopbarIndicatorModeIcon mode={mode} />, ariaLabel: `${ariaLabel}: ${label}` };
+        return (
+          <button
+            key={mode}
+            type="button"
+            className={`cm-column-mode-button settings-agent-mode-button${currentMode === mode ? " active" : ""}`}
+            title={label}
+            aria-label={`${ariaLabel}: ${label}`}
+            onClick={() => handleAgentIndicatorModeChange(key, mode)}
+          >
+            <AgentTopbarIndicatorModeIcon mode={mode} />
+          </button>
+        );
       })}
-    />
+    </div>
   );
 
   const processStepModeLabel = (mode: AgentProcessStepDefaultMode) => mode === "tabs"
@@ -475,15 +411,23 @@ export function SettingsDialog({ open, onClose }: { open: boolean; onClose: () =
     : t("settings.agentProcessStepModeTimeline", "Timeline");
 
   const renderAgentProcessStepModeGroup = () => (
-    <SettingsSegmentedControl
-      ariaLabel={t("settings.agentProcessStepDefaultMode", "Step process default view")}
-      value={agentConsoleSettings.processStepDefaultMode}
-      onChange={(mode) => handleAgentProcessStepModeChange(mode as AgentProcessStepDefaultMode)}
-      options={AGENT_PROCESS_STEP_MODE_OPTIONS.map((mode) => {
+    <div className="settings-btn-group" role="group" aria-label={t("settings.agentProcessStepDefaultMode", "Step process default view")}>
+      {AGENT_PROCESS_STEP_MODE_OPTIONS.map((mode) => {
         const label = processStepModeLabel(mode);
-        return { id: mode, label, icon: <Icon name={mode === "tabs" ? "rows" : "list"} size={13} /> };
+        return (
+          <button
+            key={mode}
+            type="button"
+            className={`settings-btn-option${agentConsoleSettings.processStepDefaultMode === mode ? " active" : ""}`}
+            onClick={() => handleAgentProcessStepModeChange(mode)}
+            title={label}
+          >
+            <Icon name={mode === "tabs" ? "rows" : "list"} size={13} />
+            <span>{label}</span>
+          </button>
+        );
       })}
-    />
+    </div>
   );
 
   const navigationIndicatorOrderLabel = (navigationIndicatorOrder: AgentNavigationIndicatorOrder) => navigationIndicatorOrder === "leftToRight"
@@ -491,15 +435,23 @@ export function SettingsDialog({ open, onClose }: { open: boolean; onClose: () =
     : t("settings.agentNavigationIndicatorOrderRightToLeft", "Right to left");
 
   const renderAgentNavigationIndicatorOrderGroup = () => (
-    <SettingsSegmentedControl
-      ariaLabel={t("settings.agentNavigationIndicatorOrder", "Navigation indicator order")}
-      value={agentConsoleSettings.navigationIndicatorOrder}
-      onChange={(navigationIndicatorOrder) => handleAgentNavigationIndicatorOrderChange(navigationIndicatorOrder as AgentNavigationIndicatorOrder)}
-      options={AGENT_NAVIGATION_INDICATOR_ORDER_OPTIONS.map((navigationIndicatorOrder) => {
+    <div className="settings-btn-group" role="group" aria-label={t("settings.agentNavigationIndicatorOrder", "Navigation indicator order")}>
+      {AGENT_NAVIGATION_INDICATOR_ORDER_OPTIONS.map((navigationIndicatorOrder) => {
         const label = navigationIndicatorOrderLabel(navigationIndicatorOrder);
-        return { id: navigationIndicatorOrder, label, icon: <Icon name="arrow-right" size={13} style={{ transform: navigationIndicatorOrder === "rightToLeft" ? "rotate(180deg)" : undefined }} /> };
+        return (
+          <button
+            key={navigationIndicatorOrder}
+            type="button"
+            className={`settings-btn-option${agentConsoleSettings.navigationIndicatorOrder === navigationIndicatorOrder ? " active" : ""}`}
+            onClick={() => handleAgentNavigationIndicatorOrderChange(navigationIndicatorOrder)}
+            title={label}
+          >
+            <Icon name="arrow-right" size={13} style={{ transform: navigationIndicatorOrder === "rightToLeft" ? "rotate(180deg)" : undefined }} />
+            <span>{label}</span>
+          </button>
+        );
       })}
-    />
+    </div>
   );
 
   const renderAgentDiffOffsetControl = (label: string, key: "additionsOffsetX" | "additionsOffsetY" | "deletionsOffsetX" | "deletionsOffsetY") => {
@@ -554,12 +506,6 @@ export function SettingsDialog({ open, onClose }: { open: boolean; onClose: () =
     return t("settings.openCodePermissionAsk", "Ask");
   };
 
-  const openCodePermissionActionIcon = (action: OpenCodePermissionAction) => {
-    if (action === "allow") return "check";
-    if (action === "deny") return "circle-x";
-    return "warning";
-  };
-
   const renderOpenCodePermissionDefaults = () => {
     return (
       <div className="settings-section settings-opencode-section">
@@ -568,35 +514,31 @@ export function SettingsDialog({ open, onClose }: { open: boolean; onClose: () =
             <span className="settings-label">{t("settings.openCodePermissions", "OpenCode default permissions")}</span>
             <span className="settings-sublabel">{t("settings.openCodePermissionsDesc", "These permissions are applied to new OpenCode sessions. Active sessions can be adjusted from the Agent header.")}</span>
           </div>
-          <div className="settings-submitted-section-list settings-opencode-permission-list">
-            <div className="settings-submitted-section-head settings-opencode-permission-head">
-              <span>{t("settings.openCodePermission", "Permission")}</span>
-              <span>{t("settings.openCodeDefault", "Default")}</span>
-            </div>
+          <div className="settings-opencode-permission-list">
             {OPEN_CODE_PERMISSION_DEFINITIONS.map((definition) => {
               const currentAction = getOpenCodePermissionPresetAction(openCodeSettings.defaultPermissionPreset, definition.permission);
-              const description = t(definition.descriptionKey, definition.defaultDescription);
               return (
-                <div key={definition.permission} className="settings-submitted-section-item settings-opencode-permission-item">
-                  <span className="settings-submitted-section-name settings-opencode-permission-name-cell">
-                    <span className="settings-list-icon-slot"><Icon name={definition.icon} size={13} /></span>
-                    <span className="settings-opencode-permission-title-line">
-                      <span>{t(definition.labelKey, definition.defaultLabel)}</span>
-                      <span className="settings-opencode-permission-inline-desc">{description}</span>
+                <div key={definition.permission} className="settings-opencode-permission-item">
+                  <div className="settings-opencode-permission-info">
+                    <span className="settings-opencode-permission-icon"><Icon name={definition.icon} size={13} /></span>
+                    <span className="settings-opencode-permission-copy">
+                      <span className="settings-opencode-permission-name">{t(definition.labelKey, definition.defaultLabel)}</span>
+                      <span className="settings-opencode-permission-desc">{t(definition.descriptionKey, definition.defaultDescription)}</span>
                     </span>
-                  </span>
-                  <SettingsSegmentedControl
-                    ariaLabel={t(definition.labelKey, definition.defaultLabel)}
-                    value={currentAction}
-                    onChange={(action) => handleOpenCodePermissionActionChange(definition.permission, action as OpenCodePermissionAction)}
-                    className="settings-opencode-permission-actions"
-                    options={OPEN_CODE_PERMISSION_ACTIONS.map((action) => ({
-                      id: action,
-                      label: openCodePermissionActionLabel(action),
-                      icon: <Icon name={openCodePermissionActionIcon(action)} size={11} />,
-                      variant: action,
-                    }))}
-                  />
+                  </div>
+                  <div className="settings-opencode-permission-actions" role="group" aria-label={t(definition.labelKey, definition.defaultLabel)}>
+                    {OPEN_CODE_PERMISSION_ACTIONS.map((action) => (
+                      <button
+                        key={action}
+                        type="button"
+                        className={`settings-opencode-permission-action settings-opencode-permission-action-${action}${currentAction === action ? " active" : ""}`}
+                        onClick={() => handleOpenCodePermissionActionChange(definition.permission, action)}
+                        aria-pressed={currentAction === action}
+                      >
+                        {openCodePermissionActionLabel(action)}
+                      </button>
+                    ))}
+                  </div>
                 </div>
               );
             })}
@@ -608,8 +550,8 @@ export function SettingsDialog({ open, onClose }: { open: boolean; onClose: () =
 
   const renderOpenCodeModelLibrary = () => {
     const enabledCount = openCodeSettings.models.filter((model) => model.enabled).length;
+    const favoriteCount = openCodeSettings.models.filter((model) => model.favorite).length;
     const preferredModel = openCodeSettings.models.find((model) => model.id === openCodeSettings.preferredModelId);
-    const modelGroups = groupOpenCodeModelsByProvider(filteredOpenCodeModels);
     return (
       <div className="settings-section settings-opencode-section">
         <div className="settings-row settings-row-stacked">
@@ -620,6 +562,7 @@ export function SettingsDialog({ open, onClose }: { open: boolean; onClose: () =
           <div className="settings-opencode-summary-row">
             <span>{t("settings.openCodeModelsTotal", "{{count}} models", { count: openCodeSettings.models.length })}</span>
             <span>{t("settings.openCodeModelsEnabled", "{{count}} enabled", { count: enabledCount })}</span>
+            <span>{t("settings.openCodeModelsFavorite", "{{count}} favorites", { count: favoriteCount })}</span>
             {preferredModel && <span>{t("settings.openCodePreferredModel", "Default: {{model}}", { model: preferredModel.label })}</span>}
           </div>
           <div className="settings-opencode-toolbar">
@@ -638,54 +581,50 @@ export function SettingsDialog({ open, onClose }: { open: boolean; onClose: () =
             </div>
           ) : (
             <div className="settings-opencode-model-list">
-              {modelGroups.map((group) => (
-                <div key={group.providerId} className="settings-opencode-model-group">
-                  <div className="settings-opencode-model-group-head">
-                    <span>{group.label}</span>
-                    <span className="settings-opencode-model-count-badge">{t("settings.openCodeProviderModelSummary", "{{enabled}}/{{total}} enabled", { enabled: group.enabledCount, total: group.models.length })}</span>
+              <div className="settings-opencode-model-head">
+                <span>{t("settings.openCodeModel", "Model")}</span>
+                <span>{t("settings.openCodeDefault", "Default")}</span>
+                <span>{t("settings.openCodeEnabled", "Enabled")}</span>
+              </div>
+              {filteredOpenCodeModels.map((model) => {
+                const isPreferred = openCodeSettings.preferredModelId === model.id;
+                return (
+                  <div key={model.id} className="settings-opencode-model-item">
+                    <div className="settings-opencode-model-info">
+                      <button
+                        type="button"
+                        className={`settings-opencode-star${model.favorite ? " active" : ""}`}
+                        title={model.favorite ? t("settings.openCodeRemoveFavorite", "Remove favorite") : t("settings.openCodeAddFavorite", "Add favorite")}
+                        onClick={() => handleOpenCodeModelFavoriteChange(model.id, !model.favorite)}
+                      >
+                        <Icon name={model.favorite ? "star-full" : "star-empty"} size={13} />
+                      </button>
+                      <span className="settings-opencode-model-title-stack">
+                        <span className="settings-opencode-model-name">{model.label}</span>
+                        <span className="settings-opencode-model-id">{model.id}</span>
+                        {model.description && <span className="settings-opencode-model-desc">{model.description}</span>}
+                      </span>
+                    </div>
+                    <button
+                      type="button"
+                      className={`settings-opencode-default-button${isPreferred ? " active" : ""}`}
+                      onClick={() => handleOpenCodePreferredModelChange(model.id)}
+                      title={isPreferred ? t("settings.openCodeCurrentDefault", "Current default") : t("settings.openCodeSetDefault", "Set as default")}
+                    >
+                      {isPreferred ? <Icon name="check" size={12} /> : <Icon name="pin" size={12} />}
+                      <span>{isPreferred ? t("settings.openCodeDefaultActive", "Default") : t("settings.openCodeSetDefaultShort", "Set")}</span>
+                    </button>
+                    <button
+                      type="button"
+                      className={`settings-toggle settings-toggle-sm${model.enabled ? " settings-toggle-on" : ""}`}
+                      onClick={() => handleOpenCodeModelEnabledChange(model.id, !model.enabled)}
+                      title={model.enabled ? t("settings.openCodeDisableModel", "Hide from switcher") : t("settings.openCodeEnableModel", "Show in switcher")}
+                    >
+                      <span className="settings-toggle-knob" />
+                    </button>
                   </div>
-                  <div className="settings-opencode-model-family-list">
-                    {group.families.map((family) => (
-                      <div key={family.familyId} className="settings-opencode-model-family">
-                        <div className="settings-opencode-model-family-head">
-                          <span>{family.label}</span>
-                          <span className="settings-opencode-model-count-badge">{t("settings.openCodeProviderModelSummary", "{{enabled}}/{{total}} enabled", { enabled: family.enabledCount, total: family.models.length })}</span>
-                        </div>
-                        <div className="settings-opencode-model-cloud">
-                          {family.models.map((model) => {
-                            const isPreferred = openCodeSettings.preferredModelId === model.id;
-                            return (
-                              <div key={model.id} className={`settings-opencode-model-tag${model.enabled ? " enabled" : ""}${isPreferred ? " preferred" : ""}`}>
-                                <span className="settings-opencode-model-tag-main">
-                                  <span className="settings-opencode-model-tag-label">{model.label}</span>
-                                </span>
-                                <span className="settings-opencode-model-actions">
-                                  <button
-                                    type="button"
-                                    className={`settings-opencode-model-icon-button${isPreferred ? " active" : ""}`}
-                                    onClick={() => handleOpenCodePreferredModelChange(model.id)}
-                                    aria-label={isPreferred ? t("settings.openCodeCurrentDefault", "Current default") : t("settings.openCodeSetDefault", "Set as default")}
-                                  >
-                                    <Icon name={isPreferred ? "check" : "circle-check"} size={12} />
-                                  </button>
-                                  <button
-                                    type="button"
-                                    className={`settings-opencode-model-icon-button${model.enabled ? " active" : ""}`}
-                                    onClick={() => handleOpenCodeModelEnabledChange(model.id, !model.enabled)}
-                                    aria-label={model.enabled ? t("settings.openCodeDisableModel", "Hide from switcher") : t("settings.openCodeEnableModel", "Show in switcher")}
-                                  >
-                                    <Icon name={model.enabled ? "eye" : "eye-off"} size={12} />
-                                  </button>
-                                </span>
-                              </div>
-                            );
-                          })}
-                        </div>
-                      </div>
-                    ))}
-                  </div>
-                </div>
-              ))}
+                );
+              })}
             </div>
           )}
         </div>
@@ -792,13 +731,12 @@ export function SettingsDialog({ open, onClose }: { open: boolean; onClose: () =
                 {renderSettingsNavItem("sessionNavigation", "list-tree", t("settings.sessionNavigation", "Session navigation"), true)}
               </>
             ))}
-            {renderSettingsNavGroup("agent", t("settings.agent", "Agent"), ["agentConsole", "agentChat", "agentSessionManager", "openCode", "openCodePermissions"], (
+            {renderSettingsNavGroup("agent", t("settings.agent", "Agent"), ["agentConsole", "agentChat", "agentSessionManager", "openCode"], (
               <>
                 {renderSettingsNavItem("agentConsole", "robot", t("settings.agentConsoleDisplay", "Navigation bar"), true)}
                 {renderSettingsNavItem("agentChat", "message-dot", t("settings.agentChat", "Chat"), true)}
                 {renderSettingsNavItem("agentSessionManager", "message", t("settings.agentSessionManager", "Session manager"), true)}
-                {renderSettingsNavItem("openCode", "code", t("settings.openCode", "Models"), true)}
-                {renderSettingsNavItem("openCodePermissions", "checklist", t("settings.openCodeApprovalPermissions", "Approval permissions"), true)}
+                {renderSettingsNavItem("openCode", "code", t("settings.openCode", "OpenCode"), true)}
               </>
             ))}
             {renderSettingsNavGroup("layout", t("settings.layout", "Layout"), ["layoutPanels", "terminal", "resources"], (
@@ -837,18 +775,18 @@ export function SettingsDialog({ open, onClose }: { open: boolean; onClose: () =
                     <span className="settings-sublabel">{t("settings.clearHistoryDesc")}</span>
                   </div>
                   {!confirmClear ? (
-                    <div className="settings-command-actions">
+                    <div className="settings-btn-group">
                       <button
-                        className="settings-command-button danger"
+                        className="settings-btn-option danger"
                         onClick={() => setConfirmClear(true)}
                       >
                         {t("settings.clearHistoryBtn")}
                       </button>
                     </div>
                   ) : (
-                    <div className="settings-command-actions">
+                    <div className="settings-btn-group">
                       <button
-                        className="settings-command-button danger active"
+                        className="settings-btn-option danger active"
                         onClick={async () => {
                           await useFeedbackStore.getState().clearAllHistory();
                           setConfirmClear(false);
@@ -857,7 +795,7 @@ export function SettingsDialog({ open, onClose }: { open: boolean; onClose: () =
                         {t("settings.clearHistoryConfirm")}
                       </button>
                       <button
-                        className="settings-command-button"
+                        className="settings-btn-option"
                         onClick={() => setConfirmClear(false)}
                       >
                         {t("settings.clearHistoryCancel")}
@@ -877,29 +815,41 @@ export function SettingsDialog({ open, onClose }: { open: boolean; onClose: () =
                 {/* Theme */}
                 <div className="settings-row">
                   <span className="settings-label">{t("settings.theme")}</span>
-                  <SettingsSegmentedControl
-                    ariaLabel={t("settings.theme")}
-                    value={theme}
-                    onChange={(value) => handleThemeChange(value as Theme)}
-                    options={[
-                      { id: "dark", label: t("settings.themeDark"), icon: <Icon name="moon" size={12} /> },
-                      { id: "light", label: t("settings.themeLight"), icon: <Icon name="sun-full" size={12} /> },
-                    ]}
-                  />
+                  <div className="settings-btn-group">
+                    <button
+                      className={`settings-btn-option${theme === "dark" ? " active" : ""}`}
+                      onClick={() => handleThemeChange("dark")}
+                    >
+                      <Icon name="moon" size={12} />
+                      {t("settings.themeDark")}
+                    </button>
+                    <button
+                      className={`settings-btn-option${theme === "light" ? " active" : ""}`}
+                      onClick={() => handleThemeChange("light")}
+                    >
+                      <Icon name="sun-full" size={12} />
+                      {t("settings.themeLight")}
+                    </button>
+                  </div>
                 </div>
 
                 {/* Language */}
                 <div className="settings-row">
                   <span className="settings-label">{t("settings.language")}</span>
-                  <SettingsSegmentedControl
-                    ariaLabel={t("settings.language")}
-                    value={i18n.language.startsWith("zh") ? "zh" : "en"}
-                    onChange={handleLangChange}
-                    options={[
-                      { id: "zh", label: "中文" },
-                      { id: "en", label: "English" },
-                    ]}
-                  />
+                  <div className="settings-btn-group">
+                    <button
+                      className={`settings-btn-option${i18n.language === "zh" ? " active" : ""}`}
+                      onClick={() => handleLangChange("zh")}
+                    >
+                      中文
+                    </button>
+                    <button
+                      className={`settings-btn-option${i18n.language === "en" ? " active" : ""}`}
+                      onClick={() => handleLangChange("en")}
+                    >
+                      English
+                    </button>
+                  </div>
                 </div>
 
                 {/* Zoom: Global */}
@@ -1003,16 +953,19 @@ export function SettingsDialog({ open, onClose }: { open: boolean; onClose: () =
                     <span className="settings-label">{t("settings.sessionNavigationMode", "Navigation display mode")}</span>
                     <span className="settings-sublabel">{t("settings.sessionNavigationModeDesc", "Choose how sessions are shown inside each caller panel.")}</span>
                   </div>
-                  <SettingsSegmentedControl
-                    ariaLabel={t("settings.sessionNavigationMode", "Navigation display mode")}
-                    value={sessionListMode}
-                    onChange={(mode) => setSessionListMode(mode as typeof sessionListMode)}
-                    className="settings-segmented-icon-only settings-segmented-visual-options settings-session-nav-options session-nav-mode-group"
-                    options={SESSION_LIST_MODE_OPTIONS.map((option) => {
-                      const label = t(option.labelKey, option.defaultLabel);
-                      return { id: option.mode, label, icon: <SessionNavigationModeIcon mode={option.mode} />, ariaLabel: `${t("settings.sessionNavigationMode", "Navigation display mode")}: ${label}` };
-                    })}
-                  />
+                  <div className="cm-column-mode-group session-nav-mode-group" role="group" aria-label={t("settings.sessionNavigationMode", "Navigation display mode")}>
+                    {SESSION_LIST_MODE_OPTIONS.map((option) => (
+                      <button
+                        key={option.mode}
+                        className={`cm-column-mode-button${sessionListMode === option.mode ? " active" : ""}`}
+                        title={t(option.labelKey, option.defaultLabel)}
+                        aria-label={`${t("settings.sessionNavigationMode", "Navigation display mode")}: ${t(option.labelKey, option.defaultLabel)}`}
+                        onClick={() => setSessionListMode(option.mode)}
+                      >
+                        <SessionNavigationModeIcon mode={option.mode} />
+                      </button>
+                    ))}
+                  </div>
                 </div>
                 <div className="settings-row">
                   <div className="settings-row-info">
@@ -1108,8 +1061,8 @@ export function SettingsDialog({ open, onClose }: { open: boolean; onClose: () =
                       <span className="settings-label">{t("settings.agentCleanupEmptySessionsNow", "Clean empty sessions now")}</span>
                       <span className="settings-sublabel">{agentCleanupMessage || t("settings.agentCleanupEmptySessionsNowDesc", "Immediately remove inactive empty Agent sessions.")}</span>
                     </div>
-                    <div className="settings-command-actions">
-                      <button type="button" className="settings-command-button" onClick={handleAgentCleanupNow}>
+                    <div className="settings-btn-group">
+                      <button type="button" className="settings-btn-option" onClick={handleAgentCleanupNow}>
                         {t("settings.agentCleanupEmptySessionsButton", "Clean now")}
                       </button>
                     </div>
@@ -1225,26 +1178,24 @@ export function SettingsDialog({ open, onClose }: { open: boolean; onClose: () =
                         <span className="settings-label">{t("settings.agentDiffVisualAdjustment", "Diff visual adjustment")}</span>
                         <span className="settings-sublabel">{t("settings.agentDiffVisualAdjustmentDesc", "Tune diff colors and compact topbar text position.")}</span>
                       </div>
-                      <SettingsSegmentedControl
-                        ariaLabel={t("settings.agentDiffColorPreset", "Diff color preset")}
-                        value={agentConsoleSettings.diffVisual.colorPresetId}
-                        onChange={(value) => handleAgentDiffColorPresetChange(value as AgentDiffColorPresetId)}
-                        className="settings-segmented-icon-only settings-segmented-visual-options settings-agent-color-options"
-                        options={AGENT_DIFF_COLOR_PRESETS.map((preset) => {
+                      <div className="settings-agent-color-presets" role="group" aria-label={t("settings.agentDiffColorPreset", "Diff color preset")}>
+                        {AGENT_DIFF_COLOR_PRESETS.map((preset) => {
                           const label = t(preset.labelKey, preset.defaultLabel);
-                          return {
-                            id: preset.id,
-                            label,
-                            ariaLabel: `${t("settings.agentDiffColorPreset", "Diff color preset")}: ${label}`,
-                            icon: (
-                              <span className="settings-agent-color-swatch-pair" aria-hidden="true">
+                          return (
+                            <button
+                              key={preset.id}
+                              type="button"
+                              className={`settings-agent-color-preset${agentConsoleSettings.diffVisual.colorPresetId === preset.id ? " active" : ""}`}
+                              title={label}
+                              aria-label={`${t("settings.agentDiffColorPreset", "Diff color preset")}: ${label}`}
+                              onClick={() => handleAgentDiffColorPresetChange(preset.id)}
+                            >
                               <span style={{ background: preset.additions }} />
                               <span style={{ background: preset.deletions }} />
-                              </span>
-                            ),
-                          };
+                            </button>
+                          );
                         })}
-                      />
+                      </div>
                       <div className="settings-agent-offset-panel">
                         <button
                           type="button"
@@ -1272,8 +1223,7 @@ export function SettingsDialog({ open, onClose }: { open: boolean; onClose: () =
               </>
             )}
 
-            {tab === "openCode" && renderOpenCodeModelLibrary()}
-            {tab === "openCodePermissions" && renderOpenCodePermissionDefaults()}
+            {tab === "openCode" && <>{renderOpenCodePermissionDefaults()}{renderOpenCodeModelLibrary()}</>}
 
             {tab === "resources" && (
               <div className="settings-section">
@@ -1282,15 +1232,22 @@ export function SettingsDialog({ open, onClose }: { open: boolean; onClose: () =
                     <span className="settings-label">{t("settings.resourceIconTheme", "Resource icon theme")}</span>
                     <span className="settings-sublabel">{t("settings.resourceIconThemeDesc", "Choose the file icon theme used by project resources and resource links.")}</span>
                   </div>
-                  <SettingsSegmentedControl
-                    ariaLabel={t("settings.resourceIconTheme", "Resource icon theme")}
-                    value={resourceIconTheme}
-                    onChange={(value) => setResourceIconTheme(value as typeof resourceIconTheme)}
-                    options={[
-                      { id: "default", label: t("settings.resourceIconThemeDefault", "Default"), icon: <Icon name="file-text" size={12} /> },
-                      { id: "catppuccin", label: t("settings.resourceIconThemeCatppuccin", "Catppuccin"), icon: <Icon name="folder" size={12} /> },
-                    ]}
-                  />
+                  <div className="settings-btn-group">
+                    <button
+                      className={`settings-btn-option${resourceIconTheme === "default" ? " active" : ""}`}
+                      onClick={() => setResourceIconTheme("default")}
+                    >
+                      <Icon name="file-text" size={12} />
+                      {t("settings.resourceIconThemeDefault", "Default")}
+                    </button>
+                    <button
+                      className={`settings-btn-option${resourceIconTheme === "catppuccin" ? " active" : ""}`}
+                      onClick={() => setResourceIconTheme("catppuccin")}
+                    >
+                      <Icon name="folder" size={12} />
+                      {t("settings.resourceIconThemeCatppuccin", "Catppuccin")}
+                    </button>
+                  </div>
                 </div>
               </div>
             )}

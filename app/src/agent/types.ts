@@ -132,8 +132,19 @@ export interface AgentMessage {
   providerParentMessageId?: string;
   providerParts?: AgentProviderMessagePart[];
   composerDraft?: string;
+  submittedMarkdown?: string;
+  submittedAttachmentTags?: AgentSubmittedAttachmentTag[];
   createdAt: string;
   updatedAt?: string;
+}
+
+export type AgentSubmittedAttachmentKind = "image" | "test-log" | "git" | "mlc" | "web" | "resource";
+
+export interface AgentSubmittedAttachmentTag {
+  id: string;
+  kind: AgentSubmittedAttachmentKind;
+  label?: string;
+  detail?: string;
 }
 
 export interface AgentProviderMessagePart {

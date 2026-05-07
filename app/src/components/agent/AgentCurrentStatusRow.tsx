@@ -8,6 +8,13 @@ import { useAgentStore } from "../../store/agentStore";
 import { Icon } from "../Icons";
 import { AgentDiffPatchList, permissionBlockToDiffFiles } from "./AgentDiffViewer";
 
+function permissionOptionLabel(t: ReturnType<typeof useTranslation>["t"], option: AgentPermissionOption): string {
+  if (option.kind === "allow_once") return t("agentConsole.allowOnce", "Allow once");
+  if (option.kind === "allow_session") return t("agentConsole.allowSession", "Allow for this session");
+  if (option.kind === "allow_always") return t("agentConsole.allowAlways", "Always allow");
+  return t("agentConsole.reject", "Reject");
+}
+
 function AgentApprovalActions({ sessionId, requestId, options }: { sessionId: string; requestId: string; options: AgentPermissionOption[] }) {
   const { t } = useTranslation();
   const [allowMenuOpen, setAllowMenuOpen] = useState(false);
@@ -35,10 +42,10 @@ function AgentApprovalActions({ sessionId, requestId, options }: { sessionId: st
   }, [allowMenuOpen]);
 
   const fallbackOptions: AgentPermissionOption[] = [
-    { id: "once", label: t("agentConsole.allowOnce", "Allow once"), kind: "allow_once" },
-    { id: "session", label: t("agentConsole.allowSession", "Allow for this session"), kind: "allow_session" },
-    { id: "always", label: t("agentConsole.allowAlways", "Always allow"), kind: "allow_always" },
-    { id: "reject", label: t("agentConsole.reject", "Reject"), kind: "reject_once" },
+    { id: "once", label: "", kind: "allow_once" },
+    { id: "session", label: "", kind: "allow_session" },
+    { id: "always", label: "", kind: "allow_always" },
+    { id: "reject", label: "", kind: "reject_once" },
   ];
   const resolvedOptions = options.length ? options : fallbackOptions;
   const allowOptions = resolvedOptions.filter((option) => option.kind === "allow_once" || option.kind === "allow_session" || option.kind === "allow_always");
@@ -54,13 +61,13 @@ function AgentApprovalActions({ sessionId, requestId, options }: { sessionId: st
     <div className="agent-approval-row-actions agent-current-status-row-actions">
       {rejectOption && (
         <button type="button" className="agent-approval-action-reject" onClick={() => resolve(rejectOption.id)}>
-          {rejectOption.label}
+          {permissionOptionLabel(t, rejectOption)}
         </button>
       )}
       {primaryAllowOption && (
         <div ref={allowMenuRef} className="agent-approval-allow-wrap" data-preview-overlay>
           <div className="agent-approval-split-button">
-            <button type="button" className="agent-approval-action-allow-main" onClick={() => resolve(primaryAllowOption.id)} title={primaryAllowOption.label}>
+            <button type="button" className="agent-approval-action-allow-main" onClick={() => resolve(primaryAllowOption.id)} title={permissionOptionLabel(t, primaryAllowOption)}>
               {t("agentConsole.allow", "Allow")}
             </button>
             <button type="button" className="agent-approval-action-allow-caret" onClick={() => setAllowMenuOpen((value) => !value)} title={t("agentConsole.moreAllowOptions", "More allow options")}>
@@ -71,7 +78,7 @@ function AgentApprovalActions({ sessionId, requestId, options }: { sessionId: st
             <div className="app-select-panel agent-approval-allow-menu" data-preview-overlay>
               {secondaryAllowOptions.map((option) => (
                 <button key={option.id} type="button" className="app-select-option" onClick={() => resolve(option.id)}>
-                  {option.label}
+                  {permissionOptionLabel(t, option)}
                 </button>
               ))}
             </div>

@@ -3,10 +3,10 @@ import { hasAgentComposerContent } from "../agent/composer";
 import { normalizeOpenCodeEvent, normalizeOpenCodePart, normalizeOpenCodeTodos, startOpenCodeServerRuntime } from "../agent/opencode";
 import type { OpenCodeAgentInfo, OpenCodeBusEvent, OpenCodeCommandFilePart, OpenCodeCommandInfo, OpenCodeMessage, OpenCodeMessageInfo, OpenCodeMessagePart, OpenCodePermissionReply, OpenCodePermissionRule, OpenCodeProviderResponse, OpenCodeServerRuntime, OpenCodeSseConnection } from "../agent/opencode";
 import { createAgentSession } from "../agent/sessionFactory";
-import { buildSubmittedComposerPayload } from "../composer/submittedFeedback";
+import { buildSubmittedComposerPayload, collectSubmittedResourceLinks } from "../composer/submittedFeedback";
 import { getAgentConsoleSettings } from "../agentConsoleSettings";
 import { getOpenCodeDefaultPermissionRules, setOpenCodePreferredModel, syncOpenCodeModels } from "../openCodeSettings";
-import type { AgentChoiceOption, AgentContentBlock, AgentContextUsage, AgentDiagnosticEntry, AgentMessage, AgentProviderMessagePart, AgentSession, AgentSessionFileDiff } from "../agent/types";
+import type { AgentChoiceOption, AgentContentBlock, AgentContextUsage, AgentDiagnosticEntry, AgentMessage, AgentProviderMessagePart, AgentSession, AgentSessionFileDiff, AgentSubmittedAttachmentTag } from "../agent/types";
 import type { AgentProviderId } from "../agent/types";
 import type { GitAction, ImageAttachment, MlcAttachment, WebAttachment } from "./feedbackStore";
 
@@ -125,7 +125,7 @@ function textBlock(content: string, phase: "process" | "result" = "result"): Age
   };
 }
 
-function createUserMessage(content: string, options: Partial<Pick<AgentMessage, "id" | "providerMessageId" | "providerParts" | "composerDraft">> = {}): AgentMessage {
+function createUserMessage(content: string, options: Partial<Pick<AgentMessage, "id" | "providerMessageId" | "providerParts" | "composerDraft" | "submittedMarkdown" | "submittedAttachmentTags">> = {}): AgentMessage {
   return {
     id: options.id || newId("agent_user_msg"),
     role: "user",
@@ -134,8 +134,38 @@ function createUserMessage(content: string, options: Partial<Pick<AgentMessage, 
     providerMessageId: options.providerMessageId || options.id,
     providerParts: options.providerParts,
     composerDraft: options.composerDraft,
+    submittedMarkdown: options.submittedMarkdown,
+    submittedAttachmentTags: options.submittedAttachmentTags,
     createdAt: nowIso(),
   };
+}
+
+function createSubmittedAttachmentTag(kind: AgentSubmittedAttachmentTag["kind"], label?: string, detail?: string): AgentSubmittedAttachmentTag {
+  return {
+    id: newId("agent_attachment"),
+    kind,
+    label: label?.trim() || undefined,
+    detail: detail?.trim() || undefined,
+  };
+}
+
+function submittedGitActionDetail(gitAction: GitAction): string {
+  if (gitAction.type === "commit-before") return "commit before work";
+  if (gitAction.type === "commit") return "commit after work";
+  if (gitAction.type === "commit-push") return "commit and push";
+  if (gitAction.type === "create-branch") return gitAction.branchName ? `create branch ${gitAction.branchName}` : "create branch";
+  return gitAction.type;
+}
+
+function buildSubmittedAttachmentTags(session: AgentSession): AgentSubmittedAttachmentTag[] {
+  const tags: AgentSubmittedAttachmentTag[] = [];
+  if (session.testLogText.trim()) tags.push(createSubmittedAttachmentTag("test-log", undefined, `${session.testLogText.trim().length} chars`));
+  if (session.gitAction) tags.push(createSubmittedAttachmentTag("git", undefined, submittedGitActionDetail(session.gitAction)));
+  session.images.forEach((image) => tags.push(createSubmittedAttachmentTag("image", image.name || image.path, image.path)));
+  session.mlcAttachments.forEach((attachment) => tags.push(createSubmittedAttachmentTag("mlc", attachment.title || attachment.filePath, attachment.filePath)));
+  session.webAttachments.forEach((attachment) => tags.push(createSubmittedAttachmentTag("web", attachment.pageTitle || attachment.sourceUrl, attachment.sourceUrl)));
+  collectSubmittedResourceLinks(session.draft, session.cwd).forEach((link) => tags.push(createSubmittedAttachmentTag("resource", link.label, link.href)));
+  return tags;
 }
 
 function createStreamingAssistantMessage(messageId?: string): AgentMessage {
@@ -1505,6 +1535,7 @@ export const useAgentStore = create<AgentStoreState>((set, get) => ({
       includePayloadRouting: false,
     });
     const composerDraft = session.draft;
+    const submittedAttachmentTags = buildSubmittedAttachmentTags(session);
 
     try {
       if (session.providerId === "opencode") {
@@ -1625,9 +1656,11 @@ export const useAgentStore = create<AgentStoreState>((set, get) => ({
           webAttachments: [],
           messages: [
             ...item.messages,
-            createUserMessage(submittedPrompt.markdown, {
+            createUserMessage(composerDraft.trim() || submittedPrompt.historyText.trim(), {
               providerParts: [{ type: "text", text: composerDraft }],
               composerDraft,
+              submittedMarkdown: submittedPrompt.markdown,
+              submittedAttachmentTags,
             }),
             createStreamingAssistantMessage(),
           ],
