@@ -172,6 +172,7 @@ export interface AgentSession {
   modeId?: string;
   availableModels?: AgentChoiceOption[];
   availableModes?: AgentChoiceOption[];
+  availableCommands?: AgentChoiceOption[];
   contextUsage?: AgentContextUsage;
   configOptions?: unknown[];
   status: AgentSessionStatus;

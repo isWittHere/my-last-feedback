@@ -2,6 +2,7 @@ import { useCallback, useEffect, useRef, useState } from "react";
 import { useAgentConsoleSettings } from "../../agentConsoleSettings";
 import type { AgentSession } from "../../agent/types";
 import { AgentMessageItem } from "./AgentMessageItem";
+import { AgentSessionHeader } from "./AgentSessionHeader";
 
 function messageText(message: AgentSession["messages"][number]): string {
   return message.blocks
@@ -20,6 +21,7 @@ export function AgentMessageTimeline({ session }: { session: AgentSession }) {
   const { showStickyUserMessageBar } = useAgentConsoleSettings();
   const endRef = useRef<HTMLDivElement>(null);
   const scrollRef = useRef<HTMLDivElement>(null);
+  const topOverlayRef = useRef<HTMLDivElement>(null);
   const messagesRef = useRef(session.messages);
   const shouldAutoFollowRef = useRef(true);
   const [stickyUserContent, setStickyUserContent] = useState<string | null>(null);
@@ -65,13 +67,15 @@ export function AgentMessageTimeline({ session }: { session: AgentSession }) {
     const container = scrollRef.current;
     if (!container) return;
     const containerRect = container.getBoundingClientRect();
+    const overlayHeight = topOverlayRef.current?.getBoundingClientRect().height ?? 0;
+    const stickyThreshold = containerRect.top + overlayHeight + 8;
     const userElements = container.querySelectorAll('[data-role="user"]');
     let nextContent: string | null = null;
     let nextMsgId: string | null = null;
 
     userElements.forEach((element) => {
       const rect = element.getBoundingClientRect();
-      if (rect.bottom < containerRect.top + 8) {
+      if (rect.bottom < stickyThreshold) {
         const msgId = element.getAttribute("data-msg-id");
         const message = messagesRef.current.find((item) => item.id === msgId);
         if (message) {
@@ -140,15 +144,23 @@ export function AgentMessageTimeline({ session }: { session: AgentSession }) {
 
   return (
     <div className="agent-message-timeline" ref={scrollRef} onScroll={handleTimelineScroll}>
-      {showStickyUserMessageBar && (
-        <div className="agent-sticky-user-anchor">
-          {stickyUserContent && (
-          <button type="button" className="agent-sticky-user-bar" onClick={scrollToStickyMessage} title={stickyUserContent}>
-            <span>{stickyUserContent}</span>
-          </button>
-          )}
-        </div>
-      )}
+      <div className="agent-timeline-top-overlay" ref={topOverlayRef}>
+        <AgentSessionHeader session={session} />
+        {showStickyUserMessageBar && (
+          <div className="agent-sticky-user-slot">
+            <button
+              type="button"
+              className={`agent-sticky-user-bar${stickyUserContent ? "" : " agent-sticky-user-bar-hidden"}`}
+              onClick={scrollToStickyMessage}
+              title={stickyUserContent || undefined}
+              tabIndex={stickyUserContent ? 0 : -1}
+              aria-hidden={!stickyUserContent}
+            >
+              <span>{stickyUserContent || ""}</span>
+            </button>
+          </div>
+        )}
+      </div>
       {session.messages.map((message) => (
         <AgentMessageItem key={message.id} session={session} message={message} projectDirectory={session.cwd} />
       ))}

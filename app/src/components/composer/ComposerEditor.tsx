@@ -478,6 +478,9 @@ export const ComposerEditor = forwardRef<ComposerEditorHandle, ComposerEditorPro
 }, forwardedRef) {
   const containerRef = useRef<HTMLDivElement>(null);
   const rootRef = useRef<HTMLDivElement>(null);
+  const slashListRef = useRef<HTMLDivElement>(null);
+  const slashDetailRef = useRef<HTMLElement>(null);
+  const slashDetailHideTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const normalizedValue = normalizeBlankComposerValue(value);
   const valueRef = useRef(normalizedValue);
   const composingRef = useRef(false);
@@ -488,6 +491,7 @@ export const ComposerEditor = forwardRef<ComposerEditorHandle, ComposerEditorPro
   const lastHistoryValueRef = useRef(normalizedValue);
   const [slashMenu, setSlashMenu] = useState<SlashMenuState | null>(null);
   const [activeCommandIndex, setActiveCommandIndex] = useState(0);
+  const [hoveredCommandIndex, setHoveredCommandIndex] = useState<number | null>(null);
   const [isComposing, setIsComposing] = useState(false);
   const [isTransientInputActive, setIsTransientInputActive] = useState(false);
   const [composerSettings, setComposerSettings] = useState<ComposerSettings>(getComposerSettings);
@@ -503,6 +507,24 @@ export const ComposerEditor = forwardRef<ComposerEditorHandle, ComposerEditorPro
     }
     setIsTransientInputActive(value);
   }, []);
+
+  const clearSlashDetailHideTimer = useCallback(() => {
+    if (!slashDetailHideTimerRef.current) return;
+    clearTimeout(slashDetailHideTimerRef.current);
+    slashDetailHideTimerRef.current = null;
+  }, []);
+
+  const scheduleSlashDetailHide = useCallback((nextTarget: EventTarget | null) => {
+    const nextNode = nextTarget as Node | null;
+    if (nextNode && (slashListRef.current?.contains(nextNode) || slashDetailRef.current?.contains(nextNode))) return;
+    clearSlashDetailHideTimer();
+    slashDetailHideTimerRef.current = setTimeout(() => {
+      setHoveredCommandIndex(null);
+      slashDetailHideTimerRef.current = null;
+    }, 180);
+  }, [clearSlashDetailHideTimer]);
+
+  useEffect(() => clearSlashDetailHideTimer, [clearSlashDetailHideTimer]);
 
   const showPlaceholder = (placeholderContent !== undefined || !!placeholder) && isBlankComposerValue(normalizedValue) && !isComposing && !isTransientInputActive;
   const commandHint = useMemo(
@@ -636,11 +658,13 @@ export const ComposerEditor = forwardRef<ComposerEditorHandle, ComposerEditorPro
       start: trigger.start,
       end: selection.end,
       top: anchorTop - 6,
-      left: Math.max(8, Math.min(anchorRect.left, window.innerWidth - 328)),
+      left: Math.max(8, Math.min(anchorRect.left, window.innerWidth - 448)),
       maxHeight: Math.max(120, Math.min(240, anchorTop - 16)),
     });
     setActiveCommandIndex(0);
-  }, [readOnly]);
+    clearSlashDetailHideTimer();
+    setHoveredCommandIndex(null);
+  }, [clearSlashDetailHideTimer, readOnly]);
 
   const replaceRange = useCallback((start: number, end: number, text: string, options: { updateSlashMenu?: boolean } = {}) => {
     const root = rootRef.current;
@@ -921,6 +945,18 @@ export const ComposerEditor = forwardRef<ComposerEditorHandle, ComposerEditorPro
     insertText(text);
   }, [insertText, onPaste]);
 
+  const detailCommand = hoveredCommandIndex === null ? undefined : visibleCommands[hoveredCommandIndex];
+  const slashMenuStyle = slashMenu ? ({
+    top: slashMenu.top,
+    left: slashMenu.left,
+    "--composer-slash-max-height": `${slashMenu.maxHeight}px`,
+  } as CSSProperties) : undefined;
+  const slashDetailStyle = slashMenu ? ({
+    top: slashMenu.top,
+    left: Math.max(8, Math.min(slashMenu.left + 436, window.innerWidth - 356)),
+    "--composer-slash-max-height": `${slashMenu.maxHeight}px`,
+  } as CSSProperties) : undefined;
+
   return (
     <div ref={containerRef} className={`composer-editor-root${containerClassName ? ` ${containerClassName}` : ""}`} data-hint-suppressed={isTransientInputActive ? "true" : undefined} style={{ minHeight: style?.minHeight, height: style?.height }}>
       {showPlaceholder || commandHint ? (
@@ -986,28 +1022,38 @@ export const ComposerEditor = forwardRef<ComposerEditorHandle, ComposerEditorPro
         }}
       />
       {slashMenu && visibleCommands.length > 0 ? (
-        <div className="composer-slash-menu" style={{ top: slashMenu.top, left: slashMenu.left, maxHeight: slashMenu.maxHeight }}>
-          {visibleCommands.map((command, index) => (
-            (() => {
+        <>
+          <div ref={slashListRef} className="composer-slash-menu" style={slashMenuStyle} onMouseEnter={clearSlashDetailHideTimer} onMouseLeave={(event) => scheduleSlashDetailHide(event.relatedTarget)}>
+            {visibleCommands.map((command, index) => {
               const label = command.name || `/${command.id}`;
               return (
-            <button
-              key={command.id}
-              type="button"
-              className={`composer-slash-item${index === activeCommandIndex ? " active" : ""}`}
-              onMouseDown={(event) => event.preventDefault()}
-              onClick={() => selectCommand(command)}
-            >
-              <span className="composer-slash-icon">{command.icon ? <PromptIcon name={command.icon} size={13} /> : <Icon name="terminal" size={13} />}</span>
-              <span className="composer-slash-main">
-                <span className="composer-slash-name" title={label}>{highlightedCommandLabel(label, slashMenu.query)}</span>
-                {command.description ? <span className="composer-slash-description">{command.description}</span> : null}
-              </span>
-            </button>
+                <button
+                  key={command.id}
+                  type="button"
+                  className={`composer-slash-item${index === activeCommandIndex ? " active" : ""}`}
+                  onMouseEnter={() => {
+                    clearSlashDetailHideTimer();
+                    setHoveredCommandIndex(index);
+                  }}
+                  onMouseDown={(event) => event.preventDefault()}
+                  onClick={() => selectCommand(command)}
+                >
+                  <span className="composer-slash-icon">{command.icon ? <PromptIcon name={command.icon} size={13} /> : <Icon name="terminal" size={13} />}</span>
+                  <span className="composer-slash-main">
+                    <span className="composer-slash-name">{highlightedCommandLabel(label, slashMenu.query)}</span>
+                    {command.description ? <span className="composer-slash-description">{command.description}</span> : null}
+                  </span>
+                </button>
               );
-            })()
-          ))}
-        </div>
+            })}
+          </div>
+          {detailCommand ? (
+            <aside ref={slashDetailRef} className="composer-slash-detail" style={slashDetailStyle} aria-live="polite" onMouseEnter={clearSlashDetailHideTimer} onMouseLeave={(event) => scheduleSlashDetailHide(event.relatedTarget)}>
+              <div className="composer-slash-detail-title">{detailCommand.name || `/${detailCommand.id}`}</div>
+              {detailCommand.description ? <div className="composer-slash-detail-description">{detailCommand.description}</div> : null}
+            </aside>
+          ) : null}
+        </>
       ) : null}
     </div>
   );

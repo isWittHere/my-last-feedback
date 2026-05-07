@@ -77,6 +77,19 @@ export interface OpenCodeAgentInfo {
   [key: string]: unknown;
 }
 
+export type OpenCodeCommandSource = "command" | "mcp" | "skill";
+
+export interface OpenCodeCommandInfo {
+  name: string;
+  description?: string;
+  agent?: string;
+  model?: string;
+  source?: OpenCodeCommandSource;
+  subtask?: boolean;
+  hints?: string[];
+  [key: string]: unknown;
+}
+
 export type OpenCodePermissionAction = "allow" | "deny" | "ask";
 export type OpenCodePermissionReply = "once" | "always" | "reject";
 
@@ -116,6 +129,25 @@ export interface OpenCodePromptRequest {
   parts: OpenCodePromptPart[];
   model?: OpenCodePromptModel;
   agent?: string;
+}
+
+export interface OpenCodeCommandFilePart {
+  id?: string;
+  type: "file";
+  mime: string;
+  url: string;
+  filename?: string;
+  source?: unknown;
+}
+
+export interface OpenCodeCommandRequest {
+  command: string;
+  arguments: string;
+  agent?: string;
+  model?: string;
+  variant?: string;
+  messageID?: string;
+  parts?: OpenCodeCommandFilePart[];
 }
 
 export interface OpenCodeMessageInfo {

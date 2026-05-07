@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
+import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState, type ReactNode } from "react";
 import { useTranslation } from "react-i18next";
 import { useFeedbackStore } from "../store/feedbackStore";
 import { CallerContext } from "./CallerContext";
@@ -41,6 +41,7 @@ export function CallerPanel({ callerId }: { callerId: string }) {
   });
   const sessionListMode = useFeedbackStore((s) => s.sessionListMode);
   const setSessionListMode = useFeedbackStore((s) => s.setSessionListMode);
+  const isTopbarMode = sessionListMode === "topbarCompact" || sessionListMode === "topbarStats";
 
   useEffect(() => {
     // If current selection no longer exists, pick a new one
@@ -84,8 +85,8 @@ export function CallerPanel({ callerId }: { callerId: string }) {
     <CallerContext.Provider value={override}>
       <div className="caller-panel" style={caller?.color ? { borderColor: `${caller.color}44`, '--caller-color': caller.color } as React.CSSProperties : undefined}>
         <div className={`caller-panel-body${sessionListMode === "topbarCompact" || sessionListMode === "topbarStats" ? " caller-panel-body-topbar" : ` caller-panel-body-${sessionListMode}`}`}>
-          <Sidebar mode={sessionListMode} onModeChange={setSessionListMode} />
-          <CallerContent />
+          {!isTopbarMode && <Sidebar mode={sessionListMode} onModeChange={setSessionListMode} />}
+          <CallerContent topbarSlot={isTopbarMode ? <Sidebar mode={sessionListMode} onModeChange={setSessionListMode} /> : null} />
         </div>
       </div>
     </CallerContext.Provider>
@@ -93,7 +94,7 @@ export function CallerPanel({ callerId }: { callerId: string }) {
 }
 
 /** The right-side content area for one caller column */
-function CallerContent() {
+function CallerContent({ topbarSlot }: { topbarSlot?: ReactNode }) {
   const { t, i18n } = useTranslation();
   const { session: activeSession, caller } = useActiveCallerSession();
   const callerColor = caller?.color || 'var(--color-primary)';
@@ -393,7 +394,7 @@ function CallerContent() {
       <div ref={containerRef} className="flex-1 flex flex-col min-h-0 min-w-0 overflow-hidden" style={{ gap: 0 }}>
         {/* Summary panel */}
         <div className="overflow-hidden flex flex-col panel-card" style={{ flex: isReadonly ? `1 1 calc(${panelSizes[0] * 100}% - 1px)` : `0 0 calc(${panelSizes[0] * 100}% - 1px)`, minHeight: 48 }}>
-          <SummaryPanel />
+          <SummaryPanel topbarSlot={topbarSlot} />
         </div>
         <div className="resize-handle" onMouseDown={(e) => handleMouseDown(0, e)} />
         {/* Input area: attachments + feedback */}

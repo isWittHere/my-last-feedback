@@ -11,13 +11,6 @@ import type { PromptCommandOption } from "../../composer/promptCommands";
 import { SharedComposerInput } from "../composer/SharedComposerInput";
 import { GIT_ACTION_TYPES, GitActionOptionIcon, GitActionTag, TestLogTag, gitActionLabelKey } from "../CallerPanelParts";
 
-const AGENT_COMMANDS: PromptCommandOption[] = [
-  { id: "plan", name: "Plan", description: "Plan the agent task before editing", content: "/plan ", icon: "checklist" },
-  { id: "edit", name: "Edit", description: "Implement the requested change", content: "/edit ", icon: "edit" },
-  { id: "review", name: "Review", description: "Review current code and risks", content: "/review ", icon: "search" },
-  { id: "test", name: "Test", description: "Run or prepare validation steps", content: "/test ", icon: "play" },
-];
-
 const AGENT_COMPOSER_CALLER_ID = "agent-console";
 const DOCK_COLUMN_IDS: DockColumnId[] = ["leftSidebar", "leftPage", "rightPage", "rightSidebar"];
 
@@ -92,7 +85,15 @@ export function AgentComposer({ session }: { session: AgentSession }) {
   const setDockColumnCollapsed = useFeedbackStore((state) => state.setDockColumnCollapsed);
   const moveDockTabToColumn = useFeedbackStore((state) => state.moveDockTabToColumn);
   useOpenCodeSettings();
-  const commandOptions = useMemo(() => AGENT_COMMANDS, []);
+  const commandOptions = useMemo(() => {
+    return (session.availableCommands || []).map((command): PromptCommandOption => ({
+      id: command.id,
+      name: command.label || command.id,
+      description: command.description || "OpenCode command",
+      content: `/${command.id} `,
+      icon: "terminal",
+    }));
+  }, [session.availableCommands]);
   const hasContent = hasAgentComposerContent(session);
 
   const findDockColumnForTab = useCallback((tabId: DockTabId): DockColumnId | null => (

@@ -3,7 +3,6 @@ import { useAgentStore } from "../../store/agentStore";
 import { AgentComposer } from "./AgentComposer";
 import { AgentCurrentStatusRow } from "./AgentCurrentStatusRow";
 import { AgentMessageTimeline } from "./AgentMessageTimeline";
-import { AgentSessionHeader } from "./AgentSessionHeader";
 import { AgentTaskPanel } from "./AgentTaskPanel";
 
 const INPUT_DEFAULT = 0.28;
@@ -84,7 +83,6 @@ export function AgentConsolePanel() {
 
   return (
     <div className="agent-console-panel">
-      <AgentSessionHeader session={activeSession} />
       <div ref={containerRef} className="agent-console-resizable-body">
         <div className="agent-console-timeline-region panel-card" style={{ flex: `0 0 calc(${panelSizes[0] * 100}% - 1px)`, minHeight: 48 }}>
           <AgentMessageTimeline session={activeSession} />

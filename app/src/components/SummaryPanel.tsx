@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState, type ReactNode } from "react";
 import { useTranslation } from "react-i18next";
 import { useFeedbackStore } from "../store/feedbackStore";
 import { Icon } from "./Icons";
@@ -127,7 +127,7 @@ function QuestionsForm({
   );
 }
 
-export function SummaryPanel() {
+export function SummaryPanel({ topbarSlot }: { topbarSlot?: ReactNode }) {
   const { t } = useTranslation();
   const friendlyName = useFriendlyName();
   const { session: activeSession, caller } = useActiveCallerSession();
@@ -192,43 +192,50 @@ export function SummaryPanel() {
       } as React.CSSProperties}
     >
       {/* Content — user-select enabled for text selection */}
-      <div ref={scrollRef} className="flex-1 overflow-y-auto px-3 pt-1 pb-12 min-w-0" style={{ userSelect: "text" }}>
-        {summary ? (
-          <>
-            {/* Agent identity header */}
-            {caller && (
-              <div className="summary-caller-header" style={{ display: "flex", alignItems: "center", gap: 6, padding: "6px 0 4px" }}>
-                <IdenticonAvatar alias={caller.alias || caller.name} color={caller.color} size={22} />
-                <span style={{ fontSize: 14, lineHeight: "22px", color: "var(--color-text-muted)" }}>
-                  <span style={{ fontWeight: 600, color: caller.color }}>{caller.alias ? friendlyName(caller.alias) : caller.name.charAt(0).toUpperCase()}</span>
-                  {" "}{t("summary.says", "says:")}
-                </span>
-              </div>
-            )}
-            <MarkdownContent markdown={summary} projectDirectory={projectDirectory} />
-          </>
-        ) : (
-          <div
-            className="flex items-center justify-center h-full"
-            style={{ color: "var(--color-text-muted)" }}
-          >
-            <span className="text-xs italic">{t("summary.empty")}</span>
+      <div ref={scrollRef} className="flex-1 overflow-y-auto pt-1 pb-12 min-w-0" style={{ userSelect: "text" }}>
+        {topbarSlot && (
+          <div className="summary-topbar-overlay">
+            {topbarSlot}
           </div>
         )}
+        <div className="summary-scroll-content px-3">
+          {summary ? (
+            <>
+              {/* Agent identity header */}
+              {caller && (
+                <div className="summary-caller-header" style={{ display: "flex", alignItems: "center", gap: 6, padding: "6px 0 4px" }}>
+                  <IdenticonAvatar alias={caller.alias || caller.name} color={caller.color} size={22} />
+                  <span style={{ fontSize: 14, lineHeight: "22px", color: "var(--color-text-muted)" }}>
+                    <span style={{ fontWeight: 600, color: caller.color }}>{caller.alias ? friendlyName(caller.alias) : caller.name.charAt(0).toUpperCase()}</span>
+                    {" "}{t("summary.says", "says:")}
+                  </span>
+                </div>
+              )}
+              <MarkdownContent markdown={summary} projectDirectory={projectDirectory} />
+            </>
+          ) : (
+            <div
+              className="flex items-center justify-center h-full"
+              style={{ color: "var(--color-text-muted)" }}
+            >
+              <span className="text-xs italic">{t("summary.empty")}</span>
+            </div>
+          )}
 
-        {/* Agent Questions Form */}
-        {questions.length > 0 && (
-          <QuestionsForm
-            questions={questions}
-            sessionId={activeSession?.id || ""}
-            isReadonly={isReadonly}
-            callerColor={activeCallerColor}
-            callerAlias={caller?.alias || ""}
-            onAnswerChange={updateSessionAnswer}
-            onToggleOption={toggleSessionOption}
-            onFillTemplate={handleFillTemplate}
-          />
-        )}
+          {/* Agent Questions Form */}
+          {questions.length > 0 && (
+            <QuestionsForm
+              questions={questions}
+              sessionId={activeSession?.id || ""}
+              isReadonly={isReadonly}
+              callerColor={activeCallerColor}
+              callerAlias={caller?.alias || ""}
+              onAnswerChange={updateSessionAnswer}
+              onToggleOption={toggleSessionOption}
+              onFillTemplate={handleFillTemplate}
+            />
+          )}
+        </div>
       </div>
 
       {/* Heading minimap nav bar — right side */}

@@ -1836,6 +1836,23 @@ body,
   display: none !important;
 }
 
+.summary-topbar-overlay {
+  position: sticky;
+  top: -4px;
+  z-index: 35;
+  margin: -4px 0 0;
+}
+
+.summary-topbar-overlay .session-sidebar-topbar {
+  background: color-mix(in srgb, var(--color-bg-input-raised) 28%, transparent);
+  -webkit-backdrop-filter: blur(22px) saturate(1.24);
+  backdrop-filter: blur(22px) saturate(1.24);
+}
+
+.group\/summary .heading-nav-bar {
+  top: 32px;
+}
+
 .caller-workspace {
   flex: 1;
   min-width: 0;
@@ -1878,6 +1895,8 @@ body,
 }
 
 .agent-console-header {
+  position: relative;
+  z-index: 30;
   min-height: 31px;
   display: flex;
   flex-direction: column;
@@ -1885,6 +1904,7 @@ body,
   padding: 0;
   border-bottom: 1px solid var(--color-border-subtle);
   background: var(--color-bg-input-raised);
+  overflow: visible;
 }
 
 .agent-console-header-preview {
@@ -2393,6 +2413,13 @@ body,
   flex: 0 0 auto;
 }
 
+.agent-context-indicator-wrap:hover,
+.agent-context-indicator-wrap:focus-within,
+.agent-diff-indicator-wrap:hover,
+.agent-diff-indicator-wrap:focus-within {
+  z-index: 220;
+}
+
 .agent-diff-indicator {
   width: max-content;
   min-width: 62px;
@@ -2496,7 +2523,7 @@ body,
   background: var(--color-bg-elevated);
   box-shadow: 0 12px 30px rgba(0, 0, 0, 0.28);
   color: var(--color-text-primary);
-  z-index: 80;
+  z-index: 240;
   opacity: 0;
   pointer-events: none;
   transform: translateY(-2px);
@@ -2780,7 +2807,7 @@ body,
   background: var(--color-bg-elevated);
   box-shadow: 0 12px 30px rgba(0, 0, 0, 0.28);
   color: var(--color-text-primary);
-  z-index: 80;
+  z-index: 240;
   opacity: 0;
   pointer-events: none;
   transform: translateY(-2px);
@@ -2936,11 +2963,18 @@ body,
   flex-direction: column;
   align-items: stretch;
   border-top: 1px solid var(--color-border-subtle);
-  background: color-mix(in srgb, var(--color-bg-input-raised) 88%, var(--color-bg-base));
   min-width: 0;
 }
 
+.agent-header-glass-panel {
+  background: color-mix(in srgb, var(--color-bg-input-raised) 34%, transparent);
+  -webkit-backdrop-filter: blur(22px) saturate(1.24);
+  backdrop-filter: blur(22px) saturate(1.24);
+}
+
 .agent-console-header-details-main {
+  position: relative;
+  z-index: 2;
   height: 30px;
   min-height: 30px;
   display: flex;
@@ -2948,6 +2982,12 @@ body,
   gap: 8px;
   padding: 0 8px;
   min-width: 0;
+  overflow: visible;
+}
+
+.agent-console-header-details-main > * {
+  position: relative;
+  z-index: 2;
 }
 
 .agent-header-path {
@@ -2973,6 +3013,8 @@ body,
 }
 
 .agent-header-diagnostic {
+  position: relative;
+  z-index: 1;
   min-width: 0;
   display: flex;
   align-items: flex-start;
@@ -3465,13 +3507,41 @@ body,
   user-select: text;
 }
 
+.agent-timeline-top-overlay {
+  position: sticky;
+  top: -10px;
+  z-index: 35;
+  margin: -10px -12px 0;
+}
+
+.agent-timeline-top-overlay .agent-console-header {
+  background: color-mix(in srgb, var(--color-bg-input-raised) 28%, transparent);
+  -webkit-backdrop-filter: blur(22px) saturate(1.24);
+  backdrop-filter: blur(22px) saturate(1.24);
+}
+
+.agent-timeline-top-overlay .agent-console-header-main {
+  background: color-mix(in srgb, var(--color-bg-input-raised) 28%, transparent);
+  -webkit-backdrop-filter: blur(22px) saturate(1.24);
+  backdrop-filter: blur(22px) saturate(1.24);
+}
+
+.agent-timeline-top-overlay .agent-header-glass-panel {
+  background: color-mix(in srgb, var(--color-bg-input-raised) 28%, transparent);
+}
+
 .agent-sticky-user-anchor {
   position: sticky;
   top: -10px;
-  z-index: 4;
+  z-index: 2;
   min-height: 0;
   margin: -10px -12px 0;
   pointer-events: none;
+}
+
+.agent-sticky-user-slot {
+  min-height: 34px;
+  margin-bottom: -34px;
 }
 
 .agent-sticky-user-bar {
@@ -3482,15 +3552,23 @@ body,
   padding: 8px 12px;
   border: 0;
   border-bottom: 1px solid var(--color-border-subtle);
-  background: color-mix(in srgb, var(--color-bg-base) 94%, transparent);
+  background: color-mix(in srgb, var(--color-bg-base) 72%, transparent);
+  -webkit-backdrop-filter: blur(14px) saturate(1.14);
+  backdrop-filter: blur(14px) saturate(1.14);
   color: var(--color-text-muted);
   cursor: pointer;
   pointer-events: auto;
   transition: background 0.15s, color 0.15s;
 }
 
+.agent-sticky-user-bar-hidden {
+  visibility: hidden;
+  opacity: 0;
+  pointer-events: none;
+}
+
 .agent-sticky-user-bar:hover {
-  background: color-mix(in srgb, var(--color-bg-surface) 92%, transparent);
+  background: color-mix(in srgb, var(--color-bg-surface) 76%, transparent);
   color: var(--color-text-secondary);
 }
 
@@ -6584,7 +6662,8 @@ body,
 .composer-slash-menu {
   position: fixed;
   z-index: 1200;
-  width: min(320px, calc(100vw - 16px));
+  width: min(430px, calc(100vw - 16px));
+  max-height: var(--composer-slash-max-height, 240px);
   overflow-y: auto;
   padding: 4px;
   border: 1px solid var(--color-border);
@@ -6653,6 +6732,42 @@ body,
   color: var(--color-text-muted);
   font-size: 11px;
   line-height: 20px;
+}
+.composer-slash-detail {
+  position: fixed;
+  z-index: 1201;
+  width: min(340px, calc(100vw - 24px));
+  max-width: 340px;
+  max-height: var(--composer-slash-max-height, 240px);
+  overflow: auto;
+  padding: 10px 12px;
+  border: 1px solid var(--color-border);
+  border-radius: 8px;
+  background: var(--color-bg-surface);
+  box-shadow: none;
+  color: var(--color-text-secondary);
+  transform: translateY(-100%);
+  pointer-events: auto;
+}
+.composer-slash-detail-title {
+  color: var(--color-text-primary);
+  font-size: 13px;
+  font-weight: 700;
+  line-height: 1.35;
+  overflow-wrap: anywhere;
+}
+.composer-slash-detail-description {
+  margin-top: 6px;
+  color: var(--color-text-muted);
+  font-size: 12px;
+  line-height: 1.45;
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+}
+@media (max-width: 760px) {
+  .composer-slash-detail {
+    display: none;
+  }
 }
 /* ── Light Theme Overrides (hardcoded colors) ── */
 [data-theme="light"] ::-webkit-scrollbar-thumb {
@@ -7005,15 +7120,27 @@ body,
 }
 
 .settings-agent-preview {
-  position: sticky;
-  top: 0;
-  z-index: 5;
-  height: 31px;
+  position: relative;
+  z-index: 1;
   min-height: 31px;
   margin: 0 -18px 12px;
   padding: 0;
   background: var(--color-bg-surface);
   overflow: visible;
+}
+
+.settings-agent-sticky-user-preview {
+  background: var(--color-bg-input-raised);
+}
+
+.settings-agent-sticky-user-bar-preview {
+  min-height: 30px;
+  cursor: default;
+  pointer-events: none;
+}
+
+.settings-agent-sticky-user-bar-preview span {
+  max-width: 72%;
 }
 
 .settings-agent-section {

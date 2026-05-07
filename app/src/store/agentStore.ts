@@ -1,7 +1,7 @@
 import { create } from "zustand";
 import { hasAgentComposerContent } from "../agent/composer";
 import { normalizeOpenCodeEvent, normalizeOpenCodePart, normalizeOpenCodeTodos, startOpenCodeServerRuntime } from "../agent/opencode";
-import type { OpenCodeAgentInfo, OpenCodeBusEvent, OpenCodeMessage, OpenCodeMessageInfo, OpenCodePermissionReply, OpenCodePermissionRule, OpenCodeProviderResponse, OpenCodeServerRuntime, OpenCodeSseConnection } from "../agent/opencode";
+import type { OpenCodeAgentInfo, OpenCodeBusEvent, OpenCodeCommandFilePart, OpenCodeCommandInfo, OpenCodeMessage, OpenCodeMessageInfo, OpenCodePermissionReply, OpenCodePermissionRule, OpenCodeProviderResponse, OpenCodeServerRuntime, OpenCodeSseConnection } from "../agent/opencode";
 import { createAgentSession } from "../agent/sessionFactory";
 import { buildSubmittedComposerPayload } from "../composer/submittedFeedback";
 import { getAgentConsoleSettings } from "../agentConsoleSettings";
@@ -234,6 +234,16 @@ function choicesFromOpenCodeAgents(agents: OpenCodeAgentInfo[]): AgentChoiceOpti
     .filter((option): option is AgentChoiceOption => Boolean(option));
 }
 
+function choicesFromOpenCodeCommands(commands: OpenCodeCommandInfo[]): AgentChoiceOption[] {
+  return commands
+    .filter((command) => command.name)
+    .map((command) => ({
+      id: command.name,
+      label: command.name,
+      description: [command.description, command.source ? `source: ${command.source}` : undefined].filter(Boolean).join(" · "),
+    }));
+}
+
 function fallbackOpenCodeAgentChoices(): AgentChoiceOption[] {
   return [
     { id: "build", label: "build", description: "The default OpenCode agent." },
@@ -251,6 +261,40 @@ function openCodeModelFromSession(session: AgentSession): { providerID: string; 
   const [providerID, ...modelParts] = session.modelId.split("/");
   const modelID = modelParts.join("/");
   return providerID && modelID ? { providerID, modelID } : undefined;
+}
+
+function openCodeCommandModelFromSession(session: AgentSession): string | undefined {
+  const model = openCodeModelFromSession(session);
+  return model ? `${model.providerID}/${model.modelID}` : undefined;
+}
+
+function parseOpenCodeSlashCommandDraft(text: string): { name: string; arguments: string } | null {
+  const trimmed = text.trimStart();
+  if (!trimmed.startsWith("/")) return null;
+  const firstWhitespaceIndex = trimmed.search(/\s/);
+  const rawName = firstWhitespaceIndex === -1 ? trimmed.slice(1) : trimmed.slice(1, firstWhitespaceIndex);
+  const name = rawName.trim();
+  if (!name) return null;
+  return {
+    name,
+    arguments: firstWhitespaceIndex === -1 ? "" : trimmed.slice(firstWhitespaceIndex).trimStart(),
+  };
+}
+
+function findOpenCodeCommand(session: AgentSession, name: string): AgentChoiceOption | undefined {
+  const normalized = name.toLowerCase();
+  return (session.availableCommands || []).find((command) => command.id.toLowerCase() === normalized);
+}
+
+function openCodeCommandFilePartsFromSession(session: AgentSession): OpenCodeCommandFilePart[] {
+  return session.images
+    .filter((image) => Boolean(image.dataUrl))
+    .map((image) => ({
+      type: "file",
+      mime: /^data:([^;,]+)/.exec(image.dataUrl || "")?.[1] || "image/png",
+      url: image.dataUrl || "",
+      filename: image.name,
+    }));
 }
 
 function openCodeModelIdFromInfo(info: OpenCodeMessageInfo | undefined): string | undefined {
@@ -872,13 +916,6 @@ function resolvePermissionInSession(session: AgentSession, requestId: string, op
   };
 }
 
-const AGENT_COMMAND_PROMPTS = [
-  { name: "plan", description: "Plan the agent task before editing", content: "Analyze the task, inspect relevant files, and outline the implementation plan before making changes.", icon: "checklist" },
-  { name: "edit", description: "Implement the requested change", content: "Implement the requested change using the existing project conventions and keep the edit focused.", icon: "edit" },
-  { name: "review", description: "Review current code and risks", content: "Review the relevant code for bugs, regressions, missing validation, and risks before summarizing findings.", icon: "search" },
-  { name: "test", description: "Run or prepare validation steps", content: "Validate the change with the appropriate diagnostics, tests, or build checks for this project.", icon: "play" },
-];
-
 function updateSession(sessions: AgentSession[], sessionId: string, updater: (session: AgentSession) => AgentSession): AgentSession[] {
   return sessions.map((session) => session.id === sessionId ? updater(session) : session);
 }
@@ -897,6 +934,7 @@ export const useAgentStore = create<AgentStoreState>((set, get) => ({
     const state = get();
     const activeSession = state.getActiveSession();
     const requestedCwd = options.cwd?.trim();
+    const inheritOpenCodeCommands = !requestedCwd || requestedCwd === activeSession?.cwd;
     const createdAt = nowIso();
     const sessionId = newId("agent_session");
     const session: AgentSession = {
@@ -908,6 +946,7 @@ export const useAgentStore = create<AgentStoreState>((set, get) => ({
       modeId: activeSession?.modeId,
       availableModels: activeSession?.availableModels || [],
       availableModes: activeSession?.availableModes || [],
+      availableCommands: inheritOpenCodeCommands ? activeSession?.availableCommands || [] : [],
       configOptions: activeSession?.configOptions || [],
       status: "idle",
       createdAt,
@@ -1047,12 +1086,14 @@ export const useAgentStore = create<AgentStoreState>((set, get) => ({
         });
         events.start();
         openCodeHttpRuntimes.set(runtime.processInfo.processId, { sessionId, runtime, events });
-        const [providers, agents] = await Promise.all([
+        const [providers, agents, commands] = await Promise.all([
           runtime.client.providers(),
           runtime.client.agents().catch(() => [] as OpenCodeAgentInfo[]),
+          runtime.client.commands().catch(() => [] as OpenCodeCommandInfo[]),
         ]);
         const availableModels = choicesFromOpenCodeProviders(providers);
         const availableModes = choicesFromOpenCodeAgents(agents);
+        const availableCommands = choicesFromOpenCodeCommands(commands);
         const modeOptions = availableModes.length > 0 ? availableModes : fallbackOpenCodeAgentChoices();
         const serverModelId = session.modelId || availableModels[0]?.id;
         const openCodeSettings = availableModels.length > 0 ? syncOpenCodeModels(availableModels, serverModelId) : null;
@@ -1077,6 +1118,7 @@ export const useAgentStore = create<AgentStoreState>((set, get) => ({
             },
             availableModels: availableModels.length > 0 ? availableModels : item.availableModels,
             availableModes: modeOptions,
+            availableCommands,
             modelId,
             modeId,
             updatedAt: nowIso(),
@@ -1167,12 +1209,108 @@ export const useAgentStore = create<AgentStoreState>((set, get) => ({
       testLogText: session.testLogText,
       gitAction: session.gitAction,
     }, {
-      prompts: AGENT_COMMAND_PROMPTS,
+      prompts: [],
       mainHeading: "User Prompt",
       quickActionHeading: "Agent Requirement",
       includeSystemReminder: false,
       includePayloadRouting: false,
     });
+
+    try {
+      if (session.providerId === "opencode") {
+        if (!openCodeHttpRuntimeForSession(session, get().sessions)) {
+          await get().startOpenCodeProvider(sessionId);
+        }
+        session = get().sessions.find((item) => item.id === sessionId);
+        if (!session) throw new Error("Agent session is not ready");
+        const slashCommand = parseOpenCodeSlashCommandDraft(session.draft);
+        if (slashCommand && (!session.availableCommands || session.availableCommands.length === 0)) {
+          const httpRuntime = openCodeHttpRuntimeForSession(session, get().sessions);
+          if (httpRuntime) {
+            const commands = await httpRuntime.runtime.client.commands().catch(() => [] as OpenCodeCommandInfo[]);
+            set((state) => ({
+              sessions: updateSession(state.sessions, sessionId, (item) => ({
+                ...item,
+                availableCommands: choicesFromOpenCodeCommands(commands),
+                updatedAt: nowIso(),
+              })),
+            }));
+            session = get().sessions.find((item) => item.id === sessionId) || session;
+          }
+        }
+        const openCodeCommand = slashCommand ? findOpenCodeCommand(session, slashCommand.name) : undefined;
+        if (slashCommand && !openCodeCommand) {
+          set((state) => ({
+            sessions: updateSession(state.sessions, sessionId, (item) => appendDiagnosticToSession({
+              ...item,
+              updatedAt: nowIso(),
+            }, "warn", `OpenCode command not found: /${slashCommand.name}`)),
+          }));
+          return;
+        }
+        if (slashCommand && openCodeCommand) {
+          const httpRuntime = openCodeHttpRuntimeForSession(session, get().sessions);
+          if (!httpRuntime) throw new Error("Agent session is not available");
+
+          let providerSessionId = session.providerSessionId;
+          if (!providerSessionId) {
+            const created = await httpRuntime.runtime.client.createSession();
+            providerSessionId = created.id;
+            await httpRuntime.runtime.client.updateSession(providerSessionId, { permission: openCodeReadOnlyPermissionRules() }).catch((error) => {
+              get().appendAgentDiagnostic(sessionId, "warn", `Failed to apply read-only permissions: ${error instanceof Error ? error.message : String(error)}`);
+            });
+          }
+
+          const configuredSession = get().sessions.find((item) => item.id === sessionId) || session;
+          const commandParts = openCodeCommandFilePartsFromSession(configuredSession);
+          set((state) => ({
+            sessions: updateSession(state.sessions, sessionId, (item) => appendDiagnosticToSession({
+              ...item,
+              providerSessionId,
+              providerSessionState: "active",
+              status: "running",
+              draft: "",
+              testLogText: "",
+              gitAction: null,
+              images: [],
+              mlcAttachments: [],
+              webAttachments: [],
+              updatedAt: nowIso(),
+            }, "info", `Running OpenCode command: /${openCodeCommand.id}`)),
+          }));
+
+          void httpRuntime.runtime.client.command(providerSessionId, {
+            command: openCodeCommand.id,
+            arguments: slashCommand.arguments,
+            ...(configuredSession.modeId ? { agent: configuredSession.modeId } : {}),
+            ...(openCodeCommandModelFromSession(configuredSession) ? { model: openCodeCommandModelFromSession(configuredSession) } : {}),
+            ...(commandParts.length > 0 ? { parts: commandParts } : {}),
+          }).catch((error) => {
+            const message = error instanceof Error ? error.message : String(error);
+            void drainPacedTextBuffers(sessionId).finally(() => {
+              set((state) => ({
+                sessions: updateSession(state.sessions, sessionId, (item) => appendDiagnosticToSession({
+                  ...item,
+                  status: "error",
+                  updatedAt: nowIso(),
+                }, "error", `OpenCode command failed: ${message}`)),
+              }));
+            });
+          });
+          return;
+        }
+      }
+    } catch (error) {
+      const message = error instanceof Error ? error.message : String(error);
+      set((state) => ({
+        sessions: updateSession(state.sessions, sessionId, (item) => appendDiagnosticToSession({
+          ...item,
+          status: "error",
+          updatedAt: nowIso(),
+        }, "error", `OpenCode command failed: ${message}`)),
+      }));
+      return;
+    }
 
     set((state) => ({
       sessions: updateSession(state.sessions, sessionId, (item) => ({

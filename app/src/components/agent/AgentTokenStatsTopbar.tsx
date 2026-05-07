@@ -1,5 +1,6 @@
-import { useCallback, useMemo, useRef, useState, type CSSProperties, type WheelEvent } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState, type CSSProperties, type WheelEvent } from "react";
 import { useTranslation } from "react-i18next";
+import { useAgentConsoleSettings } from "../../agentConsoleSettings";
 import type { AgentSession } from "../../agent/types";
 import { type AgentTokenStatKind, type AgentStepStatus } from "../../agent/steps";
 import { getAgentTokenStatsSummary } from "../../agent/tokenStats";
@@ -91,11 +92,15 @@ interface TokenTooltipState {
 
 export function AgentTokenStatsTopbar({ session }: { session: AgentSession }) {
   const { t } = useTranslation();
+  const { navigationIndicatorOrder } = useAgentConsoleSettings();
   const summary = useMemo(() => getAgentTokenStatsSummary(session), [session]);
   const stats = summary.stats;
+  const displayStats = useMemo(() => navigationIndicatorOrder === "rightToLeft" ? [...stats].reverse() : stats, [navigationIndicatorOrder, stats]);
   const currentIndex = stats.findIndex((stat) => stat.status === "running" || stat.status === "pending");
   const highlightedIndex = currentIndex >= 0 ? currentIndex : stats.length - 1;
+  const highlightedStat = highlightedIndex >= 0 ? stats.find((stat) => stat.index === highlightedIndex) : undefined;
   const topbarRef = useRef<HTMLDivElement>(null);
+  const listRef = useRef<HTMLDivElement>(null);
   const [tooltip, setTooltip] = useState<TokenTooltipState | null>(null);
 
   const handleWheel = useCallback((event: WheelEvent<HTMLDivElement>) => {
@@ -107,14 +112,24 @@ export function AgentTokenStatsTopbar({ session }: { session: AgentSession }) {
     event.preventDefault();
   }, []);
 
+  useEffect(() => {
+    const container = listRef.current;
+    if (!container || stats.length === 0 || highlightedIndex < 0) return;
+    const frame = requestAnimationFrame(() => {
+      const currentItem = container.querySelector<HTMLElement>('[data-agent-token-current="true"]');
+      currentItem?.scrollIntoView({ block: "nearest", inline: "nearest", behavior: "smooth" });
+    });
+    return () => cancelAnimationFrame(frame);
+  }, [highlightedIndex, highlightedStat?.id, highlightedStat?.tokenCount, navigationIndicatorOrder, stats.length]);
+
   if (stats.length === 0) {
     return <div className="agent-token-topbar-empty">{t("agentConsole.noSteps", "No process steps")}</div>;
   }
 
   return (
     <div ref={topbarRef} className="agent-token-topbar" aria-label={t("agentConsole.tokenStats", "Agent step token statistics")}>
-      <div className="agent-token-topbar-list" onWheel={handleWheel}>
-        {stats.map((stat) => {
+      <div ref={listRef} className="agent-token-topbar-list" onWheel={handleWheel}>
+        {displayStats.map((stat) => {
           const shape = getTokenItemShape(stat.tokenCount);
           const label = statLabel(stat.kind, stat.label, t);
           const title = `${stat.index + 1}. ${label}`;
@@ -127,6 +142,7 @@ export function AgentTokenStatsTopbar({ session }: { session: AgentSession }) {
               key={stat.id}
               type="button"
               className={`agent-token-topbar-item agent-token-topbar-item-${stat.kind} agent-token-topbar-item-${stat.status}${stat.index === highlightedIndex ? " current" : ""}`}
+              data-agent-token-current={stat.index === highlightedIndex ? "true" : undefined}
               aria-label={ariaLabel}
               onClick={() => focusAgentStat(stat.messageId, stat.target === "step" ? (stat.stepId || stat.blockIds[0]) : undefined)}
               onPointerEnter={(event) => {

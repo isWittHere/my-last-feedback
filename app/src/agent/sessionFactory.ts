@@ -15,6 +15,7 @@ export function createAgentSession(): AgentSession {
     modeId: undefined,
     availableModels: [],
     availableModes: [],
+    availableCommands: [],
     contextUsage: undefined,
     configOptions: [],
     status: "disconnected",

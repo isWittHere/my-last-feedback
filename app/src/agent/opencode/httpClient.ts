@@ -1,6 +1,8 @@
 import type {
   OpenCodeAgentInfo,
   OpenCodeBusEvent,
+  OpenCodeCommandInfo,
+  OpenCodeCommandRequest,
   OpenCodeHealthResponse,
   OpenCodeHttpClientOptions,
   OpenCodeMessage,
@@ -103,6 +105,10 @@ export class OpenCodeHttpClient {
     return this.request<OpenCodeAgentInfo[]>("/agent");
   }
 
+  commands(): Promise<OpenCodeCommandInfo[]> {
+    return this.request<OpenCodeCommandInfo[]>("/command");
+  }
+
   listSessions(): Promise<OpenCodeSessionInfo[]> {
     return this.request<OpenCodeSessionInfo[]>("/session");
   }
@@ -133,6 +139,10 @@ export class OpenCodeHttpClient {
 
   promptAsync(sessionId: string, body: OpenCodePromptRequest): Promise<boolean> {
     return this.request<boolean>(`/session/${encodeURIComponent(sessionId)}/prompt_async`, { method: "POST", body });
+  }
+
+  command(sessionId: string, body: OpenCodeCommandRequest): Promise<OpenCodeMessage> {
+    return this.request<OpenCodeMessage>(`/session/${encodeURIComponent(sessionId)}/command`, { method: "POST", body });
   }
 
   abort(sessionId: string): Promise<boolean> {

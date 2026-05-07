@@ -7,7 +7,7 @@ export function AgentHeaderDetailsRow({ session }: { session: AgentSession }) {
   const latestDiagnostic = session.diagnostics[session.diagnostics.length - 1];
 
   return (
-    <div className="agent-console-header-details">
+    <div className="agent-console-header-details agent-header-glass-panel">
       <div className="agent-console-header-details-main">
         <div className="agent-header-path">
           <Icon name="folder" size={12} />

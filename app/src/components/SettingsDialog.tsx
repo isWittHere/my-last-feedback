@@ -15,7 +15,7 @@ import { getNotificationSettings, saveNotificationSettings, syncAutoFocusNewRequ
 import { getSubmittedViewSettings, saveSubmittedViewSettings, SUBMITTED_VIEW_SECTION_CONFIGS, type SubmittedViewSectionId, type SubmittedViewSettings } from "../submittedViewSettings";
 import { getTerminalSettings, saveTerminalSettings, type TerminalSettings, type TerminalShellId } from "../terminalSettings";
 import { getComposerSettings, saveComposerSettings, type ComposerSettings } from "../composerSettings";
-import { AGENT_DIFF_COLOR_PRESETS, getAgentConsoleSettings, saveAgentConsoleSettings, type AgentConsoleSettings, type AgentDiffColorPresetId, type AgentProcessStepDefaultMode, type AgentTopbarIndicatorMode } from "../agentConsoleSettings";
+import { AGENT_DIFF_COLOR_PRESETS, getAgentConsoleSettings, saveAgentConsoleSettings, type AgentConsoleSettings, type AgentDiffColorPresetId, type AgentNavigationIndicatorOrder, type AgentProcessStepDefaultMode, type AgentTopbarIndicatorMode } from "../agentConsoleSettings";
 import { getOpenCodeSettings, setOpenCodeModelEnabled, setOpenCodeModelFavorite, setOpenCodePreferredModel, type OpenCodeSettings } from "../openCodeSettings";
 import { SESSION_LIST_MODE_OPTIONS } from "../sessionNavigationSettings";
 import { SessionNavigationModeIcon } from "./SessionNavigationModeIcon";
@@ -28,6 +28,7 @@ const SETTINGS_DOCK_COLUMN_IDS: DockColumnId[] = ["leftSidebar", "leftPage", "ri
 const SETTINGS_DOCK_TAB_IDS: DockTabId[] = ["mlc", "mlcPreview", "resources", "previewBrowser", "previewInfo", "agentConsole", "terminal"];
 const AGENT_TOPBAR_INDICATOR_MODE_OPTIONS: AgentTopbarIndicatorMode[] = ["hidden", "text", "textAndGraphic"];
 const AGENT_PROCESS_STEP_MODE_OPTIONS: AgentProcessStepDefaultMode[] = ["tabs", "timeline"];
+const AGENT_NAVIGATION_INDICATOR_ORDER_OPTIONS: AgentNavigationIndicatorOrder[] = ["leftToRight", "rightToLeft"];
 
 function isSettingsDockTabId(value: string): value is DockTabId {
   return SETTINGS_DOCK_TAB_IDS.includes(value as DockTabId);
@@ -92,7 +93,19 @@ export function SettingsDialog({ open, onClose }: { open: boolean; onClose: () =
   const [agentCleanupMessage, setAgentCleanupMessage] = useState<string | null>(null);
   const [zoomSettings, setZoomSettings] = useState<ZoomSettings>(getZoomSettings);
   const [submittedViewSettings, setSubmittedViewSettings] = useState<SubmittedViewSettings>(getSubmittedViewSettings);
-  const agentPreviewSession = useMemo(() => createMockAgentSession(), []);
+  const agentPreviewSession = useMemo(() => {
+    const session = createMockAgentSession();
+    const latestDiagnostic = session.diagnostics[session.diagnostics.length - 1];
+    return {
+      ...session,
+      diagnostics: latestDiagnostic ? [
+        {
+          ...latestDiagnostic,
+          message: t("settings.agentPreviewDiagnosticMessage", "Session created: ses_preview_openCode_http_stream. This notification wraps across lines and scrolls when the message is longer than the available header space."),
+        },
+      ] : [],
+    };
+  }, [t]);
   const prompts = useFeedbackStore((s) => s.prompts);
   const disabledPrompts = useFeedbackStore((s) => s.disabledPrompts);
   const showPromptButtons = useFeedbackStore((s) => s.showPromptButtons);
@@ -244,6 +257,14 @@ export function SettingsDialog({ open, onClose }: { open: boolean; onClose: () =
   const handleAgentStickyUserMessageBarToggle = useCallback(() => {
     setAgentConsoleSettings((prev) => {
       const next = { ...prev, showStickyUserMessageBar: !prev.showStickyUserMessageBar };
+      saveAgentConsoleSettings(next);
+      return next;
+    });
+  }, []);
+
+  const handleAgentNavigationIndicatorOrderChange = useCallback((navigationIndicatorOrder: AgentNavigationIndicatorOrder) => {
+    setAgentConsoleSettings((prev) => {
+      const next = { ...prev, navigationIndicatorOrder };
       saveAgentConsoleSettings(next);
       return next;
     });
@@ -404,6 +425,30 @@ export function SettingsDialog({ open, onClose }: { open: boolean; onClose: () =
     </div>
   );
 
+  const navigationIndicatorOrderLabel = (navigationIndicatorOrder: AgentNavigationIndicatorOrder) => navigationIndicatorOrder === "leftToRight"
+    ? t("settings.agentNavigationIndicatorOrderLeftToRight", "Left to right")
+    : t("settings.agentNavigationIndicatorOrderRightToLeft", "Right to left");
+
+  const renderAgentNavigationIndicatorOrderGroup = () => (
+    <div className="settings-btn-group" role="group" aria-label={t("settings.agentNavigationIndicatorOrder", "Navigation indicator order")}>
+      {AGENT_NAVIGATION_INDICATOR_ORDER_OPTIONS.map((navigationIndicatorOrder) => {
+        const label = navigationIndicatorOrderLabel(navigationIndicatorOrder);
+        return (
+          <button
+            key={navigationIndicatorOrder}
+            type="button"
+            className={`settings-btn-option${agentConsoleSettings.navigationIndicatorOrder === navigationIndicatorOrder ? " active" : ""}`}
+            onClick={() => handleAgentNavigationIndicatorOrderChange(navigationIndicatorOrder)}
+            title={label}
+          >
+            <Icon name="arrow-right" size={13} style={{ transform: navigationIndicatorOrder === "rightToLeft" ? "rotate(180deg)" : undefined }} />
+            <span>{label}</span>
+          </button>
+        );
+      })}
+    </div>
+  );
+
   const renderAgentDiffOffsetControl = (label: string, key: "additionsOffsetX" | "additionsOffsetY" | "deletionsOffsetX" | "deletionsOffsetY") => {
     const value = agentConsoleSettings.diffVisual[key];
     const displayValue = Number.isInteger(value) ? String(value) : value.toFixed(1);
@@ -438,10 +483,14 @@ export function SettingsDialog({ open, onClose }: { open: boolean; onClose: () =
   const renderAgentPreview = () => {
     return (
       <div className="settings-agent-preview" aria-label={t("settings.agentPreview", "Agent preview")}>
-        <AgentSessionHeader
-          session={agentPreviewSession}
-          previewMode
-        />
+        <AgentSessionHeader session={agentPreviewSession} />
+        {agentConsoleSettings.showStickyUserMessageBar && (
+          <div className="settings-agent-sticky-user-preview" aria-hidden="true">
+            <div className="agent-sticky-user-bar settings-agent-sticky-user-bar-preview">
+              <span>{t("settings.agentStickyUserMessageBarPreview", "Refine the Agent header so the notification row wraps naturally without covering the conversation below.")}</span>
+            </div>
+          </div>
+        )}
       </div>
     );
   };
@@ -1052,6 +1101,13 @@ export function SettingsDialog({ open, onClose }: { open: boolean; onClose: () =
                         >
                           <span className="settings-toggle-knob" />
                         </button>
+                      </div>
+                      <div className="settings-row settings-agent-toggle-row">
+                        <div className="settings-row-info">
+                          <span className="settings-label">{t("settings.agentNavigationIndicatorOrder", "Navigation indicator order")}</span>
+                          <span className="settings-sublabel">{t("settings.agentNavigationIndicatorOrderDesc", "Choose whether process indicator columns read from oldest to newest or newest to oldest.")}</span>
+                        </div>
+                        {renderAgentNavigationIndicatorOrderGroup()}
                       </div>
                     </div>
                     <div className="settings-agent-indicator-list">
