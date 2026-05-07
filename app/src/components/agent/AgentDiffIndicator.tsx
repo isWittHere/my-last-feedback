@@ -3,6 +3,8 @@ import { useTranslation } from "react-i18next";
 import { getAgentDiffColorPreset, useAgentConsoleSettings } from "../../agentConsoleSettings";
 import { formatDiffStatCount, getAgentDiffStatsSummary } from "../../agent/diffStats";
 import type { AgentSession } from "../../agent/types";
+import { useAgentStore } from "../../store/agentStore";
+import { AgentDiffPatchList, sessionDiffFilesToUiFiles } from "./AgentDiffViewer";
 
 type DiffMiniSegment = "add" | "delete" | "empty";
 
@@ -28,7 +30,9 @@ function buildDiffSegments(additions: number, deletions: number, slots: number):
 export function AgentDiffIndicator({ session }: { session: AgentSession }) {
   const { t } = useTranslation();
   const { diffIndicatorMode, diffVisual } = useAgentConsoleSettings();
+  const refreshAgentSessionDiff = useAgentStore((state) => state.refreshAgentSessionDiff);
   const summary = useMemo(() => getAgentDiffStatsSummary(session), [session]);
+  const realDiffFiles = useMemo(() => sessionDiffFilesToUiFiles(session.sessionDiffs), [session.sessionDiffs]);
   const colorPreset = getAgentDiffColorPreset(diffVisual.colorPresetId);
   const diffVisualStyle = {
     "--agent-diff-add-color": colorPreset.additions,
@@ -45,11 +49,15 @@ export function AgentDiffIndicator({ session }: { session: AgentSession }) {
   const panelSegments = buildDiffSegments(compactAdditions, compactDeletions, 48);
 
   if (diffIndicatorMode === "hidden") return null;
-  if (summary.changedFiles === 0 && summary.fileChangeBlocks === 0 && summary.additions === 0 && summary.deletions === 0) return null;
+  if (summary.changedFiles === 0 && summary.fileChangeBlocks === 0 && summary.additions === 0 && summary.deletions === 0 && !session.sessionDiffLoading && !session.sessionDiffError) return null;
+  const refreshDiff = () => {
+    if (!session.providerSessionId || session.sessionDiffLoading) return;
+    void refreshAgentSessionDiff(session.id);
+  };
 
   return (
     <div className="agent-diff-indicator-wrap" style={diffVisualStyle}>
-      <button type="button" className={`agent-diff-indicator${diffIndicatorMode === "text" ? " agent-diff-indicator-text-only" : ""}`} aria-label={`${t("agentConsole.diffStats", "Diff statistics")} ${compactLabel}`}>
+      <button type="button" className={`agent-diff-indicator${diffIndicatorMode === "text" ? " agent-diff-indicator-text-only" : ""}`} onClick={refreshDiff} aria-label={`${t("agentConsole.diffStats", "Diff statistics")} ${compactLabel}`}>
         <span className="agent-diff-indicator-text" aria-hidden="true">
           <span className="agent-diff-indicator-add">+{formatDiffStatCount(compactAdditions)}</span>
           <span className="agent-diff-indicator-delete">-{formatDiffStatCount(compactDeletions)}</span>
@@ -64,12 +72,14 @@ export function AgentDiffIndicator({ session }: { session: AgentSession }) {
         <div className="agent-diff-popover-head">
           <span>{t("agentConsole.diffSpace", "Diff activity")}</span>
           <div className="agent-diff-popover-summary">
+            {session.sessionDiffLoading && <span>{t("agentConsole.diffLoading", "Loading")}</span>}
             <span>{t("agentConsole.changedFilesShort", "Files")} <strong>{summary.changedFiles}</strong></span>
             <span>{t("agentConsole.fileChangesShort", "Changes")} <strong>{summary.fileChangeBlocks}</strong></span>
             <span className="agent-diff-summary-add">+{summary.additions}</span>
             <span className="agent-diff-summary-delete">-{summary.deletions}</span>
           </div>
         </div>
+        {session.sessionDiffError && <div className="agent-diff-panel-error">{session.sessionDiffError}</div>}
         <div className="agent-diff-panel-squares" aria-label={t("agentConsole.diffHeatmap", "Diff blocks")}>
           {panelSegments.map((segment, index) => <span key={`${segment}-${index}`} className={`agent-diff-panel-square agent-diff-panel-square-${segment}`} />)}
         </div>
@@ -93,6 +103,7 @@ export function AgentDiffIndicator({ session }: { session: AgentSession }) {
             );
           }) : <div className="agent-diff-file-empty">{t("agentConsole.noDiffFiles", "No changed files")}</div>}
         </div>
+        {realDiffFiles.length > 0 && <AgentDiffPatchList files={realDiffFiles} />}
       </div>
     </div>
   );

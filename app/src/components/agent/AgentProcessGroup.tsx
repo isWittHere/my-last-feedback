@@ -66,6 +66,7 @@ function formatScalar(value: unknown): string {
 
 function stepIconName(step: AgentStepItem): string {
   if (step.kind === "thinking") return "message-dot";
+  if (step.kind === "compaction") return "list-tree";
   if (step.kind === "tool") return "wrench";
   if (step.kind === "task_list") return "checklist";
   if (step.kind === "permission") return "shield";
@@ -75,6 +76,7 @@ function stepIconName(step: AgentStepItem): string {
 
 function stepHasContent(step: AgentStepItem): boolean {
   if (step.kind === "thinking") return Boolean(step.detail);
+  if (step.kind === "compaction") return true;
   if (step.kind === "tool") return Boolean(step.args || step.result);
   if (step.kind === "task_list") return Boolean(step.tasks?.length);
   if (step.kind === "artifacts") return Boolean(step.blocks?.length);
@@ -84,6 +86,11 @@ function stepHasContent(step: AgentStepItem): boolean {
 function StepDetail({ step, projectDirectory }: { step: AgentStepItem; projectDirectory?: string }) {
   if (step.kind === "thinking" && step.detail) {
     return <MarkdownContent markdown={step.detail} projectDirectory={projectDirectory} className="agent-process-markdown" variant="feedback" enableComposerTokens />;
+  }
+  if (step.kind === "compaction") {
+    return step.detail
+      ? <MarkdownContent markdown={step.detail} projectDirectory={projectDirectory} className="agent-process-markdown" variant="feedback" enableComposerTokens />
+      : <p className="agent-process-detail-note">{step.status === "running" ? "正在压缩上下文" : step.status === "failed" ? "上下文压缩失败" : "上下文已压缩"}</p>;
   }
   if (step.kind === "tool") {
     return (
@@ -315,16 +322,18 @@ export function AgentProcessGroup({ blocks, messageId, isStreaming = false, proj
 
   const toolCount = steps.filter((step) => step.kind === "tool").length;
   const thinkingCount = steps.filter((step) => step.kind === "thinking").length;
+  const compactionCount = steps.filter((step) => step.kind === "compaction").length;
   const artifactCount = steps.reduce((count, step) => count + (step.blocks?.length || 0), 0);
   const taskCount = steps.filter((step) => step.kind === "task_list").length;
-  const isSingleThinking = steps.length === 1 && steps[0]?.kind === "thinking" && !isStreaming;
+  const isSingleInlineProcess = steps.length === 1 && (steps[0]?.kind === "thinking" || steps[0]?.kind === "compaction") && !isStreaming;
   const summaryParts = [
     toolCount > 0 ? `${toolCount} 个工具` : "",
     thinkingCount > 0 ? `${thinkingCount} 次思考` : "",
+    compactionCount > 0 ? `${compactionCount} 次压缩` : "",
     taskCount > 0 ? `${taskCount} 组任务` : "",
     artifactCount > 0 ? `${artifactCount} 个产物` : "",
   ].filter(Boolean);
-  const summary = hasBusyStep || isStreaming ? "正在工作..." : isSingleThinking ? "已思考" : summaryParts.length > 0 ? `已使用 ${summaryParts.join("、")}` : "已完成过程记录";
+  const summary = hasBusyStep || isStreaming ? "正在工作..." : isSingleInlineProcess ? steps[0].label : summaryParts.length > 0 ? `已使用 ${summaryParts.join("、")}` : "已完成过程记录";
   const activeStep = steps[activeIndex] || steps[0];
 
   return (
@@ -334,7 +343,7 @@ export function AgentProcessGroup({ blocks, messageId, isStreaming = false, proj
           <span className={hasBusyStep || isStreaming ? "agent-silver-shimmer-text" : undefined}>{summary}</span>
           <Icon name="chevron-right" size={12} className="agent-process-caret" />
         </button>
-        {steps.length > 1 && !isSingleThinking && (
+        {steps.length > 1 && !isSingleInlineProcess && (
           <button
             type="button"
             className="agent-process-mode-toggle"
@@ -347,8 +356,8 @@ export function AgentProcessGroup({ blocks, messageId, isStreaming = false, proj
       </div>
       {expanded && (
         <div className="agent-process-stream-body">
-          {isSingleThinking ? (
-            <div className="agent-process-single-thinking">
+          {isSingleInlineProcess ? (
+            <div className="agent-process-single-thinking" data-kind={steps[0].kind}>
               <StepDetail step={steps[0]} projectDirectory={projectDirectory} />
             </div>
           ) : mode === "timeline" ? (

@@ -18,6 +18,7 @@ export interface AgentApprovalCurrentStatus {
   title: string;
   options: AgentPermissionOption[];
   extraCount: number;
+  permissionBlock?: AgentPermissionBlock;
   fileSummary?: AgentEditFileSummary;
 }
 
@@ -107,6 +108,46 @@ function getEditFileSummary(session: AgentSession): AgentEditFileSummary | undef
   };
 }
 
+function getPermissionFileSummary(permissionBlock: AgentPermissionBlock | undefined): AgentEditFileSummary | undefined {
+  const metadata = permissionBlock?.metadata;
+  if (!metadata) return undefined;
+  const files = Array.isArray(metadata.files) ? metadata.files : [];
+  const normalized = files
+    .map((item) => (typeof item === "object" && item !== null ? item as Record<string, unknown> : null))
+    .filter((item): item is Record<string, unknown> => Boolean(item))
+    .map((item) => {
+      const path = typeof item.relativePath === "string" ? item.relativePath : typeof item.filePath === "string" ? item.filePath : "";
+      const type = item.type;
+      return {
+        path,
+        changeType: type === "add" ? "create" as const : type === "delete" ? "delete" as const : type === "update" || type === "move" ? "edit" as const : "unknown" as const,
+        additions: typeof item.additions === "number" ? item.additions : 0,
+        deletions: typeof item.deletions === "number" ? item.deletions : 0,
+      };
+    })
+    .filter((item) => item.path);
+  if (normalized.length > 0) {
+    return {
+      changedFiles: normalized.length,
+      additions: normalized.reduce((sum, item) => sum + item.additions, 0),
+      deletions: normalized.reduce((sum, item) => sum + item.deletions, 0),
+      estimated: false,
+      primaryPath: normalized[0]?.path,
+      files: normalized,
+    };
+  }
+  const filepath = typeof metadata.filepath === "string" ? metadata.filepath : permissionBlock?.patterns?.[0];
+  if (!filepath || typeof metadata.diff !== "string") return undefined;
+  return {
+    changedFiles: 1,
+    additions: 0,
+    deletions: 0,
+    estimated: true,
+    primaryPath: filepath,
+    files: [{ path: filepath, changeType: "edit", additions: 0, deletions: 0 }],
+  };
+}
+
 function getApprovalStatus(session: AgentSession): AgentApprovalCurrentStatus | null {
   const pendingPermissionBlocks = getPendingPermissionBlocks(session);
   const pendingPermissionBlock = pendingPermissionBlocks[0];
@@ -115,7 +156,7 @@ function getApprovalStatus(session: AgentSession): AgentApprovalCurrentStatus | 
   if (!requestId) return null;
 
   const variant = pendingPermissionBlock && isEditPermission(session, pendingPermissionBlock) ? "apply_edit" : "tool";
-  const fileSummary = variant === "apply_edit" ? getEditFileSummary(session) : undefined;
+  const fileSummary = variant === "apply_edit" ? getPermissionFileSummary(pendingPermissionBlock) || getEditFileSummary(session) : undefined;
 
   return {
     kind: "approval",
@@ -124,6 +165,7 @@ function getApprovalStatus(session: AgentSession): AgentApprovalCurrentStatus | 
     title: pendingPermissionBlock?.title || "",
     options: pendingPermissionBlock?.options || [],
     extraCount: Math.max(session.pendingPermissionIds.length, pendingPermissionBlocks.length) - 1,
+    permissionBlock: pendingPermissionBlock,
     fileSummary,
   };
 }

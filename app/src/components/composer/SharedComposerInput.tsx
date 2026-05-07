@@ -244,7 +244,7 @@ export function SharedComposerInput({
         containerClassName={editorContainerClassName || "agent-composer-editor-host"}
         projectDirectory={projectDirectory}
         commands={commands}
-        style={editorStyle || { height: "100%", minHeight: 0 }}
+        style={editorStyle || { height: "100%", minHeight: 0, overflowY: "auto", overflowX: "hidden", overscrollBehaviorY: "contain" }}
       />
       <div className="agent-composer-actions" data-preview-overlay>
         {bottomLeftSlot}

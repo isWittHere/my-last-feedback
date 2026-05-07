@@ -42,6 +42,13 @@ function mergeChangeType(previous: AgentDiffFileChangeType, next: AgentDiffFileC
   return "edit";
 }
 
+function changeTypeFromStatus(status: "added" | "deleted" | "modified" | undefined): AgentDiffFileChangeType {
+  if (status === "added") return "create";
+  if (status === "deleted") return "delete";
+  if (status === "modified") return "edit";
+  return "unknown";
+}
+
 function countDiffLines(content: string, files: Map<string, AgentDiffFileStat>): { additions: number; deletions: number } {
   let additions = 0;
   let deletions = 0;
@@ -105,6 +112,25 @@ export function getAgentDiffStatsSummary(session: AgentSession): AgentDiffStatsS
     estimated: false,
     files: [],
   };
+
+  if (session.sessionDiffs && session.sessionDiffs.length > 0) {
+    for (const diff of session.sessionDiffs) {
+      const file = ensureFileStat(files, diff.file);
+      file.additions = diff.additions;
+      file.deletions = diff.deletions;
+      file.changeType = changeTypeFromStatus(diff.status);
+      summary.additions += diff.additions;
+      summary.deletions += diff.deletions;
+    }
+    summary.files = Array.from(files.values()).sort((left, right) => {
+      const leftTotal = left.additions + left.deletions;
+      const rightTotal = right.additions + right.deletions;
+      return rightTotal - leftTotal || left.path.localeCompare(right.path);
+    });
+    summary.changedFiles = summary.files.length;
+    summary.estimated = false;
+    return summary;
+  }
 
   for (const message of session.messages) {
     for (const block of message.blocks) visitBlock(block, files, summary);

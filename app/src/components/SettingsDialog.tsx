@@ -487,7 +487,7 @@ export function SettingsDialog({ open, onClose }: { open: boolean; onClose: () =
         {agentConsoleSettings.showStickyUserMessageBar && (
           <div className="settings-agent-sticky-user-preview" aria-hidden="true">
             <div className="agent-sticky-user-bar settings-agent-sticky-user-bar-preview">
-              <span>{t("settings.agentStickyUserMessageBarPreview", "Refine the Agent header so the notification row wraps naturally without covering the conversation below.")}</span>
+              <span className="agent-sticky-user-letter-text">{t("settings.agentStickyUserMessageBarPreview", "Refine the Agent header so the notification row wraps naturally without covering the conversation below.")}</span>
             </div>
           </div>
         )}

@@ -33,6 +33,14 @@ export interface AgentThinkingBlock extends AgentBlockBase {
   status?: "running" | "completed";
 }
 
+export interface AgentCompactionBlock extends AgentBlockBase {
+  type: "compaction";
+  status: "running" | "completed" | "failed";
+  auto?: boolean;
+  overflow?: boolean;
+  content?: string;
+}
+
 export interface AgentToolCallBlock extends AgentBlockBase {
   type: "tool_call";
   name: string;
@@ -52,7 +60,10 @@ export interface AgentPermissionOption {
 export interface AgentPermissionBlock extends AgentBlockBase {
   type: "permission";
   requestId: string;
+  permission?: string;
   title: string;
+  patterns?: string[];
+  metadata?: Record<string, unknown>;
   toolCallId?: string;
   status: "pending" | "resolved";
   options: AgentPermissionOption[];
@@ -101,6 +112,7 @@ export interface AgentErrorBlock extends AgentBlockBase {
 export type AgentContentBlock =
   | AgentTextBlock
   | AgentThinkingBlock
+  | AgentCompactionBlock
   | AgentToolCallBlock
   | AgentPermissionBlock
   | AgentTaskListBlock
@@ -184,6 +196,11 @@ export interface AgentSession {
   webAttachments: WebAttachment[];
   messages: AgentMessage[];
   pendingPermissionIds: string[];
+  sessionDiffs?: AgentSessionFileDiff[];
+  sessionDiffLoading?: boolean;
+  sessionDiffError?: string;
+  compacting?: boolean;
+  compactError?: string;
   diagnostics: AgentDiagnosticEntry[];
   createdAt: string;
   updatedAt: string;
@@ -200,4 +217,12 @@ export interface AgentProcessStep {
   blocks: AgentContentBlock[];
   startedAt?: string;
   endedAt?: string;
+}
+
+export interface AgentSessionFileDiff {
+  file: string;
+  patch: string;
+  additions: number;
+  deletions: number;
+  status?: "added" | "deleted" | "modified";
 }

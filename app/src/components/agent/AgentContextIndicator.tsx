@@ -3,6 +3,7 @@ import { useTranslation } from "react-i18next";
 import { useAgentConsoleSettings } from "../../agentConsoleSettings";
 import type { AgentSession } from "../../agent/types";
 import { formatCompactTokenCount, getAgentTokenStatsSummary } from "../../agent/tokenStats";
+import { useAgentStore } from "../../store/agentStore";
 
 function percentWidth(value: number, total: number): string {
   if (total <= 0 || value <= 0) return "0%";
@@ -12,6 +13,7 @@ function percentWidth(value: number, total: number): string {
 export function AgentContextIndicator({ session }: { session: AgentSession }) {
   const { t } = useTranslation();
   const { contextIndicatorMode } = useAgentConsoleSettings();
+  const compactAgentSession = useAgentStore((state) => state.compactAgentSession);
   const summary = useMemo(() => getAgentTokenStatsSummary(session), [session]);
   const usedPercent = summary.usedPercent ?? 0;
   const tone = summary.contextLimit == null ? "unknown" : usedPercent >= 95 ? "danger" : usedPercent >= 80 ? "warn" : "ok";
@@ -22,6 +24,7 @@ export function AgentContextIndicator({ session }: { session: AgentSession }) {
   const remainingLabel = summary.remainingTokens == null ? t("agentConsole.unknown", "Unknown") : formatCompactTokenCount(summary.remainingTokens);
   const contextTotal = summary.contextLimit ?? summary.totalTokens;
   const idleTokens = summary.contextLimit == null ? 0 : Math.max(0, summary.contextLimit - summary.totalTokens);
+  const compactDisabled = !session.providerSessionId || session.compacting;
 
   const combinedBar = (
     <>
@@ -73,13 +76,16 @@ export function AgentContextIndicator({ session }: { session: AgentSession }) {
         <button
           type="button"
           className="btn agent-context-compress-button"
-          title={t("agentConsole.compactContextPending", "Context compression is not wired yet")}
+          disabled={compactDisabled}
+          title={session.compacting ? t("agentConsole.compactingContext", "Compacting context") : !session.providerSessionId ? t("agentConsole.compactContextPending", "Context compression requires an active OpenCode session") : t("agentConsole.compactContext", "Compress context")}
           onClick={(event) => {
             event.preventDefault();
             event.stopPropagation();
+            if (compactDisabled) return;
+            void compactAgentSession(session.id);
           }}
         >
-          {t("agentConsole.compactContext", "压缩上下文")}
+          {session.compacting ? t("agentConsole.compactingContext", "Compacting context") : t("agentConsole.compactContext", "Compress context")}
         </button>
       </div>
     </div>

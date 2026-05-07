@@ -92,6 +92,8 @@ export interface OpenCodeCommandInfo {
 
 export type OpenCodePermissionAction = "allow" | "deny" | "ask";
 export type OpenCodePermissionReply = "once" | "always" | "reject";
+export type OpenCodeFileDiffStatus = "added" | "deleted" | "modified";
+export type OpenCodeVcsDiffMode = "git" | "branch";
 
 export interface OpenCodePermissionRule {
   permission: string;
@@ -101,6 +103,56 @@ export interface OpenCodePermissionRule {
 
 export interface OpenCodePermissionReplyRequest {
   response: OpenCodePermissionReply;
+}
+
+export interface OpenCodePermissionReplyBody {
+  reply: OpenCodePermissionReply;
+  message?: string;
+}
+
+export interface OpenCodePermissionToolRef {
+  messageID?: string;
+  callID?: string;
+}
+
+export interface OpenCodePermissionRequest {
+  id: string;
+  sessionID?: string;
+  permission: string;
+  patterns: string[];
+  metadata: Record<string, unknown>;
+  always: string[];
+  tool?: OpenCodePermissionToolRef;
+  [key: string]: unknown;
+}
+
+export interface OpenCodePermissionPatchFile {
+  filePath: string;
+  relativePath?: string;
+  type?: "add" | "update" | "delete" | "move";
+  patch: string;
+  additions?: number;
+  deletions?: number;
+  movePath?: string;
+}
+
+export interface OpenCodeFileDiff {
+  file: string;
+  patch: string;
+  additions: number;
+  deletions: number;
+  status?: OpenCodeFileDiffStatus;
+}
+
+export interface OpenCodeVcsInfo {
+  branch?: string;
+  default_branch?: string;
+}
+
+export interface OpenCodeSummarizeRequest {
+  providerID: string;
+  modelID: string;
+  auto?: boolean;
 }
 
 export interface OpenCodePromptPart {

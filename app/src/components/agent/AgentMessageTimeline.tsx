@@ -4,6 +4,30 @@ import type { AgentSession } from "../../agent/types";
 import { AgentMessageItem } from "./AgentMessageItem";
 import { AgentSessionHeader } from "./AgentSessionHeader";
 
+const STICKY_USER_SCROLL_TOP_EXTRA_OFFSET = -38;
+
+function animateScrollTop(element: HTMLElement, targetTop: number) {
+  const startTop = element.scrollTop;
+  const distance = targetTop - startTop;
+  if (Math.abs(distance) < 1) {
+    element.scrollTop = targetTop;
+    return;
+  }
+  const duration = Math.min(420, Math.max(180, Math.abs(distance) * 0.28));
+  const startTime = performance.now();
+
+  const step = (timestamp: number) => {
+    const elapsed = timestamp - startTime;
+    const progress = Math.min(1, elapsed / duration);
+    const eased = 1 - Math.pow(1 - progress, 3);
+    element.scrollTop = startTop + distance * eased;
+    if (progress < 1) requestAnimationFrame(step);
+    else element.scrollTop = targetTop;
+  };
+
+  requestAnimationFrame(step);
+}
+
 function messageText(message: AgentSession["messages"][number]): string {
   return message.blocks
     .map((block) => block.type === "text" ? block.content : "")
@@ -99,8 +123,20 @@ export function AgentMessageTimeline({ session }: { session: AgentSession }) {
   const scrollToStickyMessage = useCallback(() => {
     const container = scrollRef.current;
     if (!container || !stickyUserMsgId) return;
-    const target = container.querySelector(`[data-msg-id="${CSS.escape(stickyUserMsgId)}"]`);
-    target?.scrollIntoView({ behavior: "smooth", block: "start" });
+    const firstUserMessage = messagesRef.current.find((message) => message.role === "user");
+    if (firstUserMessage?.id === stickyUserMsgId) {
+      shouldAutoFollowRef.current = false;
+      animateScrollTop(container, 0);
+      return;
+    }
+    const target = container.querySelector<HTMLElement>(`[data-msg-id="${CSS.escape(stickyUserMsgId)}"]`);
+    if (!target) return;
+    const bubble = target.querySelector<HTMLElement>(".agent-message-main") || target;
+    const containerRect = container.getBoundingClientRect();
+    const targetRect = bubble.getBoundingClientRect();
+    const overlayHeight = topOverlayRef.current?.getBoundingClientRect().height ?? 0;
+    const nextScrollTop = container.scrollTop + targetRect.top - containerRect.top - overlayHeight + STICKY_USER_SCROLL_TOP_EXTRA_OFFSET;
+    container.scrollTo({ top: Math.max(0, nextScrollTop), behavior: "smooth" });
   }, [stickyUserMsgId]);
 
   const handleTimelineScroll = useCallback(() => {
@@ -156,7 +192,7 @@ export function AgentMessageTimeline({ session }: { session: AgentSession }) {
               tabIndex={stickyUserContent ? 0 : -1}
               aria-hidden={!stickyUserContent}
             >
-              <span>{stickyUserContent || ""}</span>
+              <span className="agent-sticky-user-letter-text">{stickyUserContent || ""}</span>
             </button>
           </div>
         )}

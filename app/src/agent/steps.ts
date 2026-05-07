@@ -1,6 +1,6 @@
 import type { AgentContentBlock, AgentMessage, AgentSession, AgentTaskItem } from "./types";
 
-export type AgentStepKind = "thinking" | "tool" | "task_list" | "artifacts" | "permission" | "error";
+export type AgentStepKind = "thinking" | "compaction" | "tool" | "task_list" | "artifacts" | "permission" | "error";
 export type AgentStepStatus = "pending" | "running" | "completed" | "failed";
 export type AgentTokenStatKind = AgentStepKind | "user" | "result";
 
@@ -52,7 +52,7 @@ export function estimateTokenCount(text: string): number {
 }
 
 function tokenTextForStep(step: AgentStepItem): string {
-  if (step.kind === "thinking") return [step.label, step.detail].filter(Boolean).join("\n");
+  if (step.kind === "thinking" || step.kind === "compaction") return [step.label, step.detail].filter(Boolean).join("\n");
   if (step.kind === "tool") return [step.label, stringifyForStats(step.args), step.result].filter(Boolean).join("\n");
   if (step.kind === "task_list") return [step.label, ...(step.tasks || []).map((task) => task.title)].join("\n");
   if (step.kind === "permission" || step.kind === "error") return [step.label, step.detail].filter(Boolean).join("\n");
@@ -70,6 +70,7 @@ function tokenTextForBlocks(blocks: AgentContentBlock[]): string {
   return blocks.map((block) => {
     if (block.type === "text") return block.content;
     if (block.type === "thinking") return block.content;
+    if (block.type === "compaction") return block.content || "上下文压缩";
     if (block.type === "tool_call") return [block.label || block.title || block.name, stringifyForStats(block.args), block.result].filter(Boolean).join("\n");
     if (block.type === "task_list") return [block.title, ...block.tasks.map((task) => task.title)].filter(Boolean).join("\n");
     if (block.type === "artifact") return [block.title, block.content].join("\n");
@@ -92,6 +93,19 @@ export function buildAgentProcessSteps(blocks: AgentContentBlock[], messageId?: 
         kind: "thinking",
         label: "思考",
         status: block.status === "running" ? "running" : "completed",
+        detail: block.content,
+      });
+      continue;
+    }
+    if (block.type === "compaction") {
+      const status: AgentStepStatus = block.status === "failed" ? "failed" : block.status === "running" ? "running" : "completed";
+      steps.push({
+        id: block.id,
+        messageId,
+        blockIds: [block.id],
+        kind: "compaction",
+        label: status === "running" ? "正在压缩上下文" : status === "failed" ? "上下文压缩失败" : "上下文已压缩",
+        status,
         detail: block.content,
       });
       continue;

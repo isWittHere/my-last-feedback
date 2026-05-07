@@ -162,7 +162,8 @@
     "outputTokens": "Output",
     "idleContext": "Idle",
     "compactContext": "Compress context",
-    "compactContextPending": "Context compression is not wired yet",
+    "compactingContext": "Compacting context",
+    "compactContextPending": "Context compression requires an active OpenCode session",
     "tokenKinds": {
       "user": "User",
       "result": "Result",

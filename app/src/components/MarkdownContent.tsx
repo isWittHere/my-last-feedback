@@ -61,6 +61,7 @@ export interface MarkdownContentProps {
 type MarkdownAnchorProps = ComponentProps<"a"> & { node?: unknown };
 type MarkdownParagraphProps = ComponentProps<"p"> & { node?: unknown };
 type MarkdownListItemProps = ComponentProps<"li"> & { node?: unknown };
+type MarkdownTableProps = ComponentProps<"table"> & { node?: unknown };
 type MarkdownTableCellProps = ComponentProps<"td"> & { node?: unknown };
 type MarkdownTableHeaderProps = ComponentProps<"th"> & { node?: unknown };
 
@@ -264,6 +265,15 @@ export function MarkdownContent({ markdown, projectDirectory, className, variant
     [composerCommands, enableComposerTokens],
   );
 
+  const TableRenderer = useCallback(
+    ({ children, ...rest }: MarkdownTableProps) => (
+      <div className="markdown-table-scroll">
+        <table {...stripMarkdownNodeProp(rest as Record<string, unknown>)}>{children}</table>
+      </div>
+    ),
+    [],
+  );
+
   const TableCellRenderer = useCallback(
     ({ children, ...rest }: MarkdownTableCellProps) => <td {...stripMarkdownNodeProp(rest as Record<string, unknown>)}>{enableComposerTokens ? renderComposerChildren(children, composerCommands) : children}</td>,
     [composerCommands, enableComposerTokens],
@@ -281,7 +291,7 @@ export function MarkdownContent({ markdown, projectDirectory, className, variant
       <ReactMarkdown
         remarkPlugins={[remarkGfm, remarkBreaks, remarkMath]}
         rehypePlugins={[rehypeKatex]}
-        components={{ code: CodeBlock, a: LinkRendererWithDir, p: ParagraphRenderer, li: ListItemRenderer, td: TableCellRenderer, th: TableHeaderRenderer }}
+        components={{ code: CodeBlock, a: LinkRendererWithDir, p: ParagraphRenderer, li: ListItemRenderer, table: TableRenderer, td: TableCellRenderer, th: TableHeaderRenderer }}
       >
         {markdown}
       </ReactMarkdown>

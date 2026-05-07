@@ -3,8 +3,11 @@ import type {
   OpenCodeBusEvent,
   OpenCodeCommandInfo,
   OpenCodeCommandRequest,
+  OpenCodeFileDiff,
   OpenCodeHealthResponse,
   OpenCodeHttpClientOptions,
+  OpenCodePermissionReplyBody,
+  OpenCodePermissionRequest,
   OpenCodeMessage,
   OpenCodePermissionRule,
   OpenCodePermissionReply,
@@ -14,7 +17,10 @@ import type {
   OpenCodeSessionInfo,
   OpenCodeSessionStatusMap,
   OpenCodeSseCollectorHandlers,
+  OpenCodeSummarizeRequest,
   OpenCodeTodoItem,
+  OpenCodeVcsDiffMode,
+  OpenCodeVcsInfo,
 } from "./httpTypes";
 
 function normalizeBaseUrl(baseUrl: string): string {
@@ -109,6 +115,18 @@ export class OpenCodeHttpClient {
     return this.request<OpenCodeCommandInfo[]>("/command");
   }
 
+  vcs(): Promise<OpenCodeVcsInfo> {
+    return this.request<OpenCodeVcsInfo>("/vcs");
+  }
+
+  vcsDiff(mode: OpenCodeVcsDiffMode): Promise<OpenCodeFileDiff[]> {
+    return this.request<OpenCodeFileDiff[]>("/vcs/diff", { query: { mode } });
+  }
+
+  permissions(): Promise<OpenCodePermissionRequest[]> {
+    return this.request<OpenCodePermissionRequest[]>("/permission");
+  }
+
   listSessions(): Promise<OpenCodeSessionInfo[]> {
     return this.request<OpenCodeSessionInfo[]>("/session");
   }
@@ -137,12 +155,20 @@ export class OpenCodeHttpClient {
     return this.request<OpenCodeTodoItem[]>(`/session/${encodeURIComponent(sessionId)}/todo`);
   }
 
+  sessionDiff(sessionId: string): Promise<OpenCodeFileDiff[]> {
+    return this.request<OpenCodeFileDiff[]>(`/session/${encodeURIComponent(sessionId)}/diff`);
+  }
+
   promptAsync(sessionId: string, body: OpenCodePromptRequest): Promise<boolean> {
     return this.request<boolean>(`/session/${encodeURIComponent(sessionId)}/prompt_async`, { method: "POST", body });
   }
 
   command(sessionId: string, body: OpenCodeCommandRequest): Promise<OpenCodeMessage> {
     return this.request<OpenCodeMessage>(`/session/${encodeURIComponent(sessionId)}/command`, { method: "POST", body });
+  }
+
+  summarizeSession(sessionId: string, body: OpenCodeSummarizeRequest): Promise<boolean> {
+    return this.request<boolean>(`/session/${encodeURIComponent(sessionId)}/summarize`, { method: "POST", body });
   }
 
   abort(sessionId: string): Promise<boolean> {
@@ -154,6 +180,10 @@ export class OpenCodeHttpClient {
       method: "POST",
       body: { response },
     });
+  }
+
+  replyPermission(permissionId: string, body: OpenCodePermissionReplyBody): Promise<boolean> {
+    return this.request<boolean>(`/permission/${encodeURIComponent(permissionId)}/reply`, { method: "POST", body });
   }
 
   openEvents(handlers: OpenCodeSseCollectorHandlers = {}): OpenCodeSseConnection {

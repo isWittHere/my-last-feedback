@@ -162,7 +162,8 @@
     "outputTokens": "输出",
     "idleContext": "空闲",
     "compactContext": "压缩上下文",
-    "compactContextPending": "上下文压缩尚未接入",
+    "compactingContext": "正在压缩上下文",
+    "compactContextPending": "上下文压缩需要一个已连接的 OpenCode 会话",
     "tokenKinds": {
       "user": "用户",
       "result": "结果",

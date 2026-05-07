@@ -6,12 +6,13 @@ import { getAgentCurrentStatus } from "../../agent/currentStatus";
 import type { AgentPermissionOption, AgentSession } from "../../agent/types";
 import { useAgentStore } from "../../store/agentStore";
 import { Icon } from "../Icons";
+import { AgentDiffPatchList, permissionBlockToDiffFiles } from "./AgentDiffViewer";
 
 function AgentApprovalActions({ sessionId, requestId, options }: { sessionId: string; requestId: string; options: AgentPermissionOption[] }) {
   const { t } = useTranslation();
   const [allowMenuOpen, setAllowMenuOpen] = useState(false);
   const allowMenuRef = useRef<HTMLDivElement>(null);
-  const resolveMockPermission = useAgentStore((state) => state.resolveMockPermission);
+  const resolveAgentPermission = useAgentStore((state) => state.resolveAgentPermission);
 
   useEffect(() => {
     if (!allowMenuOpen) return;
@@ -46,7 +47,7 @@ function AgentApprovalActions({ sessionId, requestId, options }: { sessionId: st
   const rejectOption = resolvedOptions.find((option) => option.kind === "reject_once");
   const resolve = (optionId: string) => {
     setAllowMenuOpen(false);
-    resolveMockPermission(sessionId, requestId, optionId);
+    resolveAgentPermission(sessionId, requestId, optionId);
   };
 
   return (
@@ -94,6 +95,7 @@ function AgentApprovalStatusRow({ session, status }: { session: AgentSession; st
   const diffSummaryLabel = status.fileSummary && !status.fileSummary.estimated && (status.fileSummary.additions > 0 || status.fileSummary.deletions > 0)
     ? t("agentConsole.currentStatusDiffCompact", "+{{additions}} -{{deletions}}", { additions: status.fileSummary.additions, deletions: status.fileSummary.deletions })
     : null;
+  const permissionDiffFiles = useMemo(() => permissionBlockToDiffFiles(status.permissionBlock), [status.permissionBlock]);
 
   return (
     <section className="agent-approval-row agent-current-status-row" data-status-kind="approval" data-status-variant={status.variant} data-preview-overlay>
@@ -106,6 +108,11 @@ function AgentApprovalStatusRow({ session, status }: { session: AgentSession; st
         {status.extraCount > 0 && <span className="agent-approval-row-count">{t("agentConsole.approvalMoreCount", "+{{count}} more", { count: status.extraCount })}</span>}
       </div>
       <AgentApprovalActions sessionId={session.id} requestId={status.requestId} options={status.options} />
+      {permissionDiffFiles.length > 0 && (
+        <div className="agent-approval-diff-panel">
+          <AgentDiffPatchList files={permissionDiffFiles} />
+        </div>
+      )}
     </section>
   );
 }

@@ -14,6 +14,8 @@ interface InsertFeedbackTextEventDetail {
   text: string;
 }
 
+const AUTO_GROW_MAX_HEIGHT = 220;
+
 export function FeedbackInput({ minHeight, queuedCallerId }: { minHeight?: number; queuedCallerId?: string } = {}) {
   const { t } = useTranslation();
   const friendlyName = useFriendlyName();
@@ -43,12 +45,12 @@ export function FeedbackInput({ minHeight, queuedCallerId }: { minHeight?: numbe
     editorRef.current?.focus();
   }, []);
 
-  // Auto-resize when in scroll mode (minHeight provided)
+  // Auto-resize when in compact mode, then let long content scroll inside the editor.
   useEffect(() => {
     const editor = editorRef.current?.getElement();
     if (minHeight !== undefined && editor) {
       editor.style.height = "auto";
-      const h = Math.max(editor.scrollHeight, minHeight);
+      const h = Math.min(Math.max(editor.scrollHeight, minHeight), AUTO_GROW_MAX_HEIGHT);
       editor.style.height = h + "px";
     }
   }, [value, minHeight]);
@@ -217,7 +219,10 @@ export function FeedbackInput({ minHeight, queuedCallerId }: { minHeight?: numbe
       style={{
         minHeight: minHeight ?? 0,
         height: minHeight === undefined ? "100%" : undefined,
-        overflow: minHeight !== undefined ? "hidden" : undefined,
+        maxHeight: minHeight !== undefined ? AUTO_GROW_MAX_HEIGHT : undefined,
+        overflowY: "auto",
+        overflowX: "hidden",
+        overscrollBehaviorY: "contain",
         resize: minHeight !== undefined ? "none" as const : undefined,
         flexShrink: minHeight !== undefined ? 0 : undefined,
         opacity: isReadonly ? 0.6 : 1,

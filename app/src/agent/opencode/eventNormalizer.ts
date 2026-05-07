@@ -1,5 +1,6 @@
 import type {
   AgentContentBlock,
+  AgentCompactionBlock,
   AgentErrorBlock,
   AgentPermissionBlock,
   AgentTaskItem,
@@ -14,6 +15,9 @@ export type OpenCodeNormalizedEvent =
   | OpenCodeNormalizedBlockEvent
   | OpenCodeNormalizedTextDeltaEvent
   | OpenCodeNormalizedPermissionEvent
+  | OpenCodeNormalizedPermissionReplyEvent
+  | OpenCodeNormalizedSessionDiffEvent
+  | OpenCodeNormalizedSessionCompactedEvent
   | OpenCodeNormalizedSessionStatusEvent
   | OpenCodeNormalizedSessionErrorEvent
   | OpenCodeNormalizedMessageEvent
@@ -45,6 +49,27 @@ export interface OpenCodeNormalizedPermissionEvent {
   sessionId?: string;
   requestId: string;
   block: AgentPermissionBlock;
+  raw: OpenCodeBusEvent;
+}
+
+export interface OpenCodeNormalizedPermissionReplyEvent {
+  type: "permission.replied";
+  sessionId?: string;
+  requestId: string;
+  reply?: string;
+  raw: OpenCodeBusEvent;
+}
+
+export interface OpenCodeNormalizedSessionDiffEvent {
+  type: "session.diff";
+  sessionId?: string;
+  diff: Array<{ file: string; patch: string; additions: number; deletions: number; status?: "added" | "deleted" | "modified" }>;
+  raw: OpenCodeBusEvent;
+}
+
+export interface OpenCodeNormalizedSessionCompactedEvent {
+  type: "session.compacted";
+  sessionId?: string;
   raw: OpenCodeBusEvent;
 }
 
@@ -98,6 +123,27 @@ function asString(value: unknown): string | undefined {
 
 function asNumber(value: unknown): number | undefined {
   return typeof value === "number" && Number.isFinite(value) ? value : undefined;
+}
+
+function asBoolean(value: unknown): boolean | undefined {
+  return typeof value === "boolean" ? value : undefined;
+}
+
+function asFileDiff(value: unknown): OpenCodeNormalizedSessionDiffEvent["diff"][number] | null {
+  const item = asRecord(value);
+  const file = asString(item.file);
+  const patch = asString(item.patch);
+  const additions = asNumber(item.additions);
+  const deletions = asNumber(item.deletions);
+  const status = asString(item.status);
+  if (!file || patch === undefined || additions === undefined || deletions === undefined) return null;
+  return {
+    file,
+    patch,
+    additions,
+    deletions,
+    ...(status === "added" || status === "deleted" || status === "modified" ? { status } : {}),
+  };
 }
 
 function timestampFromMs(value: unknown): string {
@@ -208,6 +254,41 @@ export function normalizeOpenCodeEvent(event: OpenCodeBusEvent): OpenCodeNormali
     ];
   }
 
+  if (event.type === "permission.replied") {
+    return [
+      {
+        type: "permission.replied",
+        sessionId: asString(event.properties.sessionID),
+        requestId: asString(event.properties.requestID) || asString(event.properties.permissionID) || asString(event.properties.id) || "",
+        reply: asString(event.properties.reply) || asString(event.properties.response),
+        raw: event,
+      },
+    ];
+  }
+
+  if (event.type === "session.diff") {
+    const rawDiff = Array.isArray(event.properties.diff) ? event.properties.diff : [];
+    const diff = rawDiff.map(asFileDiff).filter((item): item is OpenCodeNormalizedSessionDiffEvent["diff"][number] => Boolean(item));
+    return [
+      {
+        type: "session.diff",
+        sessionId: asString(event.properties.sessionID),
+        diff,
+        raw: event,
+      },
+    ];
+  }
+
+  if (event.type === "session.compacted") {
+    return [
+      {
+        type: "session.compacted",
+        sessionId: asString(event.properties.sessionID),
+        raw: event,
+      },
+    ];
+  }
+
   if (event.type === "session.status") {
     const status = asRecord(event.properties.status);
     const type = asString(status.type);
@@ -281,7 +362,25 @@ export function normalizeOpenCodePart(part: OpenCodeMessagePart): AgentContentBl
   if (part.type === "tool") return normalizeToolPart(part);
   if (part.type === "text") return normalizeTextPart(part);
   if (part.type === "reasoning") return normalizeReasoningPart(part);
+  if (part.type === "compaction") return normalizeCompactionPart(part);
   return null;
+}
+
+function normalizeCompactionPart(part: OpenCodeMessagePart): AgentCompactionBlock {
+  const state = asRecord(part.state);
+  const time = asRecord(part.time);
+  const content = asString(part.text) || asString(part.content) || asString(part.summary) || asString(state.text) || asString(state.content) || asString(state.summary);
+  return {
+    id: asString(part.id) || `compaction-${asString(part.messageID) || "part"}`,
+    type: "compaction",
+    origin: blockOrigin(asString(part.messageID)),
+    createdAt: timestampFromMs(time.start || time.created),
+    updatedAt: time.end || time.completed ? timestampFromMs(time.end || time.completed) : undefined,
+    status: time.end || time.completed ? "completed" : "running",
+    auto: asBoolean(part.auto),
+    overflow: asBoolean(part.overflow),
+    ...(content ? { content } : {}),
+  };
 }
 
 function normalizeToolPart(part: OpenCodeMessagePart): AgentToolCallBlock | AgentTaskListBlock {
@@ -355,6 +454,7 @@ function normalizeReasoningPart(part: OpenCodeMessagePart): AgentThinkingBlock {
 
 function normalizePermissionAsked(event: OpenCodeBusEvent): AgentPermissionBlock {
   const tool = asRecord(event.properties.tool);
+  const metadata = asRecord(event.properties.metadata);
   const permission = asString(event.properties.permission) || "permission";
   const patterns = Array.isArray(event.properties.patterns) ? event.properties.patterns.filter((item): item is string => typeof item === "string") : [];
   const title = `${permission}${patterns.length ? ` ${patterns.join(", ")}` : ""}`;
@@ -364,7 +464,10 @@ function normalizePermissionAsked(event: OpenCodeBusEvent): AgentPermissionBlock
     origin: blockOrigin(asString(tool.messageID)),
     createdAt: new Date().toISOString(),
     requestId: asString(event.properties.id) || "",
+    permission,
     title,
+    patterns,
+    metadata,
     toolCallId: asString(tool.callID),
     status: "pending",
     options: permissionOptions(),

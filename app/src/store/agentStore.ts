@@ -6,7 +6,7 @@ import { createAgentSession } from "../agent/sessionFactory";
 import { buildSubmittedComposerPayload } from "../composer/submittedFeedback";
 import { getAgentConsoleSettings } from "../agentConsoleSettings";
 import { setOpenCodePreferredModel, syncOpenCodeModels } from "../openCodeSettings";
-import type { AgentChoiceOption, AgentContentBlock, AgentContextUsage, AgentDiagnosticEntry, AgentMessage, AgentSession } from "../agent/types";
+import type { AgentChoiceOption, AgentContentBlock, AgentContextUsage, AgentDiagnosticEntry, AgentMessage, AgentSession, AgentSessionFileDiff } from "../agent/types";
 import type { AgentProviderId } from "../agent/types";
 import type { GitAction, ImageAttachment, MlcAttachment, WebAttachment } from "./feedbackStore";
 
@@ -97,7 +97,9 @@ interface AgentStoreState {
   restoreProviderSession: (providerId: AgentProviderId, providerSessionId: string) => Promise<void>;
   renameProviderSession: (providerId: AgentProviderId, providerSessionId: string, title: string) => Promise<void>;
   deleteProviderSession: (providerId: AgentProviderId, providerSessionId: string) => Promise<void>;
-  resolveMockPermission: (sessionId: string, requestId: string, optionId: string) => void;
+  resolveAgentPermission: (sessionId: string, requestId: string, optionId: string) => void;
+  refreshAgentSessionDiff: (sessionId: string) => Promise<void>;
+  compactAgentSession: (sessionId: string) => Promise<void>;
   cleanupEmptySessions: () => Promise<number>;
   resetAgentSession: () => void;
 }
@@ -209,9 +211,30 @@ function openCodeReadOnlyPermissionRules(): OpenCodePermissionRule[] {
     { permission: "read", pattern: "*", action: "allow" },
     { permission: "list", pattern: "*", action: "allow" },
     { permission: "external_directory", pattern: "*", action: "deny" },
-    { permission: "edit", pattern: "*", action: "deny" },
+    { permission: "edit", pattern: "*", action: "ask" },
     { permission: "bash", pattern: "*", action: "deny" },
   ];
+}
+
+function normalizeOpenCodeFileDiffs(diff: unknown[]): AgentSessionFileDiff[] {
+  return diff
+    .map((item) => (typeof item === "object" && item !== null ? item as Record<string, unknown> : null))
+    .filter((item): item is Record<string, unknown> => Boolean(item))
+    .map((item) => {
+      const file = typeof item.file === "string" ? item.file : "";
+      const patch = typeof item.patch === "string" ? item.patch : "";
+      const additions = typeof item.additions === "number" ? item.additions : 0;
+      const deletions = typeof item.deletions === "number" ? item.deletions : 0;
+      const status = item.status;
+      return {
+        file,
+        patch,
+        additions,
+        deletions,
+        ...(status === "added" || status === "deleted" || status === "modified" ? { status } : {}),
+      };
+    })
+    .filter((item) => item.file);
 }
 
 function choicesFromOpenCodeProviders(providerData: OpenCodeProviderResponse): AgentChoiceOption[] {
@@ -353,14 +376,15 @@ function openCodeContextUsageFromMessages(messages: OpenCodeMessage[], contextLi
 
 function agentMessagesFromOpenCodeMessages(messages: OpenCodeMessage[]): AgentMessage[] {
   const mappedMessages = messages.map((message) => {
-    const role = message.info?.role === "user" ? "user" : "assistant";
     const updatedTime = typeof message.info?.time?.updated === "number" ? message.info.time.updated : null;
     const messageStatus = message.info?.time?.completed || message.info?.status === "complete" ? "complete" : message.info?.status === "error" ? "error" : "complete";
     const blocks = (message.parts || [])
       .map((part) => normalizeOpenCodePart(part))
       .filter((block): block is AgentContentBlock => Boolean(block))
       .filter((block) => block.type !== "text" || Boolean(block.content.trim()))
-      .map((block) => messageStatus === "complete" && block.type === "thinking" ? { ...block, status: "completed" as const, updatedAt: block.updatedAt || nowIso() } : block);
+      .map((block) => messageStatus === "complete" && (block.type === "thinking" || block.type === "compaction") ? { ...block, status: "completed" as const, updatedAt: block.updatedAt || nowIso() } : block);
+    const isCompactionOnlyMessage = blocks.length > 0 && blocks.every((block) => block.type === "compaction");
+    const role = message.info?.role === "user" && !isCompactionOnlyMessage ? "user" : "assistant";
     return {
       id: message.info?.id || newId("msg"),
       role,
@@ -739,7 +763,7 @@ function completeStreamingAssistant(session: AgentSession): AgentSession {
       ? {
         ...message,
         status: "complete",
-        blocks: message.blocks.map((block) => block.type === "thinking" ? { ...block, status: "completed", updatedAt: nowIso() } : block),
+        blocks: message.blocks.map((block) => block.type === "thinking" || block.type === "compaction" ? { ...block, status: "completed", updatedAt: nowIso() } : block),
         updatedAt: nowIso(),
       }
       : message),
@@ -802,7 +826,7 @@ function upsertAssistantBlock(session: AgentSession, block: AgentContentBlock, m
 
   let blocks = [...assistantMessage.blocks];
   let blockIndex = blocks.findIndex((item) => item.id === block.id);
-  if (blockIndex < 0 && (block.type === "text" || block.type === "thinking")) {
+  if (blockIndex < 0 && (block.type === "text" || block.type === "thinking" || block.type === "compaction")) {
     blockIndex = blocks.findIndex((item) => item.type === block.type && item.origin.phase === block.origin.phase);
   }
   if (blockIndex >= 0) {
@@ -814,6 +838,61 @@ function upsertAssistantBlock(session: AgentSession, block: AgentContentBlock, m
   }
   messages[targetIndex] = { ...assistantMessage, blocks, updatedAt: nowIso() };
   return { ...session, messages, updatedAt: nowIso() };
+}
+
+function completeCompactionInSession(session: AgentSession): AgentSession {
+  let changed = false;
+  const messages = session.messages.map((message) => {
+    let messageChanged = false;
+    const blocks = message.blocks.map((block) => {
+      if (block.type !== "compaction" || block.status === "completed") return block;
+      changed = true;
+      messageChanged = true;
+      return { ...block, status: "completed" as const, updatedAt: nowIso() };
+    });
+    return messageChanged ? { ...message, blocks, status: message.status === "streaming" ? "complete" : message.status, updatedAt: nowIso() } : message;
+  });
+  return {
+    ...session,
+    messages: changed ? messages : session.messages,
+    status: "idle",
+    compacting: false,
+    compactError: undefined,
+    updatedAt: nowIso(),
+  };
+}
+
+function startCompactionInSession(session: AgentSession): AgentSession {
+  const started = upsertAssistantBlock(session, {
+    id: `compaction-${session.id}`,
+    type: "compaction",
+    status: "running",
+    origin: { phase: "process", placement: "standalone" },
+    createdAt: nowIso(),
+  });
+  return { ...started, compacting: true, compactError: undefined, status: "running", updatedAt: nowIso() };
+}
+
+function failCompactionInSession(session: AgentSession, message: string): AgentSession {
+  let changed = false;
+  const messages = session.messages.map((agentMessage) => {
+    let messageChanged = false;
+    const blocks = agentMessage.blocks.map((block) => {
+      if (block.type !== "compaction" || block.status !== "running") return block;
+      changed = true;
+      messageChanged = true;
+      return { ...block, status: "failed" as const, content: message, updatedAt: nowIso() };
+    });
+    return messageChanged ? { ...agentMessage, blocks, status: agentMessage.status === "streaming" ? "error" : agentMessage.status, updatedAt: nowIso() } : agentMessage;
+  });
+  return {
+    ...session,
+    messages: changed ? messages : session.messages,
+    compacting: false,
+    compactError: message,
+    status: session.status === "running" ? "idle" : session.status,
+    updatedAt: nowIso(),
+  };
 }
 
 function applyOpenCodeBusEvent(session: AgentSession, event: OpenCodeBusEvent): AgentSession {
@@ -839,6 +918,18 @@ function applyOpenCodeBusEvent(session: AgentSession, event: OpenCodeBusEvent): 
         : { ...nextSession, pendingPermissionIds: [...nextSession.pendingPermissionIds, normalized.requestId], updatedAt: nowIso() };
       continue;
     }
+    if (normalized.type === "permission.replied") {
+      nextSession = resolvePermissionInSession(nextSession, normalized.requestId, normalized.reply || "once");
+      continue;
+    }
+    if (normalized.type === "session.diff") {
+      nextSession = { ...nextSession, sessionDiffs: normalized.diff, sessionDiffLoading: false, sessionDiffError: undefined, updatedAt: nowIso() };
+      continue;
+    }
+    if (normalized.type === "session.compacted") {
+      nextSession = completeCompactionInSession(nextSession);
+      continue;
+    }
     if (normalized.type === "todo.updated") {
       nextSession = upsertLatestTaskListBlock(nextSession, normalized.block);
       continue;
@@ -848,6 +939,7 @@ function applyOpenCodeBusEvent(session: AgentSession, event: OpenCodeBusEvent): 
       nextSession = {
         ...(normalized.status === "idle" ? completeStreamingAssistant(nextSession) : nextSession),
         status: normalized.status === "idle" ? "idle" : normalized.status === "running" ? "running" : nextSession.status,
+        compacting: normalized.status === "idle" ? false : nextSession.compacting,
         updatedAt: nowIso(),
       };
       continue;
@@ -894,6 +986,10 @@ function handleOpenCodeBusEvent(sessionId: string, event: OpenCodeBusEvent) {
   useAgentStore.setState((state) => ({
     sessions: updateSession(state.sessions, sessionId, (session) => applyOpenCodeBusEvent(session, event)),
   }));
+}
+
+function handleOpenCodePermissionRequest(sessionId: string, request: Record<string, unknown>) {
+  handleOpenCodeBusEvent(sessionId, { type: "permission.asked", properties: request } as OpenCodeBusEvent);
 }
 
 function openCodePermissionReplyFromOption(optionId: string): OpenCodePermissionReply {
@@ -1086,10 +1182,11 @@ export const useAgentStore = create<AgentStoreState>((set, get) => ({
         });
         events.start();
         openCodeHttpRuntimes.set(runtime.processInfo.processId, { sessionId, runtime, events });
-        const [providers, agents, commands] = await Promise.all([
+        const [providers, agents, commands, pendingPermissions] = await Promise.all([
           runtime.client.providers(),
           runtime.client.agents().catch(() => [] as OpenCodeAgentInfo[]),
           runtime.client.commands().catch(() => [] as OpenCodeCommandInfo[]),
+          runtime.client.permissions().catch(() => []),
         ]);
         const availableModels = choicesFromOpenCodeProviders(providers);
         const availableModes = choicesFromOpenCodeAgents(agents);
@@ -1124,6 +1221,7 @@ export const useAgentStore = create<AgentStoreState>((set, get) => ({
             updatedAt: nowIso(),
           }, "info", "Agent session ready.")),
         }));
+        for (const request of pendingPermissions) handleOpenCodePermissionRequest(sessionId, request as Record<string, unknown>);
       } catch (error) {
         const message = error instanceof Error ? error.message : String(error);
         set((state) => ({
@@ -1541,10 +1639,12 @@ export const useAgentStore = create<AgentStoreState>((set, get) => ({
         : state.sessions.find((item) => isReusableProvisionalSession(item, providerId));
       const targetSessionId = reusableSession?.id || newId("agent_session");
 
-      const [messages, todos, providerSessions] = await Promise.all([
+      const [messages, todos, providerSessions, sessionDiffs, pendingPermissions] = await Promise.all([
         httpRuntime.runtime.client.messages(providerSessionId),
         httpRuntime.runtime.client.todos(providerSessionId).catch(() => []),
         httpRuntime.runtime.client.listSessions().catch(() => []),
+        httpRuntime.runtime.client.sessionDiff(providerSessionId).catch(() => []),
+        httpRuntime.runtime.client.permissions().catch(() => []),
       ]);
       const providerSession = providerSessions.find((item) => item.id === providerSessionId);
       const replayedMessages = appendRestoredTaskList(agentMessagesFromOpenCodeMessages(messages), todos, providerSessionId);
@@ -1569,6 +1669,9 @@ export const useAgentStore = create<AgentStoreState>((set, get) => ({
             availableModes: session.availableModes || [],
             configOptions: session.configOptions || [],
             contextUsage: restoredContextUsage,
+            sessionDiffs: normalizeOpenCodeFileDiffs(sessionDiffs),
+            sessionDiffLoading: false,
+            sessionDiffError: undefined,
             status: "idle",
             updatedAt: nowIso(),
           }, "info", `Session restored: ${providerSessionId}`))
@@ -1588,11 +1691,15 @@ export const useAgentStore = create<AgentStoreState>((set, get) => ({
             availableModes: session.availableModes || [],
             configOptions: session.configOptions || [],
             contextUsage: restoredContextUsage,
+            sessionDiffs: normalizeOpenCodeFileDiffs(sessionDiffs),
+            sessionDiffLoading: false,
+            sessionDiffError: undefined,
             status: "idle",
             createdAt: nowIso(),
             updatedAt: nowIso(),
           }, "info", `Session restored: ${providerSessionId}`)],
       }));
+      for (const request of pendingPermissions) handleOpenCodePermissionRequest(targetSessionId, request as Record<string, unknown>);
       return;
     }
 
@@ -1670,16 +1777,59 @@ export const useAgentStore = create<AgentStoreState>((set, get) => ({
     }));
   },
 
-  resolveMockPermission: (sessionId, requestId, optionId) => {
+  resolveAgentPermission: (sessionId, requestId, optionId) => {
     const session = get().sessions.find((item) => item.id === sessionId);
     const httpRuntime = openCodeHttpRuntimeForSession(session, get().sessions);
     if (session?.providerSessionId && httpRuntime) {
-      void httpRuntime.runtime.client.respondPermission(session.providerSessionId, requestId, openCodePermissionReplyFromOption(optionId))
+      const reply = openCodePermissionReplyFromOption(optionId);
+      void httpRuntime.runtime.client.replyPermission(requestId, { reply })
+        .catch(() => httpRuntime.runtime.client.respondPermission(session.providerSessionId!, requestId, reply))
         .catch((error) => get().appendAgentDiagnostic(sessionId, "error", `Failed to answer OpenCode permission: ${error instanceof Error ? error.message : String(error)}`));
     }
     set((state) => ({
       sessions: updateSession(state.sessions, sessionId, (session) => resolvePermissionInSession(session, requestId, optionId)),
     }));
+  },
+
+  refreshAgentSessionDiff: async (sessionId) => {
+    const session = get().sessions.find((item) => item.id === sessionId);
+    const httpRuntime = openCodeHttpRuntimeForSession(session, get().sessions);
+    if (!session?.providerSessionId || !httpRuntime) return;
+    set((state) => ({
+      sessions: updateSession(state.sessions, sessionId, (item) => ({ ...item, sessionDiffLoading: true, sessionDiffError: undefined, updatedAt: nowIso() })),
+    }));
+    try {
+      const diff = await httpRuntime.runtime.client.sessionDiff(session.providerSessionId);
+      set((state) => ({
+        sessions: updateSession(state.sessions, sessionId, (item) => ({ ...item, sessionDiffs: normalizeOpenCodeFileDiffs(diff), sessionDiffLoading: false, sessionDiffError: undefined, updatedAt: nowIso() })),
+      }));
+    } catch (error) {
+      set((state) => ({
+        sessions: updateSession(state.sessions, sessionId, (item) => ({ ...item, sessionDiffLoading: false, sessionDiffError: error instanceof Error ? error.message : String(error), updatedAt: nowIso() })),
+      }));
+    }
+  },
+
+  compactAgentSession: async (sessionId) => {
+    const session = get().sessions.find((item) => item.id === sessionId);
+    const httpRuntime = openCodeHttpRuntimeForSession(session, get().sessions);
+    const model = session ? openCodeModelFromSession(session) : undefined;
+    if (!session?.providerSessionId || !httpRuntime || !model) {
+      get().appendAgentDiagnostic(sessionId, "warn", "Cannot compact context until an OpenCode session and model are ready.");
+      return;
+    }
+    set((state) => ({
+      sessions: updateSession(state.sessions, sessionId, startCompactionInSession),
+    }));
+    try {
+      await httpRuntime.runtime.client.summarizeSession(session.providerSessionId, { ...model, auto: false });
+    } catch (error) {
+      const message = error instanceof Error ? error.message : String(error);
+      set((state) => ({
+        sessions: updateSession(state.sessions, sessionId, (item) => failCompactionInSession(item, message)),
+      }));
+      get().appendAgentDiagnostic(sessionId, "error", `Failed to compact context: ${message}`);
+    }
   },
 
   cleanupEmptySessions: async () => {
