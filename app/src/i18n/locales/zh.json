@@ -408,7 +408,7 @@
     "sessionNavigationAttachmentDots": "显示缩略导航附件圆点",
     "sessionNavigationAttachmentDotsDesc": "当 session 包含附件或额外提交资源时，在缩略导航 item 上显示小圆点。",
     "sessionNavigationColorCards": "使用彩色色卡",
-    "sessionNavigationColorCardsDesc": "顶部统计导航按请求类型显示彩色块，同时保留关键状态色。",
+    "sessionNavigationColorCardsDesc": "顶部统计导航按请求类型显示彩色块；关闭时使用 caller 主题色。",
     "gitOperations": "Git 操作",
     "gitTimedReminder": "定时 Git 备份提醒",
     "gitTimedReminderDesc": "当本次没有手动选择 Git Action 时，按时间间隔向提交反馈注入 Git 备份提醒。",

@@ -54,9 +54,9 @@ export function saveShowSessionNavigationAttachmentDots(value: boolean) {
 export function readUseSessionNavigationColorCards(): boolean {
   try {
     const stored = localStorage.getItem(SESSION_COLOR_CARDS_STORAGE_KEY);
-    return stored == null ? true : stored === "true";
+    return stored == null ? false : stored === "true";
   } catch {
-    return true;
+    return false;
   }
 }
 

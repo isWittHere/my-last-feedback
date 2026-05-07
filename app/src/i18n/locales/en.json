@@ -408,7 +408,7 @@
     "sessionNavigationAttachmentDots": "Show compact navigation attachment dots",
     "sessionNavigationAttachmentDotsDesc": "Show a small dot on compact session items when a session has attachments or extra submitted resources.",
     "sessionNavigationColorCards": "Use color cards",
-    "sessionNavigationColorCardsDesc": "Color topbar stats blocks by request type while keeping critical status colors visible.",
+    "sessionNavigationColorCardsDesc": "Color topbar stats blocks by request type; when off, use the caller theme color.",
     "gitOperations": "Git operations",
     "gitTimedReminder": "Timed Git backup reminder",
     "gitTimedReminderDesc": "When no manual Git Action is selected, inject a Git backup reminder into submitted feedback on a schedule.",
