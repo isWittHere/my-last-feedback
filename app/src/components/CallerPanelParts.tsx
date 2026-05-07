@@ -9,6 +9,7 @@ import { useActiveCallerSession } from "./useActiveCallerSession";
 import { readText as readClipboardText } from "@tauri-apps/plugin-clipboard-manager";
 import { webAttachmentLabel } from "../browser/webAttachmentFormat";
 import { collectSubmittedResourceLinks, type SubmittedResourceLink } from "../composer/submittedFeedback";
+import { GIT_OPERATION_SETTINGS_EVENT, getGitOperationSettings, shouldInjectTimedGitReminder } from "../gitOperationSettings";
 import { CatppuccinResourceIcon } from "./CatppuccinResourceIcon";
 
 const DOCK_COLUMN_IDS: DockColumnId[] = ["leftSidebar", "leftPage", "rightPage", "rightSidebar"];
@@ -134,9 +135,24 @@ export function AttachmentTagBar({
   const isResourceButtonActive = !!resourcesDockColumnId && !dockLayout.columns[resourcesDockColumnId].collapsed && dockLayout.columns[resourcesDockColumnId].activeTabId === "resources" && !!activeSession?.projectDirectory && mlcActiveWorkspacePath === activeSession.projectDirectory;
   const isPreviewButtonActive = !!previewDockColumnId && !dockLayout.columns[previewDockColumnId].collapsed && dockLayout.columns[previewDockColumnId].activeTabId === "previewBrowser";
   const hasWebAttachments = targetWebAttachments.length > 0;
-  const hasTags = images.length > 0 || hasTestLog || showTestLog || hasGitAction || hasMlcAttachments || hasWebAttachments;
+  const [gitReminderTick, setGitReminderTick] = useState(0);
+  const timedGitReady = useMemo(() => {
+    if (queuedCallerId || hasGitAction || !activeSession || activeSession.status !== "pending") return false;
+    return shouldInjectTimedGitReminder(activeSession.projectDirectory, Date.now(), getGitOperationSettings());
+  }, [activeSession, gitReminderTick, hasGitAction, queuedCallerId]);
+  const hasTags = images.length > 0 || hasTestLog || showTestLog || hasGitAction || timedGitReady || hasMlcAttachments || hasWebAttachments;
   const tagAreaRef = useRef<HTMLDivElement>(null);
   const branchInputRef = useRef<HTMLInputElement>(null);
+
+  useEffect(() => {
+    const refresh = () => setGitReminderTick((value) => value + 1);
+    const intervalId = window.setInterval(refresh, 30_000);
+    window.addEventListener(GIT_OPERATION_SETTINGS_EVENT, refresh as EventListener);
+    return () => {
+      window.clearInterval(intervalId);
+      window.removeEventListener(GIT_OPERATION_SETTINGS_EVENT, refresh as EventListener);
+    };
+  }, []);
 
   const handleAttachLogClick = async () => {
     const wasHidden = !showTestLog;
@@ -386,6 +402,13 @@ export function AttachmentTagBar({
               callerColor={callerColor}
               onRemove={() => queuedCallerId ? setQueuedDraftGitAction(queuedCallerId, null) : activeSession && setSessionGitAction(activeSession.id, null)}
             />
+          )}
+          {timedGitReady && (
+            <div className="attachment-tag attachment-tag-git-ready" title={t("gitAction.timedReadyDesc", "A timed Git backup reminder is ready and will be injected when you submit, unless you choose a manual Git Action.")}>
+              <Icon name="clock" size={10} />
+              <Icon name="git-commit" size={10} />
+              <span>{t("gitAction.timedReady", "Timed Git ready")}</span>
+            </div>
           )}
           {hasMlcAttachments && (
             <div

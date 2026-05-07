@@ -93,6 +93,12 @@ function getTopbarStatsColor(session: Session, isLight: boolean): string {
   }
 }
 
+function getTopbarStatsNeutralColor(session: Session, isLight: boolean): string {
+  if (session.status === "pending") return "#f59e0b";
+  if (session.status === "cancelled") return isLight ? "#dc2626" : "#f87171";
+  return isLight ? "#cbd5e1" : "#475569";
+}
+
 /** Collapsible session group with sticky header */
 function SessionGroup({
   label,
@@ -244,6 +250,7 @@ export function Sidebar({ mode, onModeChange }: { mode: SessionListMode; onModeC
   const activeCallerColor = caller?.color || null;
   const blinkingCallerIds = useFeedbackStore((s) => s.unreadCallerIds);
   const showAttachmentDots = useFeedbackStore((s) => s.showSessionNavigationAttachmentDots);
+  const useColorCards = useFeedbackStore((s) => s.useSessionNavigationColorCards);
   const isBlinking = caller ? blinkingCallerIds.includes(caller.id) : false;
   const isRail = mode === "rail";
   const isTopbarCompact = mode === "topbarCompact";
@@ -552,7 +559,7 @@ export function Sidebar({ mode, onModeChange }: { mode: SessionListMode; onModeC
                     width: shape!.width,
                     minWidth: shape!.width,
                     height: shape!.height,
-                    backgroundColor: getTopbarStatsColor(session, isLight),
+                    "--session-topbar-card-bg": useColorCards ? getTopbarStatsColor(session, isLight) : getTopbarStatsNeutralColor(session, isLight),
                     "--session-topbar-stripe-color": isLight ? "rgba(255, 255, 255, 0.54)" : "rgba(15, 23, 42, 0.42)",
                   } as CSSProperties}
                 >

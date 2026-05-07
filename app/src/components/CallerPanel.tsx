@@ -353,6 +353,7 @@ function CallerContent({ topbarSlot }: { topbarSlot?: ReactNode }) {
         });
         pushMessageHistory(activeSession.callerId, historyText);
         completeSessionWithSubmittedFeedback(activeSession.id, finalFeedback);
+        submittedFeedback.afterSubmit?.();
         // Clear transfer state after successful submit
         setTransferAlias(null);
         setTransferPopoverOpen(false);

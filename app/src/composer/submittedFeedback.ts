@@ -1,4 +1,5 @@
 import { formatWebAttachments } from "../browser/webAttachmentFormat";
+import { getGitOperationSettings, markTimedGitReminderInjected, shouldInjectTimedGitReminder, type GitOperationSettings } from "../gitOperationSettings";
 import type { Session, ImageAttachment, MlcAttachment, WebAttachment, QuestionItem, GitAction } from "../store/feedbackStore";
 import { parseComposerTextTokens } from "./composerTokens";
 import { formatSlashCommandExpansions } from "./commandExpansion";
@@ -10,6 +11,7 @@ export interface SubmittedFeedbackOptions {
   callerAlias?: string | null;
   transferAlias?: string | null;
   includeSystemReminder?: boolean;
+  includeGitOperationPrompts?: boolean;
   language?: string;
 }
 
@@ -17,6 +19,7 @@ export interface SubmittedFeedbackResult {
   markdown: string;
   historyText: string;
   imageList: Array<{ path: string; name: string; data_url?: string }>;
+  afterSubmit?: () => void;
 }
 
 export interface SubmittedComposerDraft {
@@ -123,8 +126,29 @@ function formatQuestionAnswers(questions: QuestionItem[] | undefined, language?:
   ].join("\n");
 }
 
+function formatGitFolderBlacklist(settings: GitOperationSettings): string | null {
+  const entries = settings.folderBlacklist.filter(Boolean);
+  if (entries.length === 0) return null;
+  return [
+    "Configured folder blacklist:",
+    ...entries.map((entry) => `- ${entry}`),
+  ].join("\n");
+}
+
+function formatGitSafetyRequirements(settings: GitOperationSettings): string {
+  return [
+    formatGitFolderBlacklist(settings),
+    "Requirements:",
+    "- Inspect `git status --short` before staging files.",
+    "- Do not stage or commit files under the configured blacklisted folders.",
+    "- Prefer explicit `git add -- <files>` when unrelated or risky files are present.",
+    "- Keep generated build output out of the commit unless the user explicitly asks for it.",
+  ].filter(Boolean).join("\n\n");
+}
+
 function formatGitAction(gitAction: GitAction | null | undefined): string | null {
   if (!gitAction) return null;
+  const settings = getGitOperationSettings();
   const gitMessages: Record<string, string> = {
     "commit-before": "Please execute git add and git commit now before performing any other requested operation.",
     commit: "Please complete the requested operation first, then execute git add and git commit once to back up the resulting changes.",
@@ -133,7 +157,24 @@ function formatGitAction(gitAction: GitAction | null | undefined): string | null
       ? `Please create a new branch "${gitAction.branchName}" and switch to it now before performing any other requested operation.`
       : "Please create a new branch and switch to it now before performing any other requested operation.",
   };
-  return `## Git Action\n${gitMessages[gitAction.type]}`;
+  return `## Git Action\n${gitMessages[gitAction.type]}\n\n${formatGitSafetyRequirements(settings)}`;
+}
+
+function resolveTimedGitBackupReminder(projectDirectory: string | undefined, hasGitAction: boolean): { section?: string; afterSubmit: () => void } | null {
+  const settings = getGitOperationSettings();
+  if (!shouldInjectTimedGitReminder(projectDirectory, Date.now(), settings)) return null;
+  if (hasGitAction) {
+    return { afterSubmit: () => markTimedGitReminderInjected(projectDirectory) };
+  }
+  return {
+    section: [
+      "## Timed Git Backup Reminder",
+      `A scheduled MLFB reminder is active. It has been at least ${settings.timedReminderIntervalMinutes} minutes since the last git backup reminder for this workspace.`,
+      "Please immediately perform a full-workspace git backup before continuing, while respecting the configured blacklist.",
+      formatGitSafetyRequirements(settings),
+    ].join("\n\n"),
+    afterSubmit: () => markTimedGitReminderInjected(projectDirectory),
+  };
 }
 
 function formatPayloadRouting(callerAlias?: string | null, transferAlias?: string | null): string | null {
@@ -251,6 +292,7 @@ export function augmentReadonlySubmittedFeedback(
 
 export function buildSubmittedComposerPayload(draft: SubmittedComposerDraft, options: SubmittedComposerPayloadOptions): SubmittedFeedbackResult {
   const sections: string[] = [];
+  const afterSubmitCallbacks: Array<() => void> = [];
   const trimmedFeedback = draft.text.trim();
   const quickAction = options.quickAction?.trim();
   const images = draft.images || [];
@@ -271,6 +313,14 @@ export function buildSubmittedComposerPayload(draft: SubmittedComposerDraft, opt
 
   const gitAction = formatGitAction(draft.gitAction);
   if (gitAction) sections.push(gitAction);
+
+  if (options.includeGitOperationPrompts !== false && options.includeSystemReminder !== false) {
+    const timedGitReminder = resolveTimedGitBackupReminder(draft.projectDirectory, Boolean(draft.gitAction));
+    if (timedGitReminder) {
+      if (timedGitReminder.section) sections.push(timedGitReminder.section);
+      afterSubmitCallbacks.push(timedGitReminder.afterSubmit);
+    }
+  }
 
   if ((draft.testLogText || "").trim()) sections.push(`## Attachment: Test Logs\n${fence(draft.testLogText || "")}`);
   if ((draft.commandLogs || "").trim()) sections.push(`## Attachment: Command Logs\n${fence(draft.commandLogs || "")}`);
@@ -300,6 +350,7 @@ export function buildSubmittedComposerPayload(draft: SubmittedComposerDraft, opt
     markdown: sections.join("\n\n"),
     historyText: trimmedFeedback,
     imageList: images.map((image) => ({ path: image.path, name: image.name, data_url: image.dataUrl })),
+    afterSubmit: afterSubmitCallbacks.length > 0 ? () => afterSubmitCallbacks.forEach((callback) => callback()) : undefined,
   };
 }
 

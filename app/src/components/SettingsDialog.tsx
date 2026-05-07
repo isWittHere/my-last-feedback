@@ -15,6 +15,7 @@ import { getNotificationSettings, saveNotificationSettings, syncAutoFocusNewRequ
 import { getSubmittedViewSettings, saveSubmittedViewSettings, SUBMITTED_VIEW_SECTION_CONFIGS, type SubmittedViewSectionId, type SubmittedViewSettings } from "../submittedViewSettings";
 import { getTerminalSettings, saveTerminalSettings, type TerminalSettings, type TerminalShellId } from "../terminalSettings";
 import { getComposerSettings, saveComposerSettings, type ComposerSettings } from "../composerSettings";
+import { formatGitFolderBlacklistText, getGitOperationSettings, parseGitFolderBlacklistText, saveGitOperationSettings, type GitOperationSettings } from "../gitOperationSettings";
 import { AGENT_DIFF_COLOR_PRESETS, getAgentConsoleSettings, saveAgentConsoleSettings, type AgentConsoleSettings, type AgentDiffColorPresetId, type AgentNavigationIndicatorOrder, type AgentProcessStepDefaultMode, type AgentTopbarIndicatorMode } from "../agentConsoleSettings";
 import { getOpenCodePermissionPresetAction, getOpenCodeSettings, OPEN_CODE_PERMISSION_DEFINITIONS, setOpenCodeDefaultPermissionAction, setOpenCodeModelEnabled, setOpenCodePreferredModel, type OpenCodePermissionAction, type OpenCodeSettings } from "../openCodeSettings";
 import { SESSION_LIST_MODE_OPTIONS } from "../sessionNavigationSettings";
@@ -22,7 +23,7 @@ import { SessionNavigationModeIcon } from "./SessionNavigationModeIcon";
 import { AppSelect, type AppSelectOption } from "./AppSelect";
 import { SettingsSegmentedControl } from "./SettingsSegmentedControl";
 
-type Tab = "general" | "display" | "callers" | "submitted" | "prompts" | "sessionNavigation" | "layoutPanels" | "agentConsole" | "agentChat" | "agentSessionManager" | "openCode" | "openCodePermissions" | "terminal" | "resources" | "notification" | "about";
+type Tab = "general" | "display" | "callers" | "submitted" | "prompts" | "sessionNavigation" | "gitOperations" | "layoutPanels" | "agentConsole" | "agentChat" | "agentSessionManager" | "openCode" | "openCodePermissions" | "terminal" | "resources" | "notification" | "about";
 type SettingsGroupId = "mlfb" | "agent" | "layout";
 
 const SETTINGS_DOCK_COLUMN_IDS: DockColumnId[] = ["leftSidebar", "leftPage", "rightPage", "rightSidebar"];
@@ -163,6 +164,7 @@ export function SettingsDialog({ open, onClose }: { open: boolean; onClose: () =
   const [notifSettings, setNotifSettings] = useState<NotificationSettings>(getNotificationSettings);
   const [terminalSettings, setTerminalSettings] = useState<TerminalSettings>(getTerminalSettings);
   const [composerSettings, setComposerSettings] = useState<ComposerSettings>(getComposerSettings);
+  const [gitOperationSettings, setGitOperationSettings] = useState<GitOperationSettings>(getGitOperationSettings);
   const [agentConsoleSettings, setAgentConsoleSettings] = useState<AgentConsoleSettings>(getAgentConsoleSettings);
   const [openCodeSettings, setOpenCodeSettings] = useState<OpenCodeSettings>(getOpenCodeSettings);
   const [openCodeModelQuery, setOpenCodeModelQuery] = useState("");
@@ -189,12 +191,14 @@ export function SettingsDialog({ open, onClose }: { open: boolean; onClose: () =
   const resourceIconTheme = useFeedbackStore((s) => s.resourceIconTheme);
   const sessionListMode = useFeedbackStore((s) => s.sessionListMode);
   const showSessionNavigationAttachmentDots = useFeedbackStore((s) => s.showSessionNavigationAttachmentDots);
+  const useSessionNavigationColorCards = useFeedbackStore((s) => s.useSessionNavigationColorCards);
   const dockLayout = useFeedbackStore((s) => s.dockLayout);
   const setShowPromptButtons = useFeedbackStore((s) => s.setShowPromptButtons);
   const setShowTransferSubmitUi = useFeedbackStore((s) => s.setShowTransferSubmitUi);
   const setResourceIconTheme = useFeedbackStore((s) => s.setResourceIconTheme);
   const setSessionListMode = useFeedbackStore((s) => s.setSessionListMode);
   const setShowSessionNavigationAttachmentDots = useFeedbackStore((s) => s.setShowSessionNavigationAttachmentDots);
+  const setUseSessionNavigationColorCards = useFeedbackStore((s) => s.setUseSessionNavigationColorCards);
   const togglePromptDisabled = useFeedbackStore((s) => s.togglePromptDisabled);
   const moveDockTabToColumn = useFeedbackStore((s) => s.moveDockTabToColumn);
   const cleanupEmptyAgentSessions = useAgentStore((s) => s.cleanupEmptySessions);
@@ -206,6 +210,7 @@ export function SettingsDialog({ open, onClose }: { open: boolean; onClose: () =
     setNotifSettings(getNotificationSettings());
     setTerminalSettings(getTerminalSettings());
     setComposerSettings(getComposerSettings());
+    setGitOperationSettings(getGitOperationSettings());
     setAgentConsoleSettings(getAgentConsoleSettings());
     setAgentCleanupMessage(null);
     setOpenCodeSettings(getOpenCodeSettings());
@@ -407,6 +412,22 @@ export function SettingsDialog({ open, onClose }: { open: boolean; onClose: () =
       return next;
     });
   }, []);
+
+  const updateGitOperationSettings = useCallback((updater: (current: GitOperationSettings) => GitOperationSettings) => {
+    setGitOperationSettings((current) => saveGitOperationSettings(updater(current)));
+  }, []);
+
+  const handleGitReminderEnabledToggle = useCallback(() => {
+    updateGitOperationSettings((current) => ({ ...current, timedReminderEnabled: !current.timedReminderEnabled }));
+  }, [updateGitOperationSettings]);
+
+  const handleGitReminderIntervalChange = useCallback((value: number) => {
+    updateGitOperationSettings((current) => ({ ...current, timedReminderIntervalMinutes: value }));
+  }, [updateGitOperationSettings]);
+
+  const handleGitFolderBlacklistChange = useCallback((value: string) => {
+    updateGitOperationSettings((current) => ({ ...current, folderBlacklist: parseGitFolderBlacklistText(value) }));
+  }, [updateGitOperationSettings]);
 
   const handleSubmittedSectionVisibleToggle = useCallback((id: SubmittedViewSectionId) => {
     updateSubmittedViewSettings((current) => ({
@@ -784,12 +805,13 @@ export function SettingsDialog({ open, onClose }: { open: boolean; onClose: () =
           <div className="settings-nav">
             {renderSettingsNavItem("general", "gear", t("settings.general"))}
             {renderSettingsNavItem("display", "sun", t("settings.display"))}
-            {renderSettingsNavGroup("mlfb", t("settings.mlfb", "MLFB"), ["callers", "submitted", "prompts", "sessionNavigation"], (
+            {renderSettingsNavGroup("mlfb", t("settings.mlfb", "MLFB"), ["callers", "submitted", "prompts", "sessionNavigation", "gitOperations"], (
               <>
                 {renderSettingsNavItem("callers", "users", t("settings.callers"), true)}
                 {renderSettingsNavItem("submitted", "checklist", t("settings.submittedFeedback", "Submitted feedback"), true)}
                 {renderSettingsNavItem("prompts", "file-text", t("settings.prompts"), true)}
                 {renderSettingsNavItem("sessionNavigation", "list-tree", t("settings.sessionNavigation", "Session navigation"), true)}
+                {renderSettingsNavItem("gitOperations", "git-branch", t("settings.gitOperations", "Git operations"), true)}
               </>
             ))}
             {renderSettingsNavGroup("agent", t("settings.agent", "Agent"), ["agentConsole", "agentChat", "agentSessionManager", "openCode", "openCodePermissions"], (
@@ -1025,6 +1047,80 @@ export function SettingsDialog({ open, onClose }: { open: boolean; onClose: () =
                   >
                     <span className="settings-toggle-knob" />
                   </button>
+                </div>
+                <div className="settings-row">
+                  <div className="settings-row-info">
+                    <span className="settings-label">{t("settings.sessionNavigationColorCards", "Use color cards")}</span>
+                    <span className="settings-sublabel">{t("settings.sessionNavigationColorCardsDesc", "Color topbar stats blocks by request type while keeping critical status colors visible.")}</span>
+                  </div>
+                  <button
+                    className={`settings-toggle${useSessionNavigationColorCards ? " settings-toggle-on" : ""}`}
+                    onClick={() => setUseSessionNavigationColorCards(!useSessionNavigationColorCards)}
+                  >
+                    <span className="settings-toggle-knob" />
+                  </button>
+                </div>
+              </div>
+            )}
+
+            {tab === "gitOperations" && (
+              <div className="settings-section">
+                <div className="settings-row">
+                  <div className="settings-row-info">
+                    <span className="settings-label">{t("settings.gitTimedReminder", "Timed Git backup reminder")}</span>
+                    <span className="settings-sublabel">{t("settings.gitTimedReminderDesc", "Inject a scheduled reminder into submitted feedback when no manual Git Action is selected.")}</span>
+                  </div>
+                  <button
+                    className={`settings-toggle${gitOperationSettings.timedReminderEnabled ? " settings-toggle-on" : ""}`}
+                    onClick={handleGitReminderEnabledToggle}
+                  >
+                    <span className="settings-toggle-knob" />
+                  </button>
+                </div>
+                <div className="settings-row">
+                  <div className="settings-row-info">
+                    <span className="settings-label">{t("settings.gitTimedReminderInterval", "Reminder interval")}</span>
+                    <span className="settings-sublabel">{t("settings.gitTimedReminderIntervalDesc", "Minimum minutes between scheduled Git backup reminders per workspace.")}</span>
+                  </div>
+                  <div className="cm-number-with-unit">
+                    <input
+                      type="number"
+                      min={1}
+                      max={1440}
+                      value={gitOperationSettings.timedReminderIntervalMinutes}
+                      onChange={(event) => handleGitReminderIntervalChange(Number(event.target.value))}
+                      className="cm-number-input"
+                    />
+                    <span className="cm-number-unit">{t("settings.gitTimedReminderMinutes", "min")}</span>
+                  </div>
+                </div>
+                <div className="settings-row settings-row-stacked">
+                  <div className="settings-row-info">
+                    <span className="settings-label">{t("settings.gitFolderBlacklist", "Git folder blacklist")}</span>
+                    <span className="settings-sublabel">{t("settings.gitFolderBlacklistDesc", "Folders listed here are included in Git Action and timed Git reminder instructions as paths that must not be staged or committed.")}</span>
+                  </div>
+                  <textarea
+                    className="settings-git-blacklist-textarea"
+                    rows={5}
+                    spellCheck={false}
+                    value={formatGitFolderBlacklistText(gitOperationSettings.folderBlacklist)}
+                    onChange={(event) => handleGitFolderBlacklistChange(event.target.value)}
+                  />
+                </div>
+                <div className="settings-row settings-row-stacked">
+                  <div className="settings-row-info">
+                    <span className="settings-label">{t("settings.gitReminderPreview", "Injected reminder preview")}</span>
+                    <span className="settings-sublabel">{t("settings.gitReminderPreviewDesc", "Manual Git Action and scheduled reminders both include these safety requirements.")}</span>
+                  </div>
+                  <pre className="settings-git-reminder-preview">{[
+                    "Configured folder blacklist:",
+                    ...(gitOperationSettings.folderBlacklist.length > 0 ? gitOperationSettings.folderBlacklist.map((entry) => `- ${entry}`) : ["- (none)"]),
+                    "",
+                    "Requirements:",
+                    "- Inspect `git status --short` before staging files.",
+                    "- Do not stage or commit files under the configured blacklisted folders.",
+                    "- Prefer explicit `git add -- <files>` when unrelated or risky files are present.",
+                  ].join("\n")}</pre>
                 </div>
               </div>
             )}
