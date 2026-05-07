@@ -29,6 +29,11 @@ export interface AgentProviderSessionItem {
   [key: string]: unknown;
 }
 
+interface AgentSessionDiffRefreshOptions {
+  silent?: boolean;
+  preserveExistingOnEmpty?: boolean;
+}
+
 interface AgentOpenCodeHttpRuntimeEntry {
   sessionId: string;
   runtime: OpenCodeServerRuntime;
@@ -101,7 +106,7 @@ interface AgentStoreState {
   updateOpenCodeSessionPermission: (sessionId: string, permission: string, action: "allow" | "ask" | "deny") => Promise<void>;
   resetOpenCodeSessionPermissions: (sessionId: string) => Promise<void>;
   resolveAgentPermission: (sessionId: string, requestId: string, optionId: string) => void;
-  refreshAgentSessionDiff: (sessionId: string) => Promise<void>;
+  refreshAgentSessionDiff: (sessionId: string, options?: AgentSessionDiffRefreshOptions) => Promise<void>;
   compactAgentSession: (sessionId: string) => Promise<void>;
   cleanupEmptySessions: () => Promise<number>;
   resetAgentSession: () => void;
@@ -1298,8 +1303,14 @@ function openCodeEventProviderSessionId(event: OpenCodeBusEvent): string | undef
         : undefined;
 }
 
+function openCodeEventShouldRefreshSessionDiff(event: OpenCodeBusEvent): boolean {
+  return normalizeOpenCodeEvent(event).some((normalized) => normalized.type === "session.status" && normalized.status === "idle");
+}
+
 function handleOpenCodeBusEvent(runtimeOwnerSessionId: string, event: OpenCodeBusEvent) {
   const providerSessionId = openCodeEventProviderSessionId(event);
+  const shouldRefreshSessionDiff = openCodeEventShouldRefreshSessionDiff(event);
+  const sessionDiffRefreshIds = new Set<string>();
   useAgentStore.setState((state) => {
     let routed = false;
     const sessions = state.sessions.map((session) => {
@@ -1307,10 +1318,16 @@ function handleOpenCodeBusEvent(runtimeOwnerSessionId: string, event: OpenCodeBu
       const matchesRuntimeOwner = !providerSessionId && session.id === runtimeOwnerSessionId;
       if (!matchesProviderSession && !matchesRuntimeOwner) return session;
       routed = true;
+      if (shouldRefreshSessionDiff && session.providerId === "opencode" && session.providerSessionId && !session.sessionDiffLoading) sessionDiffRefreshIds.add(session.id);
       return applyOpenCodeBusEvent(session, event);
     });
     return { sessions: routed ? sessions : state.sessions };
   });
+  for (const sessionId of sessionDiffRefreshIds) {
+    setTimeout(() => {
+      void useAgentStore.getState().refreshAgentSessionDiff(sessionId, { silent: true, preserveExistingOnEmpty: true });
+    }, 150);
+  }
 }
 
 function handleOpenCodePermissionRequest(sessionId: string, request: Record<string, unknown>) {
@@ -2302,17 +2319,23 @@ export const useAgentStore = create<AgentStoreState>((set, get) => ({
     }));
   },
 
-  refreshAgentSessionDiff: async (sessionId) => {
+  refreshAgentSessionDiff: async (sessionId, options) => {
     const session = get().sessions.find((item) => item.id === sessionId);
     const httpRuntime = openCodeHttpRuntimeForSession(session, get().sessions);
     if (!session?.providerSessionId || !httpRuntime) return;
-    set((state) => ({
-      sessions: updateSession(state.sessions, sessionId, (item) => ({ ...item, sessionDiffLoading: true, sessionDiffError: undefined, updatedAt: nowIso() })),
-    }));
+    if (!options?.silent) {
+      set((state) => ({
+        sessions: updateSession(state.sessions, sessionId, (item) => ({ ...item, sessionDiffLoading: true, sessionDiffError: undefined, updatedAt: nowIso() })),
+      }));
+    }
     try {
       const diff = await httpRuntime.runtime.client.sessionDiff(session.providerSessionId);
+      const normalizedDiff = normalizeOpenCodeFileDiffs(diff);
       set((state) => ({
-        sessions: updateSession(state.sessions, sessionId, (item) => ({ ...item, sessionDiffs: normalizeOpenCodeFileDiffs(diff), sessionDiffLoading: false, sessionDiffError: undefined, updatedAt: nowIso() })),
+        sessions: updateSession(state.sessions, sessionId, (item) => {
+          const preserveExistingDiff = options?.preserveExistingOnEmpty && normalizedDiff.length === 0 && (item.sessionDiffs?.length || 0) > 0;
+          return { ...item, sessionDiffs: preserveExistingDiff ? item.sessionDiffs : normalizedDiff, sessionDiffLoading: false, sessionDiffError: undefined, updatedAt: nowIso() };
+        }),
       }));
     } catch (error) {
       set((state) => ({

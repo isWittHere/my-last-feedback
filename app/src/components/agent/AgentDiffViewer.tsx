@@ -1,4 +1,6 @@
+import type { CSSProperties } from "react";
 import { useTranslation } from "react-i18next";
+import { getAgentDiffColorPreset, useAgentConsoleSettings } from "../../agentConsoleSettings";
 import type { AgentPermissionBlock, AgentSessionFileDiff } from "../../agent/types";
 
 export interface AgentUiDiffFile {
@@ -7,6 +9,27 @@ export interface AgentUiDiffFile {
   additions: number;
   deletions: number;
   status?: "added" | "deleted" | "modified" | "create" | "edit" | "delete" | "unknown";
+}
+
+type DiffPatchSegment = "add" | "delete" | "empty";
+
+function buildDiffPatchSegments(additions: number, deletions: number, slots: number): DiffPatchSegment[] {
+  const total = additions + deletions;
+  if (total <= 0) return Array.from({ length: slots }, () => "empty");
+  let addSlots = Math.round((additions / total) * slots);
+  let deleteSlots = slots - addSlots;
+  if (additions > 0 && addSlots === 0) {
+    addSlots = 1;
+    deleteSlots = slots - 1;
+  }
+  if (deletions > 0 && deleteSlots === 0) {
+    deleteSlots = 1;
+    addSlots = slots - 1;
+  }
+  return [
+    ...Array.from({ length: addSlots }, () => "add" as const),
+    ...Array.from({ length: deleteSlots }, () => "delete" as const),
+  ];
 }
 
 function asRecord(value: unknown): Record<string, unknown> {
@@ -79,13 +102,22 @@ function DiffLine({ line, index }: { line: string; index: number }) {
 
 export function AgentDiffPatchList({ files, emptyLabel }: { files: AgentUiDiffFile[]; emptyLabel?: string }) {
   const { t } = useTranslation();
+  const { diffVisual } = useAgentConsoleSettings();
+  const colorPreset = getAgentDiffColorPreset(diffVisual.colorPresetId);
+  const diffVisualStyle = {
+    "--agent-diff-add-color": colorPreset.additions,
+    "--agent-diff-delete-color": colorPreset.deletions,
+  } as CSSProperties;
   if (files.length === 0) return <div className="agent-diff-patch-empty">{emptyLabel || t("agentConsole.noDiffFiles", "No changed files")}</div>;
   return (
-    <div className="agent-diff-patch-list">
+    <div className="agent-diff-patch-list" style={diffVisualStyle}>
       {files.map((file) => (
         <details key={`${file.path}-${file.patch.length}`} className="agent-diff-patch-file" open={files.length === 1}>
           <summary className="agent-diff-patch-summary">
             <span className="agent-diff-patch-path">{file.path}</span>
+            <span className="agent-diff-patch-meter" aria-hidden="true">
+              {buildDiffPatchSegments(file.additions, file.deletions, 12).map((segment, index) => <span key={`${file.path}-${segment}-${index}`} className={`agent-diff-patch-square agent-diff-patch-square-${segment}`} />)}
+            </span>
             <span className="agent-diff-patch-stats"><span className="agent-diff-summary-add">+{file.additions}</span><span className="agent-diff-summary-delete">-{file.deletions}</span></span>
           </summary>
           <div className="agent-diff-code-block">
