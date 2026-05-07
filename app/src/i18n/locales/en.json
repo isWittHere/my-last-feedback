@@ -99,6 +99,8 @@
     "abort": "Abort",
     "processWorking": "Working",
     "processComplete": "Process",
+    "staleProcessNotice": "The session or message has ended, but some process state was still marked running, so it is shown as completed.",
+    "staleProcessStepTooltip": "This process state was still marked running.",
     "steps": "steps",
     "timeline": "Timeline",
     "tabs": "Tabs",

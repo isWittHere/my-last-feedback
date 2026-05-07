@@ -139,6 +139,15 @@ function attachmentIconName(kind: AgentSubmittedAttachmentTag["kind"]): string {
   return "paperclip";
 }
 
+function hasResidualActiveProcessBlock(blocks: AgentContentBlock[]): boolean {
+  return blocks.some((block) => {
+    if (block.type === "thinking") return block.status === "running";
+    if (block.type === "compaction") return block.status === "running";
+    if (block.type === "tool_call") return block.status === "running" || block.status === "pending";
+    return false;
+  });
+}
+
 function AgentUserAttachmentTags({ tags }: { tags?: AgentSubmittedAttachmentTag[] }) {
   const { t } = useTranslation();
   if (!tags || tags.length === 0) return null;
@@ -178,7 +187,16 @@ export function AgentMessageItem({ session, message, projectDirectory }: { sessi
   const submittedText = message.role === "user" ? userSubmittedText(message, resultBlocks) : "";
   const hasFullInfo = Boolean(submittedText.trim()) && submittedText.trim() !== userText.trim();
   const assistantText = useMemo(() => message.role === "assistant" ? resultBlocks.map(blockText).filter(Boolean).join("\n\n") : "", [message.role, resultBlocks]);
-  const isStreaming = message.status === "streaming";
+  const sessionIsActive = session.status === "starting" || session.status === "running" || session.status === "cancelling";
+  const isStreaming = sessionIsActive && message.status === "streaming";
+  const hasResidualProcessState = hasResidualActiveProcessBlock(processBlocks);
+  const hasStaleProcessState = message.role === "assistant" && (
+    (!sessionIsActive && (message.status === "streaming" || hasResidualProcessState)) ||
+    (message.status !== "streaming" && hasResidualProcessState)
+  );
+  const staleActivityNotice = hasStaleProcessState
+    ? t("agentConsole.staleProcessNotice", "The session or message has ended, but some process state was still marked running, so it is shown as completed.")
+    : undefined;
 
   if (message.role === "user") {
     return (
@@ -226,7 +244,7 @@ export function AgentMessageItem({ session, message, projectDirectory }: { sessi
             <span>{says}</span>
           </header>
         )}
-        <AgentProcessGroup blocks={processBlocks} messageId={message.id} isStreaming={isStreaming} projectDirectory={projectDirectory} />
+        <AgentProcessGroup blocks={processBlocks} messageId={message.id} isStreaming={isStreaming} projectDirectory={projectDirectory} staleActivityNotice={staleActivityNotice} />
         <ResultBlocks blocks={resultBlocks} projectDirectory={projectDirectory} />
         <AgentMessageActions session={session} message={message} copyText={assistantText} disabled={isStreaming} />
       </div>

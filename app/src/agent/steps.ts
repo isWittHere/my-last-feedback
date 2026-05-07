@@ -16,6 +16,7 @@ export interface AgentStepItem {
   result?: string;
   tasks?: AgentTaskItem[];
   blocks?: AgentContentBlock[];
+  staleRunningState?: boolean;
 }
 
 export interface AgentStepTokenStat {
@@ -82,23 +83,31 @@ function tokenTextForBlocks(blocks: AgentContentBlock[]): string {
   }).filter(Boolean).join("\n");
 }
 
+function isActiveSessionStatus(status: AgentSession["status"]): boolean {
+  return status === "starting" || status === "running" || status === "cancelling";
+}
+
 export function buildAgentProcessSteps(blocks: AgentContentBlock[], messageId?: string, messageStatus?: AgentMessage["status"]): AgentStepItem[] {
   const steps: AgentStepItem[] = [];
+  const messageIsStreaming = messageStatus === "streaming";
   for (const block of blocks) {
     if (block.type === "thinking") {
+      const staleRunningState = !messageIsStreaming && block.status === "running";
       steps.push({
         id: block.id,
         messageId,
         blockIds: [block.id],
         kind: "thinking",
         label: "思考",
-        status: block.status === "running" ? "running" : "completed",
+        status: messageIsStreaming && block.status === "running" ? "running" : "completed",
         detail: block.content,
+        staleRunningState,
       });
       continue;
     }
     if (block.type === "compaction") {
-      const status: AgentStepStatus = block.status === "failed" ? "failed" : block.status === "running" ? "running" : "completed";
+      const status: AgentStepStatus = block.status === "failed" ? "failed" : messageIsStreaming && block.status === "running" ? "running" : "completed";
+      const staleRunningState = block.status !== "failed" && !messageIsStreaming && block.status === "running";
       steps.push({
         id: block.id,
         messageId,
@@ -107,19 +116,23 @@ export function buildAgentProcessSteps(blocks: AgentContentBlock[], messageId?: 
         label: status === "running" ? "正在压缩上下文" : status === "failed" ? "上下文压缩失败" : "上下文已压缩",
         status,
         detail: block.content,
+        staleRunningState,
       });
       continue;
     }
     if (block.type === "tool_call") {
+      const status: AgentStepStatus = block.status === "failed" ? "failed" : messageIsStreaming ? block.status || "completed" : "completed";
+      const staleRunningState = block.status !== "failed" && !messageIsStreaming && (block.status === "running" || block.status === "pending");
       steps.push({
         id: block.id,
         messageId,
         blockIds: [block.id],
         kind: "tool",
         label: block.label || block.title || (typeof block.args?.label === "string" ? block.args.label : block.name),
-        status: block.status || "completed",
+        status,
         args: block.args,
         result: block.result,
+        staleRunningState,
       });
       continue;
     }
@@ -201,7 +214,8 @@ export function collectAgentStepTokenStats(session: AgentSession): AgentStepToke
     }
     if (message.role !== "assistant") continue;
     const { processBlocks, resultBlocks } = splitAgentMessageBlocks(message);
-    const steps = buildAgentProcessSteps(processBlocks, message.id, message.status);
+    const effectiveMessageStatus = isActiveSessionStatus(session.status) ? message.status : "complete";
+    const steps = buildAgentProcessSteps(processBlocks, message.id, effectiveMessageStatus);
     for (const step of steps) {
       stats.push({
         id: `${message.id}:${step.id}`,

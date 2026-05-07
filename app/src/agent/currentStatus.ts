@@ -171,6 +171,7 @@ function getApprovalStatus(session: AgentSession): AgentApprovalCurrentStatus | 
 }
 
 function getRunningActivityStatus(session: AgentSession): Exclude<AgentCurrentStatus, AgentApprovalCurrentStatus | null> | null {
+  if (session.status !== "starting" && session.status !== "running" && session.status !== "cancelling") return null;
   const stats = collectAgentStepTokenStats(session);
   for (let index = stats.length - 1; index >= 0; index -= 1) {
     const stat = stats[index];

@@ -3057,7 +3057,7 @@ body,
   justify-content: space-between;
   gap: 8px;
   min-width: 0;
-  padding: 6px 8px;
+  padding: 4px 10px;
   cursor: pointer;
   color: var(--color-text-secondary);
   font-size: 11px;
@@ -3083,7 +3083,7 @@ body,
 
 .agent-diff-patch-square {
   width: 4px;
-  height: 9px;
+  height: 10px;
   flex: 1 1 4px;
   min-width: 2px;
   border-radius: 1px;
@@ -3660,8 +3660,8 @@ body,
   flex: 0 0 auto;
   min-width: 16px;
   padding: 0 4px;
-  border-radius: var(--radius-xs);
-  font-size: 10px;
+  border-radius: var(--radius-md);
+  font-size: 11px;
   line-height: 15px;
   text-align: center;
   color: var(--color-text-muted);
@@ -3795,7 +3795,9 @@ body,
 
 .agent-approval-row-actions {
   flex: 0 0 auto;
-  gap: 6px;
+  justify-content: flex-end;
+  gap: 3px;
+  margin-left: auto;
 }
 
 .agent-approval-diff-panel {
@@ -3854,7 +3856,7 @@ body,
   display: inline-flex;
   align-items: stretch;
   box-sizing: border-box;
-  height: 24px;
+  height: 20px;
   overflow: hidden;
   border: 0;
   border-radius: var(--radius-sm);
@@ -3864,12 +3866,12 @@ body,
 .agent-approval-row-actions > button,
 .agent-approval-split-button > button {
   box-sizing: border-box;
-  height: 24px;
-  min-height: 22px;
+  height: 20px;
+  min-height: 18px;
   display: inline-flex;
   align-items: center;
   justify-content: center;
-  padding: 0 8px;
+  padding: 0 6px;
   border: 0;
   border-radius: var(--radius-sm);
   background: var(--color-bg-base);
@@ -4383,6 +4385,79 @@ body,
   margin-top: 4px;
 }
 
+.agent-process-stale-note {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  margin: 2px 0 4px;
+  color: var(--color-text-muted);
+  font-size: 12px;
+  line-height: 1.5;
+}
+
+.agent-process-stale-note svg {
+  flex: 0 0 auto;
+  color: var(--color-text-muted);
+}
+
+.agent-process-stale-step-icon {
+  position: relative;
+  flex: 0 0 auto;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 13px;
+  height: 13px;
+  background: transparent;
+  color: var(--color-warning);
+  opacity: 0.86;
+}
+
+.agent-process-stale-step-icon svg {
+  flex: 0 0 auto;
+  display: block;
+  pointer-events: none;
+}
+
+.agent-process-stale-step-tip {
+  position: absolute;
+  left: 50%;
+  bottom: calc(100% + 7px);
+  max-width: 220px;
+  padding: 5px 7px;
+  border: 1px solid var(--color-border);
+  border-radius: 4px;
+  background: var(--color-bg-elevated);
+  color: var(--color-text-primary);
+  box-shadow: 0 8px 20px rgba(0, 0, 0, 0.28);
+  font-size: 11px;
+  font-weight: 500;
+  line-height: 1.45;
+  opacity: 0;
+  pointer-events: none;
+  text-align: center;
+  transform: translate(-50%, 2px);
+  transition: opacity 0.12s ease, transform 0.12s ease;
+  white-space: nowrap;
+  z-index: 20;
+}
+
+.agent-process-stale-step-icon:hover .agent-process-stale-step-tip,
+.agent-process-stale-step-icon:focus-visible .agent-process-stale-step-tip {
+  opacity: 1;
+  transform: translate(-50%, 0);
+}
+
+.agent-process-step-tabs button:has(.agent-process-stale-step-icon:hover):not(.active) {
+  border-color: var(--color-border);
+  background: rgba(255, 255, 255, 0.04);
+  color: var(--color-text-secondary);
+}
+
+[data-theme="light"] .agent-process-step-tabs button:has(.agent-process-stale-step-icon:hover):not(.active) {
+  background: rgba(0, 0, 0, 0.03);
+}
+
 .agent-process-scroll-shell {
   position: relative;
   min-width: 0;
@@ -4537,6 +4612,14 @@ body,
   word-break: break-word;
 }
 
+.agent-process-pre-section > .agent-tool-args,
+.agent-process-pre-section > pre {
+  max-height: min(34vh, 320px);
+  overflow: auto;
+  overscroll-behavior: contain;
+  scrollbar-gutter: stable;
+}
+
 .agent-tool-args {
   display: grid;
   grid-template-columns: max-content minmax(0, 1fr);
@@ -4680,6 +4763,21 @@ body,
   min-width: 0;
   overflow: hidden;
   text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.agent-process-step-head .agent-process-stale-step-icon,
+.agent-process-step-head .agent-process-stale-step-tip,
+.agent-process-step-tabs button .agent-process-stale-step-icon,
+.agent-process-step-tabs button .agent-process-stale-step-tip {
+  min-width: auto;
+  overflow: visible;
+  text-overflow: clip;
+  white-space: normal;
+}
+
+.agent-process-step-head .agent-process-stale-step-tip,
+.agent-process-step-tabs button .agent-process-stale-step-tip {
   white-space: nowrap;
 }
 

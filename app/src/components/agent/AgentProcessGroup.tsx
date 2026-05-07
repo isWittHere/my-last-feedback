@@ -1,4 +1,5 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { useTranslation } from "react-i18next";
 import { useAgentConsoleSettings, type AgentProcessStepDefaultMode } from "../../agentConsoleSettings";
 import type { AgentContentBlock } from "../../agent/types";
 import { buildAgentProcessSteps, type AgentStepItem } from "../../agent/steps";
@@ -151,9 +152,11 @@ interface AgentFocusStepEventDetail {
   stepId?: string;
 }
 
-export function AgentProcessGroup({ blocks, messageId, isStreaming = false, projectDirectory }: { blocks: AgentContentBlock[]; messageId?: string; isStreaming?: boolean; projectDirectory?: string }) {
+export function AgentProcessGroup({ blocks, messageId, isStreaming = false, projectDirectory, staleActivityNotice }: { blocks: AgentContentBlock[]; messageId?: string; isStreaming?: boolean; projectDirectory?: string; staleActivityNotice?: string }) {
+  const { t } = useTranslation();
   const { processStepDefaultMode } = useAgentConsoleSettings();
   const steps = useMemo(() => buildAgentProcessSteps(blocks, messageId, isStreaming ? "streaming" : "complete"), [blocks, messageId, isStreaming]);
+  const staleStepTooltip = t("agentConsole.staleProcessStepTooltip", "This process state was still marked running.");
   const hasBusyStep = steps.some((step) => step.status === "pending" || step.status === "running");
   const [expanded, setExpanded] = useState(isStreaming || hasBusyStep);
   const [mode, setMode] = useState<ProcessViewMode>(processStepDefaultMode);
@@ -353,6 +356,12 @@ export function AgentProcessGroup({ blocks, messageId, isStreaming = false, proj
           </button>
         )}
       </div>
+      {staleActivityNotice ? (
+        <p className="agent-process-stale-note">
+          <Icon name="info" size={13} />
+          <span>{staleActivityNotice}</span>
+        </p>
+      ) : null}
       {expanded && (
         <div className="agent-process-stream-body">
           {isSingleInlineProcess ? (
@@ -373,6 +382,12 @@ export function AgentProcessGroup({ blocks, messageId, isStreaming = false, proj
                     <button type="button" className="agent-process-step-head" onClick={() => hasContent && toggleStep(index)}>
                       <Icon name={stepIconName(step)} size={13} />
                       <span>{step.label}</span>
+                      {step.staleRunningState && (
+                        <span className="agent-process-stale-step-icon">
+                          <Icon name="circle-warning" size={13} />
+                          <span className="agent-process-stale-step-tip">{staleStepTooltip}</span>
+                        </span>
+                      )}
                       {hasContent && <Icon name="chevron-right" size={11} className="agent-process-step-caret" style={{ transform: isOpen ? "rotate(90deg)" : undefined }} />}
                     </button>
                     {isOpen && hasContent && (
@@ -401,6 +416,12 @@ export function AgentProcessGroup({ blocks, messageId, isStreaming = false, proj
                   <button key={`${step.kind}-${index}`} type="button" className={activeIndex === index ? "active" : ""} onClick={() => setActiveIndex(index)}>
                     <Icon name={stepIconName(step)} size={11} />
                     <span>{step.label}</span>
+                    {step.staleRunningState && (
+                      <span className="agent-process-stale-step-icon">
+                        <Icon name="circle-warning" size={13} />
+                        <span className="agent-process-stale-step-tip">{staleStepTooltip}</span>
+                      </span>
+                    )}
                   </button>
                 ))}
               </div>

@@ -99,6 +99,8 @@
     "abort": "中止",
     "processWorking": "工作中",
     "processComplete": "过程",
+    "staleProcessNotice": "会话或消息已结束，但过程状态仍残留为运行中，已按完成显示。",
+    "staleProcessStepTooltip": "该过程状态残留为运行中",
     "steps": "步骤",
     "timeline": "时间线",
     "tabs": "标签",
