@@ -78,6 +78,7 @@ export function AgentComposer({ session }: { session: AgentSession }) {
   const updateGitBranchName = useAgentStore((state) => state.updateGitBranchName);
   const sendAgentPrompt = useAgentStore((state) => state.sendAgentPrompt);
   const abortAgentPrompt = useAgentStore((state) => state.abortAgentPrompt);
+  const appendAgentDiagnostic = useAgentStore((state) => state.appendAgentDiagnostic);
   const dockLayout = useFeedbackStore((state) => state.dockLayout);
   const setFocusedComposer = useFeedbackStore((state) => state.setFocusedComposer);
   const setMlcActiveWorkspacePath = useFeedbackStore((state) => state.setMlcActiveWorkspacePath);
@@ -320,6 +321,13 @@ export function AgentComposer({ session }: { session: AgentSession }) {
 
   const modeOptions = session.availableModes || [];
   const modelOptions = getEnabledOpenCodeModels(session.availableModels || [], session.modelId);
+  const effectiveModelId = session.modelId || modelOptions[0]?.id;
+  const selectedModel = modelOptions.find((model) => model.id === effectiveModelId) || (effectiveModelId ? session.availableModels?.find((model) => model.id === effectiveModelId) : undefined);
+  const imageAttachmentsDisabled = selectedModel?.capabilities?.input?.image !== true;
+  const imageAttachmentRejectedReason = t("agentConsole.imageAttachmentRejected", "The selected model does not support image input. The image was not added.");
+  const handleImageAttachmentRejected = useCallback((reason: string) => {
+    appendAgentDiagnostic(session.id, "warn", reason || imageAttachmentRejectedReason);
+  }, [appendAgentDiagnostic, imageAttachmentRejectedReason, session.id]);
   const bottomLeftSlot = modeOptions.length > 0 || modelOptions.length > 0 ? (
     <div className="agent-composer-selectors">
       {modeOptions.length > 0 ? <AgentSelectButton label={t("agentConsole.mode", "Mode")} value={session.modeId || modeOptions[0].id} options={modeOptions} onSelect={(mode) => setSessionMode(session.id, mode)} /> : null}
@@ -353,6 +361,9 @@ export function AgentComposer({ session }: { session: AgentSession }) {
         onAddImage={(image) => addImage(session.id, image)}
         onRemoveImage={(path) => removeImage(session.id, path)}
         onClearImages={() => clearImages(session.id)}
+        imageAttachmentsDisabled={imageAttachmentsDisabled}
+        imageAttachmentsDisabledReason={imageAttachmentRejectedReason}
+        onImageAttachmentRejected={handleImageAttachmentRejected}
         onRemoveMlcAttachment={(filePath) => removeMlcAttachment(session.id, filePath)}
         onClearMlcAttachments={() => clearMlcAttachments(session.id)}
         onRemoveWebAttachment={(attachmentId) => removeWebAttachment(session.id, attachmentId)}

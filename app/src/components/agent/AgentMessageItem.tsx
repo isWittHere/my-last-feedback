@@ -184,16 +184,18 @@ export function AgentMessageItem({ session, message, projectDirectory }: { sessi
     return (
       <article className={`agent-message agent-message-${message.role}`} data-role={message.role} data-msg-id={message.id} data-status={message.status}>
         <div className="agent-message-user-shell" style={{ "--agent-actor-color": color } as CSSProperties}>
-          <AgentMessageActions session={session} message={message} copyText={userText} disabled={isStreaming} canShowFullInfo={hasFullInfo} fullInfoOpen={fullInfoOpen} onToggleFullInfo={() => setFullInfoOpen((open) => !open)} />
           <div className="agent-message-user-stack">
-            <div className="agent-message-main">
-              {showMessageSpeakerLine && (
-                <header className="agent-message-speaker">
-                  {avatarKind === "opencode" ? <OpenCodeInitialAvatar size={22} /> : <IdenticonAvatar alias={alias} color={color} size={22} />}
-                  <span>{says}</span>
-                </header>
-              )}
-              {userText.trim() ? <MarkdownContent markdown={userText} projectDirectory={projectDirectory} className="agent-user-markdown" variant="feedback" enableComposerTokens /> : <span className="agent-user-empty-prompt">{t("agentConsole.attachmentOnlyPrompt", "Attachment-only prompt")}</span>}
+            <div className="agent-message-user-row">
+              <AgentMessageActions session={session} message={message} copyText={userText} disabled={isStreaming} canShowFullInfo={hasFullInfo} fullInfoOpen={fullInfoOpen} onToggleFullInfo={() => setFullInfoOpen((open) => !open)} />
+              <div className="agent-message-main">
+                {showMessageSpeakerLine && (
+                  <header className="agent-message-speaker">
+                    {avatarKind === "opencode" ? <OpenCodeInitialAvatar size={22} /> : <IdenticonAvatar alias={alias} color={color} size={22} />}
+                    <span>{says}</span>
+                  </header>
+                )}
+                {userText.trim() ? <MarkdownContent markdown={userText} projectDirectory={projectDirectory} className="agent-user-markdown" variant="feedback" enableComposerTokens /> : <span className="agent-user-empty-prompt">{t("agentConsole.attachmentOnlyPrompt", "Attachment-only prompt")}</span>}
+              </div>
             </div>
             <AgentUserAttachmentTags tags={message.submittedAttachmentTags} />
             {hasFullInfo && fullInfoOpen && (

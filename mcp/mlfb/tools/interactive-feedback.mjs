@@ -18,6 +18,16 @@ const MIME_BY_EXT = {
   bmp: "image/bmp",
 };
 
+const REQUEST_TYPE_VALUES = [
+  "explanation",
+  "question",
+  "completion",
+  "analysis_report",
+  "document_completed",
+  "verification_completed",
+  "default",
+];
+
 const TOOL_DESCRIPTION = `Request interactive feedback from the user via a desktop GUI window.
 The user may provide text feedback, test logs, and/or attach images.
 Images will be returned as ImageContent alongside the text feedback.
@@ -26,7 +36,8 @@ IMPORTANT - rules for AI agents calling this tool:
 1. request_name MUST always be provided with a meaningful task title. Never omit it or leave it blank.
 2. summary MUST be written in standard Markdown format (headings, lists, bold, code blocks). Do NOT use escape characters such as \\n or \\t.
 3. Describe full context, suggestions, and detailed information in summary. Use questions only for concise, actionable choices or brief input fields.
-4. agent_name: REQUIRED. Your 4-char uppercase hex identifier assigned by the hook system (delivered via PostToolUse additionalContext, e.g. "[my-last-feedback] Your agent_name is \"A1B2\"").`;
+4. request_type: REQUIRED. Use one of: explanation (解释), question (询问), completion (处理完毕), analysis_report (分析细节报告), document_completed (完成文档), verification_completed (完成验证或检查), default (默认).
+5. agent_name: REQUIRED. Your 4-char uppercase hex identifier assigned by the hook system (delivered via PostToolUse additionalContext, e.g. "[my-last-feedback] Your agent_name is \"A1B2\"").`;
 
 /**
  * Register the interactive_feedback tool on the given McpServer.
@@ -47,6 +58,12 @@ export function registerInteractiveFeedback(server) {
         "A concise title (5-10 words) for the current task, displayed in the window title bar. " +
         "This parameter is REQUIRED and MUST NOT be left empty."
       ),
+      request_type: z.enum(REQUEST_TYPE_VALUES).describe(
+        "REQUIRED. Why the agent is using this tool. " +
+        "Allowed values: explanation=解释, question=询问, completion=处理完毕, " +
+        "analysis_report=分析细节报告, document_completed=完成文档, " +
+        "verification_completed=完成验证或检查, default=默认/其他."
+      ),
       agent_name: z.string().regex(/^[A-Z0-9]{4}$/, "agent_name must be 4 uppercase hex chars (e.g. A1B2)").describe(
         "REQUIRED. Your 4-char uppercase hex agent identifier (e.g. A1B2). " +
         "Provided by the hook system via PostToolUse additionalContext. Use the same value in ALL calls."
@@ -58,7 +75,7 @@ export function registerInteractiveFeedback(server) {
         "Structured questions for the user. Options are short identifiers only — describe full proposals and details in summary."
       ),
     },
-    async ({ project_directory, summary, request_name, agent_name, questions }) => {
+    async ({ project_directory, summary, request_name, request_type, agent_name, questions }) => {
       const projectDir = project_directory.split("\n")[0].trim();
       const info = await resolveCallerInfo(server, { workspaceHint: projectDir });
 
@@ -76,7 +93,7 @@ export function registerInteractiveFeedback(server) {
       try {
         const socket = await ensureAppRunning();
         console.error("[MLFB] IPC socket connected, sending request...");
-        result = await requestFeedbackViaIpc(socket, projectDir, summary, request_name, callerInfo, questions);
+        result = await requestFeedbackViaIpc(socket, projectDir, summary, request_name, request_type, callerInfo, questions);
       } catch (ipcErr) {
         console.error("[MLFB] IPC failed:", ipcErr.message);
         throw new Error(`MLFB persistent IPC failed: ${ipcErr.message}. Please start or restart the My Last Feedback app and try again.`);

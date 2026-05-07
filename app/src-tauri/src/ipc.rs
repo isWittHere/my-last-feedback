@@ -22,6 +22,23 @@ const PORT_START: u16 = 19850;
 #[cfg(not(debug_assertions))]
 const PORT_END: u16 = 19860;
 
+fn default_request_type() -> String {
+    "default".to_string()
+}
+
+fn normalize_request_type(value: &str) -> String {
+    match value {
+        "explanation"
+        | "question"
+        | "completion"
+        | "analysis_report"
+        | "document_completed"
+        | "verification_completed"
+        | "default" => value.to_string(),
+        _ => default_request_type(),
+    }
+}
+
 /// Lock file path to store the active port
 /// Debug builds use a different file to avoid conflicting with installed release builds.
 fn lock_file_path() -> std::path::PathBuf {
@@ -60,6 +77,8 @@ struct RequestPayload {
     summary: String,
     #[serde(default)]
     request_name: String,
+    #[serde(default = "default_request_type")]
+    request_type: String,
     #[serde(default)]
     project_directory: String,
     #[serde(default)]
@@ -92,6 +111,7 @@ pub struct NewSessionEvent {
     pub caller_client_name: String,
     pub caller_alias: String,
     pub request_name: String,
+    pub request_type: String,
     pub summary: String,
     pub project_directory: String,
     pub questions: Vec<QuestionField>,
@@ -227,6 +247,7 @@ async fn handle_connection(
                 };
 
                 let session_id = request.session_id.clone();
+                let request_type = normalize_request_type(&payload_field.request_type);
 
                 // Create oneshot channel for response
                 let (tx, rx) = oneshot::channel::<FeedbackPayload>();
@@ -245,6 +266,7 @@ async fn handle_connection(
                         caller.id.clone(),
                         session_id.clone(),
                         payload_field.request_name.clone(),
+                        request_type.clone(),
                         payload_field.summary.clone(),
                         payload_field.project_directory.clone(),
                         questions_json,
@@ -258,6 +280,7 @@ async fn handle_connection(
                         caller_client_name: caller.client_name.clone(),
                         caller_alias: caller.alias.clone(),
                         request_name: payload_field.request_name,
+                        request_type,
                         summary: payload_field.summary,
                         project_directory: payload_field.project_directory,
                         questions: payload_field.questions,

@@ -2,7 +2,7 @@ import { useEffect } from "react";
 import { invoke } from "@tauri-apps/api/core";
 import { listen } from "@tauri-apps/api/event";
 import { getCurrentWindow } from "@tauri-apps/api/window";
-import { useFeedbackStore } from "./store/feedbackStore";
+import { normalizeRequestType, useFeedbackStore } from "./store/feedbackStore";
 import { useMLRAStore } from "./store/mlraStore";
 import { FeedbackApp } from "./components/FeedbackApp";
 import { AppTooltipProvider } from "./components/AppTooltip";
@@ -70,6 +70,7 @@ interface NewSessionEvent {
   caller_client_name: string;
   caller_alias: string;
   request_name: string;
+  request_type?: string;
   summary: string;
   project_directory: string;
   questions: Array<{ label: string; options?: string[] }>;
@@ -94,6 +95,7 @@ function App() {
         id: string;
         caller_id: string;
         request_name: string;
+        request_type?: string;
         summary: string;
         project_directory: string;
         status: string;
@@ -116,6 +118,7 @@ function App() {
             id: sess.id,
             callerId: sess.caller_id,
             requestName: sess.request_name,
+            requestType: normalizeRequestType(sess.request_type),
             summary: sess.summary,
             projectDirectory: sess.project_directory,
             status: (sess.status === "pending" ? "pending" : sess.status === "cancelled" ? "cancelled" : "responded") as Session["status"],
@@ -178,6 +181,7 @@ function App() {
         id: data.session_id,
         callerId: data.caller_id,
         requestName: data.request_name,
+        requestType: normalizeRequestType(data.request_type),
         summary: data.summary,
         projectDirectory: data.project_directory,
         status: "pending",

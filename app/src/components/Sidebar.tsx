@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState, type WheelEvent } from "react";
+import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState, type CSSProperties, type WheelEvent } from "react";
 import { createPortal } from "react-dom";
 import { invoke } from "@tauri-apps/api/core";
 import { useFeedbackStore } from "../store/feedbackStore";
@@ -71,6 +71,26 @@ function SessionStatusIcon({ session, size = 12 }: { session: Session; size?: nu
   if (session.status === "pending") return <Icon name="message-dot" size={size} color="#f59e0b" fill="none" />;
   if (session.status === "cancelled") return <Icon name="close" size={size} color="#ef4444" strokeWidth={2.5} />;
   return <Icon name="check" size={size} color="var(--color-success)" strokeWidth={2.5} />;
+}
+
+function getTopbarStatsColor(session: Session, isLight: boolean): string {
+  if (session.status === "pending") return "#f59e0b";
+  if (session.status === "cancelled") return isLight ? "#dc2626" : "#f87171";
+
+  switch (session.requestType) {
+    case "explanation":
+    case "analysis_report":
+      return isLight ? "#db2777" : "#f472b6";
+    case "question":
+      return isLight ? "#7c3aed" : "#a78bfa";
+    case "completion":
+      return isLight ? "#0f766e" : "#2dd4bf";
+    case "document_completed":
+    case "verification_completed":
+    case "default":
+    default:
+      return isLight ? "#64748b" : "#94a3b8";
+  }
 }
 
 /** Collapsible session group with sticky header */
@@ -214,6 +234,7 @@ export function Sidebar({ mode, onModeChange }: { mode: SessionListMode; onModeC
   const { t } = useTranslation();
   const friendlyName = useFriendlyName();
   const override = useCallerOverride();
+  const isLight = useIsLightTheme();
   const { callerId: activeCallerId, sessionId: activeSessionId, caller } = useActiveCallerSession();
   const allSessions = useFeedbackStore((s) => s.sessions);
   const setActiveSession = useFeedbackStore((s) => s.setActiveSession);
@@ -531,8 +552,9 @@ export function Sidebar({ mode, onModeChange }: { mode: SessionListMode; onModeC
                     width: shape!.width,
                     minWidth: shape!.width,
                     height: shape!.height,
-                    ...(session.status === "responded" && activeCallerColor ? { backgroundColor: activeCallerColor } : {}),
-                  }}
+                    backgroundColor: getTopbarStatsColor(session, isLight),
+                    "--session-topbar-stripe-color": isLight ? "rgba(255, 255, 255, 0.54)" : "rgba(15, 23, 42, 0.42)",
+                  } as CSSProperties}
                 >
                   {showAttachmentDots && hasSessionAttachments(session) && <span className="session-topbar-attachment-dot" />}
                 </button>

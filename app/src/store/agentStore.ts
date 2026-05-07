@@ -1,12 +1,12 @@
 import { create } from "zustand";
 import { hasAgentComposerContent } from "../agent/composer";
 import { normalizeOpenCodeEvent, normalizeOpenCodePart, normalizeOpenCodeTodos, startOpenCodeServerRuntime } from "../agent/opencode";
-import type { OpenCodeAgentInfo, OpenCodeBusEvent, OpenCodeCommandFilePart, OpenCodeCommandInfo, OpenCodeMessage, OpenCodeMessageInfo, OpenCodeMessagePart, OpenCodePermissionReply, OpenCodePermissionRule, OpenCodeProviderResponse, OpenCodeServerRuntime, OpenCodeSseConnection } from "../agent/opencode";
+import type { OpenCodeAgentInfo, OpenCodeBusEvent, OpenCodeCommandFilePart, OpenCodeCommandInfo, OpenCodeMessage, OpenCodeMessageInfo, OpenCodeMessagePart, OpenCodePermissionReply, OpenCodePermissionRule, OpenCodePromptPart, OpenCodeProviderResponse, OpenCodeServerRuntime, OpenCodeSseConnection } from "../agent/opencode";
 import { createAgentSession } from "../agent/sessionFactory";
 import { buildSubmittedComposerPayload, collectSubmittedResourceLinks } from "../composer/submittedFeedback";
 import { getAgentConsoleSettings } from "../agentConsoleSettings";
 import { getOpenCodeDefaultPermissionRules, setOpenCodePreferredModel, syncOpenCodeModels } from "../openCodeSettings";
-import type { AgentChoiceOption, AgentContentBlock, AgentContextUsage, AgentDiagnosticEntry, AgentMessage, AgentProviderMessagePart, AgentSession, AgentSessionFileDiff, AgentSubmittedAttachmentTag } from "../agent/types";
+import type { AgentChoiceOption, AgentContentBlock, AgentContextUsage, AgentDiagnosticEntry, AgentMessage, AgentModelCapabilities, AgentProviderMessagePart, AgentSession, AgentSessionFileDiff, AgentSubmittedAttachmentTag } from "../agent/types";
 import type { AgentProviderId } from "../agent/types";
 import type { GitAction, ImageAttachment, MlcAttachment, WebAttachment } from "./feedbackStore";
 
@@ -201,6 +201,18 @@ function finitePositiveNumber(value: unknown): number | undefined {
   return typeof value === "number" && Number.isFinite(value) && value > 0 ? value : undefined;
 }
 
+function recordFromUnknown(value: unknown): Record<string, unknown> | undefined {
+  return value && typeof value === "object" && !Array.isArray(value) ? value as Record<string, unknown> : undefined;
+}
+
+function booleanFromUnknown(value: unknown): boolean | undefined {
+  return typeof value === "boolean" ? value : undefined;
+}
+
+function stringArrayFromUnknown(value: unknown): string[] {
+  return Array.isArray(value) ? value.filter((item): item is string => typeof item === "string") : [];
+}
+
 function extractModelContextLimit(model: unknown): number | undefined {
   if (!model || typeof model !== "object") return undefined;
   const value = model as Record<string, unknown>;
@@ -219,6 +231,35 @@ function extractModelContextLimit(model: unknown): number | undefined {
     ?? finitePositiveNumber(metaLimit?.context);
 }
 
+function inputCapabilityValue(input: Record<string, unknown> | undefined, modalities: string[], key: string): boolean | undefined {
+  const explicit = booleanFromUnknown(input?.[key]);
+  if (explicit !== undefined) return explicit;
+  return modalities.includes(key) ? true : undefined;
+}
+
+function extractModelCapabilities(model: unknown): AgentModelCapabilities | undefined {
+  const value = recordFromUnknown(model);
+  if (!value) return undefined;
+  const capabilities = recordFromUnknown(value.capabilities);
+  const input = recordFromUnknown(capabilities?.input);
+  const modalities = recordFromUnknown(value.modalities);
+  const modalityInput = stringArrayFromUnknown(modalities?.input);
+  const inputCapabilities = {
+    text: inputCapabilityValue(input, modalityInput, "text"),
+    audio: inputCapabilityValue(input, modalityInput, "audio"),
+    image: inputCapabilityValue(input, modalityInput, "image"),
+    video: inputCapabilityValue(input, modalityInput, "video"),
+    pdf: inputCapabilityValue(input, modalityInput, "pdf"),
+  };
+  const hasInputCapability = Object.values(inputCapabilities).some((item) => item !== undefined);
+  const attachment = booleanFromUnknown(capabilities?.attachment) ?? booleanFromUnknown(value.attachment);
+  if (attachment === undefined && !hasInputCapability) return undefined;
+  return {
+    attachment,
+    input: hasInputCapability ? inputCapabilities : undefined,
+  };
+}
+
 function toChoiceOption(id: unknown, label: unknown, description: unknown, source?: unknown): AgentChoiceOption | null {
   if (typeof id !== "string" || !id) return null;
   return {
@@ -226,6 +267,7 @@ function toChoiceOption(id: unknown, label: unknown, description: unknown, sourc
     label: typeof label === "string" && label ? label : id,
     description: typeof description === "string" && description ? description : undefined,
     contextLimit: extractModelContextLimit(source),
+    capabilities: extractModelCapabilities(source),
   };
 }
 
@@ -326,6 +368,14 @@ function openCodeCommandModelFromSession(session: AgentSession): string | undefi
   return model ? `${model.providerID}/${model.modelID}` : undefined;
 }
 
+function selectedAgentModel(session: AgentSession): AgentChoiceOption | undefined {
+  return session.modelId ? session.availableModels?.find((model) => model.id === session.modelId) : undefined;
+}
+
+function agentSessionSupportsImageInput(session: AgentSession): boolean {
+  return selectedAgentModel(session)?.capabilities?.input?.image === true;
+}
+
 function parseOpenCodeSlashCommandDraft(text: string): { name: string; arguments: string } | null {
   const trimmed = text.trimStart();
   if (!trimmed.startsWith("/")) return null;
@@ -344,15 +394,47 @@ function findOpenCodeCommand(session: AgentSession, name: string): AgentChoiceOp
   return (session.availableCommands || []).find((command) => command.id.toLowerCase() === normalized);
 }
 
-function openCodeCommandFilePartsFromSession(session: AgentSession): OpenCodeCommandFilePart[] {
+function imageMimeFromDataUrl(dataUrl: string | undefined): string {
+  return /^data:([^;,]+)/.exec(dataUrl || "")?.[1] || "image/png";
+}
+
+function openCodeImageFilePartsFromSession(session: AgentSession): OpenCodeCommandFilePart[] {
   return session.images
     .filter((image) => Boolean(image.dataUrl))
     .map((image) => ({
       type: "file",
-      mime: /^data:([^;,]+)/.exec(image.dataUrl || "")?.[1] || "image/png",
+      mime: imageMimeFromDataUrl(image.dataUrl),
       url: image.dataUrl || "",
       filename: image.name,
     }));
+}
+
+function unsupportedImageInputNotice(images: ImageAttachment[]): string {
+  const rows = images.map((image, index) => {
+    const name = image.name || image.path || `image-${index + 1}`;
+    return `- ${name} was not sent.`;
+  });
+  return [
+    "## Attachment: Images Removed",
+    "ERROR: Images were removed because the selected model does not support image input. Inform the user.",
+    "",
+    ...rows,
+  ].join("\n");
+}
+
+function appendUnsupportedImageInputNotice(markdown: string, images: ImageAttachment[]): string {
+  if (images.length === 0) return markdown;
+  return [markdown.trim(), unsupportedImageInputNotice(images)].filter(Boolean).join("\n\n");
+}
+
+function openCodePromptPartsFromSession(session: AgentSession, markdown: string): { parts: OpenCodePromptPart[]; markdown: string; removedImageCount: number } {
+  const imageParts = openCodeImageFilePartsFromSession(session);
+  if (imageParts.length === 0) return { parts: [{ type: "text", text: markdown }], markdown, removedImageCount: 0 };
+  if (!agentSessionSupportsImageInput(session)) {
+    const filteredMarkdown = appendUnsupportedImageInputNotice(markdown, session.images);
+    return { parts: [{ type: "text", text: filteredMarkdown }], markdown: filteredMarkdown, removedImageCount: imageParts.length };
+  }
+  return { parts: [{ type: "text", text: markdown }, ...imageParts], markdown, removedImageCount: 0 };
 }
 
 function openCodeModelIdFromInfo(info: OpenCodeMessageInfo | undefined): string | undefined {
@@ -427,6 +509,26 @@ function promptDraftFromProviderParts(parts: AgentProviderMessagePart[] | undefi
     .trim();
 }
 
+function extractSubmittedPromptSection(markdown: string): string {
+  const trimmedMarkdown = markdown.trim();
+  const promptHeading = /^##\s+(?:User Prompt|User Feedback|用户提示|用户反馈)\s*\n/i.exec(trimmedMarkdown);
+  if (!promptHeading) return "";
+  const contentStart = promptHeading[0].length;
+  const nextSectionIndex = trimmedMarkdown.slice(contentStart).search(/\n##\s+/);
+  const contentEnd = nextSectionIndex >= 0 ? contentStart + nextSectionIndex : trimmedMarkdown.length;
+  return trimmedMarkdown.slice(contentStart, contentEnd).trim();
+}
+
+function restoredUserMessagePayload(providerParts: AgentProviderMessagePart[]): { composerDraft?: string; submittedMarkdown?: string } {
+  const providerText = promptDraftFromProviderParts(providerParts);
+  if (!providerText) return {};
+  const promptOnly = extractSubmittedPromptSection(providerText) || providerText;
+  return {
+    composerDraft: promptOnly,
+    submittedMarkdown: promptOnly !== providerText ? providerText : undefined,
+  };
+}
+
 function messageDraftText(message: AgentMessage): string {
   const draft = message.composerDraft?.trim();
   if (draft) return draft;
@@ -487,6 +589,7 @@ function agentMessagesFromOpenCodeMessages(messages: OpenCodeMessage[]): AgentMe
     const isCompactionOnlyMessage = blocks.length > 0 && blocks.every((block) => block.type === "compaction");
     const role = message.info?.role === "user" && !isCompactionOnlyMessage ? "user" : "assistant";
     const providerParts = summarizeOpenCodeParts(message.parts);
+    const restoredPayload = role === "user" ? restoredUserMessagePayload(providerParts) : {};
     return {
       id: message.info?.id || newId("msg"),
       role,
@@ -496,7 +599,8 @@ function agentMessagesFromOpenCodeMessages(messages: OpenCodeMessage[]): AgentMe
       providerMessageIds: message.info?.id ? [message.info.id] : undefined,
       providerParentMessageId: message.info?.parentID,
       providerParts,
-      composerDraft: role === "user" ? promptDraftFromProviderParts(providerParts) : undefined,
+      composerDraft: restoredPayload.composerDraft,
+      submittedMarkdown: restoredPayload.submittedMarkdown,
       modelId: openCodeModelIdFromInfo(message.info),
       createdAt: message.info?.time?.created ? new Date(message.info.time.created).toISOString() : nowIso(),
       updatedAt: updatedTime ? new Date(updatedTime).toISOString() : nowIso(),
@@ -1296,11 +1400,16 @@ export const useAgentStore = create<AgentStoreState>((set, get) => ({
   },
 
   addImage: (sessionId, image) => set((state) => ({
-    sessions: updateSession(state.sessions, sessionId, (session) => ({
-      ...session,
-      images: session.images.some((item) => item.path === image.path) ? session.images : [...session.images, image],
-      updatedAt: nowIso(),
-    })),
+    sessions: updateSession(state.sessions, sessionId, (session) => {
+      if (!agentSessionSupportsImageInput(session)) {
+        return appendDiagnosticToSession(session, "warn", "The selected model does not support image input. The image was not added.");
+      }
+      return {
+        ...session,
+        images: session.images.some((item) => item.path === image.path) ? session.images : [...session.images, image],
+        updatedAt: nowIso(),
+      };
+    }),
   })),
 
   removeImage: (sessionId, imagePath) => set((state) => ({
@@ -1592,7 +1701,11 @@ export const useAgentStore = create<AgentStoreState>((set, get) => ({
           }
 
           const configuredSession = get().sessions.find((item) => item.id === sessionId) || session;
-          const commandParts = openCodeCommandFilePartsFromSession(configuredSession);
+          const commandSupportsImages = agentSessionSupportsImageInput(configuredSession);
+          const commandParts = commandSupportsImages ? openCodeImageFilePartsFromSession(configuredSession) : [];
+          if (!commandSupportsImages && configuredSession.images.some((image) => Boolean(image.dataUrl))) {
+            get().appendAgentDiagnostic(sessionId, "warn", "Images were removed because the selected model does not support image input.");
+          }
           set((state) => ({
             sessions: updateSession(state.sessions, sessionId, (item) => appendDiagnosticToSession({
               ...item,
@@ -1643,6 +1756,13 @@ export const useAgentStore = create<AgentStoreState>((set, get) => ({
       return;
     }
 
+    const promptSession = get().sessions.find((item) => item.id === sessionId) || session;
+    if (!promptSession) return;
+    const promptDelivery = openCodePromptPartsFromSession(promptSession, submittedPrompt.markdown);
+    if (promptDelivery.removedImageCount > 0) {
+      get().appendAgentDiagnostic(sessionId, "warn", "Images were removed because the selected model does not support image input.");
+    }
+
     set((state) => ({
       sessions: updateSession(state.sessions, sessionId, (item) => ({
           ...item,
@@ -1659,7 +1779,7 @@ export const useAgentStore = create<AgentStoreState>((set, get) => ({
             createUserMessage(composerDraft.trim() || submittedPrompt.historyText.trim(), {
               providerParts: [{ type: "text", text: composerDraft }],
               composerDraft,
-              submittedMarkdown: submittedPrompt.markdown,
+              submittedMarkdown: promptDelivery.markdown,
               submittedAttachmentTags,
             }),
             createStreamingAssistantMessage(),
@@ -1702,7 +1822,7 @@ export const useAgentStore = create<AgentStoreState>((set, get) => ({
 
         const configuredSession = get().sessions.find((item) => item.id === sessionId) || session;
         await httpRuntime.runtime.client.promptAsync(providerSessionId, {
-          parts: [{ type: "text", text: submittedPrompt.historyText || submittedPrompt.markdown }],
+          parts: promptDelivery.parts,
           model: openCodeModelFromSession(configuredSession),
           ...(configuredSession.modeId ? { agent: configuredSession.modeId } : {}),
         });

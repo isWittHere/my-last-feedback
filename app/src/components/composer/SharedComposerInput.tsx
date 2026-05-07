@@ -35,6 +35,9 @@ export interface SharedComposerInputProps {
   onAddImage: (image: ImageAttachment) => void;
   onRemoveImage: (path: string) => void;
   onClearImages: () => void;
+  imageAttachmentsDisabled?: boolean;
+  imageAttachmentsDisabledReason?: string;
+  onImageAttachmentRejected?: (reason: string) => void;
   onRemoveMlcAttachment: (filePath: string) => void;
   onClearMlcAttachments: () => void;
   onRemoveWebAttachment: (attachmentId: string) => void;
@@ -93,6 +96,9 @@ export function SharedComposerInput({
   onAddImage,
   onRemoveImage,
   onClearImages,
+  imageAttachmentsDisabled,
+  imageAttachmentsDisabledReason,
+  onImageAttachmentRejected,
   onRemoveMlcAttachment,
   onClearMlcAttachments,
   onRemoveWebAttachment,
@@ -113,6 +119,7 @@ export function SharedComposerInput({
   const fileInputRef = useRef<HTMLInputElement>(null);
   const [dragOver, setDragOver] = useState(false);
   const hasAttachmentTags = images.length > 0 || Boolean(hasAttachmentMiddleTags) || mlcAttachments.length > 0 || webAttachments.length > 0;
+  const imageRejectReason = imageAttachmentsDisabledReason || t("agentConsole.modelDoesNotSupportImages", "The selected model does not support image input");
 
   useEffect(() => {
     editorRef.current?.focus();
@@ -134,16 +141,25 @@ export function SharedComposerInput({
 
   const addFiles = useCallback(async (files: FileList | File[]) => {
     if (readOnly) return;
-    for (const file of Array.from(files)) {
+    const fileList = Array.from(files);
+    if (imageAttachmentsDisabled && fileList.some(isImageFile)) {
+      onImageAttachmentRejected?.(imageRejectReason);
+      return;
+    }
+    for (const file of fileList) {
       const image = await fileToImageAttachment(file);
       if (image) onAddImage(image);
     }
-  }, [onAddImage, readOnly]);
+  }, [imageAttachmentsDisabled, imageRejectReason, onAddImage, onImageAttachmentRejected, readOnly]);
 
   const openImagePicker = useCallback(() => {
     if (readOnly) return;
+    if (imageAttachmentsDisabled) {
+      onImageAttachmentRejected?.(imageRejectReason);
+      return;
+    }
     requestAnimationFrame(() => fileInputRef.current?.click());
-  }, [readOnly]);
+  }, [imageAttachmentsDisabled, imageRejectReason, onImageAttachmentRejected, readOnly]);
 
   const handlePaste = useCallback((event: ClipboardEvent<HTMLDivElement>) => {
     const items = event.clipboardData?.items;
@@ -154,15 +170,23 @@ export function SharedComposerInput({
       .filter((file): file is File => Boolean(file));
     if (files.length === 0) return;
     event.preventDefault();
+    if (imageAttachmentsDisabled) {
+      onImageAttachmentRejected?.(imageRejectReason);
+      return;
+    }
     void addFiles(files.map((file) => new File([file], `clipboard_${Date.now()}.png`, { type: file.type })));
-  }, [addFiles]);
+  }, [addFiles, imageAttachmentsDisabled, imageRejectReason, onImageAttachmentRejected]);
 
   const handleDrop = useCallback((event: React.DragEvent) => {
     setDragOver(false);
     if (event.dataTransfer.files.length === 0) return;
     event.preventDefault();
+    if (imageAttachmentsDisabled && Array.from(event.dataTransfer.files).some(isImageFile)) {
+      onImageAttachmentRejected?.(imageRejectReason);
+      return;
+    }
     void addFiles(event.dataTransfer.files);
-  }, [addFiles]);
+  }, [addFiles, imageAttachmentsDisabled, imageRejectReason, onImageAttachmentRejected]);
 
   const handleKeyDown = useCallback((event: KeyboardEvent<HTMLDivElement>, _selection: TextRange) => {
     onEditorKeyDown?.(event, _selection);
@@ -178,6 +202,7 @@ export function SharedComposerInput({
       <div
         className="agent-composer-attachment-area"
         onDragOver={(event) => {
+          if (imageAttachmentsDisabled) return;
           if (event.dataTransfer.types.includes("Files")) {
             event.preventDefault();
             setDragOver(true);
@@ -188,13 +213,15 @@ export function SharedComposerInput({
         style={dragOver ? { outline: "2px dashed var(--color-primary)", outlineOffset: -2 } : undefined}
       >
         <div className="attachment-action-row px-3 pt-1.5 pb-0.5">
-          <button type="button" className="btn" title={t("images.dropHint", "Drop or paste images")} onClick={openImagePicker}>
-            <Icon name="image" size={12} />
-            <span className="attachment-action-label">{t("images.attach", "Attach")}</span>
-            {images.length > 0 && (
-              <span className="attachment-action-meta" style={{ color: "var(--color-text-muted)" }}>{images.length}</span>
-            )}
-          </button>
+          {!imageAttachmentsDisabled && (
+            <button type="button" className="btn" title={t("images.dropHint", "Drop or paste images")} onClick={openImagePicker}>
+              <Icon name="image" size={12} />
+              <span className="attachment-action-label">{t("images.attach", "Attach")}</span>
+              {images.length > 0 && (
+                <span className="attachment-action-meta" style={{ color: "var(--color-text-muted)" }}>{images.length}</span>
+              )}
+            </button>
+          )}
           {attachmentActionButtons}
           <input
             ref={fileInputRef}
@@ -202,6 +229,7 @@ export function SharedComposerInput({
             multiple
             accept={IMAGE_EXTENSIONS.join(",")}
             className="hidden"
+            disabled={imageAttachmentsDisabled || readOnly}
             onChange={(event) => {
               if (event.target.files) void addFiles(event.target.files);
               event.currentTarget.value = "";

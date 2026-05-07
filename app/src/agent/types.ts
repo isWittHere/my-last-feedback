@@ -187,11 +187,25 @@ export interface AgentProviderRuntimeInfo {
   authMethods?: unknown[];
 }
 
+export interface AgentModelInputCapabilities {
+  text?: boolean;
+  audio?: boolean;
+  image?: boolean;
+  video?: boolean;
+  pdf?: boolean;
+}
+
+export interface AgentModelCapabilities {
+  attachment?: boolean;
+  input?: AgentModelInputCapabilities;
+}
+
 export interface AgentChoiceOption {
   id: string;
   label: string;
   description?: string;
   contextLimit?: number;
+  capabilities?: AgentModelCapabilities;
 }
 
 export interface AgentContextUsage {

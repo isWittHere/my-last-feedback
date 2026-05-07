@@ -41,6 +41,11 @@ fn hsl_to_hex(h: f64, s: f64, l: f64) -> String {
 }
 
 const MAX_HISTORY_SESSIONS: usize = 200;
+const DEFAULT_REQUEST_TYPE: &str = "default";
+
+fn default_request_type() -> String {
+    DEFAULT_REQUEST_TYPE.to_string()
+}
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(rename_all = "lowercase")]
@@ -69,6 +74,8 @@ pub struct SessionSummary {
     pub id: String,
     pub caller_id: String,
     pub request_name: String,
+    #[serde(default = "default_request_type")]
+    pub request_type: String,
     pub status: SessionStatus,
     pub created_at: DateTime<Utc>,
 }
@@ -79,6 +86,8 @@ pub struct SessionDetail {
     pub id: String,
     pub caller_id: String,
     pub request_name: String,
+    #[serde(default = "default_request_type")]
+    pub request_type: String,
     pub summary: String,
     pub project_directory: String,
     pub status: SessionStatus,
@@ -134,6 +143,8 @@ struct PersistedSession {
     id: String,
     caller_id: String,
     request_name: String,
+    #[serde(default = "default_request_type")]
+    request_type: String,
     summary: String,
     project_directory: String,
     status: SessionStatus,
@@ -292,6 +303,7 @@ impl SessionManager {
         caller_id: String,
         session_id: String,
         request_name: String,
+        request_type: String,
         summary: String,
         project_directory: String,
         questions: Vec<serde_json::Value>,
@@ -301,6 +313,7 @@ impl SessionManager {
             id: session_id.clone(),
             caller_id,
             request_name,
+            request_type,
             summary,
             project_directory,
             status: SessionStatus::Pending,
@@ -358,6 +371,7 @@ impl SessionManager {
                 id: s.detail.id.clone(),
                 caller_id: s.detail.caller_id.clone(),
                 request_name: s.detail.request_name.clone(),
+                request_type: s.detail.request_type.clone(),
                 status: s.detail.status,
                 created_at: s.detail.created_at,
             })
@@ -372,6 +386,7 @@ impl SessionManager {
                 id: s.detail.id.clone(),
                 caller_id: s.detail.caller_id.clone(),
                 request_name: s.detail.request_name.clone(),
+                request_type: s.detail.request_type.clone(),
                 status: s.detail.status,
                 created_at: s.detail.created_at,
             })
@@ -799,6 +814,7 @@ impl SessionManager {
                     id: entry.detail.id.clone(),
                     caller_id: entry.detail.caller_id.clone(),
                     request_name: entry.detail.request_name.clone(),
+                    request_type: entry.detail.request_type.clone(),
                     summary: entry.detail.summary.clone(),
                     project_directory: entry.detail.project_directory.clone(),
                     status: entry.detail.status,
@@ -874,6 +890,7 @@ impl SessionManager {
                         id: ps.id,
                         caller_id: ps.caller_id,
                         request_name: ps.request_name,
+                        request_type: ps.request_type,
                         summary: ps.summary,
                         project_directory: ps.project_directory,
                         status: ps.status,

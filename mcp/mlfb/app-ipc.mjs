@@ -75,11 +75,12 @@ export async function cancelAllActiveSessions() {
  * @param {string} projectDirectory
  * @param {string} summary
  * @param {string} requestName
+ * @param {string} requestType
  * @param {{ name: string, version: string, clientName: string, alias: string }} callerInfo
  * @param {Array<{label: string, options?: string[]}>} [questions]
  * @returns {Promise<{interactive_feedback?: string, images?: any[], caller_alias?: string, transfer_to_alias?: string}>}
  */
-export function requestFeedbackViaIpc(socket, projectDirectory, summary, requestName, callerInfo, questions) {
+export function requestFeedbackViaIpc(socket, projectDirectory, summary, requestName, requestType, callerInfo, questions) {
   const sessionId = randomUUID();
 
   const request = JSON.stringify({
@@ -94,6 +95,7 @@ export function requestFeedbackViaIpc(socket, projectDirectory, summary, request
     payload: {
       summary,
       request_name: requestName,
+      request_type: requestType,
       project_directory: projectDirectory,
       questions: questions || [],
     },

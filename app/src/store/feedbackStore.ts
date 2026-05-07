@@ -22,6 +22,24 @@ export type CallerColumnMode = "auto" | 1 | 2 | 3;
 
 export type SessionStatus = "pending" | "responded" | "cancelled";
 
+export const REQUEST_TYPES = [
+  "explanation",
+  "question",
+  "completion",
+  "analysis_report",
+  "document_completed",
+  "verification_completed",
+  "default",
+] as const;
+
+export type RequestType = typeof REQUEST_TYPES[number];
+
+export function normalizeRequestType(value: unknown): RequestType {
+  return typeof value === "string" && (REQUEST_TYPES as readonly string[]).includes(value)
+    ? value as RequestType
+    : "default";
+}
+
 export interface QuestionItem {
   label: string;
   options?: string[];
@@ -216,6 +234,7 @@ export interface Session {
   id: string;
   callerId: string;
   requestName: string;
+  requestType: RequestType;
   summary: string;
   projectDirectory: string;
   status: SessionStatus;
@@ -848,7 +867,12 @@ export const useFeedbackStore = create<FeedbackState>((set, get) => ({
   },
 
   addSession: (session, options) => {
-    const normalizedSession = { ...session, mlcAttachments: session.mlcAttachments || [], webAttachments: session.webAttachments || [] };
+    const normalizedSession = {
+      ...session,
+      requestType: normalizeRequestType(session.requestType),
+      mlcAttachments: session.mlcAttachments || [],
+      webAttachments: session.webAttachments || [],
+    };
     const attentionMode = options?.attentionMode ?? "interrupt";
     const shouldInterrupt = attentionMode !== "passive";
     const wasHidden = get().hiddenCallerIds.includes(normalizedSession.callerId);

@@ -50,6 +50,24 @@ export interface OpenCodeProviderModel {
   status?: string;
   context?: number;
   cost?: Record<string, unknown>;
+  attachment?: boolean;
+  modalities?: {
+    input?: string[];
+    output?: string[];
+    [key: string]: unknown;
+  };
+  capabilities?: {
+    attachment?: boolean;
+    input?: {
+      text?: boolean;
+      audio?: boolean;
+      image?: boolean;
+      video?: boolean;
+      pdf?: boolean;
+      [key: string]: unknown;
+    };
+    [key: string]: unknown;
+  };
   [key: string]: unknown;
 }
 
@@ -155,13 +173,24 @@ export interface OpenCodeSummarizeRequest {
   auto?: boolean;
 }
 
-export interface OpenCodePromptPart {
+export interface OpenCodePromptTextPart {
   id?: string;
   type: "text";
   text: string;
   synthetic?: boolean;
   ignored?: boolean;
 }
+
+export interface OpenCodeFilePart {
+  id?: string;
+  type: "file";
+  mime: string;
+  url: string;
+  filename?: string;
+  source?: unknown;
+}
+
+export type OpenCodePromptPart = OpenCodePromptTextPart | OpenCodeFilePart;
 
 export interface OpenCodePromptModel {
   providerID: string;
@@ -191,14 +220,7 @@ export interface OpenCodeForkRequest {
   messageID: string;
 }
 
-export interface OpenCodeCommandFilePart {
-  id?: string;
-  type: "file";
-  mime: string;
-  url: string;
-  filename?: string;
-  source?: unknown;
-}
+export type OpenCodeCommandFilePart = OpenCodeFilePart;
 
 export interface OpenCodeCommandRequest {
   command: string;
