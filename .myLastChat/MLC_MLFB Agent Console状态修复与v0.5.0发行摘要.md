@@ -1,6 +1,6 @@
 ---
-title: MLFB Agent Console状态修复与v0.5.0发行摘要
-description: Agent Console状态、导航器色卡与0.5.0发行摘要
+title: MLFB Agent Console状态修复与v0.5.1发行摘要
+description: Agent Console、Git提醒、导航色卡与0.5.1发行摘要
 workplace: ${workspaceFolder}
 project: my-last-feedback
 type: coding
@@ -10,6 +10,9 @@ solved_lists:
   - 改进Agent Console过程流、权限行、sticky用户栏与失败图标
   - 完成token导航器语义色卡、条纹与紧凑高度行为
   - 将版本同步升级到0.5.0并构建Windows发行包
+  - 新增Git操作设置页、黑名单与定时Git提醒注入
+  - 修正MLFB导航彩色色卡开关语义与active对比度
+  - 将版本同步升级到0.5.1并构建Windows发行包
 ---
 
 # MLFB Agent Console状态修复与v0.5.0发行摘要
@@ -417,3 +420,333 @@ Release v0.5.0 package build summary
 - `toolStepTone` 的正则可能需要基于真实 OpenCode tool name 继续校准，尤其是 read/edit/execute 工具命名。
 - token navigator 的色卡只在非 running/stale 覆盖时显示；如果用户期望 running 也保留语义色，需要重新设计状态覆盖策略。
 - `staleProcessNotice` 外层文案仍包含“已按完成显示”，用户目前只要求 hover tip 不出现“已完成”；如果后续继续敏感，可以调整外层文案为更诊断化的表达。
+
+---
+
+# 2026-05-08 追加：Git操作提醒、导航色卡语义与v0.5.1发行
+
+## 1. Previous Conversation
+
+在前一次摘要之后，会话继续围绕 MLFB 的 Git 操作提示、Session 导航显示、定时备份提醒和发行版本推进。用户保留了硬性规则：`ref-repos/` 是参考目录，不能暂存、不能提交。所有 git 操作都继续使用显式文件列表，避免把 `ref-repos/` 或其它无关未跟踪文件纳入提交。
+
+用户先要求新增两类产品能力：设置页面里提供“MLFB 导航器使用彩色色卡（开关）”；同时加入“定时 git 提示词注入”，默认每 20 分钟，注入额外定时 Git 章节，并在全仓库 Git 备份与 Git Action 中支持文件夹黑名单，典型黑名单包括 `ref-repos`。随后用户进一步澄清，Git Action 自身也必须有黑名单支持，并需要一个新的 Git operations 设置页。
+
+在第一版实现后，用户指出对定时 Git 的语义理解不够精确。最新明确语义是：定时 Git 不是按钮点击触发，也不是草稿状态触发，而是在设定时间过去后，当前未提交活动进入“定时 Git 就绪态”；只有用户真实点击提交并成功发送时，才根据发送当刻的真实状态判定是否注入定时 Git 章节、是否使用用户手动 Git Action、以及本轮计时是否结束。用户还指出“MLFB 导航器彩色色卡开关似乎无效”。
+
+之后用户继续纠正导航色卡开关语义：如果不开启彩色色卡功能，默认应按照 caller 主题色显示，而不是中性色。最后用户要求移除 active 项斜条纹，通过压淡未 active 项提高对比度。
+
+完成这些修正后，用户发出最新请求：
+
+> 好的，升级到0.5.1，并构建新版本发行包，之后补充对话摘要（ /compact ）。之后git备份。
+
+该追加摘要即响应该请求创建。由于查询 My Last Chat 后发现本文档与当前工作高度相关，因此本次按规则更新既有文件，而不是创建新文件。
+
+## 2. Current Work
+
+当前最近完成的工作分为四组。
+
+第一，新增 Git operations 设置能力。前端新增 `app/src/gitOperationSettings.ts`，通过 localStorage 管理 Git 操作配置：是否启用定时提醒、提醒间隔分钟数、文件夹黑名单。默认启用定时提醒，间隔为 20 分钟，默认黑名单包含 `ref-repos`。设置页新增 Git operations tab，允许用户修改定时提醒开关、间隔和黑名单。
+
+第二，提交 payload 组装支持 Git 安全要求与定时 Git 章节。`app/src/composer/submittedFeedback.ts` 会在 Git Action 章节中追加配置黑名单和安全要求，要求代理在提交前检查 `git status --short`，不要暂存黑名单目录，优先显式 `git add -- <files>`。定时 Git 章节只在发送时判断，且 `CallerPanel.tsx` 只会在 `submit_session_feedback` 成功后调用 `submittedFeedback.afterSubmit?.()`，因此计时重置发生在真实成功发送之后。
+
+第三，修正定时 Git 的就绪与手动覆盖语义。现在发送时计算 `resolveTimedGitBackupReminder(projectDirectory, hasGitAction)`：
+
+```ts
+if (!shouldInjectTimedGitReminder(projectDirectory, Date.now(), settings)) return null;
+if (hasGitAction) {
+  return { afterSubmit: () => markTimedGitReminderInjected(projectDirectory) };
+}
+return {
+  section: [
+    "## Timed Git Backup Reminder",
+    `A scheduled MLFB reminder is active. It has been at least ${settings.timedReminderIntervalMinutes} minutes since the last git backup reminder for this workspace.`,
+    "Please immediately perform a full-workspace git backup before continuing, while respecting the configured blacklist.",
+    formatGitSafetyRequirements(settings),
+  ].join("\n\n"),
+  afterSubmit: () => markTimedGitReminderInjected(projectDirectory),
+};
+```
+
+因此：未计时完成时即使用户手动选择 Git，也不会影响计时继续；计时完成且提交时无手动 Git Action，会自动注入 `## Timed Git Backup Reminder`；计时完成且提交时有手动 Git Action，则使用用户的 Git 指示，不注入定时章节，但成功发送后消费本轮就绪态并重新计时。
+
+第四，MLFB Session 顶部统计导航的色卡开关语义与视觉对比已修正。`useSessionNavigationColorCards` 未设置时默认 `false`，即默认 caller 主题色。关闭彩色色卡时，所有顶部统计块使用当前 caller 颜色；开启时才按请求类型和关键状态显示彩色色卡。active 项斜条纹已移除，未 active 项通过更低 opacity 压淡，active 项保持高不透明度和轻微亮度/饱和增强。
+
+本轮已经完成三个备份提交：
+
+```text
+0342182 Add Git operation settings and timed reminders
+0a51313 Fix navigation color card fallback
+a31da35 Refine navigation card active contrast
+```
+
+随后版本已升级到 `0.5.1`，并运行 Windows 发行脚本成功产出新发行包：
+
+```text
+Version : v0.5.1
+Output  : dist/win-x64/my-last-feedback
+Archive : dist/win-x64/my-last-feedback-v0.5.1-win-x64.zip
+Binary  : app/src-tauri/target/release/app.exe
+```
+
+构建命令：
+
+```bash
+bash scripts/package-win.sh
+```
+
+构建中仍有既有 Vite dynamic import 与 chunk size 警告，但 Tauri release build 和 zip 打包均成功。
+
+## 3. Key Technical Concepts
+
+- Git 操作设置：localStorage 持久化、默认 20 分钟定时提醒、默认黑名单 `ref-repos`。
+- 定时 Git 就绪态：派生状态，不写入 `gitAction` 草稿；真实发送时才判定是否注入、是否手动覆盖、是否重置计时。
+- Git Action 黑名单：手动 Git Action 与定时 Git Reminder 都注入同一套安全要求和黑名单列表。
+- Payload 组装：`buildSubmittedComposerPayload` 返回 `{ text, afterSubmit }`，发送成功后由调用方触发后置副作用。
+- MLFB 导航色卡：`useSessionNavigationColorCards` 控制顶部统计导航色彩来源。关闭时使用 caller 主题色，开启时使用 requestType/status 色卡。
+- 顶部统计导航对比：active 不再用斜纹，改为未 active 压淡、active 高亮。
+- i18n：用户可见字符串继续写入 `app/src/i18n/locales/zh.json` 和 `app/src/i18n/locales/en.json`。
+- 版本同步：`package.json`、`package-lock.json`、`app/package.json`、`app/package-lock.json`、`app/src-tauri/Cargo.toml`、`app/src-tauri/Cargo.lock`、`app/src-tauri/tauri.conf.json` 已同步到 `0.5.1`。
+- 发行脚本：`scripts/package-win.sh` 从根 `package.json` 读取版本号，输出 zip 到 `dist/win-x64/`。
+
+## 4. Relevant Files and Code
+
+### `app/src/gitOperationSettings.ts`
+
+新增 Git operations 设置模块。关键接口：
+
+```ts
+export interface GitOperationSettings {
+  timedReminderEnabled: boolean;
+  timedReminderIntervalMinutes: number;
+  folderBlacklist: string[];
+}
+
+export const DEFAULT_GIT_OPERATION_SETTINGS: GitOperationSettings = {
+  timedReminderEnabled: true,
+  timedReminderIntervalMinutes: 20,
+  folderBlacklist: ["ref-repos"],
+};
+```
+
+关键行为：
+
+- `getGitOperationSettings()` 读取并归一化设置。
+- `saveGitOperationSettings()` 保存设置并派发 `GIT_OPERATION_SETTINGS_EVENT`。
+- `shouldInjectTimedGitReminder(projectDirectory, now, settings)` 判断当前 workspace 是否达到定时 Git 就绪。
+- `markTimedGitReminderInjected(projectDirectory, now)` 在真实成功发送后重置计时周期。
+
+### `app/src/composer/submittedFeedback.ts`
+
+新增 Git 安全要求组装：
+
+```ts
+function formatGitSafetyRequirements(settings: GitOperationSettings): string {
+  return [
+    formatGitFolderBlacklist(settings),
+    "Requirements:",
+    "- Inspect `git status --short` before staging files.",
+    "- Do not stage or commit files under the configured blacklisted folders.",
+    "- Prefer explicit `git add -- <files>` when unrelated or risky files are present.",
+    "- Keep generated build output out of the commit unless the user explicitly asks for it.",
+  ].filter(Boolean).join("\n\n");
+}
+```
+
+定时 Git 解析函数从“是否注入”改为“是否消费就绪态”：
+
+```ts
+function resolveTimedGitBackupReminder(projectDirectory: string | undefined, hasGitAction: boolean): { section?: string; afterSubmit: () => void } | null {
+  const settings = getGitOperationSettings();
+  if (!shouldInjectTimedGitReminder(projectDirectory, Date.now(), settings)) return null;
+  if (hasGitAction) {
+    return { afterSubmit: () => markTimedGitReminderInjected(projectDirectory) };
+  }
+  return {
+    section: [
+      "## Timed Git Backup Reminder",
+      `A scheduled MLFB reminder is active. It has been at least ${settings.timedReminderIntervalMinutes} minutes since the last git backup reminder for this workspace.`,
+      "Please immediately perform a full-workspace git backup before continuing, while respecting the configured blacklist.",
+      formatGitSafetyRequirements(settings),
+    ].join("\n\n"),
+    afterSubmit: () => markTimedGitReminderInjected(projectDirectory),
+  };
+}
+```
+
+### `app/src/components/CallerPanel.tsx`
+
+成功提交后才触发 afterSubmit：
+
+```ts
+await invoke("submit_session_feedback", ...);
+pushMessageHistory(activeSession.callerId, historyText);
+completeSessionWithSubmittedFeedback(activeSession.id, finalFeedback);
+submittedFeedback.afterSubmit?.();
+```
+
+这保证计时重置只基于真实发送结果，而不是用户点击 Git 按钮或修改草稿。
+
+### `app/src/components/CallerPanelParts.tsx`
+
+新增派生 UI 标签“定时 Git 已就绪”。它只是展示状态，不会设置 `gitAction`：
+
+```ts
+const timedGitReady = useMemo(() => {
+  if (queuedCallerId || hasGitAction || !activeSession || activeSession.status !== "pending") return false;
+  return shouldInjectTimedGitReminder(activeSession.projectDirectory, Date.now(), getGitOperationSettings());
+}, [activeSession, gitReminderTick, hasGitAction, queuedCallerId]);
+```
+
+设置变更或每 30 秒刷新一次，确保当前活动达到时间后能显示就绪态。
+
+### `app/src/components/SettingsDialog.tsx`
+
+新增 Git operations 设置 tab，包含定时提醒开关、间隔输入、黑名单 textarea 和预览提示。Session Navigation 设置中新增彩色色卡开关。
+
+### `app/src/sessionNavigationSettings.ts`
+
+导航色卡开关默认关闭：
+
+```ts
+export function readUseSessionNavigationColorCards(): boolean {
+  try {
+    const stored = localStorage.getItem(SESSION_COLOR_CARDS_STORAGE_KEY);
+    return stored == null ? false : stored === "true";
+  } catch {
+    return false;
+  }
+}
+```
+
+### `app/src/components/Sidebar.tsx`
+
+顶部统计导航颜色逻辑：
+
+```ts
+function getTopbarStatsCallerColor(activeCallerColor: string | null, isLight: boolean): string {
+  return activeCallerColor || (isLight ? "#64748b" : "#94a3b8");
+}
+```
+
+样式变量：
+
+```tsx
+"--session-topbar-card-bg": useColorCards ? getTopbarStatsColor(session, isLight) : getTopbarStatsCallerColor(activeCallerColor, isLight),
+```
+
+这使关闭彩色色卡时使用 caller 主题色，开启时才进入 requestType/status 彩色色卡。
+
+### `app/src/index.css`
+
+顶部统计导航 active 斜纹已移除，未 active 项压淡：
+
+```css
+.session-topbar-item {
+  opacity: 0.5;
+}
+.session-topbar-item:hover {
+  opacity: 0.82;
+  filter: brightness(1.12);
+}
+.session-topbar-item.active {
+  opacity: 1;
+  filter: saturate(1.12) brightness(1.08);
+}
+```
+
+状态类继续通过 CSS 变量接收 TS 端计算的背景色：
+
+```css
+.session-topbar-item {
+  background: var(--session-topbar-card-bg, color-mix(in srgb, var(--color-text-muted) 58%, transparent));
+}
+.session-topbar-item-responded {
+  background: var(--session-topbar-card-bg, var(--color-success));
+}
+```
+
+新增定时 Git 就绪标签样式：
+
+```css
+.attachment-tag-git-ready {
+  background: color-mix(in srgb, #f59e0b 16%, transparent);
+  border-color: color-mix(in srgb, #f59e0b 42%, transparent);
+  color: #fbbf24;
+}
+```
+
+### `app/src/i18n/locales/zh.json` 与 `app/src/i18n/locales/en.json`
+
+新增/修正文案：
+
+- Git operations 设置页文案。
+- 定时 Git 就绪标签：中文“定时 Git 已就绪”，英文 “Timed Git ready”。
+- Session 导航色卡说明：关闭时使用 caller 主题色。
+
+### 版本和发行文件
+
+已同步到 `0.5.1`：
+
+- `package.json`
+- `package-lock.json`
+- `app/package.json`
+- `app/package-lock.json`
+- `app/src-tauri/Cargo.toml`
+- `app/src-tauri/Cargo.lock`
+- `app/src-tauri/tauri.conf.json`
+
+发行包结果：
+
+```text
+dist/win-x64/my-last-feedback-v0.5.1-win-x64.zip
+```
+
+## 5. Problem Solving
+
+本轮解决的问题包括：
+
+- 第一版定时 Git 只在注入定时章节时重置计时，导致“计时完成后用户手动选择 Git”时可能一直保持 ready。修正后，ready 状态如果在真实发送时被手动 Git Action 覆盖，也会在成功发送后消费并重新计时。
+- 用户点击 Git 操作按钮不能视为最终选择。修正后，所有关键判定都集中在 payload build/submit 流程，不因按钮点击重置计时。
+- Git 黑名单不仅用于定时提醒，也用于普通 Git Action。现在二者都注入统一安全要求。
+- 彩色色卡开关最初被实现为“关闭时中性色”，与用户预期不符。修正后关闭时使用 caller 主题色，开启时使用彩色色卡，并且默认关闭。
+- 顶部统计导航 active 斜纹被用户要求移除。修正后用 active 高不透明度与未 active 压淡形成对比。
+- CSS `backgroundColor` 曾与状态类 `background` shorthand 冲突。现在状态背景通过 `--session-topbar-card-bg` CSS 变量统一驱动。
+
+验证记录：
+
+- 多次运行 `get_errors`，相关 TS/JSON 文件无错误。
+- CSS 仍有既有 `@theme` unknown at-rule 诊断，不是本轮新增。
+- 多次运行 `npm run build` 成功。
+- `bash scripts/package-win.sh` 成功完成 Tauri release build 与 zip 打包。
+
+已创建提交：
+
+```text
+0342182 Add Git operation settings and timed reminders
+0a51313 Fix navigation color card fallback
+a31da35 Refine navigation card active contrast
+```
+
+## 6. Pending Tasks and Next Steps
+
+最近用户原话：
+
+> 好的，升级到0.5.1，并构建新版本发行包，之后补充对话摘要（ /compact ）。之后git备份。
+
+截至写入本追加摘要时：
+
+- `0.5.1` 版本号已同步。
+- Windows x64 发行包已构建完成。
+- 本 `/compact` 摘要已更新到既有 My Last Chat 文档。
+
+下一步必须执行 Git 备份，且继续遵守：
+
+- 只暂存版本升级文件和本文档。
+- 不暂存 `ref-repos/`。
+- 不暂存无关未跟踪文件，例如 `.myLastChat/MLC_interactive_feedback request_type与导航色卡会话摘要.md`、`new-test-document.md`、`test-report.md`。
+
+建议提交信息：
+
+```text
+Release v0.5.1 package build summary
+```
