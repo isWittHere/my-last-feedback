@@ -3456,7 +3456,7 @@ body,
   min-width: 0;
   min-height: 28px;
   justify-content: space-between;
-  gap: 10px;
+  gap: 0px;
   padding: 3px 8px;
   color: var(--color-text-muted);
   background: transparent;
@@ -3789,6 +3789,7 @@ body,
   max-width: min(80%, 760px);
   max-height: 4.35em;
   min-width: 0;
+  padding-right: 4px;
   overflow-x: hidden;
   overflow-y: auto;
   overscroll-behavior: contain;
@@ -3798,7 +3799,6 @@ body,
   font-size: 12px;
   line-height: 1.45;
   color: var(--color-text-muted);
-  scrollbar-width: thin;
 }
 
 .agent-message {
@@ -3820,7 +3820,7 @@ body,
 
 .agent-message-user .agent-message-main {
   width: fit-content;
-  max-width: 80%;
+  max-width: 92%;
   gap: 0;
   padding: 3px 9px;
   border: 1px solid var(--color-border-subtle);
@@ -7073,6 +7073,7 @@ body,
 [data-theme="light"] *:hover::-webkit-scrollbar-thumb:hover {
   background: #a0a0a0;
 }
+
 [data-theme="light"] .prose code {
   background: rgba(0, 0, 0, 0.06);
   border-color: rgba(0, 0, 0, 0.1);

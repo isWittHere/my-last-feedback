@@ -16,6 +16,7 @@
 - Follow existing patterns in the touched area instead of introducing new abstractions or broad refactors.
 - For UI work, keep user-visible strings in i18n resources and preserve bilingual behavior.
 - Frontend styling lives primarily in `app/src/index.css` and existing component styles; reuse the current design language before adding new patterns.
+- Scrollable UI regions should use the shared MLFB scrollbar language: a thin 3px, square-corner rectangular thumb that is transparent by default and appears on hover via the global scrollbar rules. Avoid local scrollbar colors, rounded thumbs, or always-visible custom scrollbars unless a specific platform constraint requires it.
 - Avoid adding hover tips, tooltip triggers, or similar hover-only affordances unless they solve a clear discoverability or density problem already present in the product flow.
 - For Rust Tauri commands, follow the existing `Result<_, String>` and `map_err(|e| e.to_string())` error handling style.
 

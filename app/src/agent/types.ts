@@ -128,6 +128,7 @@ export interface AgentMessage {
   status: "streaming" | "complete" | "error";
   modelId?: string;
   providerMessageId?: string;
+  providerMessageIds?: string[];
   providerParentMessageId?: string;
   providerParts?: AgentProviderMessagePart[];
   composerDraft?: string;

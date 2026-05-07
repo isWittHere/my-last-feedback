@@ -109,10 +109,6 @@ function newId(prefix: string): string {
   return `${prefix}_${crypto.randomUUID?.() || `${Date.now()}_${Math.random().toString(16).slice(2)}`}`;
 }
 
-function newOpenCodeId(prefix: "msg" | "prt"): string {
-  return `${prefix}_${crypto.randomUUID?.() || `${Date.now()}_${Math.random().toString(16).slice(2)}`}`;
-}
-
 function nowIso(): string {
   return new Date().toISOString();
 }
@@ -146,6 +142,8 @@ function createStreamingAssistantMessage(messageId?: string): AgentMessage {
     role: "assistant",
     status: "streaming",
     blocks: [],
+    providerMessageId: messageId,
+    providerMessageIds: messageId ? [messageId] : undefined,
     createdAt: nowIso(),
   };
 }
@@ -416,6 +414,32 @@ function messageProviderId(message: AgentMessage): string {
   return message.providerMessageId || message.id;
 }
 
+function messageMatchesProviderId(message: AgentMessage, providerMessageId?: string): boolean {
+  if (!providerMessageId) return false;
+  return message.providerMessageId === providerMessageId || message.providerMessageIds?.includes(providerMessageId) || message.id === providerMessageId;
+}
+
+function isProviderUserMessage(session: AgentSession, providerMessageId?: string): boolean {
+  return Boolean(providerMessageId && session.messages.some((message) => message.role === "user" && messageMatchesProviderId(message, providerMessageId)));
+}
+
+function bindAssistantProviderMessageId(message: AgentMessage, providerMessageId?: string): AgentMessage {
+  if (!providerMessageId || messageMatchesProviderId(message, providerMessageId)) return message;
+  return {
+    ...message,
+    providerMessageId: message.providerMessageId || providerMessageId,
+    providerMessageIds: [...(message.providerMessageIds || (message.providerMessageId ? [message.providerMessageId] : [])), providerMessageId],
+  };
+}
+
+function findLatestAssistantAfterLastUser(messages: AgentMessage[]): number {
+  const lastUserIndex = messages.findLastIndex((message) => message.role === "user");
+  for (let index = messages.length - 1; index > lastUserIndex; index -= 1) {
+    if (messages[index].role === "assistant") return index;
+  }
+  return -1;
+}
+
 function agentMessagesFromOpenCodeMessages(messages: OpenCodeMessage[]): AgentMessage[] {
   const mappedMessages = messages.map((message) => {
     const updatedTime = typeof message.info?.time?.updated === "number" ? message.info.time.updated : null;
@@ -434,6 +458,7 @@ function agentMessagesFromOpenCodeMessages(messages: OpenCodeMessage[]): AgentMe
       status: messageStatus,
       blocks,
       providerMessageId: message.info?.id,
+      providerMessageIds: message.info?.id ? [message.info.id] : undefined,
       providerParentMessageId: message.info?.parentID,
       providerParts,
       composerDraft: role === "user" ? promptDraftFromProviderParts(providerParts) : undefined,
@@ -467,6 +492,7 @@ function mergeContiguousAssistantMessages(messages: AgentMessage[]): AgentMessag
         blocks: [...previous.blocks, ...message.blocks],
         status: mergeMessageStatus(previous.status, message.status),
         modelId: previous.modelId || message.modelId,
+        providerMessageIds: [...new Set([...(previous.providerMessageIds || (previous.providerMessageId ? [previous.providerMessageId] : [])), ...(message.providerMessageIds || (message.providerMessageId ? [message.providerMessageId] : []))])],
         updatedAt: latestIso(previous.updatedAt || previous.createdAt, message.updatedAt || message.createdAt),
       };
       continue;
@@ -645,12 +671,22 @@ function insertProcessBlock(blocks: AgentContentBlock[], block: AgentContentBloc
 function appendAssistantTextChunkImmediate(session: AgentSession, phase: "process" | "result", text: string, messageId?: string, partId?: string): AgentSession {
   if (!text) return session;
   const messages = [...session.messages];
-  const lastMessage = messages[messages.length - 1];
-  let assistantMessage = lastMessage?.role === "assistant" && lastMessage.status === "streaming" ? lastMessage : null;
+  let targetIndex = messageId ? messages.findIndex((message) => message.role === "assistant" && messageMatchesProviderId(message, messageId)) : -1;
+  if (targetIndex < 0) {
+    const lastIndex = messages.length - 1;
+    const lastMessage = messages[lastIndex];
+    if (lastMessage?.role === "assistant" && lastMessage.status === "streaming" && (!messageId || !lastMessage.providerMessageId || messageMatchesProviderId(lastMessage, messageId))) {
+      targetIndex = lastIndex;
+    }
+  }
+  if (targetIndex < 0 && messageId) targetIndex = findLatestAssistantAfterLastUser(messages);
+  let assistantMessage = targetIndex >= 0 ? messages[targetIndex] : null;
   if (!assistantMessage) {
     assistantMessage = createStreamingAssistantMessage(messageId);
     messages.push(assistantMessage);
+    targetIndex = messages.length - 1;
   }
+  assistantMessage = bindAssistantProviderMessageId(assistantMessage, messageId);
 
   const targetType = phase === "process" ? "thinking" : "text";
   const blockIndex = assistantMessage.blocks.findIndex((block) => partId ? block.id === partId : block.type === targetType && block.origin.phase === phase);
@@ -672,7 +708,7 @@ function appendAssistantTextChunkImmediate(session: AgentSession, phase: "proces
     blocks.push(partId ? { ...textBlock(text, "result"), id: partId } : textBlock(text, "result"));
   }
 
-  messages[messages.length - 1] = { ...assistantMessage, blocks, updatedAt: nowIso() };
+  messages[targetIndex] = { ...assistantMessage, blocks, updatedAt: nowIso() };
   return { ...session, messages, updatedAt: nowIso() };
 }
 
@@ -789,6 +825,39 @@ function clearPacedTextBuffers(sessionId?: string) {
   }
 }
 
+function flushPacedTextBuffersIntoSession(session: AgentSession): AgentSession {
+  let nextSession = session;
+  for (const [key, buffer] of pacedTextBuffers) {
+    if (buffer.sessionId !== session.id) continue;
+    if (buffer.timer) clearTimeout(buffer.timer);
+    if (buffer.pending) {
+      nextSession = appendAssistantTextChunkImmediate(nextSession, buffer.phase, buffer.pending, buffer.messageId, buffer.partId);
+    }
+    pacedTextBuffers.delete(key);
+    resolvePacedBuffer(buffer);
+  }
+  return nextSession;
+}
+
+function flushPacedTextBufferForPartIntoSession(session: AgentSession, phase: "process" | "result", messageId?: string, partId?: string): AgentSession {
+  let nextSession = session;
+  const keys = [...new Set([
+    pacedBufferKey(session.id, phase, messageId, partId),
+    pacedBufferKey(session.id, phase, messageId, undefined),
+  ])];
+  for (const key of keys) {
+    const buffer = pacedTextBuffers.get(key);
+    if (!buffer) continue;
+    if (buffer.timer) clearTimeout(buffer.timer);
+    if (buffer.pending) {
+      nextSession = appendAssistantTextChunkImmediate(nextSession, buffer.phase, buffer.pending, buffer.messageId, buffer.partId);
+    }
+    pacedTextBuffers.delete(key);
+    resolvePacedBuffer(buffer);
+  }
+  return nextSession;
+}
+
 function clearPacedTextBufferForPart(sessionId: string, phase: "process" | "result", messageId?: string, partId?: string) {
   const keys = [...new Set([
     pacedBufferKey(sessionId, phase, messageId, partId),
@@ -803,12 +872,13 @@ function clearPacedTextBufferForPart(sessionId: string, phase: "process" | "resu
   }
 }
 
-function completeStreamingAssistant(session: AgentSession): AgentSession {
+function completeStreamingAssistant(session: AgentSession, providerMessageId?: string): AgentSession {
   return {
     ...session,
-    messages: session.messages.map((message) => message.role === "assistant" && message.status === "streaming"
+    messages: session.messages.map((message) => message.role === "assistant" && message.status === "streaming" && (!providerMessageId || messageMatchesProviderId(message, providerMessageId))
       ? {
         ...message,
+        ...(providerMessageId && !message.providerMessageId ? { providerMessageId } : {}),
         status: "complete",
         blocks: message.blocks.map((block) => block.type === "thinking" || block.type === "compaction" ? { ...block, status: "completed", updatedAt: nowIso() } : block),
         updatedAt: nowIso(),
@@ -844,7 +914,13 @@ function failStreamingAssistant(session: AgentSession, message: string): AgentSe
   return { ...completed, messages, updatedAt: nowIso() };
 }
 
-function findAssistantMessageIndex(messages: AgentMessage[], blockId?: string): number {
+function findAssistantMessageIndex(messages: AgentMessage[], blockId?: string, providerMessageId?: string): number {
+  if (providerMessageId) {
+    for (let index = messages.length - 1; index >= 0; index -= 1) {
+      const message = messages[index];
+      if (message.role === "assistant" && messageMatchesProviderId(message, providerMessageId)) return index;
+    }
+  }
   if (blockId) {
     for (let index = messages.length - 1; index >= 0; index -= 1) {
       const message = messages[index];
@@ -863,13 +939,20 @@ function findAssistantMessageIndex(messages: AgentMessage[], blockId?: string): 
 
 function upsertAssistantBlock(session: AgentSession, block: AgentContentBlock, messageId?: string): AgentSession {
   const messages = [...session.messages];
-  let targetIndex = findAssistantMessageIndex(messages, block.id);
+  let targetIndex = findAssistantMessageIndex(messages, block.id, messageId);
+  if (targetIndex < 0 && messageId) {
+    const lastIndex = messages.length - 1;
+    const lastMessage = messages[lastIndex];
+    if (lastMessage?.role === "assistant" && lastMessage.status === "streaming" && !lastMessage.providerMessageId) targetIndex = lastIndex;
+  }
+  if (targetIndex < 0 && messageId) targetIndex = findLatestAssistantAfterLastUser(messages);
   let assistantMessage = targetIndex >= 0 ? messages[targetIndex] : null;
   if (!assistantMessage) {
     assistantMessage = createStreamingAssistantMessage(messageId);
     messages.push(assistantMessage);
     targetIndex = messages.length - 1;
   }
+  assistantMessage = bindAssistantProviderMessageId(assistantMessage, messageId);
 
   let blocks = [...assistantMessage.blocks];
   let blockIndex = blocks.findIndex((item) => item.id === block.id);
@@ -877,7 +960,13 @@ function upsertAssistantBlock(session: AgentSession, block: AgentContentBlock, m
     blockIndex = blocks.findIndex((item) => item.type === block.type && item.origin.phase === block.origin.phase);
   }
   if (blockIndex >= 0) {
-    blocks[blockIndex] = { ...blocks[blockIndex], ...block, updatedAt: nowIso() } as AgentContentBlock;
+    const existing = blocks[blockIndex];
+    blocks[blockIndex] = {
+      ...existing,
+      ...block,
+      ...((block.type === "text" || block.type === "thinking") && !block.content && (existing.type === "text" || existing.type === "thinking") && existing.content ? { content: existing.content } : {}),
+      updatedAt: nowIso(),
+    } as AgentContentBlock;
   } else if (block.origin.phase === "process") {
     blocks = insertProcessBlock(blocks, block);
   } else {
@@ -885,6 +974,24 @@ function upsertAssistantBlock(session: AgentSession, block: AgentContentBlock, m
   }
   messages[targetIndex] = { ...assistantMessage, blocks, updatedAt: nowIso() };
   return { ...session, messages, updatedAt: nowIso() };
+}
+
+function bindProviderUserMessage(session: AgentSession, providerMessageId?: string, info?: OpenCodeMessageInfo): AgentSession {
+  if (!providerMessageId || session.messages.some((message) => message.role === "user" && messageMatchesProviderId(message, providerMessageId))) return session;
+  const messages = [...session.messages];
+  for (let index = messages.length - 1; index >= 0; index -= 1) {
+    const message = messages[index];
+    if (message.role !== "user" || message.providerMessageId) continue;
+    messages[index] = {
+      ...message,
+      providerMessageId,
+      providerParentMessageId: info?.parentID,
+      modelId: openCodeModelIdFromInfo(info) || message.modelId,
+      updatedAt: nowIso(),
+    };
+    return { ...session, messages, updatedAt: nowIso() };
+  }
+  return session;
 }
 
 function completeCompactionInSession(session: AgentSession): AgentSession {
@@ -948,11 +1055,18 @@ function applyOpenCodeBusEvent(session: AgentSession, event: OpenCodeBusEvent): 
     if (normalized.type !== "unknown" && normalized.sessionId && normalized.sessionId !== nextSession.providerSessionId) continue;
     if (normalized.type === "text.delta") {
       if (nextSession.status === "cancelling") continue;
+      if (isProviderUserMessage(nextSession, normalized.messageId)) continue;
       nextSession = appendAssistantTextChunk(nextSession, normalized.phase, normalized.delta, normalized.messageId, normalized.partId);
       continue;
     }
     if (normalized.type === "block.updated") {
+      if (isProviderUserMessage(nextSession, normalized.messageId)) {
+        continue;
+      }
       if (normalized.block.type === "text" || normalized.block.type === "thinking") {
+        nextSession = normalized.block.content
+          ? nextSession
+          : flushPacedTextBufferForPartIntoSession(nextSession, normalized.block.origin.phase, normalized.messageId, normalized.partId);
         clearPacedTextBufferForPart(nextSession.id, normalized.block.origin.phase, normalized.messageId, normalized.partId);
       }
       nextSession = upsertAssistantBlock(nextSession, normalized.block, normalized.messageId);
@@ -982,7 +1096,7 @@ function applyOpenCodeBusEvent(session: AgentSession, event: OpenCodeBusEvent): 
       continue;
     }
     if (normalized.type === "session.status") {
-      if (normalized.status === "idle") clearPacedTextBuffers(nextSession.id);
+      if (normalized.status === "idle") nextSession = flushPacedTextBuffersIntoSession(nextSession);
       nextSession = {
         ...(normalized.status === "idle" ? completeStreamingAssistant(nextSession) : nextSession),
         status: normalized.status === "idle" ? "idle" : normalized.status === "running" ? "running" : nextSession.status,
@@ -1004,6 +1118,9 @@ function applyOpenCodeBusEvent(session: AgentSession, event: OpenCodeBusEvent): 
     if (normalized.type === "message.updated") {
       const isAbortUpdate = isOpenCodeAbortError(normalized.info?.error);
       const modelId = normalized.modelId || openCodeModelIdFromInfo(normalized.info) || nextSession.modelId;
+      if (normalized.role === "user") {
+        nextSession = bindProviderUserMessage(nextSession, normalized.messageId, normalized.info);
+      }
       if (modelId) {
         const contextLimit = contextLimitForModel(nextSession.availableModels, modelId) ?? nextSession.contextUsage?.contextLimit;
         const contextUsage = normalized.info?.role === "assistant"
@@ -1022,17 +1139,39 @@ function applyOpenCodeBusEvent(session: AgentSession, event: OpenCodeBusEvent): 
         nextSession = { ...completeStreamingAssistant(nextSession), status: "idle", updatedAt: nowIso() };
         continue;
       }
-      if (normalized.status === "complete") nextSession = completeStreamingAssistant(nextSession);
+      if (normalized.status === "complete") {
+        nextSession = flushPacedTextBuffersIntoSession(nextSession);
+        if (normalized.role === "assistant" && nextSession.status !== "running") nextSession = completeStreamingAssistant(nextSession, normalized.messageId);
+      }
       if (normalized.status === "error") nextSession = { ...nextSession, status: "error", updatedAt: nowIso() };
     }
   }
   return nextSession;
 }
 
-function handleOpenCodeBusEvent(sessionId: string, event: OpenCodeBusEvent) {
-  useAgentStore.setState((state) => ({
-    sessions: updateSession(state.sessions, sessionId, (session) => applyOpenCodeBusEvent(session, event)),
-  }));
+function openCodeEventProviderSessionId(event: OpenCodeBusEvent): string | undefined {
+  const properties = event.properties as Record<string, unknown>;
+  const part = typeof properties.part === "object" && properties.part !== null ? properties.part as Record<string, unknown> : undefined;
+  const info = typeof properties.info === "object" && properties.info !== null ? properties.info as Record<string, unknown> : undefined;
+  return typeof properties.sessionID === "string" ? properties.sessionID
+    : typeof part?.sessionID === "string" ? part.sessionID
+      : typeof info?.sessionID === "string" ? info.sessionID
+        : undefined;
+}
+
+function handleOpenCodeBusEvent(runtimeOwnerSessionId: string, event: OpenCodeBusEvent) {
+  const providerSessionId = openCodeEventProviderSessionId(event);
+  useAgentStore.setState((state) => {
+    let routed = false;
+    const sessions = state.sessions.map((session) => {
+      const matchesProviderSession = providerSessionId && session.providerId === "opencode" && session.providerSessionId === providerSessionId;
+      const matchesRuntimeOwner = !providerSessionId && session.id === runtimeOwnerSessionId;
+      if (!matchesProviderSession && !matchesRuntimeOwner) return session;
+      routed = true;
+      return applyOpenCodeBusEvent(session, event);
+    });
+    return { sessions: routed ? sessions : state.sessions };
+  });
 }
 
 function handleOpenCodePermissionRequest(sessionId: string, request: Record<string, unknown>) {
@@ -1361,8 +1500,6 @@ export const useAgentStore = create<AgentStoreState>((set, get) => ({
       includePayloadRouting: false,
     });
     const composerDraft = session.draft;
-    const openCodeMessageId = newOpenCodeId("msg");
-    const openCodeTextPartId = newOpenCodeId("prt");
 
     try {
       if (session.providerId === "opencode") {
@@ -1475,8 +1612,7 @@ export const useAgentStore = create<AgentStoreState>((set, get) => ({
           messages: [
             ...item.messages,
             createUserMessage(submittedPrompt.markdown, {
-              id: openCodeMessageId,
-              providerParts: [{ id: openCodeTextPartId, type: "text", text: composerDraft }],
+              providerParts: [{ type: "text", text: composerDraft }],
               composerDraft,
             }),
             createStreamingAssistantMessage(),
@@ -1516,8 +1652,7 @@ export const useAgentStore = create<AgentStoreState>((set, get) => ({
 
         const configuredSession = get().sessions.find((item) => item.id === sessionId) || session;
         await httpRuntime.runtime.client.promptAsync(providerSessionId, {
-          messageID: openCodeMessageId,
-          parts: [{ id: openCodeTextPartId, type: "text", text: submittedPrompt.historyText || submittedPrompt.markdown }],
+          parts: [{ type: "text", text: submittedPrompt.historyText || submittedPrompt.markdown }],
           model: openCodeModelFromSession(configuredSession),
           ...(configuredSession.modeId ? { agent: configuredSession.modeId } : {}),
         });
