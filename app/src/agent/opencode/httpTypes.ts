@@ -39,11 +39,6 @@ export interface OpenCodeSessionInfo {
   title?: string;
   time?: OpenCodeSessionTime;
   permission?: OpenCodePermissionRule[];
-  revert?: {
-    messageID?: string;
-    partID?: string;
-    diff?: OpenCodeFileDiff[];
-  };
   [key: string]: unknown;
 }
 
@@ -194,11 +189,6 @@ export interface OpenCodePromptRequest {
 
 export interface OpenCodeForkRequest {
   messageID: string;
-}
-
-export interface OpenCodeRevertRequest {
-  messageID: string;
-  partID?: string;
 }
 
 export interface OpenCodeCommandFilePart {

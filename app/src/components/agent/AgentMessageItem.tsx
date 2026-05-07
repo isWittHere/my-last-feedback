@@ -58,7 +58,6 @@ function actorInfo(session: AgentSession, message: AgentMessage, language: "en" 
 function AgentMessageActions({ session, message, copyText, disabled }: { session: AgentSession; message: AgentMessage; copyText: string; disabled?: boolean }) {
   const { t } = useTranslation();
   const [copied, setCopied] = useState(false);
-  const editAgentMessage = useAgentStore((state) => state.editAgentMessage);
   const forkAgentSessionFromMessage = useAgentStore((state) => state.forkAgentSessionFromMessage);
   const canActOnUserMessage = message.role === "user" && Boolean(session.providerSessionId);
   const canCopy = Boolean(copyText.trim()) && !disabled;
@@ -77,11 +76,6 @@ function AgentMessageActions({ session, message, copyText, disabled }: { session
 
   return (
     <div className="agent-message-actions" aria-label={t("agentConsole.messageActions", "Message actions")}>
-      {canActOnUserMessage && (
-        <button type="button" className="agent-message-action" onClick={() => void editAgentMessage(session.id, message.id)} title={t("agentConsole.editAndRetry", "Edit and retry")} disabled={disabled || session.revertLoading}>
-          <Icon name="refresh" size={12} />
-        </button>
-      )}
       {canActOnUserMessage && (
         <button type="button" className="agent-message-action" onClick={() => void forkAgentSessionFromMessage(session.id, message.id)} title={t("agentConsole.forkFromMessage", "Fork from message")} disabled={disabled}>
           <Icon name="git-branch" size={12} />

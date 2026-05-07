@@ -234,7 +234,6 @@ export function AgentProcessGroup({ blocks, messageId, isStreaming = false, proj
       const targetIndex = steps.findIndex((step) => step.id === targetStepId || step.blockIds.includes(targetStepId));
       if (targetIndex < 0) return;
       setExpanded(true);
-      setMode("tabs");
       setActiveIndex(targetIndex);
       setOpenSteps((current) => ({ ...current, [targetIndex]: true }));
       requestAnimationFrame(() => {

@@ -1,7 +1,7 @@
 import { create } from "zustand";
 import { hasAgentComposerContent } from "../agent/composer";
 import { normalizeOpenCodeEvent, normalizeOpenCodePart, normalizeOpenCodeTodos, startOpenCodeServerRuntime } from "../agent/opencode";
-import type { OpenCodeAgentInfo, OpenCodeBusEvent, OpenCodeCommandFilePart, OpenCodeCommandInfo, OpenCodeMessage, OpenCodeMessageInfo, OpenCodeMessagePart, OpenCodePermissionReply, OpenCodePermissionRule, OpenCodeProviderResponse, OpenCodeServerRuntime, OpenCodeSessionInfo, OpenCodeSseConnection } from "../agent/opencode";
+import type { OpenCodeAgentInfo, OpenCodeBusEvent, OpenCodeCommandFilePart, OpenCodeCommandInfo, OpenCodeMessage, OpenCodeMessageInfo, OpenCodeMessagePart, OpenCodePermissionReply, OpenCodePermissionRule, OpenCodeProviderResponse, OpenCodeServerRuntime, OpenCodeSseConnection } from "../agent/opencode";
 import { createAgentSession } from "../agent/sessionFactory";
 import { buildSubmittedComposerPayload } from "../composer/submittedFeedback";
 import { getAgentConsoleSettings } from "../agentConsoleSettings";
@@ -93,8 +93,6 @@ interface AgentStoreState {
   receiveAgentProcessError: (processId: string, message: string) => void;
   sendAgentPrompt: (sessionId: string) => Promise<void>;
   abortAgentPrompt: (sessionId: string) => Promise<void>;
-  editAgentMessage: (sessionId: string, messageId: string) => Promise<void>;
-  restoreAgentRevertedMessage: (sessionId: string, messageId: string) => Promise<void>;
   forkAgentSessionFromMessage: (sessionId: string, messageId: string) => Promise<void>;
   refreshProviderSessions: (providerId: AgentProviderId, cursor?: string | null) => Promise<void>;
   restoreProviderSession: (providerId: AgentProviderId, providerSessionId: string) => Promise<void>;
@@ -418,16 +416,6 @@ function messageProviderId(message: AgentMessage): string {
   return message.providerMessageId || message.id;
 }
 
-function revertStateFromOpenCodeSession(session: OpenCodeSessionInfo | undefined): AgentSession["revert"] {
-  const messageId = session?.revert?.messageID;
-  if (!messageId) return undefined;
-  return {
-    messageId,
-    partId: session.revert?.partID,
-    diff: normalizeOpenCodeFileDiffs(session.revert?.diff || []),
-  };
-}
-
 function agentMessagesFromOpenCodeMessages(messages: OpenCodeMessage[]): AgentMessage[] {
   const mappedMessages = messages.map((message) => {
     const updatedTime = typeof message.info?.time?.updated === "number" ? message.info.time.updated : null;
@@ -486,21 +474,6 @@ function mergeContiguousAssistantMessages(messages: AgentMessage[]): AgentMessag
     merged.push(message);
   }
   return merged;
-}
-
-function cleanupRevertedMessagesForSubmit(session: AgentSession): AgentSession {
-  const revertMessageId = session.revert?.messageId;
-  if (!revertMessageId) return session;
-  const revertIndex = session.messages.findIndex((message) => messageProviderId(message) === revertMessageId);
-  return {
-    ...session,
-    messages: revertIndex >= 0 ? session.messages.slice(0, revertIndex) : session.messages,
-    revert: undefined,
-    revertLoading: false,
-    revertError: undefined,
-    draftSource: undefined,
-    updatedAt: nowIso(),
-  };
 }
 
 function appendRestoredTaskList(messages: AgentMessage[], todos: unknown[], providerSessionId: string): AgentMessage[] {
@@ -1489,10 +1462,8 @@ export const useAgentStore = create<AgentStoreState>((set, get) => ({
     }
 
     set((state) => ({
-      sessions: updateSession(state.sessions, sessionId, (item) => {
-        const cleaned = cleanupRevertedMessagesForSubmit(item);
-        return {
-          ...cleaned,
+      sessions: updateSession(state.sessions, sessionId, (item) => ({
+          ...item,
           status: "running",
           draft: "",
           draftSource: undefined,
@@ -1502,7 +1473,7 @@ export const useAgentStore = create<AgentStoreState>((set, get) => ({
           mlcAttachments: [],
           webAttachments: [],
           messages: [
-            ...cleaned.messages,
+            ...item.messages,
             createUserMessage(submittedPrompt.markdown, {
               id: openCodeMessageId,
               providerParts: [{ id: openCodeTextPartId, type: "text", text: composerDraft }],
@@ -1511,8 +1482,7 @@ export const useAgentStore = create<AgentStoreState>((set, get) => ({
             createStreamingAssistantMessage(),
           ],
           updatedAt: nowIso(),
-        };
-      }),
+      })),
     }));
 
     try {
@@ -1611,108 +1581,6 @@ export const useAgentStore = create<AgentStoreState>((set, get) => ({
     set((state) => ({
       sessions: updateSession(state.sessions, sessionId, (item) => appendDiagnosticToSession(item, "warn", "Abort is not available for this session.")),
     }));
-  },
-
-  editAgentMessage: async (sessionId, messageId) => {
-    const session = get().sessions.find((item) => item.id === sessionId);
-    const message = session?.messages.find((item) => item.id === messageId);
-    const httpRuntime = openCodeHttpRuntimeForSession(session, get().sessions);
-    if (!session?.providerSessionId || !message || message.role !== "user" || !httpRuntime) return;
-    const providerMessageId = messageProviderId(message);
-    const draft = messageDraftText(message);
-    const previousDraft = session.draft;
-    const previousSource = session.draftSource;
-    const previousRevert = session.revert;
-    set((state) => ({
-      sessions: updateSession(state.sessions, sessionId, (item) => ({
-        ...item,
-        draft,
-        draftSource: { kind: "message-edit", sourceSessionId: sessionId, sourceMessageId: message.id },
-        revertLoading: true,
-        revertError: undefined,
-        updatedAt: nowIso(),
-      })),
-    }));
-    try {
-      if (session.status === "running" || session.status === "cancelling") {
-        clearPacedTextBuffers(session.id);
-        await httpRuntime.runtime.client.abort(session.providerSessionId).catch(() => false);
-      }
-      const updated = await httpRuntime.runtime.client.revertSession(session.providerSessionId, { messageID: providerMessageId });
-      set((state) => ({
-        sessions: updateSession(state.sessions, sessionId, (item) => ({
-          ...item,
-          revert: revertStateFromOpenCodeSession(updated) || { messageId: providerMessageId },
-          sessionDiffs: Array.isArray(updated.revert?.diff) ? normalizeOpenCodeFileDiffs(updated.revert.diff) : item.sessionDiffs,
-          revertLoading: false,
-          revertError: undefined,
-          status: item.status === "running" || item.status === "cancelling" ? "idle" : item.status,
-          updatedAt: nowIso(),
-        })),
-      }));
-    } catch (error) {
-      const detail = error instanceof Error ? error.message : String(error);
-      set((state) => ({
-        sessions: updateSession(state.sessions, sessionId, (item) => appendDiagnosticToSession({
-          ...item,
-          draft: previousDraft,
-          draftSource: previousSource,
-          revert: previousRevert,
-          revertLoading: false,
-          revertError: detail,
-          updatedAt: nowIso(),
-        }, "error", `Failed to edit message: ${detail}`)),
-      }));
-    }
-  },
-
-  restoreAgentRevertedMessage: async (sessionId, messageId) => {
-    const session = get().sessions.find((item) => item.id === sessionId);
-    const httpRuntime = openCodeHttpRuntimeForSession(session, get().sessions);
-    if (!session?.providerSessionId || !session.revert || !httpRuntime) return;
-    const revertIndex = session.messages.findIndex((message) => messageProviderId(message) === session.revert!.messageId);
-    if (revertIndex < 0) return;
-    const rolledUserMessages = session.messages.slice(revertIndex).filter((message) => message.role === "user");
-    const selectedIndex = rolledUserMessages.findIndex((message) => message.id === messageId || messageProviderId(message) === messageId);
-    const selected = selectedIndex >= 0 ? rolledUserMessages[selectedIndex] : undefined;
-    if (!selected) return;
-    const next = rolledUserMessages[selectedIndex + 1];
-    const previousDraft = session.draft;
-    const previousSource = session.draftSource;
-    const previousRevert = session.revert;
-    set((state) => ({
-      sessions: updateSession(state.sessions, sessionId, (item) => ({ ...item, revertLoading: true, revertError: undefined, updatedAt: nowIso() })),
-    }));
-    try {
-      const updated = next
-        ? await httpRuntime.runtime.client.revertSession(session.providerSessionId, { messageID: messageProviderId(next) })
-        : await httpRuntime.runtime.client.unrevertSession(session.providerSessionId);
-      set((state) => ({
-        sessions: updateSession(state.sessions, sessionId, (item) => ({
-          ...item,
-          revert: revertStateFromOpenCodeSession(updated),
-          sessionDiffs: Array.isArray(updated.revert?.diff) ? normalizeOpenCodeFileDiffs(updated.revert.diff) : item.sessionDiffs,
-          draft: next ? messageDraftText(next) : "",
-          draftSource: next ? { kind: "message-edit", sourceSessionId: sessionId, sourceMessageId: next.id } : undefined,
-          revertLoading: false,
-          revertError: undefined,
-          updatedAt: nowIso(),
-        })),
-      }));
-    } catch (error) {
-      const detail = error instanceof Error ? error.message : String(error);
-      set((state) => ({
-        sessions: updateSession(state.sessions, sessionId, (item) => appendDiagnosticToSession({
-          ...item,
-          draft: previousDraft,
-          draftSource: previousSource,
-          revert: previousRevert,
-          revertLoading: false,
-          revertError: detail,
-          updatedAt: nowIso(),
-        }, "error", `Failed to restore reverted message: ${detail}`)),
-      }));
-    }
   },
 
   forkAgentSessionFromMessage: async (sessionId, messageId) => {
@@ -1880,7 +1748,6 @@ export const useAgentStore = create<AgentStoreState>((set, get) => ({
         httpRuntime.runtime.client.permissions().catch(() => []),
       ]);
       const providerSession = providerSessions.find((item) => item.id === providerSessionId);
-      const restoredRevert = revertStateFromOpenCodeSession(providerSession);
       const replayedMessages = appendRestoredTaskList(agentMessagesFromOpenCodeMessages(messages), todos, providerSessionId);
       const restoredSelection = openCodeSelectionFromMessages(messages);
       const restoredModelId = restoredSelection.modelId || session.modelId;
@@ -1906,9 +1773,6 @@ export const useAgentStore = create<AgentStoreState>((set, get) => ({
             sessionDiffs: normalizeOpenCodeFileDiffs(sessionDiffs),
             sessionDiffLoading: false,
             sessionDiffError: undefined,
-            revert: restoredRevert,
-            revertLoading: false,
-            revertError: undefined,
             status: "idle",
             updatedAt: nowIso(),
           }, "info", `Session restored: ${providerSessionId}`))
@@ -1931,9 +1795,6 @@ export const useAgentStore = create<AgentStoreState>((set, get) => ({
             sessionDiffs: normalizeOpenCodeFileDiffs(sessionDiffs),
             sessionDiffLoading: false,
             sessionDiffError: undefined,
-            revert: restoredRevert,
-            revertLoading: false,
-            revertError: undefined,
             status: "idle",
             createdAt: nowIso(),
             updatedAt: nowIso(),
@@ -1994,27 +1855,46 @@ export const useAgentStore = create<AgentStoreState>((set, get) => ({
     }
     if (!httpRuntime) throw new Error("Session delete is not available.");
     await httpRuntime.runtime.client.deleteSession(providerSessionId);
-    set((state) => ({
-      providerSessionLists: {
-        ...state.providerSessionLists,
-        [providerId]: state.providerSessionLists[providerId]
-          ? {
-            ...state.providerSessionLists[providerId],
-            sessions: state.providerSessionLists[providerId].sessions.filter((item) => item.sessionId !== providerSessionId),
-            updatedAt: nowIso(),
-          }
-          : undefined,
-      },
-      sessions: state.sessions.map((item) => item.providerId === providerId && item.providerSessionId === providerSessionId
-        ? appendDiagnosticToSession({
-          ...item,
-          providerSessionId: undefined,
-          providerSessionState: undefined,
-          status: item.status === "running" || item.status === "cancelling" ? "idle" : item.status,
+    set((state) => {
+      const resetSessions = state.sessions.map((item) => {
+        if (item.providerId !== providerId || item.providerSessionId !== providerSessionId) return item;
+        return appendDiagnosticToSession({
+          ...createAgentSession(),
+          id: item.id,
+          providerId: item.providerId,
+          providerRuntime: item.providerRuntime,
+          title: "New Agent Session",
+          cwd: item.cwd,
+          modelId: item.modelId,
+          modeId: item.modeId,
+          availableModels: item.availableModels || [],
+          availableModes: item.availableModes || [],
+          availableCommands: item.availableCommands || [],
+          configOptions: item.configOptions || [],
+          status: "idle",
+          createdAt: item.createdAt,
           updatedAt: nowIso(),
-        }, "info", `Session deleted: ${providerSessionId}`)
-        : item),
-    }));
+        }, "info", `Session deleted: ${providerSessionId}`);
+      });
+      const runtimeOwnerIds = resetSessions
+        .filter((item) => item.providerRuntime?.processId)
+        .map((item) => item.id);
+      const cleaned = cleanupEmptyAgentSessions(resetSessions, state.activeSessionId, runtimeOwnerIds);
+      return {
+        activeSessionId: cleaned.activeSessionId,
+        providerSessionLists: {
+          ...state.providerSessionLists,
+          [providerId]: state.providerSessionLists[providerId]
+            ? {
+              ...state.providerSessionLists[providerId],
+              sessions: state.providerSessionLists[providerId].sessions.filter((item) => item.sessionId !== providerSessionId),
+              updatedAt: nowIso(),
+            }
+            : undefined,
+        },
+        sessions: cleaned.sessions,
+      };
+    });
   },
 
   resolveAgentPermission: (sessionId, requestId, optionId) => {

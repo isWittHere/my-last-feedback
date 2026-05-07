@@ -168,13 +168,8 @@
     "copyMessage": "复制消息",
     "copyResponse": "复制回复",
     "messageCopied": "已复制",
-    "editAndRetry": "编辑并重试",
     "forkFromMessage": "从此消息分支",
-    "revertedMessages": "已回滚 {{count}} 条消息",
-    "restoreMessage": "恢复",
-    "emptyMessage": "空消息",
     "forkDraftSource": "来自分支消息的草稿",
-    "editDraftSource": "正在编辑历史消息",
     "tokenKinds": {
       "user": "用户",
       "result": "结果",

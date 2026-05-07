@@ -15,7 +15,6 @@ import type {
   OpenCodePromptRequest,
   OpenCodeProviderResponse,
   OpenCodeRequestOptions,
-  OpenCodeRevertRequest,
   OpenCodeSessionInfo,
   OpenCodeSessionStatusMap,
   OpenCodeSseCollectorHandlers,
@@ -151,14 +150,6 @@ export class OpenCodeHttpClient {
 
   forkSession(sessionId: string, body: OpenCodeForkRequest): Promise<OpenCodeSessionInfo> {
     return this.request<OpenCodeSessionInfo>(`/session/${encodeURIComponent(sessionId)}/fork`, { method: "POST", body });
-  }
-
-  revertSession(sessionId: string, body: OpenCodeRevertRequest): Promise<OpenCodeSessionInfo> {
-    return this.request<OpenCodeSessionInfo>(`/session/${encodeURIComponent(sessionId)}/revert`, { method: "POST", body });
-  }
-
-  unrevertSession(sessionId: string): Promise<OpenCodeSessionInfo> {
-    return this.request<OpenCodeSessionInfo>(`/session/${encodeURIComponent(sessionId)}/unrevert`, { method: "POST" });
   }
 
   messages(sessionId: string): Promise<OpenCodeMessage[]> {

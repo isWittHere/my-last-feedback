@@ -213,15 +213,8 @@ export interface AgentSession {
   sessionDiffError?: string;
   compacting?: boolean;
   compactError?: string;
-  revert?: {
-    messageId: string;
-    partId?: string;
-    diff?: AgentSessionFileDiff[];
-  };
-  revertLoading?: boolean;
-  revertError?: string;
   draftSource?: {
-    kind: "message-edit" | "fork";
+    kind: "fork";
     sourceSessionId: string;
     sourceMessageId: string;
   };
