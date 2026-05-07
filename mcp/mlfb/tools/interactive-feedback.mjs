@@ -27,17 +27,27 @@ const REQUEST_TYPE_VALUES = [
   "verification_completed",
   "default",
 ];
+const REQUEST_TYPE_SET = new Set(REQUEST_TYPE_VALUES);
+const REQUEST_TYPE_HINT = "request_type is REQUIRED and MUST be one of: explanation, question, completion, analysis_report, document_completed, verification_completed, default.";
 
 const TOOL_DESCRIPTION = `Request interactive feedback from the user via a desktop GUI window.
 The user may provide text feedback, test logs, and/or attach images.
 Images will be returned as ImageContent alongside the text feedback.
 
+MANDATORY ARGUMENTS: project_directory, summary, request_name, request_type, agent_name.
+${REQUEST_TYPE_HINT}
+
 IMPORTANT - rules for AI agents calling this tool:
 1. request_name MUST always be provided with a meaningful task title. Never omit it or leave it blank.
 2. summary MUST be written in standard Markdown format (headings, lists, bold, code blocks). Do NOT use escape characters such as \\n or \\t.
 3. Describe full context, suggestions, and detailed information in summary. Use questions only for concise, actionable choices or brief input fields.
-4. request_type: REQUIRED. Use one of: explanation (解释), question (询问), completion (处理完毕), analysis_report (分析细节报告), document_completed (完成文档), verification_completed (完成验证或检查), default (默认).
+4. request_type: REQUIRED. Use one of: explanation (解释), question (询问), completion (修复/实现/请求任务已完成), analysis_report (分析细节报告), document_completed (完成文档), verification_completed (用户明确要求的验证/检查/测试已完成), default (默认). Never omit request_type.
 5. agent_name: REQUIRED. Your 4-char uppercase hex identifier assigned by the hook system (delivered via PostToolUse additionalContext, e.g. "[my-last-feedback] Your agent_name is \"A1B2\"").`;
+
+function assertRequestType(value) {
+  if (typeof value === "string" && REQUEST_TYPE_SET.has(value)) return value;
+  throw new Error(`${REQUEST_TYPE_HINT} Received: ${value === undefined ? "missing" : JSON.stringify(value)}.`);
+}
 
 /**
  * Register the interactive_feedback tool on the given McpServer.
@@ -60,9 +70,9 @@ export function registerInteractiveFeedback(server) {
       ),
       request_type: z.enum(REQUEST_TYPE_VALUES).describe(
         "REQUIRED. Why the agent is using this tool. " +
-        "Allowed values: explanation=解释, question=询问, completion=处理完毕, " +
+        "Allowed values: explanation=解释, question=询问, completion=修复/实现/请求任务已完成, " +
         "analysis_report=分析细节报告, document_completed=完成文档, " +
-        "verification_completed=完成验证或检查, default=默认/其他."
+        "verification_completed=用户明确要求的验证/检查/测试已完成, default=默认/其他."
       ),
       agent_name: z.string().regex(/^[A-Z0-9]{4}$/, "agent_name must be 4 uppercase hex chars (e.g. A1B2)").describe(
         "REQUIRED. Your 4-char uppercase hex agent identifier (e.g. A1B2). " +
@@ -76,6 +86,7 @@ export function registerInteractiveFeedback(server) {
       ),
     },
     async ({ project_directory, summary, request_name, request_type, agent_name, questions }) => {
+      const checkedRequestType = assertRequestType(request_type);
       const projectDir = project_directory.split("\n")[0].trim();
       const info = await resolveCallerInfo(server, { workspaceHint: projectDir });
 
@@ -93,13 +104,11 @@ export function registerInteractiveFeedback(server) {
       try {
         const socket = await ensureAppRunning();
         console.error("[MLFB] IPC socket connected, sending request...");
-        result = await requestFeedbackViaIpc(socket, projectDir, summary, request_name, request_type, callerInfo, questions);
+        result = await requestFeedbackViaIpc(socket, projectDir, summary, request_name, checkedRequestType, callerInfo, questions);
       } catch (ipcErr) {
         console.error("[MLFB] IPC failed:", ipcErr.message);
         throw new Error(`MLFB persistent IPC failed: ${ipcErr.message}. Please start or restart the My Last Feedback app and try again.`);
       }
-
-      console.error("[MLFB] Got result, returning. feedback length:", result?.interactive_feedback?.length || 0);
 
       const content = [];
 
@@ -138,8 +147,8 @@ export function registerInteractiveFeedback(server) {
       const effectiveAlias = transferTo || result.caller_alias || alias;
 
       const systemText = transferTo
-        ? `[System] Agent identifier has been TRANSFERRED from "${alias}" to "${effectiveAlias}". From now on you MUST include agent_name="${effectiveAlias}" in ALL subsequent interactive_feedback calls. Discard the previous agent_name.\n[System] IMPORTANT: In your summary parameter, use standard Markdown only. Do NOT use escape characters such as \\n, \\t, \\\\n, or any other backslash-escaped sequences. Write actual line breaks and formatting directly in Markdown.`
-        : `[System] Agent identifier "${effectiveAlias}" confirmed. You MUST include agent_name="${effectiveAlias}" in ALL subsequent interactive_feedback calls.\n[System] IMPORTANT: In your summary parameter, use standard Markdown only. Do NOT use escape characters such as \\n, \\t, \\\\n, or any other backslash-escaped sequences. Write actual line breaks and formatting directly in Markdown.`;
+        ? `[System] Agent identifier has been TRANSFERRED from "${alias}" to "${effectiveAlias}". From now on you MUST include agent_name="${effectiveAlias}" in ALL subsequent interactive_feedback calls. Discard the previous agent_name.\n[System] ${REQUEST_TYPE_HINT}\n[System] IMPORTANT: In your summary parameter, use standard Markdown only. Do NOT use escape characters such as \\n, \\t, \\\\n, or any other backslash-escaped sequences. Write actual line breaks and formatting directly in Markdown.`
+        : `[System] Agent identifier "${effectiveAlias}" confirmed. You MUST include agent_name="${effectiveAlias}" in ALL subsequent interactive_feedback calls.\n[System] ${REQUEST_TYPE_HINT}\n[System] IMPORTANT: In your summary parameter, use standard Markdown only. Do NOT use escape characters such as \\n, \\t, \\\\n, or any other backslash-escaped sequences. Write actual line breaks and formatting directly in Markdown.`;
 
       content.push({ type: "text", text: systemText });
 

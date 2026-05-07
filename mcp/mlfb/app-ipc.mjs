@@ -13,6 +13,21 @@ import { PORT_CONFIG, findAppBinary } from "./paths.mjs";
 /** @type {Map<string, { socket: import("node:net").Socket }>} */
 export const activeSessions = new Map();
 
+const REQUEST_TYPE_VALUES = new Set([
+  "explanation",
+  "question",
+  "completion",
+  "analysis_report",
+  "document_completed",
+  "verification_completed",
+  "default",
+]);
+
+function assertRequestType(requestType) {
+  if (typeof requestType === "string" && REQUEST_TYPE_VALUES.has(requestType)) return requestType;
+  throw new Error("request_type is required and must be one of: explanation, question, completion, analysis_report, document_completed, verification_completed, default.");
+}
+
 /** Attempt to connect to an already-running app. */
 export function connectToApp() {
   return discoverAndConnect(PORT_CONFIG);
@@ -82,6 +97,7 @@ export async function cancelAllActiveSessions() {
  */
 export function requestFeedbackViaIpc(socket, projectDirectory, summary, requestName, requestType, callerInfo, questions) {
   const sessionId = randomUUID();
+  const checkedRequestType = assertRequestType(requestType);
 
   const request = JSON.stringify({
     type: "feedback_request",
@@ -95,7 +111,7 @@ export function requestFeedbackViaIpc(socket, projectDirectory, summary, request
     payload: {
       summary,
       request_name: requestName,
-      request_type: requestType,
+      request_type: checkedRequestType,
       project_directory: projectDirectory,
       questions: questions || [],
     },
