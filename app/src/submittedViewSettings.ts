@@ -4,6 +4,7 @@ export type SubmittedViewSectionId =
   | "userRequirement"
   | "questions"
   | "gitAction"
+  | "timedGitReminder"
   | "images"
   | "resourceLinks"
   | "testLogs"
@@ -35,6 +36,7 @@ export const SUBMITTED_VIEW_SECTION_CONFIGS: SubmittedViewSectionConfig[] = [
   { id: "userRequirement", labelKey: "settings.submittedSectionUserRequirement", defaultLabel: "User Requirement" },
   { id: "questions", labelKey: "settings.submittedSectionQuestions", defaultLabel: "Agent Questions Response" },
   { id: "gitAction", labelKey: "settings.submittedSectionGitAction", defaultLabel: "Git Action" },
+  { id: "timedGitReminder", labelKey: "settings.submittedSectionTimedGitReminder", defaultLabel: "Timed Git Backup Reminder" },
   { id: "images", labelKey: "settings.submittedSectionImages", defaultLabel: "Attachment: Images" },
   { id: "resourceLinks", labelKey: "settings.submittedSectionResourceLinks", defaultLabel: "Attachment: Resource Links" },
   { id: "testLogs", labelKey: "settings.submittedSectionTestLogs", defaultLabel: "Attachment: Test Logs" },
@@ -56,6 +58,7 @@ export const DEFAULT_SUBMITTED_VIEW_SETTINGS: SubmittedViewSettings = {
     userRequirement: false,
     questions: false,
     gitAction: false,
+    timedGitReminder: false,
     images: false,
     resourceLinks: false,
     testLogs: true,
@@ -103,6 +106,7 @@ export function identifySubmittedViewSection(title: string): SubmittedViewSectio
   if (normalized.includes("slash command expansion")) return "slashExpansions";
   if (normalized.includes("user requirement")) return "userRequirement";
   if (normalized.includes("question") || normalized.includes("answer")) return "questions";
+  if (normalized.includes("timed git") || normalized.includes("git backup reminder")) return "timedGitReminder";
   if (normalized.includes("git action")) return "gitAction";
   if (normalized.includes("image")) return "images";
   if (normalized.includes("resource link") || normalized.includes("file link") || normalized.includes("attachment resource")) return "resourceLinks";

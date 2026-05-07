@@ -499,6 +499,7 @@
     "submittedSectionUserRequirement": "用户需求",
     "submittedSectionQuestions": "问答结果",
     "submittedSectionGitAction": "Git 操作",
+    "submittedSectionTimedGitReminder": "定时 Git 备份提醒",
     "submittedSectionImages": "图片附件",
     "submittedSectionResourceLinks": "资源链接",
     "submittedSectionTestLogs": "测试日志",

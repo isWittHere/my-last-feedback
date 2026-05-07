@@ -27,7 +27,7 @@ type Tab = "general" | "display" | "callers" | "submitted" | "prompts" | "sessio
 type SettingsGroupId = "mlfb" | "agent" | "layout";
 
 const SETTINGS_DOCK_COLUMN_IDS: DockColumnId[] = ["leftSidebar", "leftPage", "rightPage", "rightSidebar"];
-const SETTINGS_DOCK_TAB_IDS: DockTabId[] = ["mlc", "mlcPreview", "resources", "previewBrowser", "previewInfo", "agentConsole", "terminal"];
+const SETTINGS_DOCK_TAB_IDS: DockTabId[] = ["mlc", "mlcPreview", "resources", "previewBrowser", "previewInfo", "agentConsole", "agentSessions", "terminal"];
 const AGENT_TOPBAR_INDICATOR_MODE_OPTIONS: AgentTopbarIndicatorMode[] = ["hidden", "text", "textAndGraphic"];
 const AGENT_PROCESS_STEP_MODE_OPTIONS: AgentProcessStepDefaultMode[] = ["tabs", "timeline"];
 const AGENT_NAVIGATION_INDICATOR_ORDER_OPTIONS: AgentNavigationIndicatorOrder[] = ["leftToRight", "rightToLeft"];
@@ -727,6 +727,7 @@ export function SettingsDialog({ open, onClose }: { open: boolean; onClose: () =
     if (tabId === "previewBrowser") return t("previewBrowser.title", "Preview Browser");
     if (tabId === "previewInfo") return t("previewBrowser.infoTitle", "Preview Info");
     if (tabId === "agentConsole") return t("agentConsole.title", "Agent Console");
+    if (tabId === "agentSessions") return t("agentSessions.title", "Sessions");
     if (tabId === "terminal") return t("terminal.title", "Terminal");
     return t("resources.title", "Project resources");
   };
@@ -737,6 +738,7 @@ export function SettingsDialog({ open, onClose }: { open: boolean; onClose: () =
     if (tabId === "previewBrowser") return <Icon name="globe" size={13} />;
     if (tabId === "previewInfo") return <Icon name="code" size={13} />;
     if (tabId === "agentConsole") return <Icon name="robot" size={13} />;
+    if (tabId === "agentSessions") return <Icon name="message" size={13} />;
     if (tabId === "terminal") return <Icon name="terminal" size={13} />;
     return <Icon name="folder" size={13} />;
   };
@@ -776,6 +778,7 @@ export function SettingsDialog({ open, onClose }: { open: boolean; onClose: () =
     if (sectionId === "userRequirement") return <Icon name="checklist" size={13} />;
     if (sectionId === "questions") return <Icon name="message" size={13} />;
     if (sectionId === "gitAction") return <Icon name="git-branch" size={13} />;
+    if (sectionId === "timedGitReminder") return <Icon name="clock" size={13} />;
     if (sectionId === "images") return <Icon name="image" size={13} />;
     if (sectionId === "resourceLinks") return <Icon name="paperclip" size={13} />;
     if (sectionId === "testLogs") return <Icon name="file-text" size={13} />;

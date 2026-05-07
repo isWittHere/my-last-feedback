@@ -499,6 +499,7 @@
     "submittedSectionUserRequirement": "User Requirement",
     "submittedSectionQuestions": "Agent Questions Response",
     "submittedSectionGitAction": "Git Action",
+    "submittedSectionTimedGitReminder": "Timed Git Backup Reminder",
     "submittedSectionImages": "Attachment: Images",
     "submittedSectionResourceLinks": "Attachment: Resource Links",
     "submittedSectionTestLogs": "Attachment: Test Logs",
