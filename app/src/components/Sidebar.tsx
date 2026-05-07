@@ -558,7 +558,6 @@ export function Sidebar({ mode, onModeChange }: { mode: SessionListMode; onModeC
                     minWidth: shape!.width,
                     height: shape!.height,
                     "--session-topbar-card-bg": useColorCards ? getTopbarStatsColor(session, isLight) : getTopbarStatsCallerColor(activeCallerColor, isLight),
-                    "--session-topbar-stripe-color": isLight ? "rgba(255, 255, 255, 0.54)" : "rgba(15, 23, 42, 0.42)",
                   } as CSSProperties}
                 >
                   {showAttachmentDots && hasSessionAttachments(session) && <span className="session-topbar-attachment-dot" />}
