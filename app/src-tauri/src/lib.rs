@@ -97,6 +97,102 @@ fn get_auto_focus_new_request(state: State<AppState>) -> bool {
     state.auto_focus_new_request.lock().map(|value| *value).unwrap_or(true)
 }
 
+#[tauri::command]
+async fn select_directory(title: Option<String>, initial_directory: Option<String>) -> Result<Option<String>, String> {
+    select_directory_impl(
+        title.unwrap_or_else(|| "Choose workspace folder".to_string()),
+        initial_directory.and_then(|value| {
+            let value = value.trim().to_string();
+            (!value.is_empty()).then_some(value)
+        }),
+    ).await
+}
+
+#[cfg(target_os = "windows")]
+fn quote_powershell_string(value: &str) -> String {
+    format!("'{}'", value.replace('\'', "''"))
+}
+
+#[cfg(target_os = "windows")]
+async fn select_directory_impl(title: String, initial_directory: Option<String>) -> Result<Option<String>, String> {
+    let initial_script = initial_directory
+        .as_deref()
+        .filter(|path| std::path::Path::new(path).is_dir())
+        .map(|path| format!("$dialog.SelectedPath = {};", quote_powershell_string(path)))
+        .unwrap_or_default();
+    let script = format!(
+        "Add-Type -AssemblyName System.Windows.Forms; $dialog = New-Object System.Windows.Forms.FolderBrowserDialog; $dialog.Description = {}; $dialog.ShowNewFolderButton = $true; if ($dialog.PSObject.Properties.Name -contains 'AutoUpgradeEnabled') {{ $dialog.AutoUpgradeEnabled = $true }}; {} if ($dialog.ShowDialog() -eq [System.Windows.Forms.DialogResult]::OK) {{ [Console]::Out.Write($dialog.SelectedPath) }}",
+        quote_powershell_string(&title),
+        initial_script
+    );
+    let output = tauri::async_runtime::spawn_blocking(move || {
+        std::process::Command::new("powershell")
+            .args(["-NoProfile", "-STA", "-Command", &script])
+            .output()
+    })
+    .await
+    .map_err(|error| error.to_string())?
+    .map_err(|error| error.to_string())?;
+    if !output.status.success() {
+        let stderr = String::from_utf8_lossy(&output.stderr).trim().to_string();
+        return if stderr.is_empty() { Ok(None) } else { Err(stderr) };
+    }
+    let selected = String::from_utf8_lossy(&output.stdout).trim().to_string();
+    Ok((!selected.is_empty()).then_some(selected))
+}
+
+#[cfg(target_os = "macos")]
+fn quote_applescript_string(value: &str) -> String {
+    format!("\"{}\"", value.replace('\\', "\\\\").replace('"', "\\\""))
+}
+
+#[cfg(target_os = "macos")]
+async fn select_directory_impl(title: String, initial_directory: Option<String>) -> Result<Option<String>, String> {
+    let default_location = initial_directory
+        .as_deref()
+        .filter(|path| std::path::Path::new(path).is_dir())
+        .map(|path| format!(" default location POSIX file {}", quote_applescript_string(path)))
+        .unwrap_or_default();
+    let script = format!("POSIX path of (choose folder with prompt {}{})", quote_applescript_string(&title), default_location);
+    let output = tauri::async_runtime::spawn_blocking(move || {
+        std::process::Command::new("osascript").args(["-e", &script]).output()
+    })
+    .await
+    .map_err(|error| error.to_string())?
+    .map_err(|error| error.to_string())?;
+    if !output.status.success() {
+        let stderr = String::from_utf8_lossy(&output.stderr).trim().to_string();
+        return if stderr.contains("User canceled") { Ok(None) } else { Err(stderr) };
+    }
+    let selected = String::from_utf8_lossy(&output.stdout).trim().to_string();
+    Ok((!selected.is_empty()).then_some(selected))
+}
+
+#[cfg(target_os = "linux")]
+async fn select_directory_impl(title: String, initial_directory: Option<String>) -> Result<Option<String>, String> {
+    let mut args = vec!["--file-selection".to_string(), "--directory".to_string(), "--title".to_string(), title];
+    if let Some(path) = initial_directory.filter(|path| std::path::Path::new(path).is_dir()) {
+        args.push("--filename".to_string());
+        args.push(path);
+    }
+    let output = tauri::async_runtime::spawn_blocking(move || {
+        std::process::Command::new("zenity").args(args).output()
+    })
+    .await
+    .map_err(|error| error.to_string())?
+    .map_err(|error| error.to_string())?;
+    if !output.status.success() {
+        return Ok(None);
+    }
+    let selected = String::from_utf8_lossy(&output.stdout).trim().to_string();
+    Ok((!selected.is_empty()).then_some(selected))
+}
+
+#[cfg(not(any(target_os = "windows", target_os = "macos", target_os = "linux")))]
+async fn select_directory_impl(_title: String, _initial_directory: Option<String>) -> Result<Option<String>, String> {
+    Err("Directory selection is not available on this platform.".to_string())
+}
+
 fn queued_drafts_path(data_dir: &std::path::Path) -> PathBuf {
     data_dir.join("queued-drafts.json")
 }
@@ -678,6 +774,7 @@ pub fn run() {
         .invoke_handler(tauri::generate_handler![
             set_auto_focus_new_request,
             get_auto_focus_new_request,
+            select_directory,
             load_queued_drafts,
             save_queued_drafts,
             load_prompts,

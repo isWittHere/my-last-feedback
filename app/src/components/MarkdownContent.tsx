@@ -1,4 +1,4 @@
-import { Children, useCallback, type ComponentProps, type ReactNode } from "react";
+import { Children, useCallback, useEffect, useId, useState, type ComponentProps, type ReactNode } from "react";
 import ReactMarkdown from "react-markdown";
 import remarkGfm from "remark-gfm";
 import remarkBreaks from "remark-breaks";
@@ -79,6 +79,52 @@ function CopyButton({ text }: { text: string }) {
   );
 }
 
+function MermaidBlock({ chart }: { chart: string }) {
+  const { t } = useTranslation();
+  const isLight = useIsLightTheme();
+  const id = useId().replace(/[^a-zA-Z0-9_-]/g, "");
+  const [state, setState] = useState<{ svg: string | null; error: string | null }>({ svg: null, error: null });
+
+  useEffect(() => {
+    let cancelled = false;
+    setState({ svg: null, error: null });
+
+    void import("mermaid")
+      .then(async ({ default: mermaid }) => {
+        mermaid.initialize({
+          startOnLoad: false,
+          securityLevel: "strict",
+          theme: isLight ? "default" : "dark",
+        });
+        const renderId = `mermaid-${id}-${Math.random().toString(36).slice(2)}`;
+        return mermaid.render(renderId, chart);
+      })
+      .then((result) => {
+        if (!cancelled) setState({ svg: result.svg, error: null });
+      })
+      .catch((error: unknown) => {
+        if (!cancelled) setState({ svg: null, error: error instanceof Error ? error.message : String(error) });
+      });
+
+    return () => {
+      cancelled = true;
+    };
+  }, [chart, id, isLight]);
+
+  return (
+    state.error ? (
+      <div className="mermaid-render-error">
+        <div>{t("markdown.mermaidRenderFailed", "Failed to render Mermaid diagram")}</div>
+        <pre><code>{chart}</code></pre>
+      </div>
+    ) : state.svg ? (
+      <div className="mermaid-rendered" dangerouslySetInnerHTML={{ __html: state.svg }} />
+    ) : (
+      <div className="mermaid-render-loading">{t("markdown.mermaidRendering", "Rendering diagram...")}</div>
+    )
+  );
+}
+
 function CodeBlock({
   className,
   children,
@@ -90,6 +136,9 @@ function CodeBlock({
   const isLight = useIsLightTheme();
 
   if (match) {
+    const language = match[1].toLowerCase();
+    if (language === "mermaid" || language === "mmd") return <MermaidBlock chart={codeStr} />;
+
     return (
       <div className="code-block-wrapper">
         <div className="code-block-header">

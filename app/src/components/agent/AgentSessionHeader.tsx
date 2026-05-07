@@ -1,5 +1,6 @@
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { useTranslation } from "react-i18next";
+import { useAgentConsoleSettings } from "../../agentConsoleSettings";
 import { getAgentSessionIdentity } from "../../agent/sessionIdentity";
 import type { AgentSession } from "../../agent/types";
 import { Icon } from "../Icons";
@@ -17,7 +18,8 @@ interface AgentSessionHeaderProps {
 
 export function AgentSessionHeader({ session, previewMode = false }: AgentSessionHeaderProps) {
   const { t, i18n } = useTranslation();
-  const [expanded, setExpanded] = useState(false);
+  const { defaultExpandHeaderDetails } = useAgentConsoleSettings();
+  const [expanded, setExpanded] = useState(defaultExpandHeaderDetails);
   const [codeCopied, setCodeCopied] = useState(false);
   const identity = getAgentSessionIdentity(session, i18n.language.startsWith("zh") ? "zh" : "en");
   const identityTitle = identity.code ? `${identity.name} (${identity.code}) · ${identity.providerName}` : identity.providerName;
@@ -29,6 +31,10 @@ export function AgentSessionHeader({ session, previewMode = false }: AgentSessio
       window.setTimeout(() => setCodeCopied(false), 1200);
     }).catch(() => undefined);
   };
+
+  useEffect(() => {
+    if (!previewMode) setExpanded(defaultExpandHeaderDetails);
+  }, [defaultExpandHeaderDetails, previewMode, session.id]);
 
   return (
     <div className={`agent-console-header${expanded ? " expanded" : ""}${previewMode ? " agent-console-header-preview" : ""}`} data-preview-overlay>

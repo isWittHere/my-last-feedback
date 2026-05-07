@@ -67,7 +67,7 @@ interface AgentStoreState {
   activeSessionId: string | null;
   providerSessionLists: Partial<Record<AgentProviderId, AgentProviderSessionListState>>;
   getActiveSession: () => AgentSession | null;
-  createNewSession: () => string;
+  createNewSession: (options?: { cwd?: string | null }) => string;
   setActiveSession: (sessionId: string) => void;
   setSessionMode: (sessionId: string, modeId: string) => void;
   setSessionModel: (sessionId: string, modelId: string) => void;
@@ -893,16 +893,17 @@ export const useAgentStore = create<AgentStoreState>((set, get) => ({
     return state.sessions.find((session) => session.id === state.activeSessionId) || null;
   },
 
-  createNewSession: () => {
+  createNewSession: (options = {}) => {
     const state = get();
     const activeSession = state.getActiveSession();
+    const requestedCwd = options.cwd?.trim();
     const createdAt = nowIso();
     const sessionId = newId("agent_session");
     const session: AgentSession = {
       ...createAgentSession(),
       id: sessionId,
       title: "New Agent Session",
-      cwd: activeSession?.cwd || "",
+      cwd: requestedCwd || activeSession?.cwd || "",
       modelId: activeSession?.modelId,
       modeId: activeSession?.modeId,
       availableModels: activeSession?.availableModels || [],

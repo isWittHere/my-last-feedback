@@ -201,7 +201,19 @@
     "delete": "删除 session",
     "deleteConfirm": "确认删除这个 session？",
     "loadMore": "加载更多",
-    "noSessions": "还没有 sessions。"
+    "noSessions": "还没有 sessions。",
+    "chooseWorkspacePath": "选择工作区路径",
+    "chooseWorkspaceFolder": "选择工作区文件夹",
+    "browseWorkspace": "选择文件夹...",
+    "browseWorkspaceDesc": "打开系统文件夹选择器",
+    "noPathCandidates": "没有最近路径",
+    "pathSourceRecent": "最近",
+    "pathSourceActiveSession": "当前请求",
+    "pathSourceWorkspace": "工作区",
+    "pathSourceCaller": "调用方",
+    "pathSourceAgent": "Agent",
+    "pathSourceSession": "Session",
+    "pathSourceFallback": "默认"
   },
   "enhancement": {
     "label": "启用 interactive_feedback 增强提醒"
@@ -288,6 +300,10 @@
     "openCodeDisableModel": "从切换器中隐藏",
     "agentTopbarIndicators": "顶栏指示器",
     "agentTopbarIndicatorsDesc": "配置 Agent Console 顶栏中 diff 与上下文指示器的显示方式。",
+    "agentDefaultExpandHeaderDetails": "默认展开顶栏第二行",
+    "agentDefaultExpandHeaderDetailsDesc": "进入 Agent 会话时默认展开导航栏下方的详细信息行。",
+    "agentStickyUserMessageBar": "显示顶部粘滞用户消息行",
+    "agentStickyUserMessageBarDesc": "滚动聊天记录时，在顶部显示最近已越过的用户消息。",
     "agentPreview": "Agent 预览",
     "agentDiffIndicator": "Diff 指示器",
     "agentContextIndicator": "上下文指示器",

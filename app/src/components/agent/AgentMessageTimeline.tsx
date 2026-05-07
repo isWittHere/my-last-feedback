@@ -1,4 +1,5 @@
 import { useCallback, useEffect, useRef, useState } from "react";
+import { useAgentConsoleSettings } from "../../agentConsoleSettings";
 import type { AgentSession } from "../../agent/types";
 import { AgentMessageItem } from "./AgentMessageItem";
 
@@ -16,6 +17,7 @@ function messageText(message: AgentSession["messages"][number]): string {
   }
 
 export function AgentMessageTimeline({ session }: { session: AgentSession }) {
+  const { showStickyUserMessageBar } = useAgentConsoleSettings();
   const endRef = useRef<HTMLDivElement>(null);
   const scrollRef = useRef<HTMLDivElement>(null);
   const messagesRef = useRef(session.messages);
@@ -55,6 +57,11 @@ export function AgentMessageTimeline({ session }: { session: AgentSession }) {
   }, []);
 
   const updateStickyUserMessage = useCallback(() => {
+    if (!showStickyUserMessageBar) {
+      setStickyUserContent(null);
+      setStickyUserMsgId(null);
+      return;
+    }
     const container = scrollRef.current;
     if (!container) return;
     const containerRect = container.getBoundingClientRect();
@@ -76,7 +83,14 @@ export function AgentMessageTimeline({ session }: { session: AgentSession }) {
 
     setStickyUserContent((current) => current === nextContent ? current : nextContent);
     setStickyUserMsgId((current) => current === nextMsgId ? current : nextMsgId);
-  }, []);
+  }, [showStickyUserMessageBar]);
+
+  useEffect(() => {
+    if (!showStickyUserMessageBar) {
+      setStickyUserContent(null);
+      setStickyUserMsgId(null);
+    }
+  }, [showStickyUserMessageBar]);
 
   const scrollToStickyMessage = useCallback(() => {
     const container = scrollRef.current;
@@ -126,13 +140,15 @@ export function AgentMessageTimeline({ session }: { session: AgentSession }) {
 
   return (
     <div className="agent-message-timeline" ref={scrollRef} onScroll={handleTimelineScroll}>
-      <div className="agent-sticky-user-anchor">
-        {stickyUserContent && (
+      {showStickyUserMessageBar && (
+        <div className="agent-sticky-user-anchor">
+          {stickyUserContent && (
           <button type="button" className="agent-sticky-user-bar" onClick={scrollToStickyMessage} title={stickyUserContent}>
             <span>{stickyUserContent}</span>
           </button>
-        )}
-      </div>
+          )}
+        </div>
+      )}
       {session.messages.map((message) => (
         <AgentMessageItem key={message.id} session={session} message={message} projectDirectory={session.cwd} />
       ))}

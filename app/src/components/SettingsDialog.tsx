@@ -233,6 +233,22 @@ export function SettingsDialog({ open, onClose }: { open: boolean; onClose: () =
     });
   }, []);
 
+  const handleAgentHeaderDefaultExpandToggle = useCallback(() => {
+    setAgentConsoleSettings((prev) => {
+      const next = { ...prev, defaultExpandHeaderDetails: !prev.defaultExpandHeaderDetails };
+      saveAgentConsoleSettings(next);
+      return next;
+    });
+  }, []);
+
+  const handleAgentStickyUserMessageBarToggle = useCallback(() => {
+    setAgentConsoleSettings((prev) => {
+      const next = { ...prev, showStickyUserMessageBar: !prev.showStickyUserMessageBar };
+      saveAgentConsoleSettings(next);
+      return next;
+    });
+  }, []);
+
   const handleAgentProcessStepModeChange = useCallback((processStepDefaultMode: AgentProcessStepDefaultMode) => {
     setAgentConsoleSettings((prev) => {
       const next = { ...prev, processStepDefaultMode };
@@ -1005,6 +1021,38 @@ export function SettingsDialog({ open, onClose }: { open: boolean; onClose: () =
                     <div className="settings-row-info">
                       <span className="settings-label">{t("settings.agentTopbarIndicators", "Topbar indicators")}</span>
                       <span className="settings-sublabel">{t("settings.agentTopbarIndicatorsDesc", "Configure how Agent Console diff and context indicators appear in the topbar.")}</span>
+                    </div>
+                    <div className="settings-agent-topbar-options">
+                      <div className="settings-row settings-agent-toggle-row">
+                        <div className="settings-row-info">
+                          <span className="settings-label">{t("settings.agentDefaultExpandHeaderDetails", "Default-expand second row")}</span>
+                          <span className="settings-sublabel">{t("settings.agentDefaultExpandHeaderDetailsDesc", "Open the Agent navigation detail row by default for each session.")}</span>
+                        </div>
+                        <button
+                          type="button"
+                          className={`settings-toggle${agentConsoleSettings.defaultExpandHeaderDetails ? " settings-toggle-on" : ""}`}
+                          onClick={handleAgentHeaderDefaultExpandToggle}
+                          aria-label={t("settings.agentDefaultExpandHeaderDetails", "Default-expand second row")}
+                          aria-pressed={agentConsoleSettings.defaultExpandHeaderDetails}
+                        >
+                          <span className="settings-toggle-knob" />
+                        </button>
+                      </div>
+                      <div className="settings-row settings-agent-toggle-row">
+                        <div className="settings-row-info">
+                          <span className="settings-label">{t("settings.agentStickyUserMessageBar", "Show sticky user message row")}</span>
+                          <span className="settings-sublabel">{t("settings.agentStickyUserMessageBarDesc", "Keep the latest scrolled-past user message visible at the top of the chat timeline.")}</span>
+                        </div>
+                        <button
+                          type="button"
+                          className={`settings-toggle${agentConsoleSettings.showStickyUserMessageBar ? " settings-toggle-on" : ""}`}
+                          onClick={handleAgentStickyUserMessageBarToggle}
+                          aria-label={t("settings.agentStickyUserMessageBar", "Show sticky user message row")}
+                          aria-pressed={agentConsoleSettings.showStickyUserMessageBar}
+                        >
+                          <span className="settings-toggle-knob" />
+                        </button>
+                      </div>
                     </div>
                     <div className="settings-agent-indicator-list">
                       <div className="settings-agent-indicator-row">

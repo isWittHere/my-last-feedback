@@ -1,14 +1,26 @@
-import { useEffect, useMemo, useRef, useState, type ReactNode } from "react";
+import { invoke } from "@tauri-apps/api/core";
+import { useCallback, useEffect, useMemo, useRef, useState, type ReactNode } from "react";
 import { useTranslation } from "react-i18next";
 import { getAgentProviderSessionIdentity, getAgentSessionIdentity, type AgentSessionIdentity } from "../../agent/sessionIdentity";
 import type { AgentProviderId, AgentSession } from "../../agent/types";
 import { useAgentStore } from "../../store/agentStore";
+import { useFeedbackStore } from "../../store/feedbackStore";
+import { useTerminalStore, type TerminalPathSource } from "../../store/terminalStore";
 import { Icon } from "../Icons";
 import { IdenticonAvatar } from "../IdenticonAvatar";
 import { OpenCodeInitialAvatar } from "./OpenCodeInitialAvatar";
 import { getTimeGroup, timeAgo, type TimeGroup } from "../timeUtils";
 
 const GROUP_ORDER: TimeGroup[] = ["today", "yesterday", "lastWeek", "earlier"];
+type AgentWorkspacePathSource = TerminalPathSource | "agent" | "provider";
+
+interface AgentWorkspacePathCandidate {
+  path: string;
+  label: string;
+  source: AgentWorkspacePathSource;
+  callerName?: string;
+  lastUsedAt?: string | null;
+}
 
 function AgentSessionGroup({ label, count, children }: { label: string; count: number; children: ReactNode }) {
   const [collapsed, setCollapsed] = useState(false);
@@ -39,6 +51,38 @@ function folderNameFromPath(value?: string | null): string | null {
   if (!workspacePath) return null;
   const normalized = workspacePath.replace(/\/+$/, "");
   return normalized.split("/").filter(Boolean).pop() || normalized || null;
+}
+
+function normalizePathKey(value?: string | null): string {
+  return normalizeWorkspacePath(value)?.trim().replace(/\/+$/, "").toLowerCase() || "";
+}
+
+function pushWorkspacePathCandidate(candidates: AgentWorkspacePathCandidate[], seen: Set<string>, candidate: Omit<AgentWorkspacePathCandidate, "label"> & { label?: string }) {
+  const cleanPath = candidate.path.trim();
+  if (!cleanPath) return;
+  const key = normalizePathKey(cleanPath);
+  if (!key || seen.has(key)) return;
+  seen.add(key);
+  candidates.push({
+    ...candidate,
+    path: cleanPath,
+    label: candidate.label || folderNameFromPath(cleanPath) || cleanPath,
+  });
+}
+
+function agentPathSourceLabel(source: AgentWorkspacePathSource, translate: (key: string, defaultValue: string) => string, callerName?: string): string {
+  if (source === "recent") return translate("agentSessions.pathSourceRecent", "Recent");
+  if (source === "activeSession") return translate("agentSessions.pathSourceActiveSession", "Active request");
+  if (source === "workspace") return translate("agentSessions.pathSourceWorkspace", "Workspace");
+  if (source === "caller") return callerName ? `${translate("agentSessions.pathSourceCaller", "Caller")}: ${callerName}` : translate("agentSessions.pathSourceCaller", "Caller");
+  if (source === "agent") return translate("agentSessions.pathSourceAgent", "Agent");
+  if (source === "provider") return translate("agentSessions.pathSourceSession", "Session");
+  return translate("agentSessions.pathSourceFallback", "Fallback");
+}
+
+function toTerminalPathSource(source: AgentWorkspacePathSource): TerminalPathSource {
+  if (source === "caller" || source === "activeSession" || source === "workspace" || source === "fallback") return source;
+  return "recent";
 }
 
 function formatFullTimestamp(value?: string | null): string | null {
@@ -108,9 +152,20 @@ export function AgentSessionManagerPanel() {
   const restoreProviderSession = useAgentStore((state) => state.restoreProviderSession);
   const renameProviderSession = useAgentStore((state) => state.renameProviderSession);
   const deleteProviderSession = useAgentStore((state) => state.deleteProviderSession);
+  const recentPaths = useTerminalStore((state) => state.recentPaths);
+  const lastUsedCwd = useTerminalStore((state) => state.lastUsedCwd);
+  const recordRecentPath = useTerminalStore((state) => state.recordRecentPath);
+  const focusedComposer = useFeedbackStore((state) => state.focusedComposer);
+  const activeWorkspacePath = useFeedbackStore((state) => state.mlcActiveWorkspacePath || "");
+  const callerNamesKey = useFeedbackStore((state) => state.callers.map((caller) => `${caller.id}\t${caller.name}`).join("\n"));
+  const recentRequestPathsKey = useFeedbackStore((state) => state.sessions.map((session) => `${session.id}\t${session.projectDirectory}\t${session.callerId}\t${session.createdAt}`).join("\n"));
+  const pathMenuRef = useRef<HTMLDivElement>(null);
   const [busyAction, setBusyAction] = useState<string | null>(null);
   const [actionError, setActionError] = useState<string | null>(null);
+  const [pathMenuOpen, setPathMenuOpen] = useState(false);
   const autoLoadedProvidersRef = useRef(new Set<AgentProviderId>());
+
+  const activeSession = sessions.find((session) => session.id === activeSessionId) || null;
 
   const providers = useMemo(() => {
     const seen = new Set<AgentProviderId>();
@@ -137,6 +192,104 @@ export function AgentSessionManagerPanel() {
     }
   }, [providers, providerSessionLists, refreshProviderSessions]);
 
+  useEffect(() => {
+    if (!pathMenuOpen) return;
+    const handlePointerDown = (event: MouseEvent) => {
+      if (pathMenuRef.current?.contains(event.target as Node)) return;
+      setPathMenuOpen(false);
+    };
+    const handleKeyDown = (event: KeyboardEvent) => {
+      if (event.key === "Escape") setPathMenuOpen(false);
+    };
+    document.addEventListener("mousedown", handlePointerDown);
+    document.addEventListener("keydown", handleKeyDown);
+    return () => {
+      document.removeEventListener("mousedown", handlePointerDown);
+      document.removeEventListener("keydown", handleKeyDown);
+    };
+  }, [pathMenuOpen]);
+
+  const callerNames = useMemo(() => new Map(callerNamesKey
+    .split("\n")
+    .filter(Boolean)
+    .map((line) => {
+      const [id, name] = line.split("\t");
+      return [id, name || id] as const;
+    })), [callerNamesKey]);
+
+  const recentRequestPaths = useMemo(() => recentRequestPathsKey
+    .split("\n")
+    .filter(Boolean)
+    .map((line) => {
+      const [id, projectDirectory, callerId, createdAt] = line.split("\t");
+      return { id, projectDirectory, callerId, createdAt };
+    }), [recentRequestPathsKey]);
+
+  const pathCandidates = useMemo(() => {
+    const candidates: AgentWorkspacePathCandidate[] = [];
+    const seen = new Set<string>();
+    if (activeSession?.cwd) pushWorkspacePathCandidate(candidates, seen, { path: activeSession.cwd, source: "agent" });
+    if (lastUsedCwd) pushWorkspacePathCandidate(candidates, seen, { path: lastUsedCwd, source: "recent" });
+    for (const recentPath of recentPaths) {
+      pushWorkspacePathCandidate(candidates, seen, {
+        path: recentPath.path,
+        label: recentPath.label,
+        source: recentPath.source,
+        callerName: recentPath.callerName,
+        lastUsedAt: recentPath.lastUsedAt,
+      });
+    }
+    if (focusedComposer?.projectDirectory) {
+      pushWorkspacePathCandidate(candidates, seen, {
+        path: focusedComposer.projectDirectory,
+        source: "caller",
+        callerName: callerNames.get(focusedComposer.callerId),
+        lastUsedAt: focusedComposer.focusedAt,
+      });
+    }
+    if (activeWorkspacePath) pushWorkspacePathCandidate(candidates, seen, { path: activeWorkspacePath, source: "workspace" });
+    for (const session of [...sessions].sort((left, right) => right.updatedAt.localeCompare(left.updatedAt)).slice(0, 10)) {
+      pushWorkspacePathCandidate(candidates, seen, { path: session.cwd, source: "agent", lastUsedAt: session.updatedAt });
+    }
+    for (const listState of Object.values(providerSessionLists)) {
+      for (const providerSession of (listState?.sessions || []).slice(0, 12)) {
+        pushWorkspacePathCandidate(candidates, seen, { path: providerSession.cwd || "", source: "provider", lastUsedAt: providerSession.updatedAt });
+      }
+    }
+    for (const requestSession of [...recentRequestPaths].sort((left, right) => right.createdAt.localeCompare(left.createdAt)).slice(0, 10)) {
+      pushWorkspacePathCandidate(candidates, seen, {
+        path: requestSession.projectDirectory,
+        source: "caller",
+        callerName: callerNames.get(requestSession.callerId),
+        lastUsedAt: requestSession.createdAt,
+      });
+    }
+    return candidates;
+  }, [activeSession?.cwd, activeWorkspacePath, callerNames, focusedComposer, lastUsedCwd, providerSessionLists, recentPaths, recentRequestPaths, sessions]);
+
+  const defaultCwd = activeSession?.cwd || lastUsedCwd || pathCandidates[0]?.path || null;
+
+  const createFromPath = useCallback((cwd: string | null, source: AgentWorkspacePathSource = "recent") => {
+    const cleanPath = cwd?.trim() || null;
+    const sessionId = createNewSession({ cwd: cleanPath });
+    if (cleanPath) recordRecentPath(cleanPath, toTerminalPathSource(source));
+    setPathMenuOpen(false);
+    return sessionId;
+  }, [createNewSession, recordRecentPath]);
+
+  const chooseWorkspaceFolder = useCallback(async () => {
+    setActionError(null);
+    try {
+      const selectedPath = await invoke<string | null>("select_directory", {
+        title: t("agentSessions.chooseWorkspaceFolder", "Choose workspace folder"),
+        initialDirectory: defaultCwd || null,
+      });
+      if (typeof selectedPath === "string" && selectedPath.trim()) createFromPath(selectedPath, "workspace");
+    } catch (error) {
+      setActionError(error instanceof Error ? error.message : String(error));
+    }
+  }, [createFromPath, defaultCwd, t]);
+
   const runAction = async (key: string, action: () => Promise<void>) => {
     setBusyAction(key);
     setActionError(null);
@@ -154,13 +307,51 @@ export function AgentSessionManagerPanel() {
     return message;
   };
 
+  const renderPathButton = (candidate: AgentWorkspacePathCandidate) => (
+    <button key={`${candidate.source}-${candidate.path}`} type="button" className="agent-session-manager-path-item" onClick={() => createFromPath(candidate.path, candidate.source)}>
+      <Icon name={candidate.source === "workspace" ? "folder-open" : candidate.source === "agent" ? "message" : "folder"} size={12} />
+      <span className="agent-session-manager-path-main">
+        <span>{candidate.label || folderNameFromPath(candidate.path) || candidate.path}</span>
+        <small>{candidate.path}</small>
+      </span>
+      <em>{agentPathSourceLabel(candidate.source, t, candidate.callerName)}</em>
+    </button>
+  );
+
   return (
     <div className="agent-session-manager-panel">
       <div className="agent-session-manager-toolbar">
-        <button type="button" className="agent-session-manager-new-button" onClick={() => createNewSession()}>
-          <Icon name="plus" size={12} />
-          <span>{t("agentSessions.newSession", "New session")}</span>
-        </button>
+        <div ref={pathMenuRef} className="agent-session-manager-new-split">
+          <button type="button" className="agent-session-manager-new-button" onClick={() => createFromPath(defaultCwd, "recent")} title={defaultCwd || t("agentSessions.newSession", "New session")}>
+            <Icon name="plus" size={12} />
+            <span>{t("agentSessions.newSession", "New session")}</span>
+          </button>
+          <button
+            type="button"
+            className="agent-session-manager-new-caret"
+            onClick={() => setPathMenuOpen((value) => !value)}
+            aria-label={t("agentSessions.chooseWorkspacePath", "Choose workspace path")}
+            aria-haspopup="menu"
+            aria-expanded={pathMenuOpen}
+            title={t("agentSessions.chooseWorkspacePath", "Choose workspace path")}
+          >
+            <Icon name="chevron-down" size={12} />
+          </button>
+          {pathMenuOpen ? (
+            <div className="agent-session-manager-path-menu" data-preview-overlay>
+              {pathCandidates.length > 0 ? pathCandidates.slice(0, 10).map(renderPathButton) : (
+                <div className="agent-session-manager-path-empty">{t("agentSessions.noPathCandidates", "No recent paths")}</div>
+              )}
+              <button type="button" className="agent-session-manager-path-item browse" onClick={() => void chooseWorkspaceFolder()}>
+                <Icon name="folder-open" size={12} />
+                <span className="agent-session-manager-path-main">
+                  <span>{t("agentSessions.browseWorkspace", "Choose folder...")}</span>
+                  <small>{t("agentSessions.browseWorkspaceDesc", "Create the session in another workspace")}</small>
+                </span>
+              </button>
+            </div>
+          ) : null}
+        </div>
         <button
           type="button"
           className="agent-session-manager-refresh-button"

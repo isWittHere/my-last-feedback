@@ -27,6 +27,8 @@ export interface AgentConsoleSettings {
   autoCleanupEmptySessions: boolean;
   processStepDefaultMode: AgentProcessStepDefaultMode;
   showMessageSpeakerLine: boolean;
+  defaultExpandHeaderDetails: boolean;
+  showStickyUserMessageBar: boolean;
   diffVisual: AgentDiffVisualSettings;
 }
 
@@ -46,6 +48,8 @@ const DEFAULT_SETTINGS: AgentConsoleSettings = {
   autoCleanupEmptySessions: true,
   processStepDefaultMode: "tabs",
   showMessageSpeakerLine: true,
+  defaultExpandHeaderDetails: false,
+  showStickyUserMessageBar: true,
   diffVisual: {
     colorPresetId: "classic",
     additionsOffsetX: 0,
@@ -99,6 +103,8 @@ export function getAgentConsoleSettings(): AgentConsoleSettings {
       autoCleanupEmptySessions: typeof parsed.autoCleanupEmptySessions === "boolean" ? parsed.autoCleanupEmptySessions : DEFAULT_SETTINGS.autoCleanupEmptySessions,
       processStepDefaultMode: isProcessStepDefaultMode(parsed.processStepDefaultMode) ? parsed.processStepDefaultMode : DEFAULT_SETTINGS.processStepDefaultMode,
       showMessageSpeakerLine: typeof parsed.showMessageSpeakerLine === "boolean" ? parsed.showMessageSpeakerLine : DEFAULT_SETTINGS.showMessageSpeakerLine,
+      defaultExpandHeaderDetails: typeof parsed.defaultExpandHeaderDetails === "boolean" ? parsed.defaultExpandHeaderDetails : DEFAULT_SETTINGS.defaultExpandHeaderDetails,
+      showStickyUserMessageBar: typeof parsed.showStickyUserMessageBar === "boolean" ? parsed.showStickyUserMessageBar : DEFAULT_SETTINGS.showStickyUserMessageBar,
       diffVisual: {
         colorPresetId: isColorPresetId(parsedDiffVisual?.colorPresetId) ? parsedDiffVisual.colorPresetId : DEFAULT_SETTINGS.diffVisual.colorPresetId,
         additionsOffsetX: parsedDiffVisual?.additionsOffsetX == null ? legacyOffsetX : clampTextOffset(parsedDiffVisual.additionsOffsetX),

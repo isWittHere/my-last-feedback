@@ -201,7 +201,19 @@
     "delete": "Delete session",
     "deleteConfirm": "Delete this session?",
     "loadMore": "Load more",
-    "noSessions": "No sessions yet."
+    "noSessions": "No sessions yet.",
+    "chooseWorkspacePath": "Choose workspace path",
+    "chooseWorkspaceFolder": "Choose workspace folder",
+    "browseWorkspace": "Choose folder...",
+    "browseWorkspaceDesc": "Open the system folder picker",
+    "noPathCandidates": "No recent paths",
+    "pathSourceRecent": "Recent",
+    "pathSourceActiveSession": "Active request",
+    "pathSourceWorkspace": "Workspace",
+    "pathSourceCaller": "Caller",
+    "pathSourceAgent": "Agent",
+    "pathSourceSession": "Session",
+    "pathSourceFallback": "Fallback"
   },
   "enhancement": {
     "label": "Enable interactive_feedback enhanced reminder"
@@ -288,6 +300,10 @@
     "openCodeDisableModel": "Hide from switcher",
     "agentTopbarIndicators": "Topbar indicators",
     "agentTopbarIndicatorsDesc": "Configure how diff and context indicators appear in the Agent Console topbar.",
+    "agentDefaultExpandHeaderDetails": "Default-expand second row",
+    "agentDefaultExpandHeaderDetailsDesc": "Open the detail row below the navigation bar by default when entering an Agent session.",
+    "agentStickyUserMessageBar": "Show sticky user message row",
+    "agentStickyUserMessageBarDesc": "Show the latest scrolled-past user message at the top of the chat timeline.",
     "agentPreview": "Agent preview",
     "agentDiffIndicator": "Diff indicator",
     "agentContextIndicator": "Context indicator",
