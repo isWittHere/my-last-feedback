@@ -1017,14 +1017,26 @@ function clearPacedTextBufferForPart(sessionId: string, phase: "process" | "resu
 }
 
 function completeStreamingAssistant(session: AgentSession, providerMessageId?: string): AgentSession {
+  const completeProcessBlock = (block: AgentContentBlock): AgentContentBlock => {
+    if (block.type === "thinking") return block.status === "completed" ? block : { ...block, status: "completed", updatedAt: nowIso() };
+    if (block.type === "compaction") return block.status === "running" ? { ...block, status: "completed", updatedAt: nowIso() } : block;
+    if (block.type === "tool_call" && (block.status === "running" || block.status === "pending")) return { ...block, status: "completed", updatedAt: nowIso() };
+    return block;
+  };
+  const hasActiveProcessBlock = (message: AgentMessage): boolean => message.blocks.some((block) => {
+    if (block.type === "thinking") return block.status === "running";
+    if (block.type === "compaction") return block.status === "running";
+    if (block.type === "tool_call") return block.status === "running" || block.status === "pending";
+    return false;
+  });
   return {
     ...session,
-    messages: session.messages.map((message) => message.role === "assistant" && message.status === "streaming" && (!providerMessageId || messageMatchesProviderId(message, providerMessageId))
+    messages: session.messages.map((message) => message.role === "assistant" && (!providerMessageId || messageMatchesProviderId(message, providerMessageId)) && (message.status === "streaming" || hasActiveProcessBlock(message))
       ? {
         ...message,
         ...(providerMessageId && !message.providerMessageId ? { providerMessageId } : {}),
         status: "complete",
-        blocks: message.blocks.map((block) => block.type === "thinking" || block.type === "compaction" ? { ...block, status: "completed", updatedAt: nowIso() } : block),
+        blocks: message.blocks.map(completeProcessBlock),
         updatedAt: nowIso(),
       }
       : message),

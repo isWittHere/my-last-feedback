@@ -183,9 +183,8 @@ function parseJsonArray(value: unknown): unknown[] {
 
 function normalizeToolStatus(status: string | undefined, error?: string, output?: unknown, time?: Record<string, unknown>): AgentToolCallBlock["status"] {
   if (error || status === "error" || status === "failed") return "failed";
-  if (status === "completed") return "completed";
+  if (status === "completed" || time?.end || time?.completed || output !== undefined) return "completed";
   if (status === "running") return "running";
-  if (time?.end || time?.completed || output !== undefined) return "completed";
   return "pending";
 }
 
