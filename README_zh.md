@@ -122,7 +122,7 @@ Whenever you're about to complete a user request, call the interactive_feedback 
 
 ## Agent 身份 (agent_name)
 - agent_name 为必填。使用反馈响应或 hook 上下文分配的 4 位标识符。
-- 如果尚未获得标识符，生成一个 4 位大写标识符（如 "B780"）。
+- 不要自行编造或替换 agent_name；如果未知，应先取得已分配的标识符再调用 interactive_feedback。
 - 之后所有调用中必须传回该标识符。
 
 ## 请求类型 (request_type)

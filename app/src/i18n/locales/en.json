@@ -279,7 +279,16 @@
     "openSession": "Open session",
     "collapse": "Collapse sidebar",
     "expand": "Expand sidebar",
-    "summaryCharacters": "{{count}} chars"
+    "summaryCharacters": "{{count}} chars",
+    "requestType": {
+      "explanation": "Explanation",
+      "question": "Question",
+      "completion": "Completion",
+      "analysisReport": "Analysis report",
+      "documentCompleted": "Document completed",
+      "verificationCompleted": "Verification completed",
+      "default": "Default"
+    }
   },
   "session": {
     "waitingForRequest": "Waiting for feedback request...",

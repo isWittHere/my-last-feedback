@@ -279,7 +279,16 @@
     "openSession": "打开会话",
     "collapse": "收起侧栏",
     "expand": "展开侧栏",
-    "summaryCharacters": "{{count}} 字"
+    "summaryCharacters": "{{count}} 字",
+    "requestType": {
+      "explanation": "解释",
+      "question": "询问",
+      "completion": "完成",
+      "analysisReport": "分析报告",
+      "documentCompleted": "文档完成",
+      "verificationCompleted": "验证完成",
+      "default": "默认"
+    }
   },
   "session": {
     "waitingForRequest": "等待反馈请求...",

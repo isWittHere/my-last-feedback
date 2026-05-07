@@ -73,23 +73,46 @@ function SessionStatusIcon({ session, size = 12 }: { session: Session; size?: nu
   return <Icon name="check" size={size} color="var(--color-success)" strokeWidth={2.5} />;
 }
 
+function getRequestTypeLabel(requestType: Session["requestType"], t: (key: string, defaultValue: string) => string): string {
+  switch (requestType) {
+    case "explanation":
+      return t("sidebar.requestType.explanation", "Explanation");
+    case "question":
+      return t("sidebar.requestType.question", "Question");
+    case "completion":
+      return t("sidebar.requestType.completion", "Completion");
+    case "analysis_report":
+      return t("sidebar.requestType.analysisReport", "Analysis report");
+    case "document_completed":
+      return t("sidebar.requestType.documentCompleted", "Document completed");
+    case "verification_completed":
+      return t("sidebar.requestType.verificationCompleted", "Verification completed");
+    case "default":
+    default:
+      return t("sidebar.requestType.default", "Default");
+  }
+}
+
 function getTopbarStatsColor(session: Session, isLight: boolean): string {
-  if (session.status === "pending") return "#f59e0b";
-  if (session.status === "cancelled") return isLight ? "#dc2626" : "#f87171";
+  if (session.status === "pending") return isLight ? "#eab308" : "#facc15";
+  if (session.status === "cancelled") return "#991b1b";
 
   switch (session.requestType) {
     case "explanation":
-    case "analysis_report":
-      return isLight ? "#db2777" : "#f472b6";
+      return isLight ? "#64748b" : "#6b7280";
     case "question":
       return isLight ? "#7c3aed" : "#a78bfa";
     case "completion":
-      return isLight ? "#0f766e" : "#2dd4bf";
+      return isLight ? "#0f766e" : "#0d9488";
+    case "analysis_report":
+      return isLight ? "#db2777" : "#ec4899";
     case "document_completed":
+      return isLight ? "#94a3b8" : "#9ca3af";
     case "verification_completed":
+      return isLight ? "#0f766e" : "#0d9488";
     case "default":
     default:
-      return isLight ? "#64748b" : "#94a3b8";
+      return isLight ? "#64748b" : "#6b7280";
   }
 }
 
@@ -401,6 +424,7 @@ export function Sidebar({ mode, onModeChange }: { mode: SessionListMode; onModeC
       }}
     >
       <div className="session-collapsed-popup-title">{hoveredItem.session.requestName || "Untitled"}</div>
+      <div className="session-collapsed-popup-type">{getRequestTypeLabel(hoveredItem.session.requestType, t)}</div>
       <div className="session-collapsed-popup-meta">
         <span>{timeAgo(hoveredItem.session.createdAt, t)}</span>
         <span>{t("sidebar.summaryCharacters", { count: countSummaryCharacters(hoveredItem.session) })}</span>
@@ -547,7 +571,7 @@ export function Sidebar({ mode, onModeChange }: { mode: SessionListMode; onModeC
                 <button
                   key={session.id}
                   type="button"
-                  className={`session-topbar-item session-topbar-item-${session.status}${isActive ? " active" : ""}`}
+                  className={`session-topbar-item session-topbar-item-${session.status} session-topbar-type-${session.requestType}${isActive ? " active" : ""}`}
                   onClick={() => handleSelectSession(session.id)}
                   onContextMenu={(event) => handleSessionItemContextMenu(event, session)}
                   onMouseEnter={(event) => handleTopbarMouseEnter(event, session)}

@@ -124,7 +124,7 @@ Whenever you're about to complete a user request, call the interactive_feedback 
 
 ## Agent Identity (agent_name)
 - agent_name is required. Use the 4-character identifier assigned by the feedback response or hook context.
-- If you do not have one yet, generate a 4-character uppercase identifier such as "B780".
+- Do not invent or replace agent_name. If it is unknown, obtain the assigned identifier before calling interactive_feedback.
 - On ALL subsequent calls, you MUST pass that identifier back as agent_name.
 
 ## Request Type (request_type)
