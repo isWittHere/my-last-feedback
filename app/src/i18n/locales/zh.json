@@ -140,6 +140,7 @@
     "collapseHeader": "收起详情",
     "noSteps": "暂无过程步骤",
     "tokenStats": "Agent 步骤 token 统计",
+    "singleThinkingCompleted": "已思考",
     "tokens": "{{value}} token",
     "estimatedTokens": "{{value}} tokens 估算",
     "estimatedShort": "估算",

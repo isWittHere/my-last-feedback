@@ -140,6 +140,7 @@
     "collapseHeader": "Collapse details",
     "noSteps": "No process steps",
     "tokenStats": "Agent step token statistics",
+    "singleThinkingCompleted": "Thought completed",
     "tokens": "{{value}} tokens",
     "estimatedTokens": "{{value}} tokens estimated",
     "estimatedShort": "est.",

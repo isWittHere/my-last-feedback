@@ -4058,6 +4058,12 @@ body,
   flex-wrap: wrap;
 }
 
+.agent-current-status-row[data-status-kind="approval"] .agent-approval-row-main {
+  flex: 1 1 180px;
+  flex-wrap: wrap;
+  row-gap: 1px;
+}
+
 .agent-approval-row :where(span, button) {
   font-family: inherit;
   font-size: 12px;
@@ -4131,6 +4137,19 @@ body,
   color: var(--color-text-secondary);
 }
 
+.agent-current-status-row[data-status-kind="approval"] .agent-approval-row-title {
+  flex: 1 1 14rem;
+  max-width: 100%;
+  max-height: 4.5em;
+  overflow-x: hidden;
+  overflow-y: auto;
+  text-overflow: clip;
+  white-space: normal;
+  overflow-wrap: anywhere;
+  word-break: break-word;
+  scrollbar-gutter: stable;
+}
+
 .agent-approval-row-count {
   flex: 0 0 auto;
   color: var(--color-text-muted);
@@ -4141,6 +4160,10 @@ body,
   justify-content: flex-end;
   gap: 3px;
   margin-left: auto;
+}
+
+.agent-current-status-row[data-status-kind="approval"] .agent-approval-row-actions {
+  align-self: flex-start;
 }
 
 .agent-approval-diff-panel {
@@ -4874,6 +4897,11 @@ body,
   transition: background 0.15s, border-color 0.15s, color 0.15s;
 }
 
+.agent-process-step-tabs button > svg,
+.agent-process-step-head > svg {
+  flex: 0 0 auto;
+}
+
 .agent-process-step-tabs button span {
   min-width: 0;
   overflow: hidden;
@@ -4882,6 +4910,7 @@ body,
 }
 
 .agent-process-file-tag {
+  flex: 0 1 auto;
   max-width: 168px;
   margin: 0;
   padding: 0 5px;
@@ -5146,7 +5175,18 @@ body,
 }
 
 .agent-process-step-label-text {
+  flex: 0 1 auto;
+  min-width: 0;
+  max-width: 100%;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.agent-process-step-head[data-has-file-target="true"] .agent-process-step-label-text,
+.agent-process-step-tabs button[data-has-file-target="true"] .agent-process-step-label-text {
   flex: 0 0 auto;
+  max-width: none;
 }
 
 .agent-process-step-head .agent-process-stale-step-icon,

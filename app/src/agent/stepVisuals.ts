@@ -96,6 +96,6 @@ export function getAgentStepDisplayLabel(input: AgentStepVisualInput, t: Transla
       return t("agentConsole.stepTypeWithTarget", "{{type}} {{target}}", { type: typeLabel, target: displayTarget });
     }
   }
-  if (input.tone === "document_search") return typeLabel;
+  if (input.tone === "document_search" || input.tone === "todo_update") return typeLabel;
   return fallbackLabel || typeLabel;
 }

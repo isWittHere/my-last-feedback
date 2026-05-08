@@ -110,6 +110,10 @@ function StepHeadLabel({ step, fallbackLabel }: { step: AgentStepItem; fallbackL
   return <span className="agent-process-step-label-text">{getAgentStepDisplayLabel(step, t, fallbackLabel)}</span>;
 }
 
+function stepHasFileTarget(step: AgentStepItem): boolean {
+  return Boolean(getAgentStepTarget(step) && (step.tone === "document_change" || step.tone === "document_read"));
+}
+
 function StepDetail({ step, projectDirectory }: { step: AgentStepItem; projectDirectory?: string }) {
   if (step.kind === "thinking" && step.detail) {
     return <MarkdownContent markdown={step.detail} projectDirectory={projectDirectory} className="agent-process-markdown" variant="feedback" enableComposerTokens />;
@@ -361,7 +365,10 @@ export function AgentProcessGroup({ blocks, messageId, isStreaming = false, proj
     taskCount > 0 ? `${taskCount} 组任务` : "",
     artifactCount > 0 ? `${artifactCount} 个产物` : "",
   ].filter(Boolean);
-  const summary = hasBusyStep || isStreaming ? "正在工作..." : isSingleInlineProcess ? steps[0].label : summaryParts.length > 0 ? `已使用 ${summaryParts.join("、")}` : "已完成过程记录";
+  const singleInlineProcessLabel = steps[0]?.kind === "thinking" && steps[0]?.status === "completed"
+    ? t("agentConsole.singleThinkingCompleted", "已思考")
+    : steps[0]?.label;
+  const summary = hasBusyStep || isStreaming ? "正在工作..." : isSingleInlineProcess ? singleInlineProcessLabel : summaryParts.length > 0 ? `已使用 ${summaryParts.join("、")}` : "已完成过程记录";
   const activeStep = steps[activeIndex] || steps[0];
 
   return (
@@ -402,10 +409,11 @@ export function AgentProcessGroup({ blocks, messageId, isStreaming = false, proj
                 const isLast = index === steps.length - 1;
                 const isStreamingStep = isStreaming && index === steps.length - 1;
                 const hasContent = stepHasContent(step);
+                const hasFileTarget = stepHasFileTarget(step);
                 return (
                   <div key={`${step.kind}-${index}`} className="agent-process-step-compact" data-kind={step.kind} data-status={step.status} data-has-content={hasContent}>
                     {!isLast && <span className="agent-process-step-line" />}
-                    <button type="button" className="agent-process-step-head" onClick={() => hasContent && toggleStep(index)}>
+                    <button type="button" className="agent-process-step-head" data-has-file-target={hasFileTarget ? "true" : undefined} onClick={() => hasContent && toggleStep(index)}>
                       <Icon name={stepIconName(step)} size={13} />
                       <StepHeadLabel step={step} fallbackLabel={step.label} />
                       {step.staleRunningState && (
@@ -439,7 +447,7 @@ export function AgentProcessGroup({ blocks, messageId, isStreaming = false, proj
             <div className="agent-process-tab-mode">
               <div className="agent-process-step-tabs" role="tablist">
                 {steps.map((step, index) => (
-                  <button key={`${step.kind}-${index}`} type="button" className={activeIndex === index ? "active" : ""} onClick={() => setActiveIndex(index)}>
+                  <button key={`${step.kind}-${index}`} type="button" className={activeIndex === index ? "active" : ""} data-has-file-target={stepHasFileTarget(step) ? "true" : undefined} onClick={() => setActiveIndex(index)}>
                     <Icon name={stepIconName(step)} size={11} />
                     <StepHeadLabel step={step} fallbackLabel={step.label} />
                     {step.staleRunningState && (
