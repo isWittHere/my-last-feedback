@@ -19,6 +19,7 @@ export interface AgentApprovalCurrentStatus {
   options: AgentPermissionOption[];
   extraCount: number;
   permissionBlock?: AgentPermissionBlock;
+  toolCall?: AgentToolCallBlock;
   fileSummary?: AgentEditFileSummary;
 }
 
@@ -156,6 +157,7 @@ function getApprovalStatus(session: AgentSession): AgentApprovalCurrentStatus | 
   if (!requestId) return null;
 
   const variant = pendingPermissionBlock && isEditPermission(session, pendingPermissionBlock) ? "apply_edit" : "tool";
+  const toolCall = pendingPermissionBlock ? findPermissionToolCall(session, pendingPermissionBlock) : null;
   const fileSummary = variant === "apply_edit" ? getPermissionFileSummary(pendingPermissionBlock) || getEditFileSummary(session) : undefined;
 
   return {
@@ -166,6 +168,7 @@ function getApprovalStatus(session: AgentSession): AgentApprovalCurrentStatus | 
     options: pendingPermissionBlock?.options || [],
     extraCount: Math.max(session.pendingPermissionIds.length, pendingPermissionBlocks.length) - 1,
     permissionBlock: pendingPermissionBlock,
+    toolCall: toolCall || undefined,
     fileSummary,
   };
 }

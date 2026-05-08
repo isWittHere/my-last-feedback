@@ -139,6 +139,16 @@ function textBlock(content: string, phase: "process" | "result" = "result"): Age
   };
 }
 
+function appendDedupedText(existing: string, incoming: string): string {
+  if (!incoming) return existing;
+  if (!existing) return incoming;
+  if (existing.endsWith(incoming)) return existing;
+  if (incoming.startsWith(existing)) return incoming;
+  const trimmedIncoming = incoming.trim();
+  if (trimmedIncoming.length >= 12 && existing.trimEnd().endsWith(trimmedIncoming)) return existing;
+  return existing + incoming;
+}
+
 function createUserMessage(content: string, options: Partial<Pick<AgentMessage, "id" | "providerMessageId" | "providerParts" | "composerDraft" | "submittedMarkdown" | "submittedAttachmentTags">> = {}): AgentMessage {
   return {
     id: options.id || newId("agent_user_msg"),
@@ -1017,8 +1027,8 @@ function appendAssistantTextChunkImmediate(session: AgentSession, phase: "proces
   let blocks = [...assistantMessage.blocks];
   if (blockIndex >= 0) {
     const block = blocks[blockIndex];
-    if (block.type === "text") blocks[blockIndex] = { ...block, content: block.content + text, updatedAt: nowIso() };
-    if (block.type === "thinking") blocks[blockIndex] = { ...block, content: block.content + text, status: "running", updatedAt: nowIso() };
+    if (block.type === "text") blocks[blockIndex] = { ...block, content: appendDedupedText(block.content, text), updatedAt: nowIso() };
+    if (block.type === "thinking") blocks[blockIndex] = { ...block, content: appendDedupedText(block.content, text), status: "running", updatedAt: nowIso() };
   } else if (phase === "process") {
     blocks = insertProcessBlock(blocks, {
       id: partId || newId("agent_thinking"),
@@ -1114,7 +1124,7 @@ function appendAssistantTextChunk(session: AgentSession, phase: "process" | "res
     timer: null,
     waiters: [],
   };
-  buffer.pending += text;
+  buffer.pending = appendDedupedText(buffer.pending, text);
   notePacedBufferInput(buffer, text.length);
   pacedTextBuffers.set(key, buffer);
   if (!buffer.timer) {

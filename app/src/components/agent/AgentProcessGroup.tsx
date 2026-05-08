@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { useTranslation } from "react-i18next";
 import { useAgentConsoleSettings, type AgentProcessStepDefaultMode } from "../../agentConsoleSettings";
+import { getApprovalDisplayDescription, isCommandLikeApproval } from "../../agent/approvalDisplay";
 import type { AgentContentBlock } from "../../agent/types";
 import { buildAgentProcessSteps, type AgentStepItem } from "../../agent/steps";
 import { basenameResourcePath, getAgentStepDisplayLabel, getAgentStepTarget, getAgentStepTypeLabel, getAgentStepVisualDescriptor } from "../../agent/stepVisuals";
@@ -122,30 +123,19 @@ function isRejectedPermission(permission: NonNullable<AgentStepItem["permissions
   return /reject|deny/i.test(permission.selectedOptionId);
 }
 
-function stringMetadata(permission: NonNullable<AgentStepItem["permissions"]>[number], key: string): string | undefined {
-  const value = permission.metadata?.[key];
-  return typeof value === "string" && value.trim() ? value.trim() : undefined;
-}
-
-function commandApprovalDescription(step: AgentStepItem, permission: NonNullable<AgentStepItem["permissions"]>[number]): string {
-  const metadataDescription = stringMetadata(permission, "description") || stringMetadata(permission, "command") || stringMetadata(permission, "pattern");
-  if (metadataDescription) return metadataDescription;
-  const argCommand = step.args && ["description", "command", "cmd", "script"].map((key) => step.args?.[key]).find((value) => typeof value === "string" && value.trim());
-  if (typeof argCommand === "string") return argCommand.trim();
-  return permission.title;
-}
-
 function AgentProcessAttachedApproval({ step, permission, sessionId }: { step: AgentStepItem; permission: NonNullable<AgentStepItem["permissions"]>[number]; sessionId?: string }) {
   const { t } = useTranslation();
   const isPending = permission.status === "pending";
   const isRejected = isRejectedPermission(permission);
-  const isCommandApproval = step.tone === "command_execution" || step.tone === "approval_rejected";
-  const description = isCommandApproval ? commandApprovalDescription(step, permission) : permission.title;
+  const isCommandApproval = isCommandLikeApproval({ permission, args: step.args, tone: step.tone, fallbackTitle: step.label });
+  const description = isCommandApproval ? getApprovalDisplayDescription({ permission, args: step.args, tone: step.tone, fallbackTitle: step.label }) : permission.title;
   const statusLabel = isRejected
     ? t("agentConsole.stepTypes.approvalRejected", "Approval rejected")
     : isPending
       ? t("agentConsole.requestApproval", "Request approval")
-      : t("agentConsole.permissionResolved", "Permission request resolved");
+      : isCommandApproval
+        ? t("agentConsole.permissionApprovedShort", "Approved")
+        : t("agentConsole.permissionResolved", "Permission request resolved");
   return (
     <div className="agent-process-attached-approval" data-status={permission.status} data-rejected={isRejected ? "true" : undefined} data-compact={isCommandApproval ? "true" : undefined}>
       <div className="agent-process-attached-approval-main">
@@ -155,7 +145,7 @@ function AgentProcessAttachedApproval({ step, permission, sessionId }: { step: A
       </div>
       {isPending && sessionId ? (
         <AgentApprovalActions sessionId={sessionId} requestId={permission.requestId} options={permission.options} />
-      ) : !isRejected ? (
+      ) : !isRejected && !isCommandApproval ? (
         <span className="agent-process-attached-approval-state">{t("agentConsole.permissionResolvedShort", "已处理")}</span>
       ) : null}
     </div>

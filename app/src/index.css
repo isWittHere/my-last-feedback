@@ -3916,6 +3916,12 @@ body,
   border-top: 1px solid var(--color-border-subtle);
 }
 
+.agent-session-status-stack > .agent-current-status-row {
+  width: 100%;
+  box-sizing: border-box;
+  display: flex;
+}
+
 .agent-task-panel {
   flex: 0 0 auto;
   min-width: 0;
@@ -4148,6 +4154,30 @@ body,
   overflow-wrap: anywhere;
   word-break: break-word;
   scrollbar-gutter: stable;
+}
+
+.agent-current-status-row[data-command-approval="true"] {
+  flex-wrap: nowrap;
+}
+
+.agent-current-status-row[data-command-approval="true"] .agent-approval-row-actions {
+  align-self: center;
+  margin-left: auto;
+}
+
+.agent-current-status-row[data-command-approval="true"] .agent-approval-row-main {
+  flex: 1 1 auto;
+  flex-wrap: nowrap;
+}
+
+.agent-current-status-row[data-command-approval="true"] .agent-approval-row-title {
+  flex: 1 1 auto;
+  max-height: none;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  overflow-wrap: normal;
+  word-break: normal;
 }
 
 .agent-approval-row-count {
@@ -5006,6 +5036,7 @@ body,
 }
 
 .agent-process-attached-approval {
+  width: 100%;
   display: flex;
   align-items: center;
   gap: 8px;
@@ -5021,6 +5052,7 @@ body,
 }
 
 .agent-process-attached-approval-main {
+  flex: 1 1 auto;
   display: inline-flex;
   align-items: center;
   gap: 5px;
@@ -5054,6 +5086,7 @@ body,
 }
 
 .agent-process-attached-approval .agent-approval-row-actions {
+  flex: 0 0 auto;
   margin-left: auto;
 }
 

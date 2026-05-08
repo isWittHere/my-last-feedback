@@ -1,5 +1,6 @@
 import { useEffect, useMemo, useRef, useState } from "react";
 import { useTranslation } from "react-i18next";
+import { getApprovalDisplayDescription, isCommandLikeApproval } from "../../agent/approvalDisplay";
 import { formatCompactTokenCount } from "../../agent/tokenStats";
 import type { AgentApprovalCurrentStatus, AgentCurrentStatus, AgentEditFileSummary } from "../../agent/currentStatus";
 import { getAgentCurrentStatus } from "../../agent/currentStatus";
@@ -98,6 +99,8 @@ function AgentApprovalStatusRow({ session, status }: { session: AgentSession; st
   const { t } = useTranslation();
   const label = status.variant === "apply_edit" ? t("agentConsole.currentStatusApplyEdit", "Apply edits") : t("agentConsole.requestApproval", "Request approval");
   const title = status.title || t("agentConsole.permissionPending", "Permission request pending");
+  const isCommandApproval = isCommandLikeApproval({ permission: status.permissionBlock, toolCall: status.toolCall, fallbackTitle: title });
+  const displayTitle = isCommandApproval ? getApprovalDisplayDescription({ permission: status.permissionBlock, toolCall: status.toolCall, fallbackTitle: title }) : title;
   const fileSummaryLabel = status.fileSummary ? formatFileSummary(t, status.fileSummary) : null;
   const diffSummaryLabel = status.fileSummary && !status.fileSummary.estimated && (status.fileSummary.additions > 0 || status.fileSummary.deletions > 0)
     ? t("agentConsole.currentStatusDiffCompact", "+{{additions}} -{{deletions}}", { additions: status.fileSummary.additions, deletions: status.fileSummary.deletions })
@@ -105,11 +108,11 @@ function AgentApprovalStatusRow({ session, status }: { session: AgentSession; st
   const permissionDiffFiles = useMemo(() => permissionBlockToDiffFiles(status.permissionBlock), [status.permissionBlock]);
 
   return (
-    <section className="agent-approval-row agent-current-status-row" data-status-kind="approval" data-status-variant={status.variant} data-preview-overlay>
+    <section className="agent-approval-row agent-current-status-row" data-status-kind="approval" data-status-variant={status.variant} data-command-approval={isCommandApproval ? "true" : undefined} data-preview-overlay>
       <div className="agent-approval-row-main agent-current-status-row-main">
-        <Icon name="shield" size={13} />
+        {!isCommandApproval && <Icon name="shield" size={13} />}
         <span className="agent-approval-row-label agent-silver-shimmer-text">{label}</span>
-        <span className="agent-approval-row-title">{title}</span>
+        <span className="agent-approval-row-title" title={displayTitle}>{displayTitle}</span>
         {fileSummaryLabel && <span className="agent-current-status-file-chip" title={fileSummaryLabel}>{fileSummaryLabel}</span>}
         {diffSummaryLabel && <span className="agent-current-status-diff-meta">{diffSummaryLabel}</span>}
         {status.extraCount > 0 && <span className="agent-approval-row-count">{t("agentConsole.approvalMoreCount", "+{{count}} more", { count: status.extraCount })}</span>}
