@@ -32,6 +32,7 @@
   "gitAction": {
     "button": "Git 操作",
     "buttonTooltipNoTimer": "Git 操作",
+    "buttonTooltipTimedReady": "定时 Git 提醒已就绪",
     "buttonTooltipNextTimed": "下一次定时 Git 预计 {{count}} 分钟后",
     "commitBefore": "立即提交git后再进行其他操作",
     "commit": "完成本次操作后进行一次git提交",

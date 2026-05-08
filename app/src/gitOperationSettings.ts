@@ -106,6 +106,25 @@ export function getMinutesUntilTimedGitReminder(projectDirectory: string | undef
   return Math.max(0, Math.ceil((nextReminderAt - now) / 60_000));
 }
 
+export function getTimedGitReminderProgress(projectDirectory: string | undefined, now = Date.now(), settings = getGitOperationSettings()): { enabled: boolean; ready: boolean; minutesUntil: number | null; progress: number } {
+  if (!settings.timedReminderEnabled) return { enabled: false, ready: false, minutesUntil: null, progress: 0 };
+  const lastInjectedAt = readTimedGitReminderLastInjectedAt(projectDirectory);
+  if (!lastInjectedAt) return { enabled: true, ready: true, minutesUntil: 0, progress: 1 };
+
+  const intervalMs = settings.timedReminderIntervalMinutes * 60 * 1000;
+  const nextReminderAt = lastInjectedAt + intervalMs;
+  const remainingMs = nextReminderAt - now;
+  if (remainingMs <= 0) return { enabled: true, ready: true, minutesUntil: 0, progress: 1 };
+
+  const progress = Math.max(0, Math.min(1, 1 - remainingMs / intervalMs));
+  return {
+    enabled: true,
+    ready: false,
+    minutesUntil: Math.ceil(remainingMs / 60_000),
+    progress,
+  };
+}
+
 export function markTimedGitReminderInjected(projectDirectory?: string, now = Date.now()) {
   try { localStorage.setItem(reminderWorkspaceKey(projectDirectory), String(now)); } catch {}
 }

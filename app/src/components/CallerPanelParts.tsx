@@ -1,4 +1,4 @@
-import { forwardRef, useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { forwardRef, useCallback, useEffect, useMemo, useRef, useState, type CSSProperties } from "react";
 import { createPortal } from "react-dom";
 import { useTranslation } from "react-i18next";
 import { useFeedbackStore } from "../store/feedbackStore";
@@ -9,7 +9,7 @@ import { useActiveCallerSession } from "./useActiveCallerSession";
 import { readText as readClipboardText } from "@tauri-apps/plugin-clipboard-manager";
 import { webAttachmentLabel } from "../browser/webAttachmentFormat";
 import { collectSubmittedResourceLinks, type SubmittedResourceLink } from "../composer/submittedFeedback";
-import { GIT_OPERATION_SETTINGS_EVENT, getGitOperationSettings, getMinutesUntilTimedGitReminder, shouldInjectTimedGitReminder } from "../gitOperationSettings";
+import { GIT_OPERATION_SETTINGS_EVENT, getGitOperationSettings, getTimedGitReminderProgress, shouldInjectTimedGitReminder } from "../gitOperationSettings";
 import { CatppuccinResourceIcon } from "./CatppuccinResourceIcon";
 
 const DOCK_COLUMN_IDS: DockColumnId[] = ["leftSidebar", "leftPage", "rightPage", "rightSidebar"];
@@ -140,14 +140,23 @@ export function AttachmentTagBar({
     if (queuedCallerId || hasGitAction || !activeSession || activeSession.status !== "pending") return false;
     return shouldInjectTimedGitReminder(activeSession.projectDirectory, Date.now(), getGitOperationSettings());
   }, [activeSession, gitReminderTick, hasGitAction, queuedCallerId]);
-  const gitReminderDelayMinutes = useMemo(() => {
+  const gitReminderProgress = useMemo(() => {
     const projectDirectory = activeSession?.projectDirectory;
     if (!projectDirectory) return null;
-    return getMinutesUntilTimedGitReminder(projectDirectory, Date.now(), getGitOperationSettings());
+    return getTimedGitReminderProgress(projectDirectory, Date.now(), getGitOperationSettings());
   }, [activeSession?.projectDirectory, gitReminderTick]);
-  const gitActionButtonTitle = gitReminderDelayMinutes === null
-    ? t("gitAction.buttonTooltipNoTimer", "Git Action")
-    : t("gitAction.buttonTooltipNextTimed", "Next timed Git reminder in {{count}} min", { count: gitReminderDelayMinutes });
+  const refreshGitReminderCountdown = useCallback(() => setGitReminderTick((value) => value + 1), []);
+  const gitActionButtonTitle = useMemo(() => {
+    if (!gitReminderProgress?.enabled) return t("gitAction.buttonTooltipNoTimer", "Git Action");
+    if (gitReminderProgress.ready) return t("gitAction.buttonTooltipTimedReady", "Timed Git reminder ready now");
+    return t("gitAction.buttonTooltipNextTimed", "Next timed Git reminder in {{count}} min", { count: gitReminderProgress.minutesUntil ?? 0 });
+  }, [gitReminderProgress, t]);
+  const gitActionCountdownStyle = gitReminderProgress?.enabled ? {
+    "--git-countdown-angle": `${Math.round(gitReminderProgress.progress * 360)}deg`,
+    "--git-countdown-color": "var(--color-git-countdown)",
+    "--git-countdown-fill": showGitPanel ? callerColor : "var(--color-bg-elevated)",
+    "--git-countdown-track": showGitPanel ? "color-mix(in srgb, var(--color-git-countdown) 34%, transparent)" : "var(--color-border)",
+  } as CSSProperties : undefined;
   const hasTags = images.length > 0 || hasTestLog || showTestLog || hasGitAction || timedGitReady || hasMlcAttachments || hasWebAttachments;
   const tagAreaRef = useRef<HTMLDivElement>(null);
   const branchInputRef = useRef<HTMLInputElement>(null);
@@ -295,15 +304,17 @@ export function AttachmentTagBar({
           )}
         </button>
         <button
-          className="btn"
+          className={`btn${gitReminderProgress?.enabled ? " git-action-countdown-btn" : ""}${gitReminderProgress?.ready ? " git-action-countdown-ready" : ""}`}
           style={{
             fontSize: 11,
             padding: "3px 10px",
             background: showGitPanel ? callerColor : undefined,
             borderColor: showGitPanel ? callerColor : undefined,
             color: showGitPanel ? "#fff" : undefined,
+            ...gitActionCountdownStyle,
           }}
           onClick={() => setShowGitPanel((v) => !v)}
+          onMouseEnter={refreshGitReminderCountdown}
           title={gitActionButtonTitle}
         >
           <Icon name="git-commit" size={12} />

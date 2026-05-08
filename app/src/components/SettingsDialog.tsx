@@ -1131,9 +1131,7 @@ export function SettingsDialog({ open, onClose }: { open: boolean; onClose: () =
                     ...(gitOperationSettings.folderBlacklist.length > 0 ? gitOperationSettings.folderBlacklist.map((entry) => `- ${entry}`) : ["- (none)"]),
                     "",
                     "Requirements:",
-                    "- Inspect `git status --short` before staging files.",
                     "- Do not stage or commit files under the configured blacklisted folders.",
-                    "- Prefer explicit `git add -- <files>` when unrelated or risky files are present.",
                   ].join("\n")}</pre>
                 </div>
               </div>

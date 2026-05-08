@@ -139,10 +139,7 @@ function formatGitSafetyRequirements(settings: GitOperationSettings): string {
   return [
     formatGitFolderBlacklist(settings),
     "Requirements:",
-    "- Inspect `git status --short` before staging files.",
     "- Do not stage or commit files under the configured blacklisted folders.",
-    "- Prefer explicit `git add -- <files>` when unrelated or risky files are present.",
-    "- Keep generated build output out of the commit unless the user explicitly asks for it.",
   ].filter(Boolean).join("\n\n");
 }
 

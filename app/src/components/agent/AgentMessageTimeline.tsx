@@ -209,10 +209,7 @@ export function AgentMessageTimeline({ session }: { session: AgentSession }) {
 
   return (
     <div className="agent-message-timeline" ref={scrollRef} onScroll={handleTimelineScroll}>
-      <div
-        className="agent-timeline-top-overlay"
-        ref={topOverlayRef}
-      >
+      <div className="agent-timeline-top-overlay" ref={topOverlayRef}>
         <AgentSessionHeader session={session} />
         {showStickyUserMessageBar && (
           <div className="agent-sticky-user-slot">

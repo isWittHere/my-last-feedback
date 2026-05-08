@@ -194,13 +194,7 @@ export function SummaryPanel({ topbarSlot }: { topbarSlot?: ReactNode }) {
       {/* Content — user-select enabled for text selection */}
       <div ref={scrollRef} className="flex-1 overflow-y-auto pt-1 pb-12 min-w-0" style={{ userSelect: "text" }}>
         {topbarSlot && (
-          <div
-            className="summary-topbar-overlay"
-            onWheelCapture={(event) => {
-              event.preventDefault();
-              event.stopPropagation();
-            }}
-          >
+          <div className="summary-topbar-overlay">
             {topbarSlot}
           </div>
         )}

@@ -32,6 +32,7 @@
   "gitAction": {
     "button": "Git Action",
     "buttonTooltipNoTimer": "Git Action",
+    "buttonTooltipTimedReady": "Timed Git reminder ready now",
     "buttonTooltipNextTimed": "Next timed Git reminder in {{count}} min",
     "commitBefore": "Commit git now, then continue",
     "commit": "Commit git after this task",

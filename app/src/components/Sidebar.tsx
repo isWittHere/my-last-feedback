@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState, type CSSProperties } from "react";
+import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState, type CSSProperties, type WheelEvent } from "react";
 import { createPortal } from "react-dom";
 import { invoke } from "@tauri-apps/api/core";
 import { useFeedbackStore } from "../store/feedbackStore";
@@ -406,6 +406,15 @@ export function Sidebar({ mode, onModeChange }: { mode: SessionListMode; onModeC
   );
   const compactSessions = useMemo(() => sortSessionsForNavigation(sessions), [sessions]);
 
+  const handleTopbarWheel = useCallback((event: WheelEvent<HTMLDivElement>) => {
+    const container = event.currentTarget;
+    if (container.scrollWidth <= container.clientWidth) return;
+    const delta = Math.abs(event.deltaX) > Math.abs(event.deltaY) ? event.deltaX : event.deltaY;
+    if (delta === 0) return;
+    container.scrollLeft += delta;
+    event.preventDefault();
+  }, []);
+
   const hoverPopup = hoveredItem && createPortal(
     <div
       className="session-collapsed-popup"
@@ -528,14 +537,7 @@ export function Sidebar({ mode, onModeChange }: { mode: SessionListMode; onModeC
 
   if (isTopbar) {
     return (
-      <div
-        className={`session-sidebar session-sidebar-topbar session-sidebar-topbar-${isTopbarStats ? "stats" : "compact"}${modeTransitionClass}`}
-        onContextMenu={handleModeContextMenu}
-        onWheelCapture={(event) => {
-          event.preventDefault();
-          event.stopPropagation();
-        }}
-      >
+      <div className={`session-sidebar session-sidebar-topbar session-sidebar-topbar-${isTopbarStats ? "stats" : "compact"}${modeTransitionClass}`} onContextMenu={handleModeContextMenu}>
         <div className="session-topbar-caller">
           {caller ? (
             <>
@@ -561,7 +563,7 @@ export function Sidebar({ mode, onModeChange }: { mode: SessionListMode; onModeC
             <span className="session-topbar-caller-name">{t("sidebar.history", "History")}</span>
           )}
         </div>
-        <div className="session-topbar-list">
+        <div className="session-topbar-list" onWheel={handleTopbarWheel}>
           {compactSessions.length === 0 ? (
             <div className="session-topbar-empty">{t("sidebar.empty", "No sessions yet")}</div>
           ) : compactSessions.map((session) => {

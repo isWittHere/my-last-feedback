@@ -33,3 +33,4 @@
 - Update nearby docs when behavior, commands, packaging, or setup expectations change. Prefer linking to `README.md`, `BUILD.md`, and `CONTRIBUTING.md` instead of duplicating long instructions.
 - Version bumps are cross-cutting: when asked to change release versions, keep `package.json`, `app/package.json`, and `app/src-tauri/Cargo.toml` in sync.
 - Packaging scripts live in `scripts/`; prefer updating those scripts over duplicating packaging logic in ad hoc files.
+- 简单的操作或更改不需要你重新构建验证，也不需要检查diff，除非用户明确要求你进行验证或构建。

@@ -38,14 +38,7 @@ export function AgentSessionHeader({ session, previewMode = false }: AgentSessio
   }, [defaultExpandHeaderDetails, previewMode, session.id]);
 
   return (
-    <div
-      className={`agent-console-header${expanded ? " expanded" : ""}${previewMode ? " agent-console-header-preview" : ""}`}
-      data-preview-overlay
-      onWheelCapture={(event) => {
-        event.preventDefault();
-        event.stopPropagation();
-      }}
-    >
+    <div className={`agent-console-header${expanded ? " expanded" : ""}${previewMode ? " agent-console-header-preview" : ""}`} data-preview-overlay>
       <div className="agent-console-header-main">
         <div className="agent-console-topbar-caller">
           {identity.code ? (

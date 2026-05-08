@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { useCallback, useMemo, useRef, useState } from "react";
 import { useTranslation } from "react-i18next";
 import { readText as readClipboardText } from "@tauri-apps/plugin-clipboard-manager";
 import { useAgentStore } from "../../store/agentStore";
@@ -10,7 +10,6 @@ import { Icon, MlcLogoIcon } from "../Icons";
 import type { PromptCommandOption } from "../../composer/promptCommands";
 import { SharedComposerInput } from "../composer/SharedComposerInput";
 import { GIT_ACTION_TYPES, GitActionOptionIcon, GitActionTag, TestLogTag, gitActionLabelKey } from "../CallerPanelParts";
-import { GIT_OPERATION_SETTINGS_EVENT, getGitOperationSettings, getMinutesUntilTimedGitReminder } from "../../gitOperationSettings";
 
 const AGENT_COMPOSER_CALLER_ID = "agent-console";
 const DOCK_COLUMN_IDS: DockColumnId[] = ["leftSidebar", "leftPage", "rightPage", "rightSidebar"];
@@ -65,7 +64,6 @@ export function AgentComposer({ session }: { session: AgentSession }) {
   const branchInputRef = useRef<HTMLInputElement>(null);
   const [showTestLog, setShowTestLog] = useState(false);
   const [showGitPanel, setShowGitPanel] = useState(false);
-  const [gitReminderTick, setGitReminderTick] = useState(0);
   const updateDraft = useAgentStore((state) => state.updateDraft);
   const setSessionMode = useAgentStore((state) => state.setSessionMode);
   const setSessionModel = useAgentStore((state) => state.setSessionModel);
@@ -98,22 +96,6 @@ export function AgentComposer({ session }: { session: AgentSession }) {
     }));
   }, [session.availableCommands]);
   const hasContent = hasAgentComposerContent(session);
-  const gitReminderDelayMinutes = useMemo(() => (
-    getMinutesUntilTimedGitReminder(session.cwd, Date.now(), getGitOperationSettings())
-  ), [gitReminderTick, session.cwd]);
-  const gitActionButtonTitle = gitReminderDelayMinutes === null
-    ? t("gitAction.buttonTooltipNoTimer", "Git Action")
-    : t("gitAction.buttonTooltipNextTimed", "Next timed Git reminder in {{count}} min", { count: gitReminderDelayMinutes });
-
-  useEffect(() => {
-    const refresh = () => setGitReminderTick((value) => value + 1);
-    const intervalId = window.setInterval(refresh, 30_000);
-    window.addEventListener(GIT_OPERATION_SETTINGS_EVENT, refresh as EventListener);
-    return () => {
-      window.clearInterval(intervalId);
-      window.removeEventListener(GIT_OPERATION_SETTINGS_EVENT, refresh as EventListener);
-    };
-  }, []);
 
   const findDockColumnForTab = useCallback((tabId: DockTabId): DockColumnId | null => (
     DOCK_COLUMN_IDS.find((columnId) => dockLayout.columns[columnId].tabIds.includes(tabId)) || null
@@ -221,7 +203,7 @@ export function AgentComposer({ session }: { session: AgentSession }) {
           color: showGitPanel ? "#fff" : undefined,
         }}
         onClick={() => setShowGitPanel((current) => !current)}
-        title={gitActionButtonTitle}
+        title={t("gitAction.buttonTooltipNoTimer", "Git Action")}
       >
         <Icon name="git-commit" size={12} />
         <span className="attachment-action-label">{t("gitAction.button", "Git Action")}</span>

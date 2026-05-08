@@ -18,6 +18,7 @@
   --color-danger: #f06060;
   --color-danger-hover: #e04545;
   --color-warning: #d7ba7d;
+  --color-git-countdown: #9a7417;
   --color-success: #4ec9b0;
   --color-success-dim: #2d7a6a;
   --color-accent-green: #2d5a4d;
@@ -47,6 +48,7 @@
   --color-danger: #dc3545;
   --color-danger-hover: #c82333;
   --color-warning: #b7791f;
+  --color-git-countdown: #bd8522;
   --color-success: #0e9d83;
   --color-success-dim: #b5e8dd;
   --color-accent-green: #d4f0e9;
@@ -1685,6 +1687,28 @@ body,
 .attachment-action-row .btn svg,
 .attachment-control-group .btn svg {
   flex: 0 0 auto;
+}
+
+.git-action-countdown-btn {
+  --git-countdown-angle: 0deg;
+  --git-countdown-color: var(--color-git-countdown);
+  --git-countdown-fill: var(--color-bg-elevated);
+  --git-countdown-track: var(--color-border);
+  border-color: transparent !important;
+  background:
+    linear-gradient(var(--git-countdown-fill), var(--git-countdown-fill)) padding-box,
+    conic-gradient(from -90deg, var(--git-countdown-color) 0deg var(--git-countdown-angle), var(--git-countdown-track) var(--git-countdown-angle) 360deg) border-box !important;
+}
+.git-action-countdown-btn:hover {
+  --git-countdown-fill: #292929;
+  --git-countdown-track: #3a3a3a;
+}
+[data-theme="light"] .git-action-countdown-btn:hover {
+  --git-countdown-fill: #e8e8e8;
+  --git-countdown-track: #ccc;
+}
+.git-action-countdown-ready {
+  --git-countdown-angle: 360deg;
 }
 
 .git-action-icon-pair {
