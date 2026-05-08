@@ -3,7 +3,7 @@ import type { AgentContentBlock, AgentMessage, AgentSession, AgentTaskItem } fro
 export type AgentStepKind = "thinking" | "compaction" | "tool" | "task_list" | "artifacts" | "permission" | "error";
 export type AgentStepStatus = "pending" | "running" | "completed" | "failed";
 export type AgentTokenStatKind = AgentStepKind | "user" | "result";
-export type AgentStepTone = "document_change" | "document_read" | "command_execution" | "todo_update" | "artifact_output";
+export type AgentStepTone = "document_change" | "document_read" | "document_search" | "command_execution" | "todo_update" | "artifact_output";
 
 export interface AgentStepItem {
   id: string;
@@ -92,7 +92,11 @@ function toolIdentityText(block: Extract<AgentContentBlock, { type: "tool_call" 
 }
 
 function isReadToolIdentity(identityText: string): boolean {
-  return /\b(read|view|open|cat|grep|rg|search|find|list|ls|glob|scan)\b|读取|查看|搜索|查找|列出|扫描/.test(identityText);
+  return /\b(read|view|open|cat|list|ls)\b|读取|查看|列出/.test(identityText);
+}
+
+function isSearchToolIdentity(identityText: string): boolean {
+  return /\b(grep|rg|search|find|glob|scan)\b|搜索|查找|扫描/.test(identityText);
 }
 
 function hasArgKey(args: Record<string, unknown> | undefined, names: string[]): boolean {
@@ -112,7 +116,7 @@ function isToolCallFailure(block: Extract<AgentContentBlock, { type: "tool_call"
     block.label,
     block.result,
   ].filter(Boolean).join("\n").toLowerCase();
-  return !isReadToolIdentity(identityText) && /the arguments provided to the tool are invalid|model tried to call unavailable tool/.test(resultText);
+  return !isReadToolIdentity(identityText) && !isSearchToolIdentity(identityText) && /the arguments provided to the tool are invalid|model tried to call unavailable tool/.test(resultText);
 }
 
 function toolStepTone(block: Extract<AgentContentBlock, { type: "tool_call" }>): AgentStepTone | undefined {
@@ -127,7 +131,9 @@ function toolStepTone(block: Extract<AgentContentBlock, { type: "tool_call" }>):
     ? "todo_update"
     : /\b(edit|write|patch|apply|modify|replace|update|create|delete|remove|insert)\b|编辑|写入|修改|补丁|应用|创建|删除|新增/.test(identityText) || (hasPath && hasWritePayload)
     ? "document_change"
-    : isReadToolIdentity(identityText) || (hasPath && !hasWritePayload && !hasCommandPayload)
+    : isSearchToolIdentity(identityText)
+      ? "document_search"
+      : isReadToolIdentity(identityText) || (hasPath && !hasWritePayload && !hasCommandPayload)
         ? "document_read"
         : /\b(bash|shell|terminal|command|run|exec|execute|python|node|npm|pnpm|yarn|cargo|go|pytest|test|build)\b|执行|命令|运行|代码|测试|构建/.test(identityText) || hasCommandPayload
           ? "command_execution"

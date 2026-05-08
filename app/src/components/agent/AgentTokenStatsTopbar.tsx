@@ -3,7 +3,9 @@ import { useTranslation } from "react-i18next";
 import { useAgentConsoleSettings } from "../../agentConsoleSettings";
 import type { AgentSession } from "../../agent/types";
 import { type AgentTokenStatKind, type AgentStepStatus } from "../../agent/steps";
+import { getAgentStepTypeLabel, getAgentStepVisualDescriptor } from "../../agent/stepVisuals";
 import { getAgentTokenStatsSummary } from "../../agent/tokenStats";
+import { Icon } from "../Icons";
 
 const TOKEN_ITEM_MIN_WIDTH = 14;
 const TOKEN_ITEM_MAX_WIDTH = 44;
@@ -32,17 +34,6 @@ function getTokenItemShape(tokenCount: number, kind: AgentTokenStatKind) {
   }
 
   return { width, height };
-}
-
-function kindLabel(kind: AgentTokenStatKind, t: (key: string, defaultValue: string) => string): string {
-  if (kind === "user") return t("agentConsole.tokenKinds.user", "User");
-  if (kind === "result") return t("agentConsole.tokenKinds.result", "Result");
-  if (kind === "thinking") return t("agentConsole.tokenKinds.thinking", "Thinking");
-  if (kind === "tool") return t("agentConsole.tokenKinds.tool", "Tool");
-  if (kind === "task_list") return t("agentConsole.tokenKinds.taskList", "Tasks");
-  if (kind === "permission") return t("agentConsole.tokenKinds.permission", "Permission");
-  if (kind === "error") return t("agentConsole.tokenKinds.error", "Error");
-  return t("agentConsole.tokenKinds.artifacts", "Artifacts");
 }
 
 function statusLabel(status: AgentStepStatus, t: (key: string, defaultValue: string) => string): string {
@@ -91,6 +82,7 @@ function getTooltipLeft(rootRect: DOMRect, itemRect: DOMRect): number {
 interface TokenTooltipState {
   left: number;
   title: string;
+  iconName: string;
   kind: string;
   status: string;
   tokens: string;
@@ -101,7 +93,14 @@ export function AgentTokenStatsTopbar({ session }: { session: AgentSession }) {
   const { navigationIndicatorOrder } = useAgentConsoleSettings();
   const summary = useMemo(() => getAgentTokenStatsSummary(session), [session]);
   const stats = summary.stats;
-  const displayStats = useMemo(() => navigationIndicatorOrder === "rightToLeft" ? [...stats].reverse() : stats, [navigationIndicatorOrder, stats]);
+  const groupedStats = useMemo(() => {
+    let groupIndex = -1;
+    return stats.map((stat) => {
+      if (stat.kind === "user" || groupIndex < 0) groupIndex += 1;
+      return { ...stat, groupIndex };
+    });
+  }, [stats]);
+  const displayStats = useMemo(() => navigationIndicatorOrder === "rightToLeft" ? [...groupedStats].reverse() : groupedStats, [navigationIndicatorOrder, groupedStats]);
   const currentIndex = stats.findIndex((stat) => stat.status === "running" || stat.status === "pending");
   const highlightedIndex = currentIndex >= 0 ? currentIndex : stats.length - 1;
   const highlightedStat = highlightedIndex >= 0 ? stats.find((stat) => stat.index === highlightedIndex) : undefined;
@@ -135,19 +134,21 @@ export function AgentTokenStatsTopbar({ session }: { session: AgentSession }) {
   return (
     <div ref={topbarRef} className="agent-token-topbar" aria-label={t("agentConsole.tokenStats", "Agent step token statistics")}>
       <div ref={listRef} className="agent-token-topbar-list" onWheel={handleWheel}>
-        {displayStats.map((stat) => {
+        {displayStats.map((stat, displayIndex) => {
           const shape = getTokenItemShape(stat.tokenCount, stat.kind);
           const label = statLabel(stat.kind, stat.label, t);
-          const title = `${stat.index + 1}. ${label}`;
-          const kind = kindLabel(stat.kind, t);
+          const title = label;
+          const visual = getAgentStepVisualDescriptor(stat);
+          const kind = getAgentStepTypeLabel(stat, t);
           const status = stat.staleRunningState ? t("agentConsole.stepStatus.staleRunning", "Stale running state") : statusLabel(stat.status, t);
-          const tokens = t(stat.estimated ? "agentConsole.estimatedTokens" : "agentConsole.tokens", stat.estimated ? "{{value}} estimated tokens" : "{{value}} tokens", { value: formatTokenCount(stat.tokenCount) });
+          const tokens = t(stat.estimated ? "agentConsole.estimatedTokens" : "agentConsole.tokens", stat.estimated ? "{{value}} tokens estimated" : "{{value}} tokens", { value: formatTokenCount(stat.tokenCount) });
           const ariaLabel = [title, `${kind} · ${status}`, tokens].join("\n");
+          const hasGroupGap = displayIndex > 0 && stat.groupIndex !== displayStats[displayIndex - 1].groupIndex;
           return (
             <button
               key={stat.id}
               type="button"
-              className={`agent-token-topbar-item agent-token-topbar-item-${stat.kind}${stat.tone ? ` agent-token-topbar-tone-${stat.tone}` : ""} agent-token-topbar-item-${stat.status}${stat.staleRunningState ? " agent-token-topbar-item-stale-running" : ""}${stat.index === highlightedIndex ? " current" : ""}`}
+              className={`agent-token-topbar-item agent-token-topbar-item-${stat.kind}${stat.tone ? ` agent-token-topbar-tone-${stat.tone}` : ""} agent-token-topbar-item-${stat.status}${stat.staleRunningState ? " agent-token-topbar-item-stale-running" : ""}${hasGroupGap ? " agent-token-topbar-item-group-gap" : ""}${stat.index === highlightedIndex ? " current" : ""}`}
               data-agent-token-current={stat.index === highlightedIndex ? "true" : undefined}
               aria-label={ariaLabel}
               onClick={() => focusAgentStat(stat.messageId, stat.target === "step" ? (stat.stepId || stat.blockIds[0]) : undefined)}
@@ -159,6 +160,7 @@ export function AgentTokenStatsTopbar({ session }: { session: AgentSession }) {
                 setTooltip({
                   left: getTooltipLeft(rootRect, itemRect),
                   title,
+                  iconName: visual.iconName,
                   kind,
                   status,
                   tokens,
@@ -173,6 +175,7 @@ export function AgentTokenStatsTopbar({ session }: { session: AgentSession }) {
                 setTooltip({
                   left: getTooltipLeft(rootRect, itemRect),
                   title,
+                  iconName: visual.iconName,
                   kind,
                   status,
                   tokens,
@@ -186,11 +189,12 @@ export function AgentTokenStatsTopbar({ session }: { session: AgentSession }) {
       </div>
       {tooltip && (
         <div className="agent-token-topbar-tooltip" style={{ "--agent-token-tooltip-left": `${tooltip.left}px` } as CSSProperties}>
-          <span className="agent-token-topbar-tooltip-title">{tooltip.title}</span>
           <span className="agent-token-topbar-tooltip-meta">
+            <Icon name={tooltip.iconName} size={12} className="agent-token-topbar-tooltip-meta-icon" />
             <strong>{tooltip.kind}</strong>
             <span>{tooltip.status}</span>
           </span>
+          <span className="agent-token-topbar-tooltip-title">{tooltip.title}</span>
           <span className="agent-token-topbar-tooltip-tokens">{tooltip.tokens}</span>
         </div>
       )}

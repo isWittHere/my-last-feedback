@@ -2499,6 +2499,10 @@ body,
   transition: width 0.12s, height 0.12s, background-color 0.12s, opacity 0.12s, filter 0.12s;
 }
 
+.agent-token-topbar-item-group-gap {
+  margin-inline-start: 6px;
+}
+
 .agent-token-topbar-item:hover {
   opacity: 1;
   filter: brightness(1.12);
@@ -2570,6 +2574,11 @@ body,
 }
 
 .agent-token-topbar-tone-document_read {
+  background: var(--step-card-user);
+  background-image: none;
+}
+
+.agent-token-topbar-tone-document_search {
   background: var(--step-card-user);
   background-image: none;
 }
@@ -2706,6 +2715,11 @@ body,
   background-image: none;
 }
 
+[data-theme="light"] .agent-token-topbar-tone-document_search {
+  background: var(--step-card-user);
+  background-image: none;
+}
+
 [data-theme="light"] .agent-token-topbar-tone-command_execution {
   background-color: var(--step-card-command);
   background-image: repeating-linear-gradient(
@@ -2803,6 +2817,11 @@ body,
   min-width: 0;
   color: var(--color-text-muted);
   font-weight: 500;
+}
+
+.agent-token-topbar-tooltip-meta-icon {
+  flex: 0 0 auto;
+  color: var(--color-text-secondary);
 }
 
 .agent-token-topbar-tooltip-meta strong {
@@ -4862,6 +4881,42 @@ body,
   white-space: nowrap;
 }
 
+.agent-process-file-tag {
+  max-width: 168px;
+  margin: 0;
+  padding: 0 5px;
+  font-size: 0.96em;
+  line-height: 15px;
+  cursor: inherit;
+}
+
+.agent-process-step-tabs .agent-process-file-tag {
+  max-width: 118px;
+  padding: 0;
+  border-color: transparent;
+  background: transparent;
+  color: inherit;
+  font-size: 1em;
+  line-height: inherit;
+}
+
+.agent-process-step-tabs .agent-process-file-tag svg,
+.agent-process-step-tabs .agent-process-file-tag .readonly-resource-icon {
+  width: 12px;
+  height: 12px;
+}
+
+.agent-process-step-tabs .agent-process-file-tag:hover,
+.agent-process-step-tabs .agent-process-file-tag:focus-visible {
+  border-color: transparent;
+  color: inherit;
+}
+
+.agent-process-file-tag svg,
+.agent-process-file-tag .readonly-resource-icon {
+  flex: 0 0 auto;
+}
+
 .agent-process-step-tabs button:hover,
 .agent-process-step-tabs button.active {
   color: var(--color-text-primary);
@@ -5088,6 +5143,10 @@ body,
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
+}
+
+.agent-process-step-label-text {
+  flex: 0 0 auto;
 }
 
 .agent-process-step-head .agent-process-stale-step-icon,

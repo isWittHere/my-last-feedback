@@ -3,6 +3,9 @@ import { useTranslation } from "react-i18next";
 import { useAgentConsoleSettings, type AgentProcessStepDefaultMode } from "../../agentConsoleSettings";
 import type { AgentContentBlock } from "../../agent/types";
 import { buildAgentProcessSteps, type AgentStepItem } from "../../agent/steps";
+import { basenameResourcePath, getAgentStepDisplayLabel, getAgentStepTarget, getAgentStepTypeLabel, getAgentStepVisualDescriptor } from "../../agent/stepVisuals";
+import { useFeedbackStore } from "../../store/feedbackStore";
+import { CatppuccinResourceIcon } from "../CatppuccinResourceIcon";
 import { Icon } from "../Icons";
 import { MarkdownContent } from "../MarkdownContent";
 
@@ -66,14 +69,7 @@ function formatScalar(value: unknown): string {
 }
 
 function stepIconName(step: AgentStepItem): string {
-  if (step.status === "failed") return "circle-x";
-  if (step.kind === "thinking") return "message-dot";
-  if (step.kind === "compaction") return "list-tree";
-  if (step.kind === "tool") return "wrench";
-  if (step.kind === "task_list") return "checklist";
-  if (step.kind === "permission") return "shield";
-  if (step.kind === "error") return "warning";
-  return "file-text";
+  return getAgentStepVisualDescriptor(step).iconName;
 }
 
 function stepHasContent(step: AgentStepItem): boolean {
@@ -83,6 +79,35 @@ function stepHasContent(step: AgentStepItem): boolean {
   if (step.kind === "task_list") return Boolean(step.tasks?.length);
   if (step.kind === "artifacts") return Boolean(step.blocks?.length);
   return Boolean(step.detail);
+}
+
+function AgentProcessFileTag({ path }: { path: string }) {
+  const resourceIconTheme = useFeedbackStore((state) => state.resourceIconTheme);
+  const label = basenameResourcePath(path);
+  return (
+    <span className="readonly-resource-tag agent-process-file-tag" data-tooltip={`File\n${path}`} data-tooltip-placement="top">
+      {resourceIconTheme === "catppuccin" ? (
+        <CatppuccinResourceIcon entry={{ name: label, relativePath: path, kind: "file" }} size={12} className="readonly-resource-icon" />
+      ) : (
+        <Icon name="file-text" size={11} />
+      )}
+      <span>{label}</span>
+    </span>
+  );
+}
+
+function StepHeadLabel({ step, fallbackLabel }: { step: AgentStepItem; fallbackLabel: string }) {
+  const { t } = useTranslation();
+  const target = getAgentStepTarget(step);
+  if (target && (step.tone === "document_change" || step.tone === "document_read")) {
+    return (
+      <>
+        <span className="agent-process-step-label-text">{getAgentStepTypeLabel(step, t)}</span>
+        <AgentProcessFileTag path={target} />
+      </>
+    );
+  }
+  return <span className="agent-process-step-label-text">{getAgentStepDisplayLabel(step, t, fallbackLabel)}</span>;
 }
 
 function StepDetail({ step, projectDirectory }: { step: AgentStepItem; projectDirectory?: string }) {
@@ -382,7 +407,7 @@ export function AgentProcessGroup({ blocks, messageId, isStreaming = false, proj
                     {!isLast && <span className="agent-process-step-line" />}
                     <button type="button" className="agent-process-step-head" onClick={() => hasContent && toggleStep(index)}>
                       <Icon name={stepIconName(step)} size={13} />
-                      <span>{step.label}</span>
+                      <StepHeadLabel step={step} fallbackLabel={step.label} />
                       {step.staleRunningState && (
                         <span className="agent-process-stale-step-icon">
                           <Icon name="circle-warning" size={13} />
@@ -416,7 +441,7 @@ export function AgentProcessGroup({ blocks, messageId, isStreaming = false, proj
                 {steps.map((step, index) => (
                   <button key={`${step.kind}-${index}`} type="button" className={activeIndex === index ? "active" : ""} onClick={() => setActiveIndex(index)}>
                     <Icon name={stepIconName(step)} size={11} />
-                    <span>{step.label}</span>
+                    <StepHeadLabel step={step} fallbackLabel={step.label} />
                     {step.staleRunningState && (
                       <span className="agent-process-stale-step-icon">
                         <Icon name="circle-warning" size={13} />

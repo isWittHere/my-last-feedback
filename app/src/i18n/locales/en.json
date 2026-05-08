@@ -141,7 +141,7 @@
     "noSteps": "No process steps",
     "tokenStats": "Agent step token statistics",
     "tokens": "{{value}} tokens",
-    "estimatedTokens": "{{value}} estimated tokens",
+    "estimatedTokens": "{{value}} tokens estimated",
     "estimatedShort": "est.",
     "userInput": "User input",
     "agentOutput": "Agent output",
@@ -200,6 +200,24 @@
       "error": "Error",
       "artifacts": "Artifacts"
     },
+    "stepTypes": {
+      "userInput": "User input",
+      "agentOutput": "Agent output",
+      "thinking": "Thinking process",
+      "tool": "Tool call",
+      "fileRead": "File read",
+      "search": "Search",
+      "fileEdit": "File edit",
+      "commandExecution": "Command execution",
+      "todoUpdate": "Todo update",
+      "taskList": "Task list",
+      "permission": "Permission request",
+      "error": "Error step",
+      "artifactOutput": "Artifact output",
+      "contextCompaction": "Context compaction"
+    },
+    "stepTypeWithCommand": "{{type}} {{command}}",
+    "stepTypeWithTarget": "{{type}} {{target}}",
     "stepStatus": {
       "pending": "Pending",
       "running": "Running",
