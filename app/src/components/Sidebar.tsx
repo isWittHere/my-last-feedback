@@ -96,32 +96,32 @@ function getRequestTypeLabel(requestType: Session["requestType"], t: (key: strin
   }
 }
 
-function getTopbarStatsColor(session: Session, isLight: boolean): string {
-  if (session.status === "pending") return isLight ? "#eab308" : "#facc15";
-  if (session.status === "cancelled") return "#991b1b";
+function getTopbarStatsColor(session: Session): string {
+  if (session.status === "pending") return "var(--stats-nav-warning)";
+  if (session.status === "cancelled") return "var(--stats-nav-error)";
 
   switch (session.requestType) {
     case "explanation":
-      return "#7c3aed";
+      return "var(--stats-nav-tertiary)";
     case "question":
     case "planning":
-      return isLight ? "#db2777" : "#ec4899";
+      return "var(--stats-nav-secondary)";
     case "completion":
-      return isLight ? "#0f766e" : "#0d9488";
+      return "var(--stats-nav-primary)";
     case "analysis_report":
-      return "#7c3aed";
+      return "var(--stats-nav-tertiary)";
     case "document_completed":
-      return isLight ? "#94a3b8" : "#9ca3af";
+      return "var(--stats-nav-document)";
     case "verification_completed":
-      return isLight ? "#0f766e" : "#0d9488";
+      return "var(--stats-nav-primary)";
     case "default":
     default:
-      return isLight ? "#64748b" : "#6b7280";
+      return "var(--stats-nav-neutral)";
   }
 }
 
-function getTopbarStatsCallerColor(activeCallerColor: string | null, isLight: boolean): string {
-  return activeCallerColor || (isLight ? "#64748b" : "#94a3b8");
+function getTopbarStatsCallerColor(activeCallerColor: string | null): string {
+  return activeCallerColor || "var(--stats-nav-neutral)";
 }
 
 /** Collapsible session group with sticky header */
@@ -581,7 +581,7 @@ export function Sidebar({ mode, onModeChange }: { mode: SessionListMode; onModeC
                     width: shape!.width,
                     minWidth: shape!.width,
                     height: shape!.height,
-                    "--session-topbar-card-bg": useColorCards ? getTopbarStatsColor(session, isLight) : getTopbarStatsCallerColor(activeCallerColor, isLight),
+                    "--session-topbar-card-bg": useColorCards ? getTopbarStatsColor(session) : getTopbarStatsCallerColor(activeCallerColor),
                   } as CSSProperties}
                 >
                   {showAttachmentDots && hasSessionAttachments(session) && <span className="session-topbar-attachment-dot" />}
