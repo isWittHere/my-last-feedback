@@ -265,7 +265,6 @@ export function Sidebar({ mode, onModeChange }: { mode: SessionListMode; onModeC
   const { t } = useTranslation();
   const friendlyName = useFriendlyName();
   const override = useCallerOverride();
-  const isLight = useIsLightTheme();
   const { callerId: activeCallerId, sessionId: activeSessionId, caller } = useActiveCallerSession();
   const allSessions = useFeedbackStore((s) => s.sessions);
   const setActiveSession = useFeedbackStore((s) => s.setActiveSession);

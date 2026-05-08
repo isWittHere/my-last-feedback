@@ -226,7 +226,6 @@ export function normalizeOpenCodeEvent(event: OpenCodeBusEvent): OpenCodeNormali
     const partType = asString(part.type);
     const delta = asString(event.properties.delta) || "";
     if (!delta) return [];
-    if (partType === "reasoning" && field === "summary") return [];
     return [
       {
         type: "text.delta",
@@ -453,7 +452,7 @@ function normalizeReasoningPart(part: OpenCodeMessagePart): AgentThinkingBlock {
     origin: blockOrigin(asString(part.messageID)),
     createdAt: timestampFromMs(time.start),
     updatedAt: time.end || time.completed ? timestampFromMs(time.end || time.completed) : undefined,
-    content: asString(part.text) || asString(part.summary) || asString(state.text) || asString(state.summary) || "",
+    content: asString(part.text) || asString(state.text) || "",
     status: completed ? "completed" : "running",
     ...(staleRunningState ? { staleRunningState } : {}),
   };

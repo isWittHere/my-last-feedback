@@ -41,31 +41,6 @@ interface AgentOpenCodeHttpRuntimeEntry {
 }
 
 const openCodeHttpRuntimes = new Map<string, AgentOpenCodeHttpRuntimeEntry>();
-const STREAM_FLUSH_INTERVAL_MS = 40;
-const STREAM_DRAIN_INTERVAL_MS = 16;
-const STREAM_RATE_WINDOW_MS = 900;
-const STREAM_RATE_MULTIPLIER = 1.35;
-const STREAM_BASE_CHARS_PER_TICK = 16;
-const STREAM_MAX_CHARS_PER_TICK = 160;
-const STREAM_DRAIN_TICK_TARGET = 4;
-const STREAM_DRAIN_MIN_CHARS_PER_TICK = 160;
-const STREAM_DRAIN_MAX_CHARS_PER_TICK = 1400;
-
-interface PacedTextBuffer {
-  sessionId: string;
-  phase: "process" | "result";
-  messageId?: string;
-  partId?: string;
-  pending: string;
-  draining: boolean;
-  inputWindowStartedAt: number;
-  inputCharsInWindow: number;
-  lastInputAt: number;
-  timer: ReturnType<typeof setTimeout> | null;
-  waiters: Array<() => void>;
-}
-
-const pacedTextBuffers = new Map<string, PacedTextBuffer>();
 
 interface CompactionSummaryRoute {
   sessionId: string;
@@ -137,18 +112,6 @@ function textBlock(content: string, phase: "process" | "result" = "result"): Age
     origin: { phase, placement: "standalone" },
     createdAt: nowIso(),
   };
-}
-
-function appendDedupedText(existing: string, incoming: string): string {
-  if (!incoming) return existing;
-  if (!existing) return incoming;
-  if (existing.endsWith(incoming)) return existing;
-  if (existing.startsWith(incoming)) return existing;
-  if (incoming.startsWith(existing)) return incoming;
-  const trimmedIncoming = incoming.trim();
-  if (trimmedIncoming.length >= 12 && existing.trimEnd().endsWith(trimmedIncoming)) return existing;
-  if (trimmedIncoming.length >= 12 && existing.trimStart().startsWith(trimmedIncoming)) return existing;
-  return existing + incoming;
 }
 
 function mergeThinkingContent(existing: string, incoming: string): string {
@@ -1015,210 +978,6 @@ function insertProcessBlock(blocks: AgentContentBlock[], block: AgentContentBloc
   return [...blocks.slice(0, firstResultIndex), block, ...blocks.slice(firstResultIndex)];
 }
 
-function appendAssistantTextChunkImmediate(session: AgentSession, phase: "process" | "result", text: string, messageId?: string, partId?: string): AgentSession {
-  if (!text) return session;
-  const messages = [...session.messages];
-  let targetIndex = messageId ? messages.findIndex((message) => message.role === "assistant" && messageMatchesProviderId(message, messageId)) : -1;
-  if (targetIndex < 0) {
-    const lastIndex = messages.length - 1;
-    const lastMessage = messages[lastIndex];
-    if (lastMessage?.role === "assistant" && lastMessage.status === "streaming" && (!messageId || !lastMessage.providerMessageId || messageMatchesProviderId(lastMessage, messageId))) {
-      targetIndex = lastIndex;
-    }
-  }
-  if (targetIndex < 0 && messageId) targetIndex = findLatestAssistantAfterLastUser(messages);
-  let assistantMessage = targetIndex >= 0 ? messages[targetIndex] : null;
-  if (!assistantMessage) {
-    assistantMessage = createStreamingAssistantMessage(messageId);
-    messages.push(assistantMessage);
-    targetIndex = messages.length - 1;
-  }
-  assistantMessage = bindAssistantProviderMessageId(assistantMessage, messageId);
-
-  const targetType = phase === "process" ? "thinking" : "text";
-  const blockIndex = assistantMessage.blocks.findIndex((block) => partId ? block.id === partId : block.type === targetType && block.origin.phase === phase);
-  let blocks = [...assistantMessage.blocks];
-  if (blockIndex >= 0) {
-    const block = blocks[blockIndex];
-    if (block.type === "text") blocks[blockIndex] = { ...block, content: appendDedupedText(block.content, text), updatedAt: nowIso() };
-    if (block.type === "thinking") blocks[blockIndex] = { ...block, content: appendDedupedText(block.content, text), status: "running", updatedAt: nowIso() };
-  } else if (phase === "process") {
-    blocks = insertProcessBlock(blocks, {
-      id: partId || newId("agent_thinking"),
-      type: "thinking",
-      content: text,
-      status: "running",
-      origin: { phase: "process", placement: "standalone" },
-      createdAt: nowIso(),
-    });
-  } else {
-    blocks.push(partId ? { ...textBlock(text, "result"), id: partId } : textBlock(text, "result"));
-  }
-
-  messages[targetIndex] = { ...assistantMessage, blocks, updatedAt: nowIso() };
-  return { ...session, messages, updatedAt: nowIso() };
-}
-
-function pacedBufferKey(sessionId: string, phase: "process" | "result", messageId?: string, partId?: string): string {
-  return `${sessionId}:${messageId || "active"}:${partId || "part"}:${phase}`;
-}
-
-function charsForBacklog(length: number): number {
-  if (length > 1200) return STREAM_MAX_CHARS_PER_TICK;
-  if (length > 600) return 64;
-  if (length > 240) return 32;
-  return STREAM_BASE_CHARS_PER_TICK;
-}
-
-function notePacedBufferInput(buffer: PacedTextBuffer, textLength: number) {
-  const time = Date.now();
-  if (time - buffer.inputWindowStartedAt > STREAM_RATE_WINDOW_MS) {
-    buffer.inputWindowStartedAt = time;
-    buffer.inputCharsInWindow = 0;
-  }
-  buffer.inputCharsInWindow += textLength;
-  buffer.lastInputAt = time;
-}
-
-function charsForPacedBuffer(buffer: PacedTextBuffer): number {
-  if (buffer.draining) {
-    const catchUpSize = Math.ceil(buffer.pending.length / STREAM_DRAIN_TICK_TARGET);
-    return Math.min(STREAM_DRAIN_MAX_CHARS_PER_TICK, Math.max(STREAM_DRAIN_MIN_CHARS_PER_TICK, catchUpSize));
-  }
-
-  const elapsed = Math.max(1, Date.now() - buffer.inputWindowStartedAt);
-  const upstreamCharsPerTick = Math.ceil((buffer.inputCharsInWindow / elapsed) * STREAM_FLUSH_INTERVAL_MS * STREAM_RATE_MULTIPLIER);
-  return Math.max(charsForBacklog(buffer.pending.length), Math.min(STREAM_MAX_CHARS_PER_TICK, upstreamCharsPerTick));
-}
-
-function resolvePacedBuffer(buffer: PacedTextBuffer) {
-  for (const resolve of buffer.waiters.splice(0)) resolve();
-}
-
-function flushPacedTextBuffer(key: string) {
-  const buffer = pacedTextBuffers.get(key);
-  if (!buffer) return;
-  buffer.timer = null;
-  const releaseLength = Math.min(charsForPacedBuffer(buffer), buffer.pending.length);
-  const text = buffer.pending.slice(0, releaseLength);
-  buffer.pending = buffer.pending.slice(releaseLength);
-
-  if (text) {
-    useAgentStore.setState((state) => ({
-      sessions: updateSession(state.sessions, buffer.sessionId, (session) => appendAssistantTextChunkImmediate(session, buffer.phase, text, buffer.messageId, buffer.partId)),
-    }));
-  }
-
-  if (buffer.pending) {
-    buffer.timer = setTimeout(() => flushPacedTextBuffer(key), buffer.draining ? STREAM_DRAIN_INTERVAL_MS : STREAM_FLUSH_INTERVAL_MS);
-    return;
-  }
-  pacedTextBuffers.delete(key);
-  resolvePacedBuffer(buffer);
-}
-
-function appendAssistantTextChunk(session: AgentSession, phase: "process" | "result", text: string, messageId?: string, partId?: string): AgentSession {
-  if (!text) return session;
-  if (!getAgentConsoleSettings().smoothStreamingOutput) {
-    return appendAssistantTextChunkImmediate(session, phase, text, messageId, partId);
-  }
-
-  const key = pacedBufferKey(session.id, phase, messageId, partId);
-  const buffer = pacedTextBuffers.get(key) || {
-    sessionId: session.id,
-    phase,
-    messageId,
-    partId,
-    pending: "",
-    draining: false,
-    inputWindowStartedAt: Date.now(),
-    inputCharsInWindow: 0,
-    lastInputAt: Date.now(),
-    timer: null,
-    waiters: [],
-  };
-  buffer.pending = appendDedupedText(buffer.pending, text);
-  notePacedBufferInput(buffer, text.length);
-  pacedTextBuffers.set(key, buffer);
-  if (!buffer.timer) {
-    buffer.timer = setTimeout(() => flushPacedTextBuffer(key), STREAM_FLUSH_INTERVAL_MS);
-  }
-  return session;
-}
-
-function waitForPacedTextBuffers(sessionId: string): Promise<void> {
-  const buffers = [...pacedTextBuffers.values()].filter((buffer) => buffer.sessionId === sessionId);
-  if (buffers.length === 0) return Promise.resolve();
-  return Promise.all(buffers.map((buffer) => new Promise<void>((resolve) => buffer.waiters.push(resolve)))).then(() => undefined);
-}
-
-function drainPacedTextBuffers(sessionId: string): Promise<void> {
-  const buffers = [...pacedTextBuffers.entries()].filter(([, buffer]) => buffer.sessionId === sessionId);
-  if (buffers.length === 0) return Promise.resolve();
-  for (const [key, buffer] of buffers) {
-    buffer.draining = true;
-    if (buffer.timer) clearTimeout(buffer.timer);
-    buffer.timer = setTimeout(() => flushPacedTextBuffer(key), 0);
-  }
-  return waitForPacedTextBuffers(sessionId);
-}
-
-function clearPacedTextBuffers(sessionId?: string) {
-  for (const [key, buffer] of pacedTextBuffers) {
-    if (sessionId && buffer.sessionId !== sessionId) continue;
-    if (buffer.timer) clearTimeout(buffer.timer);
-    pacedTextBuffers.delete(key);
-    resolvePacedBuffer(buffer);
-  }
-}
-
-function flushPacedTextBuffersIntoSession(session: AgentSession): AgentSession {
-  let nextSession = session;
-  for (const [key, buffer] of pacedTextBuffers) {
-    if (buffer.sessionId !== session.id) continue;
-    if (buffer.timer) clearTimeout(buffer.timer);
-    if (buffer.pending) {
-      nextSession = appendAssistantTextChunkImmediate(nextSession, buffer.phase, buffer.pending, buffer.messageId, buffer.partId);
-    }
-    pacedTextBuffers.delete(key);
-    resolvePacedBuffer(buffer);
-  }
-  return nextSession;
-}
-
-function flushPacedTextBufferForPartIntoSession(session: AgentSession, phase: "process" | "result", messageId?: string, partId?: string): AgentSession {
-  let nextSession = session;
-  const keys = [...new Set([
-    pacedBufferKey(session.id, phase, messageId, partId),
-    pacedBufferKey(session.id, phase, messageId, undefined),
-  ])];
-  for (const key of keys) {
-    const buffer = pacedTextBuffers.get(key);
-    if (!buffer) continue;
-    if (buffer.timer) clearTimeout(buffer.timer);
-    if (buffer.pending) {
-      nextSession = appendAssistantTextChunkImmediate(nextSession, buffer.phase, buffer.pending, buffer.messageId, buffer.partId);
-    }
-    pacedTextBuffers.delete(key);
-    resolvePacedBuffer(buffer);
-  }
-  return nextSession;
-}
-
-function clearPacedTextBufferForPart(sessionId: string, phase: "process" | "result", messageId?: string, partId?: string) {
-  const keys = [...new Set([
-    pacedBufferKey(sessionId, phase, messageId, partId),
-    pacedBufferKey(sessionId, phase, messageId, undefined),
-  ])];
-  for (const key of keys) {
-    const buffer = pacedTextBuffers.get(key);
-    if (!buffer) continue;
-    if (buffer.timer) clearTimeout(buffer.timer);
-    pacedTextBuffers.delete(key);
-    resolvePacedBuffer(buffer);
-  }
-}
-
 function completeStreamingAssistant(session: AgentSession, providerMessageId?: string): AgentSession {
   const completeProcessBlock = (block: AgentContentBlock): AgentContentBlock => {
     if (block.type === "thinking") return block.status === "completed" ? block : { ...block, status: "completed", updatedAt: nowIso() };
@@ -1296,6 +1055,111 @@ function findAssistantMessageIndex(messages: AgentMessage[], blockId?: string, p
   return -1;
 }
 
+function openCodeMessagePartId(part: OpenCodeMessagePart | undefined): string | undefined {
+  return typeof part?.id === "string" ? part.id : undefined;
+}
+
+function openCodeMessagePartMessageId(part: OpenCodeMessagePart | undefined): string | undefined {
+  return typeof part?.messageID === "string" ? part.messageID : undefined;
+}
+
+function assistantProviderParts(message: AgentMessage): OpenCodeMessagePart[] {
+  return (message.providerParts || []) as OpenCodeMessagePart[];
+}
+
+function findAssistantProviderPartMessageIndex(messages: AgentMessage[], messageId?: string, partId?: string): number {
+  if (messageId) {
+    for (let index = messages.length - 1; index >= 0; index -= 1) {
+      const message = messages[index];
+      if (message.role === "assistant" && messageMatchesProviderId(message, messageId)) return index;
+    }
+  }
+  if (partId) {
+    for (let index = messages.length - 1; index >= 0; index -= 1) {
+      const message = messages[index];
+      if (message.role === "assistant" && assistantProviderParts(message).some((part) => openCodeMessagePartId(part) === partId)) return index;
+    }
+  }
+  return -1;
+}
+
+function upsertAssistantProviderPart(session: AgentSession, part: OpenCodeMessagePart, messageId?: string): AgentSession {
+  const partId = openCodeMessagePartId(part);
+  const providerMessageId = openCodeMessagePartMessageId(part) || messageId;
+  if (!partId) return session;
+  const messages = [...session.messages];
+  let targetIndex = findAssistantProviderPartMessageIndex(messages, providerMessageId, partId);
+  if (targetIndex < 0 && providerMessageId) targetIndex = findLatestAssistantAfterLastUser(messages);
+  let assistantMessage = targetIndex >= 0 ? messages[targetIndex] : null;
+  if (!assistantMessage) {
+    assistantMessage = createStreamingAssistantMessage(providerMessageId);
+    messages.push(assistantMessage);
+    targetIndex = messages.length - 1;
+  }
+  assistantMessage = bindAssistantProviderMessageId(assistantMessage, providerMessageId);
+  const parts = [...assistantProviderParts(assistantMessage)];
+  const nextPart = { ...part, ...(providerMessageId && !openCodeMessagePartMessageId(part) ? { messageID: providerMessageId } : {}) };
+  const partIndex = parts.findIndex((item) => openCodeMessagePartId(item) === partId);
+  if (partIndex >= 0) {
+    parts[partIndex] = nextPart;
+  } else {
+    const insertIndex = parts.findIndex((item) => (openCodeMessagePartId(item) || "") > partId);
+    if (insertIndex >= 0) parts.splice(insertIndex, 0, nextPart);
+    else parts.push(nextPart);
+  }
+  messages[targetIndex] = { ...assistantMessage, providerParts: parts as AgentProviderMessagePart[], updatedAt: nowIso() };
+  return { ...session, messages, updatedAt: nowIso() };
+}
+
+function applyAssistantProviderPartDelta(session: AgentSession, options: { messageId?: string; partId?: string; field?: string; delta: string }): { session: AgentSession; part?: OpenCodeMessagePart } {
+  if (!options.messageId || !options.partId || !options.field || !options.delta) return { session };
+  const messages = [...session.messages];
+  const targetIndex = findAssistantProviderPartMessageIndex(messages, options.messageId, options.partId);
+  if (targetIndex < 0) return { session };
+  const assistantMessage = messages[targetIndex];
+  if (assistantMessage.role !== "assistant") return { session };
+  const parts = [...assistantProviderParts(assistantMessage)];
+  const partIndex = parts.findIndex((item) => openCodeMessagePartId(item) === options.partId);
+  if (partIndex < 0) return { session };
+  const part = parts[partIndex];
+  const existing = typeof part[options.field] === "string" ? part[options.field] : "";
+  const nextPart = { ...part, messageID: openCodeMessagePartMessageId(part) || options.messageId, [options.field]: `${existing}${options.delta}` };
+  parts[partIndex] = nextPart;
+  messages[targetIndex] = { ...assistantMessage, providerParts: parts as AgentProviderMessagePart[], updatedAt: nowIso() };
+  return { session: { ...session, messages, updatedAt: nowIso() }, part: nextPart };
+}
+
+function openCodePartFromEvent(event: OpenCodeBusEvent): OpenCodeMessagePart | undefined {
+  const part = event.properties.part;
+  return typeof part === "object" && part !== null ? part as OpenCodeMessagePart : undefined;
+}
+
+function openCodePartRelatedBlockIds(part: OpenCodeMessagePart): string[] {
+  return [part.id, part.callID]
+    .filter((item): item is string => typeof item === "string" && item.length > 0);
+}
+
+function syncAssistantProviderPartBlocks(session: AgentSession, messageId?: string, partId?: string): AgentSession {
+  const messages = [...session.messages];
+  const targetIndex = findAssistantProviderPartMessageIndex(messages, messageId, partId);
+  if (targetIndex < 0) return session;
+  const assistantMessage = messages[targetIndex];
+  if (assistantMessage.role !== "assistant") return session;
+  const providerParts = assistantProviderParts(assistantMessage);
+  const relatedIds = new Set(providerParts.flatMap(openCodePartRelatedBlockIds));
+  const providerBlocks = mergeAdjacentThinkingBlocks(providerParts
+    .map((part, index) => normalizeOpenCodePartForRestore(part, index, providerParts, "assistant"))
+    .filter((block): block is AgentContentBlock => Boolean(block))
+    .filter((block) => block.type !== "text" || Boolean(block.content.trim())));
+  const preservedBlocks = assistantMessage.blocks.filter((block) => !relatedIds.has(block.id));
+  messages[targetIndex] = {
+    ...assistantMessage,
+    blocks: mergeAdjacentThinkingBlocks([...providerBlocks, ...preservedBlocks]),
+    updatedAt: nowIso(),
+  };
+  return { ...session, messages, updatedAt: nowIso() };
+}
+
 function upsertAssistantBlock(session: AgentSession, block: AgentContentBlock, messageId?: string): AgentSession {
   const messages = [...session.messages];
   let targetIndex = findAssistantMessageIndex(messages, block.id, messageId);
@@ -1315,7 +1179,7 @@ function upsertAssistantBlock(session: AgentSession, block: AgentContentBlock, m
 
   let blocks = [...assistantMessage.blocks];
   let blockIndex = blocks.findIndex((item) => item.id === block.id);
-  if (blockIndex < 0 && (block.type === "text" || block.type === "compaction")) {
+  if (blockIndex < 0 && block.type === "compaction") {
     blockIndex = blocks.findIndex((item) => item.type === block.type && item.origin.phase === block.origin.phase);
   }
   if (blockIndex >= 0) {
@@ -1529,7 +1393,14 @@ function applyOpenCodeBusEvent(session: AgentSession, event: OpenCodeBusEvent): 
         nextSession = appendCompactionSummaryText(nextSession, compactionRoute, normalized.delta, normalized.messageId);
         continue;
       }
-      nextSession = appendAssistantTextChunk(nextSession, normalized.phase, normalized.delta, normalized.messageId, normalized.partId);
+      const deltaResult = applyAssistantProviderPartDelta(nextSession, {
+        messageId: normalized.messageId,
+        partId: normalized.partId,
+        field: normalized.field,
+        delta: normalized.delta,
+      });
+      nextSession = deltaResult.session;
+      if (deltaResult.part) nextSession = syncAssistantProviderPartBlocks(nextSession, normalized.messageId, normalized.partId);
       continue;
     }
     if (normalized.type === "block.updated") {
@@ -1545,13 +1416,13 @@ function applyOpenCodeBusEvent(session: AgentSession, event: OpenCodeBusEvent): 
         nextSession = upsertBlockBeforeCompaction(nextSession, compactionRoute, normalized.block, normalized.messageId);
         continue;
       }
-      if (normalized.block.type === "text" || normalized.block.type === "thinking") {
-        nextSession = normalized.block.content
-          ? nextSession
-          : flushPacedTextBufferForPartIntoSession(nextSession, normalized.block.origin.phase, normalized.messageId, normalized.partId);
-        clearPacedTextBufferForPart(nextSession.id, normalized.block.origin.phase, normalized.messageId, normalized.partId);
+      const part = openCodePartFromEvent(normalized.raw);
+      if (part) {
+        nextSession = upsertAssistantProviderPart(nextSession, part, normalized.messageId);
+        nextSession = syncAssistantProviderPartBlocks(nextSession, normalized.messageId, normalized.partId);
+      } else {
+        nextSession = upsertAssistantBlock(nextSession, normalized.block, normalized.messageId);
       }
-      nextSession = upsertAssistantBlock(nextSession, normalized.block, normalized.messageId);
       continue;
     }
     if (normalized.type === "permission.asked") {
@@ -1577,7 +1448,6 @@ function applyOpenCodeBusEvent(session: AgentSession, event: OpenCodeBusEvent): 
       continue;
     }
     if (normalized.type === "session.status") {
-      if (normalized.status === "idle") nextSession = flushPacedTextBuffersIntoSession(nextSession);
       nextSession = {
         ...(normalized.status === "idle" ? completeStreamingAssistant(nextSession) : nextSession),
         status: normalized.status === "idle" ? "idle" : normalized.status === "running" ? "running" : nextSession.status,
@@ -1588,7 +1458,6 @@ function applyOpenCodeBusEvent(session: AgentSession, event: OpenCodeBusEvent): 
     }
     if (normalized.type === "session.error") {
       const isAbort = isOpenCodeAbortError(normalized.error);
-      if (isAbort) clearPacedTextBuffers(nextSession.id);
       nextSession = {
         ...(isAbort ? completeStreamingAssistant(nextSession) : failStreamingAssistant(nextSession, normalized.error.message || normalized.error.name || "OpenCode session error")),
         status: isAbort ? "idle" : "error",
@@ -1620,12 +1489,10 @@ function applyOpenCodeBusEvent(session: AgentSession, event: OpenCodeBusEvent): 
       }
       if (!isCompactionSummary && (normalized.info?.agent || normalized.info?.mode)) nextSession = { ...nextSession, modeId: normalized.info.agent || normalized.info.mode, updatedAt: nowIso() };
       if (isAbortUpdate) {
-        clearPacedTextBuffers(nextSession.id);
         nextSession = { ...completeStreamingAssistant(nextSession), status: "idle", updatedAt: nowIso() };
         continue;
       }
       if (normalized.status === "complete") {
-        nextSession = flushPacedTextBuffersIntoSession(nextSession);
         if (normalized.role === "assistant" && nextSession.status !== "running") nextSession = completeStreamingAssistant(nextSession, normalized.messageId);
       }
       if (normalized.status === "error") nextSession = { ...nextSession, status: "error", updatedAt: nowIso() };
@@ -1948,7 +1815,6 @@ export const useAgentStore = create<AgentStoreState>((set, get) => ({
     const httpRuntime = openCodeHttpRuntimes.get(processId);
     if (httpRuntime) {
       openCodeHttpRuntimes.delete(processId);
-      clearPacedTextBuffers(sessionId);
       httpRuntime.events.stop();
       await httpRuntime.runtime.stop().catch(() => undefined);
       set((state) => ({
@@ -1960,7 +1826,6 @@ export const useAgentStore = create<AgentStoreState>((set, get) => ({
       }));
       return;
     }
-    clearPacedTextBuffers(sessionId);
     set((state) => ({
       sessions: updateSession(state.sessions, sessionId, (item) => appendDiagnosticToSession({
         ...item,
@@ -2143,15 +2008,13 @@ export const useAgentStore = create<AgentStoreState>((set, get) => ({
             ...(commandParts.length > 0 ? { parts: commandParts } : {}),
           }).catch((error) => {
             const message = error instanceof Error ? error.message : String(error);
-            void drainPacedTextBuffers(sessionId).finally(() => {
-              set((state) => ({
-                sessions: updateSession(state.sessions, sessionId, (item) => appendDiagnosticToSession({
-                  ...item,
-                  status: "error",
-                  updatedAt: nowIso(),
-                }, "error", `OpenCode command failed: ${message}`)),
-              }));
-            });
+            set((state) => ({
+              sessions: updateSession(state.sessions, sessionId, (item) => appendDiagnosticToSession({
+                ...item,
+                status: "error",
+                updatedAt: nowIso(),
+              }, "error", `OpenCode command failed: ${message}`)),
+            }));
           });
           return;
         }
@@ -2252,7 +2115,6 @@ export const useAgentStore = create<AgentStoreState>((set, get) => ({
       throw new Error("This Agent backend is not supported.");
     } catch (error) {
       const message = error instanceof Error ? error.message : String(error);
-      await drainPacedTextBuffers(sessionId);
       set((state) => ({
         sessions: updateSession(state.sessions, sessionId, (item) => appendDiagnosticToSession({
           ...failStreamingAssistant(item, message),
@@ -2267,7 +2129,6 @@ export const useAgentStore = create<AgentStoreState>((set, get) => ({
     if (!session) return;
     const httpRuntime = openCodeHttpRuntimeForSession(session, get().sessions);
     if (httpRuntime && session.providerSessionId) {
-      clearPacedTextBuffers(sessionId);
       set((state) => ({
         sessions: updateSession(state.sessions, sessionId, (item) => appendDiagnosticToSession({
           ...item,
@@ -2809,7 +2670,6 @@ export const useAgentStore = create<AgentStoreState>((set, get) => ({
       void entry.runtime.stop().catch(() => undefined);
     }
     openCodeHttpRuntimes.clear();
-    clearPacedTextBuffers();
     set(() => ({
       sessions: [createAgentSession()],
       activeSessionId: "agent-session-opencode",

@@ -89,12 +89,6 @@ function sseDeltaKey(event: OpenCodeBusEvent): string | undefined {
   return undefined;
 }
 
-function partUpdateHasTextSnapshot(event: OpenCodeBusEvent): boolean {
-  const part = eventPart(eventProperties(event));
-  if (!part) return false;
-  return [part.text, part.summary, part.content].some((value) => typeof value === "string" && value.length > 0);
-}
-
 export class OpenCodeHttpClient {
   private readonly baseUrl: string;
   private readonly username: string;
@@ -344,13 +338,13 @@ export class OpenCodeSseConnection {
       const existingIndex = this.coalescedEvents.get(key);
       if (existingIndex !== undefined) {
         this.eventQueue[existingIndex] = event;
+        if (event.type === "message.part.updated") {
+          const deltaKey = sseDeltaKey(event);
+          if (deltaKey) this.staleDeltaKeys.add(deltaKey);
+        }
       } else {
         this.coalescedEvents.set(key, this.eventQueue.length);
         this.eventQueue.push(event);
-      }
-      if (event.type === "message.part.updated" && partUpdateHasTextSnapshot(event)) {
-        const deltaKey = sseDeltaKey(event);
-        if (deltaKey) this.staleDeltaKeys.add(deltaKey);
       }
     } else {
       this.eventQueue.push(event);
