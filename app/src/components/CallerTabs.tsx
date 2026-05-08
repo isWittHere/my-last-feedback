@@ -197,7 +197,7 @@ export function CallerTabs({ columnCount }: CallerTabsProps = {}) {
           transform: `translateX(${tx}px)`,
           transition: draggingId ? "transform 0.2s ease, opacity 0.15s" : "none",
           margin: "0 1.5px",
-          zIndex: isDragging ? 10 : isHovered ? 20 : 1,
+          zIndex: isDragging ? 120 : isHovered ? 120 : 1,
         }}
       >
         <IdenticonAvatar alias={aliasKey} color={caller.color} size={16} />

@@ -127,7 +127,8 @@ Whenever you're about to complete a user request, call the interactive_feedback 
 
 ## 请求类型 (request_type)
 - request_type 每次调用都必填。
-- 允许值：explanation、question、completion、analysis_report、document_completed、verification_completed、default。
+- 允许值：explanation、question、planning、completion、analysis_report、document_completed、verification_completed、default。
+- request_type 只是分类与视觉展示元数据，不会改变工具行为、权限、路由或可用能力。
 - 询问用户时使用 question；报告修复、实现或用户请求的任务完成时使用 completion。只有当用户明确要求执行检查、验证或测试本身时，才使用 verification_completed。
 
 ## 结构化问题 (questions)
@@ -151,7 +152,7 @@ Agent 现在会在需要确认时弹出反馈窗口。
 | `project_directory` | `string` | ✅ | 项目目录完整路径 |
 | `summary` | `string` | ✅ | Markdown 格式的工作摘要 |
 | `request_name` | `string` | ✅ | 任务标题（5-10 个词），显示在标题栏 |
-| `request_type` | `enum` | ✅ | `explanation`、`question`、`completion`、`analysis_report`、`document_completed`、`verification_completed`、`default` 之一 |
+| `request_type` | `enum` | ✅ | `explanation`、`question`、`planning`、`completion`、`analysis_report`、`document_completed`、`verification_completed`、`default` 之一 |
 | `agent_name` | `string` | ✅ | 4 位 Agent 标识符，之后调用传回同一个 ID |
 | `questions` | `array` | ❌ | 结构化问题：`[{ label: string, options?: string[] }]` |
 

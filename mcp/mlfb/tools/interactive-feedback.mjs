@@ -21,6 +21,7 @@ const MIME_BY_EXT = {
 const REQUEST_TYPE_VALUES = [
   "explanation",
   "question",
+  "planning",
   "completion",
   "analysis_report",
   "document_completed",
@@ -28,7 +29,7 @@ const REQUEST_TYPE_VALUES = [
   "default",
 ];
 const REQUEST_TYPE_SET = new Set(REQUEST_TYPE_VALUES);
-const REQUEST_TYPE_HINT = "request_type is REQUIRED and MUST be one of: explanation, question, completion, analysis_report, document_completed, verification_completed, default.";
+const REQUEST_TYPE_HINT = "request_type is REQUIRED and MUST be one of: explanation, question, planning, completion, analysis_report, document_completed, verification_completed, default. It is metadata for categorization and visual display only; it does not change tool behavior, permissions, routing, or available capabilities.";
 
 const TOOL_DESCRIPTION = `Request interactive feedback from the user via a desktop GUI window.
 The user may provide text feedback, test logs, and/or attach images.
@@ -41,7 +42,7 @@ IMPORTANT - rules for AI agents calling this tool:
 1. request_name MUST always be provided with a meaningful task title. Never omit it or leave it blank.
 2. summary MUST be written in standard Markdown format (headings, lists, bold, code blocks). Do NOT use escape characters such as \\n or \\t.
 3. Describe full context, suggestions, and detailed information in summary. Use questions only for concise, actionable choices or brief input fields.
-4. request_type: REQUIRED. Use one of: explanation (解释), question (询问), completion (修复/实现/请求任务已完成), analysis_report (分析细节报告), document_completed (完成文档), verification_completed (用户明确要求的验证/检查/测试已完成), default (默认). Never omit request_type.
+4. request_type: REQUIRED metadata only. It categorizes why you are asking for feedback and affects display/category labels only. It does NOT change tool behavior, permissions, routing, or available capabilities. Use one of: explanation (解释), question (询问), planning (规划方案), completion (修复/实现/请求任务已完成), analysis_report (分析细节报告), document_completed (完成文档), verification_completed (用户明确要求的验证/检查/测试已完成), default (默认). Never omit request_type.
 5. agent_name: REQUIRED. Your 4-char uppercase hex identifier assigned by the hook system (delivered via PostToolUse additionalContext, e.g. "[my-last-feedback] Your agent_name is \"A1B2\"").`;
 
 function assertRequestType(value) {
@@ -69,8 +70,8 @@ export function registerInteractiveFeedback(server) {
         "This parameter is REQUIRED and MUST NOT be left empty."
       ),
       request_type: z.enum(REQUEST_TYPE_VALUES).describe(
-        "REQUIRED. Why the agent is using this tool. " +
-        "Allowed values: explanation=解释, question=询问, completion=修复/实现/请求任务已完成, " +
+        "REQUIRED metadata only. Why the agent is using this tool. This categorizes the request for display and does not change tool behavior, permissions, routing, or capabilities. " +
+        "Allowed values: explanation=解释, question=询问, planning=规划方案, completion=修复/实现/请求任务已完成, " +
         "analysis_report=分析细节报告, document_completed=完成文档, " +
         "verification_completed=用户明确要求的验证/检查/测试已完成, default=默认/其他."
       ),

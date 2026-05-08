@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState, type CSSProperties, type WheelEvent } from "react";
+import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState, type CSSProperties } from "react";
 import { createPortal } from "react-dom";
 import { invoke } from "@tauri-apps/api/core";
 import { useFeedbackStore } from "../store/feedbackStore";
@@ -79,6 +79,8 @@ function getRequestTypeLabel(requestType: Session["requestType"], t: (key: strin
       return t("sidebar.requestType.explanation", "Explanation");
     case "question":
       return t("sidebar.requestType.question", "Question");
+    case "planning":
+      return t("sidebar.requestType.planning", "Planning");
     case "completion":
       return t("sidebar.requestType.completion", "Completion");
     case "analysis_report":
@@ -99,13 +101,14 @@ function getTopbarStatsColor(session: Session, isLight: boolean): string {
 
   switch (session.requestType) {
     case "explanation":
-      return isLight ? "#64748b" : "#6b7280";
+      return "#7c3aed";
     case "question":
-      return isLight ? "#7c3aed" : "#a78bfa";
+    case "planning":
+      return isLight ? "#db2777" : "#ec4899";
     case "completion":
       return isLight ? "#0f766e" : "#0d9488";
     case "analysis_report":
-      return isLight ? "#db2777" : "#ec4899";
+      return "#7c3aed";
     case "document_completed":
       return isLight ? "#94a3b8" : "#9ca3af";
     case "verification_completed":
@@ -403,15 +406,6 @@ export function Sidebar({ mode, onModeChange }: { mode: SessionListMode; onModeC
   );
   const compactSessions = useMemo(() => sortSessionsForNavigation(sessions), [sessions]);
 
-  const handleTopbarWheel = useCallback((event: WheelEvent<HTMLDivElement>) => {
-    const container = event.currentTarget;
-    if (container.scrollWidth <= container.clientWidth) return;
-    const delta = Math.abs(event.deltaX) > Math.abs(event.deltaY) ? event.deltaX : event.deltaY;
-    if (delta === 0) return;
-    container.scrollLeft += delta;
-    event.preventDefault();
-  }, []);
-
   const hoverPopup = hoveredItem && createPortal(
     <div
       className="session-collapsed-popup"
@@ -534,7 +528,14 @@ export function Sidebar({ mode, onModeChange }: { mode: SessionListMode; onModeC
 
   if (isTopbar) {
     return (
-      <div className={`session-sidebar session-sidebar-topbar session-sidebar-topbar-${isTopbarStats ? "stats" : "compact"}${modeTransitionClass}`} onContextMenu={handleModeContextMenu}>
+      <div
+        className={`session-sidebar session-sidebar-topbar session-sidebar-topbar-${isTopbarStats ? "stats" : "compact"}${modeTransitionClass}`}
+        onContextMenu={handleModeContextMenu}
+        onWheelCapture={(event) => {
+          event.preventDefault();
+          event.stopPropagation();
+        }}
+      >
         <div className="session-topbar-caller">
           {caller ? (
             <>
@@ -560,7 +561,7 @@ export function Sidebar({ mode, onModeChange }: { mode: SessionListMode; onModeC
             <span className="session-topbar-caller-name">{t("sidebar.history", "History")}</span>
           )}
         </div>
-        <div className="session-topbar-list" onWheel={handleTopbarWheel}>
+        <div className="session-topbar-list">
           {compactSessions.length === 0 ? (
             <div className="session-topbar-empty">{t("sidebar.empty", "No sessions yet")}</div>
           ) : compactSessions.map((session) => {

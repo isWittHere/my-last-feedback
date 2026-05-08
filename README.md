@@ -129,7 +129,8 @@ Whenever you're about to complete a user request, call the interactive_feedback 
 
 ## Request Type (request_type)
 - request_type is required in every call.
-- Allowed values: explanation, question, completion, analysis_report, document_completed, verification_completed, default.
+- Allowed values: explanation, question, planning, completion, analysis_report, document_completed, verification_completed, default.
+- request_type is metadata for categorization and visual display only; it does not change tool behavior, permissions, routing, or available capabilities.
 - Use question when asking the user something and completion when reporting a finished fix, implementation, or requested task. Use verification_completed only when the user's request is specifically to verify, check, or test something.
 
 ## Questions Feature
@@ -153,7 +154,7 @@ The agent will now pop up a feedback window whenever it needs your confirmation.
 | `project_directory` | `string` | Yes | Full path to the project directory |
 | `summary` | `string` | Yes | Work summary in Markdown format |
 | `request_name` | `string` | Yes | Concise task title (5–10 words), shown in the title bar |
-| `request_type` | `enum` | Yes | One of `explanation`, `question`, `completion`, `analysis_report`, `document_completed`, `verification_completed`, `default` |
+| `request_type` | `enum` | Yes | One of `explanation`, `question`, `planning`, `completion`, `analysis_report`, `document_completed`, `verification_completed`, `default` |
 | `agent_name` | `string` | Yes | 4-character agent identifier. Pass the assigned ID on subsequent calls |
 | `questions` | `array` | No | Structured questions: `[{ label: string, options?: string[] }]` |
 

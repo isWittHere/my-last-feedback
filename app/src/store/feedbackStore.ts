@@ -25,6 +25,7 @@ export type SessionStatus = "pending" | "responded" | "cancelled";
 export const REQUEST_TYPES = [
   "explanation",
   "question",
+  "planning",
   "completion",
   "analysis_report",
   "document_completed",

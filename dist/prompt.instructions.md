@@ -24,7 +24,8 @@ The #tool:my-last-feedback/interactive_feedback tool must be used in any of the 
 
 ## Request Type (`request_type`)
 - `request_type` is **REQUIRED** in every #tool:my-last-feedback/interactive_feedback call. Never omit it.
-- Allowed values only: `explanation`, `question`, `completion`, `analysis_report`, `document_completed`, `verification_completed`, `default`.
+- Allowed values only: `explanation`, `question`, `planning`, `completion`, `analysis_report`, `document_completed`, `verification_completed`, `default`.
+- `request_type` is metadata for categorization and visual display only. It does not change tool behavior, permissions, routing, or available capabilities.
 - Pick the narrowest matching value. When a fix, implementation, or requested task is finished, use `completion`; use `verification_completed` only when the user's request is specifically to verify, check, or test something. For asking what to do next, use `question`.
 
 ## Summary and Suggestions (`summary`)

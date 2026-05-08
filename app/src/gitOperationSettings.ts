@@ -9,16 +9,21 @@ export const GIT_OPERATION_SETTINGS_EVENT = "mlf-git-operation-settings-changed"
 const STORAGE_KEY = "mlf-git-operation-settings";
 const LAST_INJECTED_STORAGE_PREFIX = "mlf-git-reminder-last-injected-at::";
 
+export const GIT_TIMED_REMINDER_MIN_MINUTES = 15;
+export const GIT_TIMED_REMINDER_MAX_MINUTES = 180;
+export const GIT_TIMED_REMINDER_STEP_MINUTES = 15;
+
 export const DEFAULT_GIT_OPERATION_SETTINGS: GitOperationSettings = {
   timedReminderEnabled: true,
-  timedReminderIntervalMinutes: 20,
+  timedReminderIntervalMinutes: 30,
   folderBlacklist: ["ref-repos"],
 };
 
 function normalizeIntervalMinutes(value: unknown): number {
   const numericValue = typeof value === "number" ? value : Number(value);
   if (!Number.isFinite(numericValue)) return DEFAULT_GIT_OPERATION_SETTINGS.timedReminderIntervalMinutes;
-  return Math.max(1, Math.min(1440, Math.round(numericValue)));
+  const rounded = Math.round(numericValue / GIT_TIMED_REMINDER_STEP_MINUTES) * GIT_TIMED_REMINDER_STEP_MINUTES;
+  return Math.max(GIT_TIMED_REMINDER_MIN_MINUTES, Math.min(GIT_TIMED_REMINDER_MAX_MINUTES, rounded));
 }
 
 function normalizeFolderEntry(value: string): string | null {
@@ -91,6 +96,14 @@ export function shouldInjectTimedGitReminder(projectDirectory: string | undefine
   const lastInjectedAt = readTimedGitReminderLastInjectedAt(projectDirectory);
   if (!lastInjectedAt) return true;
   return now - lastInjectedAt >= settings.timedReminderIntervalMinutes * 60 * 1000;
+}
+
+export function getMinutesUntilTimedGitReminder(projectDirectory: string | undefined, now = Date.now(), settings = getGitOperationSettings()): number | null {
+  if (!settings.timedReminderEnabled) return null;
+  const lastInjectedAt = readTimedGitReminderLastInjectedAt(projectDirectory);
+  if (!lastInjectedAt) return 0;
+  const nextReminderAt = lastInjectedAt + settings.timedReminderIntervalMinutes * 60 * 1000;
+  return Math.max(0, Math.ceil((nextReminderAt - now) / 60_000));
 }
 
 export function markTimedGitReminderInjected(projectDirectory?: string, now = Date.now()) {

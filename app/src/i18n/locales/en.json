@@ -31,6 +31,8 @@
   },
   "gitAction": {
     "button": "Git Action",
+    "buttonTooltipNoTimer": "Git Action",
+    "buttonTooltipNextTimed": "Next timed Git reminder in {{count}} min",
     "commitBefore": "Commit git now, then continue",
     "commit": "Commit git after this task",
     "commitPush": "Commit and push git now, then continue",
@@ -283,6 +285,7 @@
     "requestType": {
       "explanation": "Explanation",
       "question": "Question",
+      "planning": "Planning",
       "completion": "Completion",
       "analysisReport": "Analysis report",
       "documentCompleted": "Document completed",
@@ -422,7 +425,10 @@
     "gitTimedReminder": "Timed Git backup reminder",
     "gitTimedReminderDesc": "When no manual Git Action is selected, inject a Git backup reminder into submitted feedback on a schedule.",
     "gitTimedReminderInterval": "Reminder interval",
-    "gitTimedReminderIntervalDesc": "Minimum minutes between scheduled Git backup reminders for the same workspace.",
+    "gitTimedReminderIntervalDesc": "Minimum interval between scheduled Git backup reminders for the same workspace. Range: 15 minutes to 3 hours.",
+    "gitTimedReminderIntervalMinutesValue": "{{count}} min",
+    "gitTimedReminderIntervalHoursValue": "{{count}} h",
+    "gitTimedReminderIntervalHoursMinutesValue": "{{hours}} h {{minutes}} min",
     "gitTimedReminderMinutes": "min",
     "gitFolderBlacklist": "Git folder blacklist",
     "gitFolderBlacklistDesc": "Folders listed here are included in Git Action and timed reminder instructions as paths the agent must not stage or commit.",

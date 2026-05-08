@@ -9,7 +9,7 @@ import { useActiveCallerSession } from "./useActiveCallerSession";
 import { readText as readClipboardText } from "@tauri-apps/plugin-clipboard-manager";
 import { webAttachmentLabel } from "../browser/webAttachmentFormat";
 import { collectSubmittedResourceLinks, type SubmittedResourceLink } from "../composer/submittedFeedback";
-import { GIT_OPERATION_SETTINGS_EVENT, getGitOperationSettings, shouldInjectTimedGitReminder } from "../gitOperationSettings";
+import { GIT_OPERATION_SETTINGS_EVENT, getGitOperationSettings, getMinutesUntilTimedGitReminder, shouldInjectTimedGitReminder } from "../gitOperationSettings";
 import { CatppuccinResourceIcon } from "./CatppuccinResourceIcon";
 
 const DOCK_COLUMN_IDS: DockColumnId[] = ["leftSidebar", "leftPage", "rightPage", "rightSidebar"];
@@ -140,6 +140,14 @@ export function AttachmentTagBar({
     if (queuedCallerId || hasGitAction || !activeSession || activeSession.status !== "pending") return false;
     return shouldInjectTimedGitReminder(activeSession.projectDirectory, Date.now(), getGitOperationSettings());
   }, [activeSession, gitReminderTick, hasGitAction, queuedCallerId]);
+  const gitReminderDelayMinutes = useMemo(() => {
+    const projectDirectory = activeSession?.projectDirectory;
+    if (!projectDirectory) return null;
+    return getMinutesUntilTimedGitReminder(projectDirectory, Date.now(), getGitOperationSettings());
+  }, [activeSession?.projectDirectory, gitReminderTick]);
+  const gitActionButtonTitle = gitReminderDelayMinutes === null
+    ? t("gitAction.buttonTooltipNoTimer", "Git Action")
+    : t("gitAction.buttonTooltipNextTimed", "Next timed Git reminder in {{count}} min", { count: gitReminderDelayMinutes });
   const hasTags = images.length > 0 || hasTestLog || showTestLog || hasGitAction || timedGitReady || hasMlcAttachments || hasWebAttachments;
   const tagAreaRef = useRef<HTMLDivElement>(null);
   const branchInputRef = useRef<HTMLInputElement>(null);
@@ -296,6 +304,7 @@ export function AttachmentTagBar({
             color: showGitPanel ? "#fff" : undefined,
           }}
           onClick={() => setShowGitPanel((v) => !v)}
+          title={gitActionButtonTitle}
         >
           <Icon name="git-commit" size={12} />
           <span className="attachment-action-label">{t("gitAction.button", "Git Action")}</span>

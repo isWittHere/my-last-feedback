@@ -30,6 +30,7 @@ fn normalize_request_type(value: &str) -> String {
     match value {
         "explanation"
         | "question"
+        | "planning"
         | "completion"
         | "analysis_report"
         | "document_completed"

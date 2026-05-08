@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useMemo, useRef, useState, type CSSProperties, type WheelEvent } from "react";
+import { useEffect, useMemo, useRef, useState, type CSSProperties } from "react";
 import { useTranslation } from "react-i18next";
 import { useAgentConsoleSettings } from "../../agentConsoleSettings";
 import type { AgentSession } from "../../agent/types";
@@ -109,15 +109,6 @@ export function AgentTokenStatsTopbar({ session }: { session: AgentSession }) {
   const listRef = useRef<HTMLDivElement>(null);
   const [tooltip, setTooltip] = useState<TokenTooltipState | null>(null);
 
-  const handleWheel = useCallback((event: WheelEvent<HTMLDivElement>) => {
-    const container = event.currentTarget;
-    if (container.scrollWidth <= container.clientWidth) return;
-    const delta = Math.abs(event.deltaX) > Math.abs(event.deltaY) ? event.deltaX : event.deltaY;
-    if (delta === 0) return;
-    container.scrollLeft += delta;
-    event.preventDefault();
-  }, []);
-
   useEffect(() => {
     const container = listRef.current;
     if (!container || stats.length === 0 || highlightedIndex < 0) return;
@@ -134,7 +125,7 @@ export function AgentTokenStatsTopbar({ session }: { session: AgentSession }) {
 
   return (
     <div ref={topbarRef} className="agent-token-topbar" aria-label={t("agentConsole.tokenStats", "Agent step token statistics")}>
-      <div ref={listRef} className="agent-token-topbar-list" onWheel={handleWheel}>
+      <div ref={listRef} className="agent-token-topbar-list">
         {displayStats.map((stat) => {
           const shape = getTokenItemShape(stat.tokenCount, stat.kind);
           const label = statLabel(stat.kind, stat.label, t);

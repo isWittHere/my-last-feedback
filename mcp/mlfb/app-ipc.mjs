@@ -16,6 +16,7 @@ export const activeSessions = new Map();
 const REQUEST_TYPE_VALUES = new Set([
   "explanation",
   "question",
+  "planning",
   "completion",
   "analysis_report",
   "document_completed",
@@ -25,7 +26,7 @@ const REQUEST_TYPE_VALUES = new Set([
 
 function assertRequestType(requestType) {
   if (typeof requestType === "string" && REQUEST_TYPE_VALUES.has(requestType)) return requestType;
-  throw new Error("request_type is required and must be one of: explanation, question, completion, analysis_report, document_completed, verification_completed, default.");
+  throw new Error("request_type is required and must be one of: explanation, question, planning, completion, analysis_report, document_completed, verification_completed, default.");
 }
 
 /** Attempt to connect to an already-running app. */

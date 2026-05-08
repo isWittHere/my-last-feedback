@@ -15,7 +15,7 @@ import { getNotificationSettings, saveNotificationSettings, syncAutoFocusNewRequ
 import { getSubmittedViewSettings, saveSubmittedViewSettings, SUBMITTED_VIEW_SECTION_CONFIGS, type SubmittedViewSectionId, type SubmittedViewSettings } from "../submittedViewSettings";
 import { getTerminalSettings, saveTerminalSettings, type TerminalSettings, type TerminalShellId } from "../terminalSettings";
 import { getComposerSettings, saveComposerSettings, type ComposerSettings } from "../composerSettings";
-import { formatGitFolderBlacklistText, getGitOperationSettings, parseGitFolderBlacklistText, saveGitOperationSettings, type GitOperationSettings } from "../gitOperationSettings";
+import { formatGitFolderBlacklistText, getGitOperationSettings, GIT_TIMED_REMINDER_MAX_MINUTES, GIT_TIMED_REMINDER_MIN_MINUTES, GIT_TIMED_REMINDER_STEP_MINUTES, parseGitFolderBlacklistText, saveGitOperationSettings, type GitOperationSettings } from "../gitOperationSettings";
 import { AGENT_DIFF_COLOR_PRESETS, getAgentConsoleSettings, saveAgentConsoleSettings, type AgentConsoleSettings, type AgentDiffColorPresetId, type AgentNavigationIndicatorOrder, type AgentProcessStepDefaultMode, type AgentTopbarIndicatorMode } from "../agentConsoleSettings";
 import { getOpenCodePermissionPresetAction, getOpenCodeSettings, OPEN_CODE_PERMISSION_DEFINITIONS, setOpenCodeDefaultPermissionAction, setOpenCodeModelEnabled, setOpenCodePreferredModel, type OpenCodePermissionAction, type OpenCodeSettings } from "../openCodeSettings";
 import { SESSION_LIST_MODE_OPTIONS } from "../sessionNavigationSettings";
@@ -171,6 +171,14 @@ export function SettingsDialog({ open, onClose }: { open: boolean; onClose: () =
   const [agentCleanupMessage, setAgentCleanupMessage] = useState<string | null>(null);
   const [zoomSettings, setZoomSettings] = useState<ZoomSettings>(getZoomSettings);
   const [submittedViewSettings, setSubmittedViewSettings] = useState<SubmittedViewSettings>(getSubmittedViewSettings);
+  const gitReminderIntervalLabel = useMemo(() => {
+    const minutes = gitOperationSettings.timedReminderIntervalMinutes;
+    if (minutes < 60) return t("settings.gitTimedReminderIntervalMinutesValue", "{{count}} min", { count: minutes });
+    const hours = Math.floor(minutes / 60);
+    const remainder = minutes % 60;
+    if (remainder === 0) return t("settings.gitTimedReminderIntervalHoursValue", "{{count}} h", { count: hours });
+    return t("settings.gitTimedReminderIntervalHoursMinutesValue", "{{hours}} h {{minutes}} min", { hours, minutes: remainder });
+  }, [gitOperationSettings.timedReminderIntervalMinutes, t]);
   const agentPreviewSession = useMemo(() => {
     const session = createMockAgentSession();
     const latestDiagnostic = session.diagnostics[session.diagnostics.length - 1];
@@ -1085,16 +1093,19 @@ export function SettingsDialog({ open, onClose }: { open: boolean; onClose: () =
                     <span className="settings-label">{t("settings.gitTimedReminderInterval", "Reminder interval")}</span>
                     <span className="settings-sublabel">{t("settings.gitTimedReminderIntervalDesc", "Minimum minutes between scheduled Git backup reminders per workspace.")}</span>
                   </div>
-                  <div className="cm-number-with-unit">
+                  <div className="settings-range-with-value">
                     <input
-                      type="number"
-                      min={1}
-                      max={1440}
+                      type="range"
+                      min={GIT_TIMED_REMINDER_MIN_MINUTES}
+                      max={GIT_TIMED_REMINDER_MAX_MINUTES}
+                      step={GIT_TIMED_REMINDER_STEP_MINUTES}
                       value={gitOperationSettings.timedReminderIntervalMinutes}
                       onChange={(event) => handleGitReminderIntervalChange(Number(event.target.value))}
-                      className="cm-number-input"
+                      className="settings-range"
                     />
-                    <span className="cm-number-unit">{t("settings.gitTimedReminderMinutes", "min")}</span>
+                    <span className="settings-range-value">
+                      {gitReminderIntervalLabel}
+                    </span>
                   </div>
                 </div>
                 <div className="settings-row settings-row-stacked">
