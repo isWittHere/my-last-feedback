@@ -862,11 +862,13 @@ body,
   position: fixed;
   z-index: 100000;
   width: max-content;
-  padding: 6px;
-  border: 1px solid var(--color-border-subtle);
-  border-radius: 8px;
-  background: color-mix(in srgb, var(--color-bg-elevated) 94%, transparent);
-  box-shadow: 0 12px 32px rgba(0, 0, 0, 0.34);
+  padding: 0;
+  border: 0;
+  background: transparent;
+}
+.layout-dropdown .settings-segmented-control {
+  background: color-mix(in srgb, var(--color-bg-input-raised) 78%, transparent);
+  box-shadow: 0 6px 18px rgba(0, 0, 0, 0.32);
   backdrop-filter: blur(12px);
   -webkit-backdrop-filter: blur(12px);
 }
@@ -909,6 +911,58 @@ body,
 }
 
 /* ── Caller Tabs (title bar) ── */
+.caller-tabs-toolbar {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  min-width: 0;
+}
+.caller-tabs-side-btn {
+  width: 28px;
+  height: 24px;
+  border-radius: 5px;
+  flex: 0 0 auto;
+  opacity: 0;
+  pointer-events: none;
+  transition: opacity 0.12s ease, background 0.12s, color 0.12s;
+}
+.titlebar:hover .caller-tabs-side-btn,
+.titlebar:focus-within .caller-tabs-side-btn {
+  opacity: 1;
+  pointer-events: auto;
+}
+.caller-tabs-side-btn .caller-sort-icon,
+.caller-tabs-side-btn .caller-layout-icon,
+.caller-tabs-side-btn .cm-column-mode-icon {
+  opacity: 0.54;
+  transition: opacity 0.12s ease;
+}
+.caller-tabs-side-btn:hover .caller-sort-icon,
+.caller-tabs-side-btn:hover .caller-layout-icon,
+.caller-tabs-side-btn:hover .cm-column-mode-icon,
+.caller-tabs-side-btn:focus-visible .caller-sort-icon,
+.caller-tabs-side-btn:focus-visible .caller-layout-icon,
+.caller-tabs-side-btn:focus-visible .cm-column-mode-icon {
+  opacity: 0.9;
+}
+.caller-tabs-side-btn.titlebar-btn-active .caller-layout-icon,
+.caller-tabs-side-btn.titlebar-btn-active .cm-column-mode-icon {
+  opacity: 0.68;
+}
+.caller-tabs-side-btn.titlebar-btn-active:hover .caller-layout-icon,
+.caller-tabs-side-btn.titlebar-btn-active:focus-visible .caller-layout-icon,
+.caller-tabs-side-btn.titlebar-btn-active:hover .cm-column-mode-icon,
+.caller-tabs-side-btn.titlebar-btn-active:focus-visible .cm-column-mode-icon {
+  opacity: 1;
+}
+.caller-sort-icon {
+  width: 17px;
+  height: 14px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+}
 .caller-tab {
   position: relative;
   display: inline-flex;
@@ -1422,11 +1476,13 @@ body,
   position: fixed;
   z-index: 100000;
   width: max-content;
-  padding: 6px;
-  border: 1px solid var(--color-border-subtle);
-  border-radius: 8px;
-  background: color-mix(in srgb, var(--color-bg-elevated) 94%, transparent);
-  box-shadow: 0 12px 32px rgba(0, 0, 0, 0.34);
+  padding: 0;
+  border: 0;
+  background: transparent;
+}
+.session-mode-menu .settings-segmented-control {
+  background: color-mix(in srgb, var(--color-bg-input-raised) 78%, transparent);
+  box-shadow: 0 6px 18px rgba(0, 0, 0, 0.32);
   backdrop-filter: blur(12px);
   -webkit-backdrop-filter: blur(12px);
 }

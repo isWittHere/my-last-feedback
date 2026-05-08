@@ -75,6 +75,14 @@ function DockDragPreview() {
   );
 }
 
+function CallerSortModeIcon() {
+  return (
+    <span className="caller-sort-icon" aria-hidden="true">
+      <Icon name="sort" size={13} style={{ transform: "rotate(-90deg)" }} />
+    </span>
+  );
+}
+
 function StageFlowPopover({ stages, currentStageId }: { stages: StageBlueprint[]; currentStageId: string | null }) {
   const { t } = useTranslation();
   const currentIndex = stages.findIndex((stage) => stage.id === currentStageId);
@@ -741,8 +749,12 @@ export function FeedbackApp() {
         {/* Center: Caller tabs */}
         {appView === "MLFB" && visibleCallers.length > 1 && (
           <div className="absolute inset-0 flex items-center justify-center pointer-events-none" style={IS_MACOS ? { left: 70 } : undefined}>
-            <div className="pointer-events-auto">
+            <div className="pointer-events-auto caller-tabs-toolbar">
+              <button onClick={() => useFeedbackStore.getState().sortCallersByName()} className="titlebar-btn caller-tabs-side-btn" title={t("titlebar.sortByWorkspace")}>
+                <CallerSortModeIcon />
+              </button>
               <CallerTabs columnCount={columnCount} />
+              <LayoutModeButton layoutMode={callerColumnMode} onCycle={cycleLayoutMode} onSelect={setCallerColumnMode} />
             </div>
           </div>
         )}
@@ -759,14 +771,6 @@ export function FeedbackApp() {
 
         {/* Right: controls */}
         <div className="flex items-center gap-1 shrink-0 z-10 ml-auto">
-          {visibleCallers.length > 1 && (
-            <>
-            <button onClick={() => useFeedbackStore.getState().sortCallersByName()} className="titlebar-btn" title={t("titlebar.sortByWorkspace")}>
-              <Icon name="sort" size={13} style={{ transform: "rotate(-90deg)" }} />
-            </button>
-            <LayoutModeButton layoutMode={callerColumnMode} onCycle={cycleLayoutMode} onSelect={setCallerColumnMode} />
-            </>
-          )}
           {appView === "MLFB" && (rightPageColumn.tabIds.length > 0 || rightSidebarColumn.tabIds.length > 0) && (
             <div className="titlebar-dock-group">
               {rightPageColumn.tabIds.length > 0 && (
@@ -892,10 +896,10 @@ function LayoutModeButton({
     const button = buttonRef.current;
     if (!button) return;
     const rect = button.getBoundingClientRect();
-    const dropdownWidth = 154;
+    const dropdownWidth = 140;
     const dropdownHeight = 42;
     setDropdownPosition({
-      left: Math.min(Math.max(8, rect.right - dropdownWidth), Math.max(8, window.innerWidth - dropdownWidth - 8)),
+      left: Math.min(Math.max(8, rect.left + rect.width / 2 - dropdownWidth / 2), Math.max(8, window.innerWidth - dropdownWidth - 8)),
       top: Math.min(rect.bottom + 6, Math.max(8, window.innerHeight - dropdownHeight - 8)),
     });
   }, []);
@@ -928,14 +932,25 @@ function LayoutModeButton({
   };
 
   const modeIcon = (m: CallerColumnMode) => {
-    const columnCount = m === "auto" ? 2 : m;
+    const cols = m === "auto" ? 0 : m;
+    if (cols === 0) {
+      return (
+        <svg className="caller-layout-icon" width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
+          <rect x="3" y="3" width="18" height="18" rx="2" />
+          <text x="12" y="16" textAnchor="middle" fill="currentColor" stroke="none" fontSize="11" fontWeight="bold" fontFamily="sans-serif">A</text>
+        </svg>
+      );
+    }
+    const dividers: React.ReactNode[] = [];
+    for (let i = 1; i < cols; i++) {
+      const x = 3 + (18 / cols) * i;
+      dividers.push(<line key={i} x1={x} y1="3" x2={x} y2="21" />);
+    }
     return (
-      <span className={`cm-column-mode-icon cm-column-mode-icon-${String(m)}`} aria-hidden="true">
-        {Array.from({ length: columnCount }, (_, columnIndex) => (
-          <span key={columnIndex} className="cm-column-mode-cell" />
-        ))}
-        {m === "auto" ? <span className="cm-column-mode-auto-mark">A</span> : null}
-      </span>
+      <svg className="caller-layout-icon" width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
+        <rect x="3" y="3" width="18" height="18" rx="2" />
+        {dividers}
+      </svg>
     );
   };
 
@@ -975,8 +990,8 @@ function LayoutModeButton({
       <button
         ref={buttonRef}
         onClick={onCycle}
-        className={`titlebar-btn${layoutMode !== "auto" ? " titlebar-btn-active" : ""}`}
-        title={t("titlebar.layoutMode", "Layout: {{mode}}", { mode: modeLabel(layoutMode) })}
+        className={`titlebar-btn caller-tabs-side-btn${layoutMode !== "auto" ? " titlebar-btn-active" : ""}`}
+        aria-label={t("titlebar.layoutMode", "Layout: {{mode}}", { mode: modeLabel(layoutMode) })}
       >
         {modeIcon(layoutMode)}
       </button>
