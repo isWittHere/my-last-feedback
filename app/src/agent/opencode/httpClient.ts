@@ -52,6 +52,49 @@ function unwrapEvent(raw: unknown): OpenCodeBusEvent {
   };
 }
 
+const SSE_FLUSH_FRAME_MS = 16;
+
+function eventProperties(event: OpenCodeBusEvent): Record<string, unknown> {
+  return typeof event.properties === "object" && event.properties !== null ? event.properties as Record<string, unknown> : {};
+}
+
+function eventPart(properties: Record<string, unknown>): Record<string, unknown> | undefined {
+  return typeof properties.part === "object" && properties.part !== null ? properties.part as Record<string, unknown> : undefined;
+}
+
+function sseEventKey(event: OpenCodeBusEvent): string | undefined {
+  const properties = eventProperties(event);
+  if (event.type === "session.status") return `session.status:${String(properties.sessionID || "")}`;
+  if (event.type === "lsp.updated") return "lsp.updated";
+  if (event.type !== "message.part.updated") return undefined;
+  const part = eventPart(properties);
+  const messageId = String(part?.messageID || properties.messageID || "");
+  const partId = String(part?.id || properties.partID || "");
+  return messageId && partId ? `message.part.updated:${messageId}:${partId}` : undefined;
+}
+
+function sseDeltaKey(event: OpenCodeBusEvent): string | undefined {
+  const properties = eventProperties(event);
+  if (event.type === "message.part.updated") {
+    const part = eventPart(properties);
+    const messageId = String(part?.messageID || properties.messageID || "");
+    const partId = String(part?.id || properties.partID || "");
+    return messageId && partId ? `${messageId}:${partId}` : undefined;
+  }
+  if (event.type === "message.part.delta") {
+    const messageId = String(properties.messageID || "");
+    const partId = String(properties.partID || "");
+    return messageId && partId ? `${messageId}:${partId}` : undefined;
+  }
+  return undefined;
+}
+
+function partUpdateHasTextSnapshot(event: OpenCodeBusEvent): boolean {
+  const part = eventPart(eventProperties(event));
+  if (!part) return false;
+  return [part.text, part.summary, part.content].some((value) => typeof value === "string" && value.length > 0);
+}
+
 export class OpenCodeHttpClient {
   private readonly baseUrl: string;
   private readonly username: string;
@@ -224,6 +267,10 @@ export class OpenCodeSseConnection {
   private readonly options: OpenCodeSseConnectionOptions;
   private readonly controller = new AbortController();
   private started = false;
+  private eventQueue: OpenCodeBusEvent[] = [];
+  private coalescedEvents = new Map<string, number>();
+  private staleDeltaKeys = new Set<string>();
+  private flushTimer: number | undefined;
 
   constructor(options: OpenCodeSseConnectionOptions) {
     this.options = options;
@@ -237,6 +284,7 @@ export class OpenCodeSseConnection {
 
   stop(): void {
     this.controller.abort();
+    this.flushEvents();
   }
 
   private async run(): Promise<void> {
@@ -252,6 +300,7 @@ export class OpenCodeSseConnection {
       if (!response.body) throw new Error("OpenCode SSE response has no body");
       this.options.handlers.onOpen?.();
       await this.readStream(response.body.getReader());
+      this.flushEvents();
       this.options.handlers.onClose?.();
     } catch (error) {
       if (error instanceof DOMException && error.name === "AbortError") {
@@ -283,9 +332,51 @@ export class OpenCodeSseConnection {
       .join("\n");
     if (!data) return;
     try {
-      this.options.handlers.onEvent?.(unwrapEvent(JSON.parse(data)));
+      this.enqueueEvent(unwrapEvent(JSON.parse(data)));
     } catch (error) {
       this.options.handlers.onError?.(error instanceof Error ? error : new Error(String(error)));
+    }
+  }
+
+  private enqueueEvent(event: OpenCodeBusEvent): void {
+    const key = sseEventKey(event);
+    if (key) {
+      const existingIndex = this.coalescedEvents.get(key);
+      if (existingIndex !== undefined) {
+        this.eventQueue[existingIndex] = event;
+      } else {
+        this.coalescedEvents.set(key, this.eventQueue.length);
+        this.eventQueue.push(event);
+      }
+      if (event.type === "message.part.updated" && partUpdateHasTextSnapshot(event)) {
+        const deltaKey = sseDeltaKey(event);
+        if (deltaKey) this.staleDeltaKeys.add(deltaKey);
+      }
+    } else {
+      this.eventQueue.push(event);
+    }
+    this.scheduleFlush();
+  }
+
+  private scheduleFlush(): void {
+    if (this.flushTimer !== undefined) return;
+    this.flushTimer = window.setTimeout(() => this.flushEvents(), SSE_FLUSH_FRAME_MS);
+  }
+
+  private flushEvents(): void {
+    if (this.flushTimer !== undefined) {
+      window.clearTimeout(this.flushTimer);
+      this.flushTimer = undefined;
+    }
+    if (this.eventQueue.length === 0) return;
+    const events = this.eventQueue;
+    const staleDeltaKeys = this.staleDeltaKeys.size > 0 ? new Set(this.staleDeltaKeys) : undefined;
+    this.eventQueue = [];
+    this.coalescedEvents.clear();
+    this.staleDeltaKeys.clear();
+    for (const event of events) {
+      if (event.type === "message.part.delta" && staleDeltaKeys?.has(sseDeltaKey(event) || "")) continue;
+      this.options.handlers.onEvent?.(event);
     }
   }
 }

@@ -224,6 +224,9 @@ const ICONS: Record<string, IconDef> = {
   rows: {
     paths: '<rect x="3" y="4" width="18" height="6" rx="1" /><rect x="3" y="14" width="18" height="6" rx="1" />',
   },
+  "line-chart": {
+    paths: '<path d="M4 18 9 12l4 3 7-9" /><circle cx="4" cy="18" r="1.5" /><circle cx="9" cy="12" r="1.5" /><circle cx="13" cy="15" r="1.5" /><circle cx="20" cy="6" r="1.5" />',
+  },
   pause: {
     paths: '<rect x="6" y="4" width="4" height="16" /><rect x="14" y="4" width="4" height="16" />',
   },

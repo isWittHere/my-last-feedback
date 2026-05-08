@@ -16,7 +16,7 @@ import { getSubmittedViewSettings, saveSubmittedViewSettings, SUBMITTED_VIEW_SEC
 import { getTerminalSettings, saveTerminalSettings, type TerminalSettings, type TerminalShellId } from "../terminalSettings";
 import { getComposerSettings, saveComposerSettings, type ComposerSettings } from "../composerSettings";
 import { formatGitFolderBlacklistText, getGitOperationSettings, GIT_TIMED_REMINDER_MAX_MINUTES, GIT_TIMED_REMINDER_MIN_MINUTES, GIT_TIMED_REMINDER_STEP_MINUTES, parseGitFolderBlacklistText, saveGitOperationSettings, type GitOperationSettings } from "../gitOperationSettings";
-import { AGENT_DIFF_COLOR_PRESETS, getAgentConsoleSettings, saveAgentConsoleSettings, type AgentConsoleSettings, type AgentDiffColorPresetId, type AgentNavigationGroupBackgroundMode, type AgentNavigationIndicatorOrder, type AgentProcessStepDefaultMode, type AgentTopbarIndicatorMode } from "../agentConsoleSettings";
+import { AGENT_DIFF_COLOR_PRESETS, getAgentConsoleSettings, saveAgentConsoleSettings, type AgentConsoleSettings, type AgentDiffColorPresetId, type AgentNavigationGroupBackgroundMode, type AgentNavigationIndicatorOrder, type AgentNavigationVisualizationMode, type AgentProcessStepDefaultMode, type AgentTopbarIndicatorMode } from "../agentConsoleSettings";
 import { getOpenCodePermissionPresetAction, getOpenCodeSettings, OPEN_CODE_PERMISSION_DEFINITIONS, setOpenCodeDefaultPermissionAction, setOpenCodeModelEnabled, setOpenCodePreferredModel, type OpenCodePermissionAction, type OpenCodeSettings } from "../openCodeSettings";
 import { SESSION_LIST_MODE_OPTIONS } from "../sessionNavigationSettings";
 import { SessionNavigationModeIcon } from "./SessionNavigationModeIcon";
@@ -30,6 +30,7 @@ const SETTINGS_DOCK_COLUMN_IDS: DockColumnId[] = ["leftSidebar", "leftPage", "ri
 const SETTINGS_DOCK_TAB_IDS: DockTabId[] = ["mlc", "mlcPreview", "resources", "previewBrowser", "previewInfo", "agentConsole", "agentSessions", "terminal"];
 const AGENT_TOPBAR_INDICATOR_MODE_OPTIONS: AgentTopbarIndicatorMode[] = ["hidden", "text", "textAndGraphic"];
 const AGENT_PROCESS_STEP_MODE_OPTIONS: AgentProcessStepDefaultMode[] = ["tabs", "timeline"];
+const AGENT_NAVIGATION_VISUALIZATION_MODE_OPTIONS: AgentNavigationVisualizationMode[] = ["bars", "lineArea"];
 const AGENT_NAVIGATION_INDICATOR_ORDER_OPTIONS: AgentNavigationIndicatorOrder[] = ["leftToRight", "rightToLeft"];
 const AGENT_NAVIGATION_GROUP_BACKGROUND_MODE_OPTIONS: AgentNavigationGroupBackgroundMode[] = ["hidden", "hover", "alternate"];
 const OPEN_CODE_PERMISSION_ACTIONS: OpenCodePermissionAction[] = ["allow", "ask", "deny"];
@@ -360,6 +361,14 @@ export function SettingsDialog({ open, onClose }: { open: boolean; onClose: () =
     });
   }, []);
 
+  const handleAgentNavigationVisualizationModeChange = useCallback((navigationVisualizationMode: AgentNavigationVisualizationMode) => {
+    setAgentConsoleSettings((prev) => {
+      const next = { ...prev, navigationVisualizationMode };
+      saveAgentConsoleSettings(next);
+      return next;
+    });
+  }, []);
+
   const handleAgentNavigationGroupBackgroundModeChange = useCallback((navigationGroupBackgroundMode: AgentNavigationGroupBackgroundMode) => {
     setAgentConsoleSettings((prev) => {
       const next = { ...prev, navigationGroupBackgroundMode };
@@ -527,6 +536,23 @@ export function SettingsDialog({ open, onClose }: { open: boolean; onClose: () =
   const navigationIndicatorOrderLabel = (navigationIndicatorOrder: AgentNavigationIndicatorOrder) => navigationIndicatorOrder === "leftToRight"
     ? t("settings.agentNavigationIndicatorOrderLeftToRight", "Left to right")
     : t("settings.agentNavigationIndicatorOrderRightToLeft", "Right to left");
+
+  const navigationVisualizationModeLabel = (mode: AgentNavigationVisualizationMode) => mode === "bars"
+    ? t("settings.agentNavigationVisualizationBars", "Bars")
+    : t("settings.agentNavigationVisualizationLineArea", "Line area");
+
+  const renderAgentNavigationVisualizationModeGroup = () => (
+    <SettingsSegmentedControl
+      ariaLabel={t("settings.agentNavigationVisualizationMode", "Navigation visualization")}
+      value={agentConsoleSettings.navigationVisualizationMode}
+      onChange={(mode) => handleAgentNavigationVisualizationModeChange(mode as AgentNavigationVisualizationMode)}
+      className="settings-segmented-icon-only"
+      options={AGENT_NAVIGATION_VISUALIZATION_MODE_OPTIONS.map((mode) => {
+        const label = navigationVisualizationModeLabel(mode);
+        return { id: mode, label, ariaLabel: `${t("settings.agentNavigationVisualizationMode", "Navigation visualization")}: ${label}`, icon: <Icon name={mode === "bars" ? "rows" : "line-chart"} size={13} /> };
+      })}
+    />
+  );
 
   const renderAgentNavigationIndicatorOrderGroup = () => (
     <SettingsSegmentedControl
@@ -1315,6 +1341,13 @@ export function SettingsDialog({ open, onClose }: { open: boolean; onClose: () =
                       <span className="settings-sublabel">{t("settings.agentTopbarIndicatorsDesc", "Configure how Agent Console diff and context indicators appear in the topbar.")}</span>
                     </div>
                     <div className="settings-agent-topbar-options">
+                      <div className="settings-row settings-agent-toggle-row">
+                        <div className="settings-row-info">
+                          <span className="settings-label">{t("settings.agentNavigationVisualizationMode", "Navigation visualization")}</span>
+                          <span className="settings-sublabel">{t("settings.agentNavigationVisualizationModeDesc", "Choose whether Agent navigation uses compact bars or a smooth line-area chart.")}</span>
+                        </div>
+                        {renderAgentNavigationVisualizationModeGroup()}
+                      </div>
                       <div className="settings-row settings-agent-toggle-row">
                         <div className="settings-row-info">
                           <span className="settings-label">{t("settings.agentDefaultExpandHeaderDetails", "Default-expand second row")}</span>

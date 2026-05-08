@@ -5,6 +5,7 @@ export type AgentDiffColorPresetId = "classic" | "soft" | "vscode";
 export type AgentProcessStepDefaultMode = "tabs" | "timeline";
 export type AgentNavigationIndicatorOrder = "leftToRight" | "rightToLeft";
 export type AgentNavigationGroupBackgroundMode = "hidden" | "hover" | "alternate";
+export type AgentNavigationVisualizationMode = "bars" | "lineArea";
 
 export interface AgentDiffColorPreset {
   id: AgentDiffColorPresetId;
@@ -31,6 +32,7 @@ export interface AgentConsoleSettings {
   showMessageSpeakerLine: boolean;
   defaultExpandHeaderDetails: boolean;
   showStickyUserMessageBar: boolean;
+  navigationVisualizationMode: AgentNavigationVisualizationMode;
   navigationIndicatorOrder: AgentNavigationIndicatorOrder;
   navigationGroupBackgroundMode: AgentNavigationGroupBackgroundMode;
   diffVisual: AgentDiffVisualSettings;
@@ -54,6 +56,7 @@ const DEFAULT_SETTINGS: AgentConsoleSettings = {
   showMessageSpeakerLine: true,
   defaultExpandHeaderDetails: false,
   showStickyUserMessageBar: true,
+  navigationVisualizationMode: "bars",
   navigationIndicatorOrder: "leftToRight",
   navigationGroupBackgroundMode: "alternate",
   diffVisual: {
@@ -88,6 +91,10 @@ function isNavigationGroupBackgroundMode(value: unknown): value is AgentNavigati
   return value === "hidden" || value === "hover" || value === "alternate";
 }
 
+function isNavigationVisualizationMode(value: unknown): value is AgentNavigationVisualizationMode {
+  return value === "bars" || value === "lineArea";
+}
+
 function clampTextOffset(value: unknown): number {
   const numericValue = typeof value === "number" && Number.isFinite(value) ? value : 0;
   return Math.max(-4, Math.min(4, Math.round(numericValue * 2) / 2));
@@ -119,6 +126,7 @@ export function getAgentConsoleSettings(): AgentConsoleSettings {
       showMessageSpeakerLine: typeof parsed.showMessageSpeakerLine === "boolean" ? parsed.showMessageSpeakerLine : DEFAULT_SETTINGS.showMessageSpeakerLine,
       defaultExpandHeaderDetails: typeof parsed.defaultExpandHeaderDetails === "boolean" ? parsed.defaultExpandHeaderDetails : DEFAULT_SETTINGS.defaultExpandHeaderDetails,
       showStickyUserMessageBar: typeof parsed.showStickyUserMessageBar === "boolean" ? parsed.showStickyUserMessageBar : DEFAULT_SETTINGS.showStickyUserMessageBar,
+      navigationVisualizationMode: isNavigationVisualizationMode(parsed.navigationVisualizationMode) ? parsed.navigationVisualizationMode : DEFAULT_SETTINGS.navigationVisualizationMode,
       navigationIndicatorOrder: isNavigationIndicatorOrder(parsed.navigationIndicatorOrder) ? parsed.navigationIndicatorOrder : DEFAULT_SETTINGS.navigationIndicatorOrder,
       navigationGroupBackgroundMode: isNavigationGroupBackgroundMode(parsed.navigationGroupBackgroundMode) ? parsed.navigationGroupBackgroundMode : DEFAULT_SETTINGS.navigationGroupBackgroundMode,
       diffVisual: {

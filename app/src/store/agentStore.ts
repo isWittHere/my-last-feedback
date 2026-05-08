@@ -143,10 +143,23 @@ function appendDedupedText(existing: string, incoming: string): string {
   if (!incoming) return existing;
   if (!existing) return incoming;
   if (existing.endsWith(incoming)) return existing;
+  if (existing.startsWith(incoming)) return existing;
   if (incoming.startsWith(existing)) return incoming;
   const trimmedIncoming = incoming.trim();
   if (trimmedIncoming.length >= 12 && existing.trimEnd().endsWith(trimmedIncoming)) return existing;
+  if (trimmedIncoming.length >= 12 && existing.trimStart().startsWith(trimmedIncoming)) return existing;
   return existing + incoming;
+}
+
+function mergeThinkingContent(existing: string, incoming: string): string {
+  const existingContent = existing.trim();
+  const incomingContent = incoming.trim();
+  if (!existingContent) return incomingContent;
+  if (!incomingContent) return existingContent;
+  if (existingContent === incomingContent) return existingContent;
+  if (incomingContent.length >= 12 && existingContent.endsWith(incomingContent)) return existingContent;
+  if (existingContent.length >= 12 && incomingContent.startsWith(existingContent)) return incomingContent;
+  return `${existingContent}\n\n${incomingContent}`;
 }
 
 function createUserMessage(content: string, options: Partial<Pick<AgentMessage, "id" | "providerMessageId" | "providerParts" | "composerDraft" | "submittedMarkdown" | "submittedAttachmentTags">> = {}): AgentMessage {
@@ -696,7 +709,7 @@ function mergeAdjacentThinkingBlocks(blocks: AgentContentBlock[]): AgentContentB
   for (const block of blocks) {
     const previous = merged[merged.length - 1];
     if (block.type === "thinking" && previous?.type === "thinking") {
-      const content = [previous.content.trim(), block.content.trim()].filter(Boolean).join("\n\n");
+      const content = mergeThinkingContent(previous.content, block.content);
       merged[merged.length - 1] = {
         ...previous,
         content,

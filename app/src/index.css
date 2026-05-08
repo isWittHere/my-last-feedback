@@ -2508,6 +2508,78 @@ body,
   background: color-mix(in srgb, var(--color-bg-elevated) 92%, var(--color-text-muted) 8%);
 }
 
+.agent-token-topbar-list-line {
+  align-items: stretch;
+}
+
+.agent-token-line-chart {
+  flex: 0 0 auto;
+  height: 100%;
+  overflow: visible;
+}
+
+.agent-token-line-group-hit,
+.agent-token-line-hit {
+  fill: transparent;
+  pointer-events: all;
+}
+
+.agent-token-line-hit {
+  cursor: pointer;
+  outline: none;
+}
+
+.agent-token-line-area {
+  pointer-events: none;
+  opacity: 0.48;
+  transition: opacity 0.12s ease;
+}
+
+.agent-token-line-segment {
+  fill: none;
+  stroke-width: 2;
+  stroke-linecap: round;
+  stroke-linejoin: round;
+  pointer-events: none;
+  opacity: 0.92;
+  transition: opacity 0.12s ease, filter 0.12s ease;
+}
+
+.agent-token-line-point {
+  pointer-events: none;
+  opacity: 0;
+  stroke: color-mix(in srgb, var(--color-bg-surface) 82%, transparent);
+  stroke-width: 1;
+  transition: opacity 0.12s ease, filter 0.12s ease, r 0.12s ease;
+}
+
+.agent-token-line-point[data-current="true"] {
+  stroke: var(--color-text-primary);
+  stroke-width: 1.4;
+  filter: brightness(1.18) saturate(1.12);
+}
+
+.agent-token-line-chart[data-has-hovered-group="true"] .agent-token-line-area[data-muted="true"] {
+  opacity: 0.18;
+}
+
+.agent-token-line-chart[data-has-hovered-group="true"] .agent-token-line-segment[data-muted="true"],
+.agent-token-line-chart[data-has-hovered-group="true"] .agent-token-line-point-wrap[data-muted="true"] .agent-token-line-point {
+  opacity: 0.24;
+  filter: saturate(0.74);
+}
+
+.agent-token-line-chart[data-has-hovered-group="true"] .agent-token-line-segment:not([data-muted="true"]),
+.agent-token-line-chart[data-has-hovered-group="true"] .agent-token-line-point-wrap:not([data-muted="true"]) .agent-token-line-point {
+  opacity: 1;
+  filter: brightness(1.2) saturate(1.14);
+}
+
+.agent-token-line-hit:focus-visible + .agent-token-line-point,
+.agent-token-line-hit:focus-visible {
+  outline: none;
+}
+
 .agent-token-topbar-item {
   position: relative;
   border: none;

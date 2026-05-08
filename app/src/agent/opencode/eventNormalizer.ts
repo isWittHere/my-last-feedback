@@ -226,6 +226,7 @@ export function normalizeOpenCodeEvent(event: OpenCodeBusEvent): OpenCodeNormali
     const partType = asString(part.type);
     const delta = asString(event.properties.delta) || "";
     if (!delta) return [];
+    if (partType === "reasoning" && field === "summary") return [];
     return [
       {
         type: "text.delta",
