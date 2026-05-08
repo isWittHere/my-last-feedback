@@ -6,7 +6,7 @@ import { createAgentSession } from "../agent/sessionFactory";
 import { buildSubmittedComposerPayload, collectSubmittedResourceLinks } from "../composer/submittedFeedback";
 import { getAgentConsoleSettings } from "../agentConsoleSettings";
 import { getOpenCodeDefaultPermissionRules, setOpenCodePreferredModel, syncOpenCodeModels } from "../openCodeSettings";
-import type { AgentChoiceOption, AgentCompactionBlock, AgentContentBlock, AgentContextUsage, AgentDiagnosticEntry, AgentMessage, AgentModelCapabilities, AgentProviderMessagePart, AgentSession, AgentSessionFileDiff, AgentSubmittedAttachmentTag } from "../agent/types";
+import type { AgentChoiceOption, AgentCompactionBlock, AgentContentBlock, AgentContextUsage, AgentDiagnosticEntry, AgentMessage, AgentModelCapabilities, AgentProviderMessagePart, AgentSession, AgentSessionFileDiff, AgentSubmittedAttachmentTag, AgentThinkingBlock } from "../agent/types";
 import type { AgentProviderId } from "../agent/types";
 import type { GitAction, ImageAttachment, MlcAttachment, WebAttachment } from "./feedbackStore";
 
@@ -661,6 +661,46 @@ function findLatestAssistantAfterLastUser(messages: AgentMessage[]): number {
   return -1;
 }
 
+function isOpenCodeRestoreProcessPart(part: OpenCodeMessagePart): boolean {
+  return part.type === "tool" || part.type === "reasoning" || part.type === "compaction";
+}
+
+function hasLaterOpenCodeProcessPart(parts: OpenCodeMessagePart[], index: number): boolean {
+  return parts.slice(index + 1).some(isOpenCodeRestoreProcessPart);
+}
+
+function normalizeOpenCodePartForRestore(part: OpenCodeMessagePart, index: number, parts: OpenCodeMessagePart[], role?: string): AgentContentBlock | null {
+  const block = normalizeOpenCodePart(part);
+  if (!block || role === "user" || block.type !== "text" || !hasLaterOpenCodeProcessPart(parts, index)) return block;
+  return {
+    ...block,
+    id: part.id || `thinking-${part.messageID || index}`,
+    type: "thinking",
+    status: "completed",
+    origin: { phase: "process", placement: "standalone" },
+  };
+}
+
+function mergeAdjacentThinkingBlocks(blocks: AgentContentBlock[]): AgentContentBlock[] {
+  const merged: AgentContentBlock[] = [];
+  for (const block of blocks) {
+    const previous = merged[merged.length - 1];
+    if (block.type === "thinking" && previous?.type === "thinking") {
+      const content = [previous.content.trim(), block.content.trim()].filter(Boolean).join("\n\n");
+      merged[merged.length - 1] = {
+        ...previous,
+        content,
+        status: previous.status === "running" || block.status === "running" ? "running" : "completed",
+        staleRunningState: previous.staleRunningState || block.staleRunningState,
+        updatedAt: latestIso(previous.updatedAt || previous.createdAt, block.updatedAt || block.createdAt),
+      };
+      continue;
+    }
+    merged.push(block);
+  }
+  return merged;
+}
+
 function agentMessagesFromOpenCodeMessages(messages: OpenCodeMessage[]): AgentMessage[] {
   const summaryByParentId = new Map<string, OpenCodeMessage>();
   for (const message of messages) {
@@ -681,7 +721,7 @@ function agentMessagesFromOpenCodeMessages(messages: OpenCodeMessage[]): AgentMe
       const pairUpdatedAt = summaryTime || (updatedTime ? new Date(updatedTime).toISOString() : undefined);
       const summaryThinkingBlocks = (summaryMessage?.parts || [])
         .map((part) => normalizeOpenCodePart(part))
-        .filter((block): block is AgentContentBlock => Boolean(block && block.type === "thinking"))
+        .filter((block): block is AgentThinkingBlock => Boolean(block && block.type === "thinking"))
         .map((block) => ({ ...block, status: "completed" as const, updatedAt: block.updatedAt || summaryTime || nowIso() }));
       const blocks = (message.parts || [])
         .map((part) => normalizeOpenCodePart(part))
@@ -724,7 +764,7 @@ function agentMessagesFromOpenCodeMessages(messages: OpenCodeMessage[]): AgentMe
       const summaryTime = latestOpenCodeMessageTime(message);
       const summaryThinkingBlocks = (message.parts || [])
         .map((part) => normalizeOpenCodePart(part))
-        .filter((block): block is AgentContentBlock => Boolean(block && block.type === "thinking"))
+        .filter((block): block is AgentThinkingBlock => Boolean(block && block.type === "thinking"))
         .map((block) => ({ ...block, status: "completed" as const, updatedAt: block.updatedAt || summaryTime || nowIso() }));
       const block = createCompactionBlock({
         status: message.info?.error ? "failed" : "completed",
@@ -737,11 +777,12 @@ function agentMessagesFromOpenCodeMessages(messages: OpenCodeMessage[]): AgentMe
       const standalone = createStandaloneCompactionMessage(block);
       return [{ ...standalone, blocks: [...summaryThinkingBlocks, block] }];
     }
-    const blocks = (message.parts || [])
-      .map((part) => normalizeOpenCodePart(part))
+    const parts = message.parts || [];
+    const blocks = mergeAdjacentThinkingBlocks(parts
+      .map((part, index) => normalizeOpenCodePartForRestore(part, index, parts, message.info?.role))
       .filter((block): block is AgentContentBlock => Boolean(block))
       .filter((block) => block.type !== "text" || Boolean(block.content.trim()))
-      .map((block) => messageStatus === "complete" && (block.type === "thinking" || block.type === "compaction") ? { ...block, status: "completed" as const, updatedAt: block.updatedAt || nowIso() } : block);
+      .map((block) => messageStatus === "complete" && (block.type === "thinking" || block.type === "compaction") ? { ...block, status: "completed" as const, updatedAt: block.updatedAt || nowIso() } : block));
     const isCompactionOnlyMessage = blocks.length > 0 && blocks.every((block) => block.type === "compaction");
     const role = message.info?.role === "user" && !isCompactionOnlyMessage ? "user" : "assistant";
     const providerParts = summarizeOpenCodeParts(message.parts);
@@ -1251,7 +1292,7 @@ function upsertAssistantBlock(session: AgentSession, block: AgentContentBlock, m
 
   let blocks = [...assistantMessage.blocks];
   let blockIndex = blocks.findIndex((item) => item.id === block.id);
-  if (blockIndex < 0 && (block.type === "text" || block.type === "thinking" || block.type === "compaction")) {
+  if (blockIndex < 0 && (block.type === "text" || block.type === "compaction")) {
     blockIndex = blocks.findIndex((item) => item.type === block.type && item.origin.phase === block.origin.phase);
   }
   if (blockIndex >= 0) {
