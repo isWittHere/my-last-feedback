@@ -3,7 +3,7 @@ import type { AgentContentBlock, AgentMessage, AgentSession, AgentTaskItem } fro
 export type AgentStepKind = "thinking" | "compaction" | "tool" | "task_list" | "artifacts" | "permission" | "error";
 export type AgentStepStatus = "pending" | "running" | "completed" | "failed";
 export type AgentTokenStatKind = AgentStepKind | "user" | "result";
-export type AgentStepTone = "document_change" | "document_read" | "command_execution";
+export type AgentStepTone = "document_change" | "document_read" | "command_execution" | "todo_update" | "artifact_output";
 
 export interface AgentStepItem {
   id: string;
@@ -87,20 +87,60 @@ function tokenTextForBlocks(blocks: AgentContentBlock[]): string {
   }).filter(Boolean).join("\n");
 }
 
-function toolStepTone(block: Extract<AgentContentBlock, { type: "tool_call" }>): AgentStepTone | undefined {
-  const searchableText = [
-    block.name,
+function toolIdentityText(block: Extract<AgentContentBlock, { type: "tool_call" }>): string {
+  return [block.name, block.title, block.label].filter(Boolean).join("\n").toLowerCase();
+}
+
+function isReadToolIdentity(identityText: string): boolean {
+  return /\b(read|view|open|cat|grep|rg|search|find|list|ls|glob|scan)\b|读取|查看|搜索|查找|列出|扫描/.test(identityText);
+}
+
+function hasArgKey(args: Record<string, unknown> | undefined, names: string[]): boolean {
+  if (!args) return false;
+  const normalizedNames = new Set(names.map((name) => name.toLowerCase()));
+  return Object.keys(args).some((key) => normalizedNames.has(key.toLowerCase()));
+}
+
+function isToolCallFailure(block: Extract<AgentContentBlock, { type: "tool_call" }>): boolean {
+  if (block.status === "failed") return true;
+  const identityText = toolIdentityText(block);
+  if (block.name.toLowerCase() === "invalid") return true;
+  if (/unavailable tool|invalid tool|invalid arguments|model tried to call unavailable tool/.test(identityText)) return true;
+
+  const resultText = [
     block.title,
     block.label,
-    stringifyForStats(block.args),
+    block.result,
   ].filter(Boolean).join("\n").toLowerCase();
-  return /\b(edit|write|patch|apply|modify|replace|update|create|delete|remove|insert)\b|编辑|写入|修改|补丁|应用|创建|删除|新增/.test(searchableText)
+  return !isReadToolIdentity(identityText) && /the arguments provided to the tool are invalid|model tried to call unavailable tool/.test(resultText);
+}
+
+function toolStepTone(block: Extract<AgentContentBlock, { type: "tool_call" }>): AgentStepTone | undefined {
+  if (isToolCallFailure(block)) return undefined;
+
+  const identityText = toolIdentityText(block);
+  const hasPath = hasArgKey(block.args, ["path", "file", "filePath", "filepath"]);
+  const hasWritePayload = hasArgKey(block.args, ["content", "oldString", "old_string", "newString", "new_string", "patch", "diff", "edits"]);
+  const hasCommandPayload = hasArgKey(block.args, ["command", "cmd", "script"]);
+
+  return /\b(todo|todowrite|todo_write|write_todo|task_list|task list)\b|待办|任务列表/.test(identityText)
+    ? "todo_update"
+    : /\b(edit|write|patch|apply|modify|replace|update|create|delete|remove|insert)\b|编辑|写入|修改|补丁|应用|创建|删除|新增/.test(identityText) || (hasPath && hasWritePayload)
     ? "document_change"
-    : /\b(bash|shell|terminal|command|run|exec|execute|python|node|npm|pnpm|yarn|cargo|go|pytest|test|build)\b|执行|命令|运行|代码|测试|构建/.test(searchableText)
-      ? "command_execution"
-      : /\b(read|view|open|cat|grep|search|find|list|ls|glob|scan)\b|读取|查看|搜索|查找|列出|扫描/.test(searchableText)
+    : isReadToolIdentity(identityText) || (hasPath && !hasWritePayload && !hasCommandPayload)
         ? "document_read"
-        : undefined;
+        : /\b(bash|shell|terminal|command|run|exec|execute|python|node|npm|pnpm|yarn|cargo|go|pytest|test|build)\b|执行|命令|运行|代码|测试|构建/.test(identityText) || hasCommandPayload
+          ? "command_execution"
+          : undefined;
+}
+
+function artifactStepTone(block: Extract<AgentContentBlock, { type: "artifact" | "file_change" }>): AgentStepTone {
+  if (block.type === "file_change" || block.kind === "diff") return "document_change";
+  return "artifact_output";
+}
+
+function artifactStepLabel(tone: AgentStepTone, count: number): string {
+  return tone === "document_change" ? `文件变更 (${count})` : `产物 (${count})`;
 }
 
 function isActiveSessionStatus(status: AgentSession["status"]): boolean {
@@ -141,7 +181,7 @@ export function buildAgentProcessSteps(blocks: AgentContentBlock[], messageId?: 
       continue;
     }
     if (block.type === "tool_call") {
-      const status: AgentStepStatus = block.status === "failed" ? "failed" : messageIsStreaming ? block.status || "completed" : "completed";
+      const status: AgentStepStatus = isToolCallFailure(block) ? "failed" : messageIsStreaming ? block.status || "completed" : "completed";
       const staleRunningState = Boolean(block.staleRunningState || (block.status !== "failed" && !messageIsStreaming && (block.status === "running" || block.status === "pending")));
       steps.push({
         id: block.id,
@@ -175,13 +215,14 @@ export function buildAgentProcessSteps(blocks: AgentContentBlock[], messageId?: 
       continue;
     }
     if (block.type === "artifact" || block.type === "file_change") {
+      const tone = artifactStepTone(block);
       const lastStep = steps[steps.length - 1];
-      if (lastStep?.kind === "artifacts") {
+      if (lastStep?.kind === "artifacts" && lastStep.tone === tone) {
         lastStep.blocks = [...(lastStep.blocks || []), block];
         lastStep.blockIds = [...lastStep.blockIds, block.id];
-        lastStep.label = `产物 (${lastStep.blocks.length})`;
+        lastStep.label = artifactStepLabel(tone, lastStep.blocks.length);
       } else {
-        steps.push({ id: block.id, messageId, blockIds: [block.id], kind: "artifacts", label: "产物 (1)", status: "completed", blocks: [block], tone: "document_change" });
+        steps.push({ id: block.id, messageId, blockIds: [block.id], kind: "artifacts", label: artifactStepLabel(tone, 1), status: "completed", blocks: [block], tone });
       }
       continue;
     }
