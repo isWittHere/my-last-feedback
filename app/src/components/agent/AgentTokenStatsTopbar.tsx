@@ -48,25 +48,18 @@ function statLabel(kind: AgentTokenStatKind, label: string, t: (key: string, def
   if (kind === "result") return t("agentConsole.agentOutput", "Agent output");
   if (kind === "thinking" && label === "思考") return t("agentConsole.tokenKinds.thinking", "Thinking");
   if (kind === "error" && label === "错误") return t("agentConsole.tokenKinds.error", "Error");
-
-  const taskMatch = /^待办事项 \((\d+)\/(\d+)\)$/.exec(label);
-  if (kind === "task_list" && taskMatch) {
-    return t("agentConsole.todoItems", "Tasks ({{completed}}/{{total}})", { completed: taskMatch[1], total: taskMatch[2] });
-  }
-
-  const artifactMatch = /^产物 \((\d+)\)$/.exec(label);
-  if (kind === "artifacts" && artifactMatch) {
-    return t("agentConsole.artifactItems", "Artifacts ({{count}})", { count: artifactMatch[1] });
-  }
-
   return label;
 }
 
 function formatTokenCount(count: number): string {
-  return count.toLocaleString();
+  if (count >= 1000) return `${(count / 1000).toFixed(count >= 10000 ? 0 : 1)}k`;
+  return String(count);
 }
 
 function focusAgentStat(messageId: string, stepId?: string) {
+  const messageElement = document.querySelector<HTMLElement>(`[data-msg-id="${CSS.escape(messageId)}"]`);
+  messageElement?.scrollIntoView({ behavior: "smooth", block: "center" });
+  if (!stepId) return;
   window.dispatchEvent(new CustomEvent("mlfb-agent-focus-step", {
     detail: { messageId, stepId },
   }));
@@ -101,6 +94,15 @@ export function AgentTokenStatsTopbar({ session }: { session: AgentSession }) {
     });
   }, [stats]);
   const displayStats = useMemo(() => navigationIndicatorOrder === "rightToLeft" ? [...groupedStats].reverse() : groupedStats, [navigationIndicatorOrder, groupedStats]);
+  const displayGroups = useMemo(() => {
+    const groups: { groupIndex: number; stats: typeof groupedStats }[] = [];
+    for (const stat of displayStats) {
+      const currentGroup = groups[groups.length - 1];
+      if (!currentGroup || currentGroup.groupIndex !== stat.groupIndex) groups.push({ groupIndex: stat.groupIndex, stats: [stat] });
+      else currentGroup.stats.push(stat);
+    }
+    return groups;
+  }, [displayStats]);
   const currentIndex = stats.findIndex((stat) => stat.status === "running" || stat.status === "pending");
   const highlightedIndex = currentIndex >= 0 ? currentIndex : stats.length - 1;
   const highlightedStat = highlightedIndex >= 0 ? stats.find((stat) => stat.index === highlightedIndex) : undefined;
@@ -134,58 +136,47 @@ export function AgentTokenStatsTopbar({ session }: { session: AgentSession }) {
   return (
     <div ref={topbarRef} className="agent-token-topbar" aria-label={t("agentConsole.tokenStats", "Agent step token statistics")}>
       <div ref={listRef} className="agent-token-topbar-list" onWheel={handleWheel}>
-        {displayStats.map((stat, displayIndex) => {
-          const shape = getTokenItemShape(stat.tokenCount, stat.kind);
-          const label = statLabel(stat.kind, stat.label, t);
-          const title = label;
-          const visual = getAgentStepVisualDescriptor(stat);
-          const kind = getAgentStepTypeLabel(stat, t);
-          const status = stat.staleRunningState ? t("agentConsole.stepStatus.staleRunning", "Stale running state") : statusLabel(stat.status, t);
-          const tokens = t(stat.estimated ? "agentConsole.estimatedTokens" : "agentConsole.tokens", stat.estimated ? "{{value}} tokens estimated" : "{{value}} tokens", { value: formatTokenCount(stat.tokenCount) });
-          const ariaLabel = [title, `${kind} · ${status}`, tokens].join("\n");
-          const hasGroupGap = displayIndex > 0 && stat.groupIndex !== displayStats[displayIndex - 1].groupIndex;
-          return (
-            <button
-              key={stat.id}
-              type="button"
-              className={`agent-token-topbar-item agent-token-topbar-item-${stat.kind}${stat.tone ? ` agent-token-topbar-tone-${stat.tone}` : ""} agent-token-topbar-item-${stat.status}${stat.staleRunningState ? " agent-token-topbar-item-stale-running" : ""}${hasGroupGap ? " agent-token-topbar-item-group-gap" : ""}${stat.index === highlightedIndex ? " current" : ""}`}
-              data-agent-token-current={stat.index === highlightedIndex ? "true" : undefined}
-              aria-label={ariaLabel}
-              onClick={() => focusAgentStat(stat.messageId, stat.target === "step" ? (stat.stepId || stat.blockIds[0]) : undefined)}
-              onPointerEnter={(event) => {
-                const root = topbarRef.current;
-                if (!root) return;
-                const rootRect = root.getBoundingClientRect();
-                const itemRect = event.currentTarget.getBoundingClientRect();
-                setTooltip({
-                  left: getTooltipLeft(rootRect, itemRect),
-                  title,
-                  iconName: visual.iconName,
-                  kind,
-                  status,
-                  tokens,
-                });
-              }}
-              onPointerLeave={() => setTooltip(null)}
-              onFocus={(event) => {
-                const root = topbarRef.current;
-                if (!root) return;
-                const rootRect = root.getBoundingClientRect();
-                const itemRect = event.currentTarget.getBoundingClientRect();
-                setTooltip({
-                  left: getTooltipLeft(rootRect, itemRect),
-                  title,
-                  iconName: visual.iconName,
-                  kind,
-                  status,
-                  tokens,
-                });
-              }}
-              onBlur={() => setTooltip(null)}
-              style={{ width: shape.width, minWidth: shape.width, height: shape.height }}
-            />
-          );
-        })}
+        {displayGroups.map((group) => (
+          <div key={group.groupIndex} className="agent-token-topbar-group" data-group-tone={group.groupIndex % 2 === 0 ? "normal" : "alternate"}>
+            {group.stats.map((stat) => {
+              const shape = getTokenItemShape(stat.tokenCount, stat.kind);
+              const label = statLabel(stat.kind, stat.label, t);
+              const title = label;
+              const visual = getAgentStepVisualDescriptor(stat);
+              const kind = getAgentStepTypeLabel(stat, t);
+              const status = stat.staleRunningState ? t("agentConsole.stepStatus.staleRunning", "Stale running state") : statusLabel(stat.status, t);
+              const tokens = t(stat.estimated ? "agentConsole.estimatedTokens" : "agentConsole.tokens", stat.estimated ? "{{value}} tokens estimated" : "{{value}} tokens", { value: formatTokenCount(stat.tokenCount) });
+              const ariaLabel = [title, `${kind} · ${status}`, tokens].join("\n");
+              return (
+                <button
+                  key={stat.id}
+                  type="button"
+                  className={`agent-token-topbar-item agent-token-topbar-item-${stat.kind}${stat.tone ? ` agent-token-topbar-tone-${stat.tone}` : ""} agent-token-topbar-item-${stat.status}${stat.staleRunningState ? " agent-token-topbar-item-stale-running" : ""}${stat.index === highlightedIndex ? " current" : ""}`}
+                  data-agent-token-current={stat.index === highlightedIndex ? "true" : undefined}
+                  aria-label={ariaLabel}
+                  onClick={() => focusAgentStat(stat.messageId, stat.target === "step" ? (stat.stepId || stat.blockIds[0]) : undefined)}
+                  onPointerEnter={(event) => {
+                    const root = topbarRef.current;
+                    if (!root) return;
+                    const rootRect = root.getBoundingClientRect();
+                    const itemRect = event.currentTarget.getBoundingClientRect();
+                    setTooltip({ left: getTooltipLeft(rootRect, itemRect), title, iconName: visual.iconName, kind, status, tokens });
+                  }}
+                  onPointerLeave={() => setTooltip(null)}
+                  onFocus={(event) => {
+                    const root = topbarRef.current;
+                    if (!root) return;
+                    const rootRect = root.getBoundingClientRect();
+                    const itemRect = event.currentTarget.getBoundingClientRect();
+                    setTooltip({ left: getTooltipLeft(rootRect, itemRect), title, iconName: visual.iconName, kind, status, tokens });
+                  }}
+                  onBlur={() => setTooltip(null)}
+                  style={{ width: shape.width, minWidth: shape.width, height: shape.height }}
+                />
+              );
+            })}
+          </div>
+        ))}
       </div>
       {tooltip && (
         <div className="agent-token-topbar-tooltip" style={{ "--agent-token-tooltip-left": `${tooltip.left}px` } as CSSProperties}>
