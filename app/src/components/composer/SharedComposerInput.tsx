@@ -25,6 +25,14 @@ export interface SharedComposerInputProps {
   placeholder: string;
   placeholderContent?: ReactNode;
   commands: PromptCommandOption[];
+  slashCommandState?: {
+    loading?: boolean;
+    error?: string;
+    loadingText?: string;
+    errorText?: string;
+    emptyText?: string;
+    noMatchesText?: string;
+  };
   readOnly?: boolean;
   images: ImageAttachment[];
   mlcAttachments: MlcAttachment[];
@@ -86,6 +94,7 @@ export function SharedComposerInput({
   placeholder,
   placeholderContent,
   commands,
+  slashCommandState,
   readOnly,
   images,
   mlcAttachments,
@@ -272,6 +281,7 @@ export function SharedComposerInput({
         containerClassName={editorContainerClassName || "agent-composer-editor-host"}
         projectDirectory={projectDirectory}
         commands={commands}
+        slashCommandState={slashCommandState}
         style={editorStyle || { height: "100%", minHeight: 0, overflowY: "auto", overflowX: "hidden", overscrollBehaviorY: "contain" }}
       />
       <div className="agent-composer-actions" data-preview-overlay>

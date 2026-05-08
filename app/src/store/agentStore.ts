@@ -100,6 +100,7 @@ interface AgentStoreState {
   appendAgentDiagnostic: (sessionId: string, level: AgentDiagnosticEntry["level"], message: string) => void;
   startOpenCodeProvider: (sessionId: string) => Promise<void>;
   stopOpenCodeProvider: (sessionId: string) => Promise<void>;
+  ensureAgentCommands: (sessionId: string, options?: { force?: boolean }) => Promise<void>;
   receiveAgentProcessOutput: (processId: string, data: string) => void;
   receiveAgentProcessStderr: (processId: string, data: string) => void;
   receiveAgentProcessExit: (processId: string, exitCode: number | null) => void;
@@ -678,6 +679,10 @@ function agentMessagesFromOpenCodeMessages(messages: OpenCodeMessage[]): AgentMe
       const summaryText = openCodeMessageText(summaryMessage);
       const summaryTime = latestOpenCodeMessageTime(summaryMessage);
       const pairUpdatedAt = summaryTime || (updatedTime ? new Date(updatedTime).toISOString() : undefined);
+      const summaryThinkingBlocks = (summaryMessage?.parts || [])
+        .map((part) => normalizeOpenCodePart(part))
+        .filter((block): block is AgentContentBlock => Boolean(block && block.type === "thinking"))
+        .map((block) => ({ ...block, status: "completed" as const, updatedAt: block.updatedAt || summaryTime || nowIso() }));
       const blocks = (message.parts || [])
         .map((part) => normalizeOpenCodePart(part))
         .filter((block): block is AgentCompactionBlock => Boolean(block && block.type === "compaction"))
@@ -704,7 +709,7 @@ function agentMessagesFromOpenCodeMessages(messages: OpenCodeMessage[]): AgentMe
         id: message.info?.id || newId("msg"),
         role: "assistant",
         status: block.status === "failed" ? "error" : "complete",
-        blocks: [block],
+        blocks: [...summaryThinkingBlocks, block],
         providerMessageId: providerMessageIds[0],
         providerMessageIds: providerMessageIds.length > 0 ? providerMessageIds : undefined,
         providerParentMessageId: message.info?.parentID,
@@ -716,15 +721,21 @@ function agentMessagesFromOpenCodeMessages(messages: OpenCodeMessage[]): AgentMe
     }
     if (isOpenCodeCompactionSummaryInfo(message.info)) {
       const summaryText = openCodeMessageText(message);
+      const summaryTime = latestOpenCodeMessageTime(message);
+      const summaryThinkingBlocks = (message.parts || [])
+        .map((part) => normalizeOpenCodePart(part))
+        .filter((block): block is AgentContentBlock => Boolean(block && block.type === "thinking"))
+        .map((block) => ({ ...block, status: "completed" as const, updatedAt: block.updatedAt || summaryTime || nowIso() }));
       const block = createCompactionBlock({
         status: message.info?.error ? "failed" : "completed",
         content: summaryText,
         providerSummaryMessageId: message.info?.id,
         createdAt: message.info?.time?.created ? new Date(message.info.time.created).toISOString() : nowIso(),
-        updatedAt: latestOpenCodeMessageTime(message),
+        updatedAt: summaryTime,
         summaryComplete: Boolean(summaryText),
       });
-      return [createStandaloneCompactionMessage(block)];
+      const standalone = createStandaloneCompactionMessage(block);
+      return [{ ...standalone, blocks: [...summaryThinkingBlocks, block] }];
     }
     const blocks = (message.parts || [])
       .map((part) => normalizeOpenCodePart(part))
@@ -1401,6 +1412,29 @@ function setCompactionSummaryText(session: AgentSession, route: CompactionSummar
   }), [route.providerCompactionMessageId, providerSummaryMessageId]);
 }
 
+function upsertBlockBeforeCompaction(session: AgentSession, route: CompactionSummaryRoute, block: AgentContentBlock, providerSummaryMessageId?: string): AgentSession {
+  const location = findCompactionBlockLocation(session, { blockId: route.blockId, providerSummaryMessageId })
+    || findCompactionBlockLocation(session, { providerCompactionMessageId: route.providerCompactionMessageId });
+  if (!location) return session;
+  const messages = [...session.messages];
+  const message = messages[location.messageIndex];
+  const blocks = [...message.blocks];
+  const existingIndex = blocks.findIndex((item) => item.id === block.id);
+  if (existingIndex >= 0) {
+    const existing = blocks[existingIndex];
+    blocks[existingIndex] = {
+      ...existing,
+      ...block,
+      ...((block.type === "thinking" || block.type === "text") && !block.content && (existing.type === "thinking" || existing.type === "text") && existing.content ? { content: existing.content } : {}),
+      updatedAt: nowIso(),
+    } as AgentContentBlock;
+  } else {
+    blocks.splice(location.blockIndex, 0, block);
+  }
+  messages[location.messageIndex] = addProviderMessageIds({ ...message, blocks, updatedAt: nowIso() }, [route.providerCompactionMessageId, providerSummaryMessageId]);
+  return { ...session, messages, updatedAt: nowIso() };
+}
+
 function startCompactionInSession(session: AgentSession): AgentSession {
   const block = createCompactionBlock();
   return {
@@ -1457,6 +1491,10 @@ function applyOpenCodeBusEvent(session: AgentSession, event: OpenCodeBusEvent): 
       const compactionRoute = normalized.messageId ? compactionSummaryRoutes.get(normalized.messageId) : undefined;
       if (compactionRoute?.sessionId === nextSession.id && normalized.block.type === "text") {
         nextSession = setCompactionSummaryText(nextSession, compactionRoute, normalized.block.content, normalized.messageId);
+        continue;
+      }
+      if (compactionRoute?.sessionId === nextSession.id && normalized.block.type === "thinking") {
+        nextSession = upsertBlockBeforeCompaction(nextSession, compactionRoute, normalized.block, normalized.messageId);
         continue;
       }
       if (normalized.block.type === "text" || normalized.block.type === "thinking") {
@@ -1641,6 +1679,9 @@ export const useAgentStore = create<AgentStoreState>((set, get) => ({
       availableModels: activeSession?.availableModels || [],
       availableModes: activeSession?.availableModes || [],
       availableCommands: inheritOpenCodeCommands ? activeSession?.availableCommands || [] : [],
+      availableCommandsLoading: false,
+      availableCommandsError: inheritOpenCodeCommands ? activeSession?.availableCommandsError : undefined,
+      availableCommandsLoadedAt: inheritOpenCodeCommands ? activeSession?.availableCommandsLoadedAt : undefined,
       configOptions: activeSession?.configOptions || [],
       status: "idle",
       createdAt,
@@ -1785,10 +1826,14 @@ export const useAgentStore = create<AgentStoreState>((set, get) => ({
         });
         events.start();
         openCodeHttpRuntimes.set(runtime.processInfo.processId, { sessionId, runtime, events });
+        let commandLoadError: string | undefined;
         const [providers, agents, commands, pendingPermissions] = await Promise.all([
           runtime.client.providers(),
           runtime.client.agents().catch(() => [] as OpenCodeAgentInfo[]),
-          runtime.client.commands().catch(() => [] as OpenCodeCommandInfo[]),
+          runtime.client.commands().catch((error) => {
+            commandLoadError = error instanceof Error ? error.message : String(error);
+            return [] as OpenCodeCommandInfo[];
+          }),
           runtime.client.permissions().catch(() => []),
         ]);
         const availableModels = choicesFromOpenCodeProviders(providers);
@@ -1819,10 +1864,13 @@ export const useAgentStore = create<AgentStoreState>((set, get) => ({
             availableModels: availableModels.length > 0 ? availableModels : item.availableModels,
             availableModes: modeOptions,
             availableCommands,
+            availableCommandsLoading: false,
+            availableCommandsError: commandLoadError,
+            availableCommandsLoadedAt: commandLoadError ? item.availableCommandsLoadedAt : nowIso(),
             modelId,
             modeId,
             updatedAt: nowIso(),
-          }, "info", "Agent session ready.")),
+          }, commandLoadError ? "warn" : "info", commandLoadError ? `Agent session ready, but OpenCode commands failed to load: ${commandLoadError}` : "Agent session ready.")),
         }));
         for (const request of pendingPermissions) handleOpenCodePermissionRequest(sessionId, request as Record<string, unknown>);
       } catch (error) {
@@ -1873,6 +1921,60 @@ export const useAgentStore = create<AgentStoreState>((set, get) => ({
         providerRuntime: { ...item.providerRuntime, processId: undefined, initialized: false },
       }, "warn", "Agent session process was not found.")),
     }));
+  },
+
+  ensureAgentCommands: async (sessionId, options = {}) => {
+    let session = get().sessions.find((item) => item.id === sessionId);
+    if (!session || session.providerId !== "opencode") return;
+    if (session.availableCommandsLoading) return;
+    if (!options.force && ((session.availableCommands?.length || 0) > 0 || (session.availableCommandsLoadedAt && !session.availableCommandsError))) return;
+
+    set((state) => ({
+      sessions: updateSession(state.sessions, sessionId, (item) => ({
+        ...item,
+        availableCommandsLoading: true,
+        availableCommandsError: undefined,
+        updatedAt: nowIso(),
+      })),
+    }));
+
+    try {
+      let httpRuntime = openCodeHttpRuntimeForSession(session, get().sessions);
+      if (!httpRuntime) {
+        await get().startOpenCodeProvider(sessionId);
+        session = get().sessions.find((item) => item.id === sessionId);
+        if (!session) return;
+        if (!options.force && (session.availableCommandsLoadedAt || session.availableCommandsError)) {
+          set((state) => ({
+            sessions: updateSession(state.sessions, sessionId, (item) => ({ ...item, availableCommandsLoading: false, updatedAt: nowIso() })),
+          }));
+          return;
+        }
+        httpRuntime = openCodeHttpRuntimeForSession(session, get().sessions);
+      }
+      if (!httpRuntime) throw new Error("OpenCode runtime is not available");
+      const commands = await httpRuntime.runtime.client.commands();
+      set((state) => ({
+        sessions: updateSession(state.sessions, sessionId, (item) => ({
+          ...item,
+          availableCommands: choicesFromOpenCodeCommands(commands),
+          availableCommandsLoading: false,
+          availableCommandsError: undefined,
+          availableCommandsLoadedAt: nowIso(),
+          updatedAt: nowIso(),
+        })),
+      }));
+    } catch (error) {
+      const message = error instanceof Error ? error.message : String(error);
+      set((state) => ({
+        sessions: updateSession(state.sessions, sessionId, (item) => appendDiagnosticToSession({
+          ...item,
+          availableCommandsLoading: false,
+          availableCommandsError: message,
+          updatedAt: nowIso(),
+        }, "warn", `OpenCode command list failed: ${message}`)),
+      }));
+    }
   },
 
   receiveAgentProcessOutput: (_processId, _data) => {},
@@ -1928,18 +2030,8 @@ export const useAgentStore = create<AgentStoreState>((set, get) => ({
         if (!session) throw new Error("Agent session is not ready");
         const slashCommand = parseOpenCodeSlashCommandDraft(session.draft);
         if (slashCommand && (!session.availableCommands || session.availableCommands.length === 0)) {
-          const httpRuntime = openCodeHttpRuntimeForSession(session, get().sessions);
-          if (httpRuntime) {
-            const commands = await httpRuntime.runtime.client.commands().catch(() => [] as OpenCodeCommandInfo[]);
-            set((state) => ({
-              sessions: updateSession(state.sessions, sessionId, (item) => ({
-                ...item,
-                availableCommands: choicesFromOpenCodeCommands(commands),
-                updatedAt: nowIso(),
-              })),
-            }));
-            session = get().sessions.find((item) => item.id === sessionId) || session;
-          }
+          await get().ensureAgentCommands(sessionId);
+          session = get().sessions.find((item) => item.id === sessionId) || session;
         }
         const openCodeCommand = slashCommand ? findOpenCodeCommand(session, slashCommand.name) : undefined;
         if (slashCommand && !openCodeCommand) {
@@ -2189,6 +2281,9 @@ export const useAgentStore = create<AgentStoreState>((set, get) => ({
           availableModels: session.availableModels || [],
           availableModes: session.availableModes || [],
           availableCommands: session.availableCommands || [],
+          availableCommandsLoading: false,
+          availableCommandsError: session.availableCommandsError,
+          availableCommandsLoadedAt: session.availableCommandsLoadedAt,
           configOptions: session.configOptions || [],
           status: "idle",
           updatedAt: nowIso(),
@@ -2348,6 +2443,10 @@ export const useAgentStore = create<AgentStoreState>((set, get) => ({
             modeId: restoredModeId,
             availableModels: session.availableModels || [],
             availableModes: session.availableModes || [],
+            availableCommands: session.availableCommands || [],
+            availableCommandsLoading: false,
+            availableCommandsError: session.availableCommandsError,
+            availableCommandsLoadedAt: session.availableCommandsLoadedAt,
             configOptions: session.configOptions || [],
             contextUsage: restoredContextUsage,
             sessionDiffs: normalizeOpenCodeFileDiffs(sessionDiffs),
@@ -2372,6 +2471,10 @@ export const useAgentStore = create<AgentStoreState>((set, get) => ({
             modeId: restoredModeId,
             availableModels: session.availableModels || [],
             availableModes: session.availableModes || [],
+            availableCommands: session.availableCommands || [],
+            availableCommandsLoading: false,
+            availableCommandsError: session.availableCommandsError,
+            availableCommandsLoadedAt: session.availableCommandsLoadedAt,
             configOptions: session.configOptions || [],
             contextUsage: restoredContextUsage,
             sessionDiffs: normalizeOpenCodeFileDiffs(sessionDiffs),
@@ -2452,6 +2555,9 @@ export const useAgentStore = create<AgentStoreState>((set, get) => ({
           availableModels: item.availableModels || [],
           availableModes: item.availableModes || [],
           availableCommands: item.availableCommands || [],
+          availableCommandsLoading: false,
+          availableCommandsError: item.availableCommandsError,
+          availableCommandsLoadedAt: item.availableCommandsLoadedAt,
           configOptions: item.configOptions || [],
           status: "idle",
           createdAt: item.createdAt,

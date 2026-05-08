@@ -1,4 +1,4 @@
-import { useCallback, useMemo, useRef, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { useTranslation } from "react-i18next";
 import { readText as readClipboardText } from "@tauri-apps/plugin-clipboard-manager";
 import { useAgentStore } from "../../store/agentStore";
@@ -79,6 +79,7 @@ export function AgentComposer({ session }: { session: AgentSession }) {
   const sendAgentPrompt = useAgentStore((state) => state.sendAgentPrompt);
   const abortAgentPrompt = useAgentStore((state) => state.abortAgentPrompt);
   const appendAgentDiagnostic = useAgentStore((state) => state.appendAgentDiagnostic);
+  const ensureAgentCommands = useAgentStore((state) => state.ensureAgentCommands);
   const dockLayout = useFeedbackStore((state) => state.dockLayout);
   const setFocusedComposer = useFeedbackStore((state) => state.setFocusedComposer);
   const setMlcActiveWorkspacePath = useFeedbackStore((state) => state.setMlcActiveWorkspacePath);
@@ -109,7 +110,15 @@ export function AgentComposer({ session }: { session: AgentSession }) {
       kind: "agent",
       focusedAt: new Date().toISOString(),
     });
-  }, [session.cwd, session.id, setFocusedComposer]);
+    void ensureAgentCommands(session.id);
+  }, [ensureAgentCommands, session.cwd, session.id, setFocusedComposer]);
+
+  useEffect(() => {
+    if (!session.draft.trimStart().startsWith("/")) return;
+    if ((session.availableCommands?.length || 0) > 0) return;
+    if (session.availableCommandsLoading) return;
+    void ensureAgentCommands(session.id);
+  }, [ensureAgentCommands, session.availableCommands?.length, session.availableCommandsLoading, session.draft, session.id]);
 
   const openResourcesPanel = useCallback(() => {
     focusAgentComposer();
@@ -354,6 +363,14 @@ export function AgentComposer({ session }: { session: AgentSession }) {
         projectDirectory={session.cwd}
         placeholder={t("agentConsole.placeholder", "Ask the agent to work in this workspace...")}
         commands={commandOptions}
+        slashCommandState={{
+          loading: session.availableCommandsLoading,
+          error: session.availableCommandsError,
+          loadingText: t("agentConsole.loadingOpenCodeCommands", "Loading OpenCode commands..."),
+          errorText: t("agentConsole.openCodeCommandsLoadFailed", "OpenCode commands failed to load"),
+          emptyText: t("agentConsole.noOpenCodeCommands", "No OpenCode commands are available in this project"),
+          noMatchesText: t("agentConsole.noMatchingOpenCodeCommands", "No matching OpenCode commands"),
+        }}
         images={session.images}
         mlcAttachments={session.mlcAttachments}
         webAttachments={session.webAttachments}

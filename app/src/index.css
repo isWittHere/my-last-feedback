@@ -7682,6 +7682,24 @@ body,
   font-size: 11px;
   line-height: 20px;
 }
+.composer-slash-empty {
+  display: grid;
+  gap: 3px;
+  min-height: 28px;
+  padding: 6px 8px;
+  color: var(--color-text-muted);
+  font-size: 12px;
+  line-height: 1.35;
+}
+.composer-slash-empty small {
+  color: var(--color-text-subtle);
+  font-size: 11px;
+  line-height: 1.35;
+  overflow-wrap: anywhere;
+}
+.composer-slash-empty-error {
+  color: var(--color-danger);
+}
 .composer-slash-detail {
   position: fixed;
   z-index: 1201;

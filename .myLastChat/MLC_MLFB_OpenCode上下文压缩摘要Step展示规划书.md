@@ -194,6 +194,19 @@ OpenCode `SessionCompaction.select()` 会决定哪些历史消息进入摘要，
 
 `tail_start_id` 只作为 step detail 的辅助信息，不参与决定 UI 时间线位置。
 
+补充规则：压缩动作本身是一轮 OpenCode compaction 对话，该对话可能先生成 reasoning/thinking，再生成最终 summary text。因此“压缩回合的位置”和“compaction step 的位置”不是完全同一个概念。
+
+正确顺序是：
+
+```text
+压缩回合 process group
+  thinking / reasoning step
+  compaction step
+    summary text
+```
+
+也就是说，compaction step 表示“压缩摘要正文开始输出”，不表示“压缩回合开始”。若 summary assistant message 产生 reasoning part，该 thinking step 必须排在 compaction step 前面。
+
 ### 4.2 手动压缩
 
 手动压缩发生在用户主动点击上下文压缩按钮时，通常 session 应处于 idle 状态。
@@ -205,6 +218,7 @@ OpenCode `SessionCompaction.select()` 会决定哪些历史消息进入摘要，
 Agent：之前的回答
 用户点击压缩
 Agent process group：上下文压缩中 / 上下文已压缩
+  可选：思考 step
   detail：摘要 Markdown 流式展示
 ```
 
@@ -212,6 +226,7 @@ Agent process group：上下文压缩中 / 上下文已压缩
 
 - 点击压缩后，立即在对话末尾创建一个独立 compaction process group。
 - 不把 compaction step 插入上一个 assistant message。
+- 如果 OpenCode summary assistant 先输出 reasoning/thinking，该 thinking step 插入到 compaction step 前。
 - 摘要 text delta 进入该 step 的 `content`。
 - 不生成普通 result 输出。
 - 完成后 step 状态变为 completed。
@@ -227,6 +242,7 @@ Agent process group：上下文压缩中 / 上下文已压缩
 用户：复杂任务
 Agent process：读取文件
 Agent process：运行工具
+Agent process：压缩回合中的思考
 Agent process：上下文压缩中
   detail：摘要 Markdown 流式展示
 Agent process：继续执行后续步骤
@@ -237,6 +253,7 @@ Agent result：最终回答
 
 - 自动压缩属于当前 assistant turn 的 process 流。
 - compaction step 应放在当前 turn 中“压缩开始”的位置。
+- 若 compaction summary assistant 产生 reasoning/thinking，该 thinking step 应排在 compaction step 前。
 - 摘要 text delta 进入该 step detail。
 - 压缩完成后的正常工具调用、思考、最终回答继续正常显示。
 - 摘要本身不作为普通 result 输出。

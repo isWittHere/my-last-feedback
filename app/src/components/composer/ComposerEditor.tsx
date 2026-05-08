@@ -111,6 +111,14 @@ interface ComposerEditorProps {
   style?: CSSProperties;
   projectDirectory?: string;
   commands?: PromptCommandOption[];
+  slashCommandState?: {
+    loading?: boolean;
+    error?: string;
+    loadingText?: string;
+    errorText?: string;
+    emptyText?: string;
+    noMatchesText?: string;
+  };
 }
 
 function tokenLength(node: Node): number {
@@ -475,6 +483,7 @@ export const ComposerEditor = forwardRef<ComposerEditorHandle, ComposerEditorPro
   style,
   projectDirectory,
   commands = [],
+  slashCommandState,
 }, forwardedRef) {
   const containerRef = useRef<HTMLDivElement>(null);
   const rootRef = useRef<HTMLDivElement>(null);
@@ -862,6 +871,15 @@ export const ComposerEditor = forwardRef<ComposerEditorHandle, ComposerEditorPro
       return;
     }
 
+    if (slashMenu) {
+      if (event.key === "Escape") {
+        event.preventDefault();
+        event.stopPropagation();
+        setSlashMenu(null);
+        return;
+      }
+    }
+
     if (slashMenu && visibleCommands.length > 0) {
       if (event.key === "ArrowDown" || event.key === "ArrowUp") {
         event.preventDefault();
@@ -876,12 +894,6 @@ export const ComposerEditor = forwardRef<ComposerEditorHandle, ComposerEditorPro
         event.preventDefault();
         event.stopPropagation();
         selectCommand(visibleCommands[activeCommandIndex] || visibleCommands[0]);
-        return;
-      }
-      if (event.key === "Escape") {
-        event.preventDefault();
-        event.stopPropagation();
-        setSlashMenu(null);
         return;
       }
     }
@@ -946,6 +958,14 @@ export const ComposerEditor = forwardRef<ComposerEditorHandle, ComposerEditorPro
   }, [insertText, onPaste]);
 
   const detailCommand = hoveredCommandIndex === null ? undefined : visibleCommands[hoveredCommandIndex];
+  const slashEmptyText = slashCommandState?.loading
+    ? slashCommandState.loadingText || "Loading OpenCode commands..."
+    : slashCommandState?.error
+      ? slashCommandState.errorText || "OpenCode commands failed to load"
+      : commands.length > 0
+        ? slashCommandState?.noMatchesText || "No matching commands"
+        : slashCommandState?.emptyText || "No commands available";
+  const slashEmptyDetail = slashCommandState?.error;
   const slashMenuStyle = slashMenu ? ({
     top: slashMenu.top,
     left: slashMenu.left,
@@ -1021,10 +1041,10 @@ export const ComposerEditor = forwardRef<ComposerEditorHandle, ComposerEditorPro
           handleInput();
         }}
       />
-      {slashMenu && visibleCommands.length > 0 ? (
+      {slashMenu ? (
         <>
           <div ref={slashListRef} className="composer-slash-menu" style={slashMenuStyle} onMouseEnter={clearSlashDetailHideTimer} onMouseLeave={(event) => scheduleSlashDetailHide(event.relatedTarget)}>
-            {visibleCommands.map((command, index) => {
+            {visibleCommands.length > 0 ? visibleCommands.map((command, index) => {
               const label = command.name || `/${command.id}`;
               return (
                 <button
@@ -1045,9 +1065,14 @@ export const ComposerEditor = forwardRef<ComposerEditorHandle, ComposerEditorPro
                   </span>
                 </button>
               );
-            })}
+            }) : (
+              <div className={`composer-slash-empty${slashCommandState?.error ? " composer-slash-empty-error" : ""}`}>
+                <span>{slashEmptyText}</span>
+                {slashEmptyDetail ? <small>{slashEmptyDetail}</small> : null}
+              </div>
+            )}
           </div>
-          {detailCommand ? (
+          {visibleCommands.length > 0 && detailCommand ? (
             <aside ref={slashDetailRef} className="composer-slash-detail" style={slashDetailStyle} aria-live="polite" onMouseEnter={clearSlashDetailHideTimer} onMouseLeave={(event) => scheduleSlashDetailHide(event.relatedTarget)}>
               <div className="composer-slash-detail-title">{detailCommand.name || `/${detailCommand.id}`}</div>
               {detailCommand.description ? <div className="composer-slash-detail-description">{detailCommand.description}</div> : null}
