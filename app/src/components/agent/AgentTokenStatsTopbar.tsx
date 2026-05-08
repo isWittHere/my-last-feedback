@@ -83,7 +83,7 @@ interface TokenTooltipState {
 
 export function AgentTokenStatsTopbar({ session }: { session: AgentSession }) {
   const { t } = useTranslation();
-  const { navigationIndicatorOrder } = useAgentConsoleSettings();
+  const { navigationIndicatorOrder, navigationGroupBackgroundMode } = useAgentConsoleSettings();
   const summary = useMemo(() => getAgentTokenStatsSummary(session), [session]);
   const stats = summary.stats;
   const groupedStats = useMemo(() => {
@@ -135,7 +135,7 @@ export function AgentTokenStatsTopbar({ session }: { session: AgentSession }) {
 
   return (
     <div ref={topbarRef} className="agent-token-topbar" aria-label={t("agentConsole.tokenStats", "Agent step token statistics")}>
-      <div ref={listRef} className="agent-token-topbar-list" onWheel={handleWheel}>
+      <div ref={listRef} className="agent-token-topbar-list" data-group-background-mode={navigationGroupBackgroundMode} onWheel={handleWheel}>
         {displayGroups.map((group) => (
           <div key={group.groupIndex} className="agent-token-topbar-group" data-group-tone={group.groupIndex % 2 === 0 ? "normal" : "alternate"}>
             {group.stats.map((stat) => {

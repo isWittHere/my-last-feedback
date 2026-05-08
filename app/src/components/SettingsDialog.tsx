@@ -16,7 +16,7 @@ import { getSubmittedViewSettings, saveSubmittedViewSettings, SUBMITTED_VIEW_SEC
 import { getTerminalSettings, saveTerminalSettings, type TerminalSettings, type TerminalShellId } from "../terminalSettings";
 import { getComposerSettings, saveComposerSettings, type ComposerSettings } from "../composerSettings";
 import { formatGitFolderBlacklistText, getGitOperationSettings, GIT_TIMED_REMINDER_MAX_MINUTES, GIT_TIMED_REMINDER_MIN_MINUTES, GIT_TIMED_REMINDER_STEP_MINUTES, parseGitFolderBlacklistText, saveGitOperationSettings, type GitOperationSettings } from "../gitOperationSettings";
-import { AGENT_DIFF_COLOR_PRESETS, getAgentConsoleSettings, saveAgentConsoleSettings, type AgentConsoleSettings, type AgentDiffColorPresetId, type AgentNavigationIndicatorOrder, type AgentProcessStepDefaultMode, type AgentTopbarIndicatorMode } from "../agentConsoleSettings";
+import { AGENT_DIFF_COLOR_PRESETS, getAgentConsoleSettings, saveAgentConsoleSettings, type AgentConsoleSettings, type AgentDiffColorPresetId, type AgentNavigationGroupBackgroundMode, type AgentNavigationIndicatorOrder, type AgentProcessStepDefaultMode, type AgentTopbarIndicatorMode } from "../agentConsoleSettings";
 import { getOpenCodePermissionPresetAction, getOpenCodeSettings, OPEN_CODE_PERMISSION_DEFINITIONS, setOpenCodeDefaultPermissionAction, setOpenCodeModelEnabled, setOpenCodePreferredModel, type OpenCodePermissionAction, type OpenCodeSettings } from "../openCodeSettings";
 import { SESSION_LIST_MODE_OPTIONS } from "../sessionNavigationSettings";
 import { SessionNavigationModeIcon } from "./SessionNavigationModeIcon";
@@ -31,6 +31,7 @@ const SETTINGS_DOCK_TAB_IDS: DockTabId[] = ["mlc", "mlcPreview", "resources", "p
 const AGENT_TOPBAR_INDICATOR_MODE_OPTIONS: AgentTopbarIndicatorMode[] = ["hidden", "text", "textAndGraphic"];
 const AGENT_PROCESS_STEP_MODE_OPTIONS: AgentProcessStepDefaultMode[] = ["tabs", "timeline"];
 const AGENT_NAVIGATION_INDICATOR_ORDER_OPTIONS: AgentNavigationIndicatorOrder[] = ["leftToRight", "rightToLeft"];
+const AGENT_NAVIGATION_GROUP_BACKGROUND_MODE_OPTIONS: AgentNavigationGroupBackgroundMode[] = ["hidden", "hover", "alternate"];
 const OPEN_CODE_PERMISSION_ACTIONS: OpenCodePermissionAction[] = ["allow", "ask", "deny"];
 
 type OpenCodeModelItem = OpenCodeSettings["models"][number];
@@ -359,6 +360,14 @@ export function SettingsDialog({ open, onClose }: { open: boolean; onClose: () =
     });
   }, []);
 
+  const handleAgentNavigationGroupBackgroundModeChange = useCallback((navigationGroupBackgroundMode: AgentNavigationGroupBackgroundMode) => {
+    setAgentConsoleSettings((prev) => {
+      const next = { ...prev, navigationGroupBackgroundMode };
+      saveAgentConsoleSettings(next);
+      return next;
+    });
+  }, []);
+
   const handleAgentProcessStepModeChange = useCallback((processStepDefaultMode: AgentProcessStepDefaultMode) => {
     setAgentConsoleSettings((prev) => {
       const next = { ...prev, processStepDefaultMode };
@@ -524,9 +533,35 @@ export function SettingsDialog({ open, onClose }: { open: boolean; onClose: () =
       ariaLabel={t("settings.agentNavigationIndicatorOrder", "Navigation indicator order")}
       value={agentConsoleSettings.navigationIndicatorOrder}
       onChange={(navigationIndicatorOrder) => handleAgentNavigationIndicatorOrderChange(navigationIndicatorOrder as AgentNavigationIndicatorOrder)}
+      className="settings-segmented-icon-only"
       options={AGENT_NAVIGATION_INDICATOR_ORDER_OPTIONS.map((navigationIndicatorOrder) => {
         const label = navigationIndicatorOrderLabel(navigationIndicatorOrder);
-        return { id: navigationIndicatorOrder, label, icon: <Icon name="arrow-right" size={13} style={{ transform: navigationIndicatorOrder === "rightToLeft" ? "rotate(180deg)" : undefined }} /> };
+        return { id: navigationIndicatorOrder, label, ariaLabel: `${t("settings.agentNavigationIndicatorOrder", "Navigation indicator order")}: ${label}`, icon: <Icon name="arrow-right" size={13} style={{ transform: navigationIndicatorOrder === "rightToLeft" ? "rotate(180deg)" : undefined }} /> };
+      })}
+    />
+  );
+
+  const navigationGroupBackgroundModeLabel = (mode: AgentNavigationGroupBackgroundMode) => {
+    if (mode === "hidden") return t("settings.agentNavigationGroupBackgroundHidden", "No background");
+    if (mode === "hover") return t("settings.agentNavigationGroupBackgroundHover", "On hover");
+    return t("settings.agentNavigationGroupBackgroundAlternate", "Always alternate");
+  };
+
+  const navigationGroupBackgroundModeIcon = (mode: AgentNavigationGroupBackgroundMode) => {
+    if (mode === "hidden") return <Icon name="eye-off" size={13} />;
+    if (mode === "hover") return <Icon name="eye" size={13} />;
+    return <Icon name="rows" size={13} style={{ transform: "rotate(90deg)" }} />;
+  };
+
+  const renderAgentNavigationGroupBackgroundModeGroup = () => (
+    <SettingsSegmentedControl
+      ariaLabel={t("settings.agentNavigationGroupBackgroundMode", "Round grouping background")}
+      value={agentConsoleSettings.navigationGroupBackgroundMode}
+      onChange={(mode) => handleAgentNavigationGroupBackgroundModeChange(mode as AgentNavigationGroupBackgroundMode)}
+      className="settings-segmented-icon-only"
+      options={AGENT_NAVIGATION_GROUP_BACKGROUND_MODE_OPTIONS.map((mode) => {
+        const label = navigationGroupBackgroundModeLabel(mode);
+        return { id: mode, label, icon: navigationGroupBackgroundModeIcon(mode), ariaLabel: `${t("settings.agentNavigationGroupBackgroundMode", "Round grouping background")}: ${label}` };
       })}
     />
   );
@@ -1317,21 +1352,34 @@ export function SettingsDialog({ open, onClose }: { open: boolean; onClose: () =
                         </div>
                         {renderAgentNavigationIndicatorOrderGroup()}
                       </div>
+                      <div className="settings-row settings-agent-toggle-row">
+                        <div className="settings-row-info">
+                          <span className="settings-label">{t("settings.agentNavigationGroupBackgroundMode", "Round grouping background")}</span>
+                          <span className="settings-sublabel">{t("settings.agentNavigationGroupBackgroundModeDesc", "Choose when conversation-round grouping backgrounds appear in the Agent navigation bar.")}</span>
+                        </div>
+                        {renderAgentNavigationGroupBackgroundModeGroup()}
+                      </div>
                     </div>
                     <div className="settings-agent-indicator-list">
-                      <div className="settings-agent-indicator-row">
-                        <span className="settings-agent-indicator-label">{t("settings.agentDiffIndicator", "Diff indicator")}</span>
+                      <div className="settings-row settings-agent-toggle-row">
+                        <div className="settings-row-info">
+                          <span className="settings-label">{t("settings.agentDiffIndicator", "Diff indicator")}</span>
+                          <span className="settings-sublabel">{t("settings.agentDiffIndicatorDesc", "Choose whether diff activity appears as text, graphics, or stays hidden in the Agent topbar.")}</span>
+                        </div>
                         {renderAgentIndicatorModeGroup("diffIndicatorMode", agentConsoleSettings.diffIndicatorMode, t("settings.agentDiffIndicator", "Diff indicator"))}
                       </div>
-                      <div className="settings-agent-indicator-row">
-                        <span className="settings-agent-indicator-label">{t("settings.agentContextIndicator", "Context indicator")}</span>
+                      <div className="settings-row settings-agent-toggle-row">
+                        <div className="settings-row-info">
+                          <span className="settings-label">{t("settings.agentContextIndicator", "Context indicator")}</span>
+                          <span className="settings-sublabel">{t("settings.agentContextIndicatorDesc", "Choose whether context usage appears as text, graphics, or stays hidden in the Agent topbar.")}</span>
+                        </div>
                         {renderAgentIndicatorModeGroup("contextIndicatorMode", agentConsoleSettings.contextIndicatorMode, t("settings.agentContextIndicator", "Context indicator"))}
                       </div>
                     </div>
-                    <div className="settings-agent-visual-group">
+                    <div className="settings-agent-visual-group settings-agent-toggle-row">
                       <div className="settings-row-info">
                         <span className="settings-label">{t("settings.agentDiffVisualAdjustment", "Diff visual adjustment")}</span>
-                        <span className="settings-sublabel">{t("settings.agentDiffVisualAdjustmentDesc", "Tune diff colors and compact topbar text position.")}</span>
+                        <span className="settings-sublabel">{t("settings.agentDiffVisualAdjustmentDesc", "Tune the color preset for added and deleted diff content.")}</span>
                       </div>
                       <SettingsSegmentedControl
                         ariaLabel={t("settings.agentDiffColorPreset", "Diff color preset")}
@@ -1353,7 +1401,13 @@ export function SettingsDialog({ open, onClose }: { open: boolean; onClose: () =
                           };
                         })}
                       />
-                      <div className="settings-agent-offset-panel">
+                    </div>
+                    <div className="settings-agent-offset-card settings-agent-toggle-row">
+                      <div className="settings-row settings-agent-offset-card-header">
+                        <div className="settings-row-info">
+                          <span className="settings-label">{t("settings.agentDiffTextOffsetAdvanced", "Text offset fine tuning")}</span>
+                          <span className="settings-sublabel">{t("settings.agentDiffTextOffsetAdvancedDesc", "Adjust the compact diff text position independently for additions and deletions.")}</span>
+                        </div>
                         <button
                           type="button"
                           className="settings-agent-offset-toggle"
@@ -1361,19 +1415,19 @@ export function SettingsDialog({ open, onClose }: { open: boolean; onClose: () =
                           aria-expanded={!diffOffsetCollapsed}
                         >
                           <Icon name={diffOffsetCollapsed ? "chevron-right" : "chevron-down"} size={13} />
-                          <span>{t("settings.agentDiffTextOffsetAdvanced", "Text offset fine tuning")}</span>
+                          <span>{diffOffsetCollapsed ? t("settings.agentDiffTextOffsetExpand", "Expand") : t("settings.agentDiffTextOffsetCollapse", "Collapse")}</span>
                         </button>
-                        {!diffOffsetCollapsed && (
-                          <div className="settings-agent-offset-list">
-                            <div className="settings-agent-offset-title">{t("settings.agentDiffAddTextOffset", "Addition text offset")}</div>
-                            {renderAgentDiffOffsetControl(t("settings.agentDiffTextOffsetX", "Horizontal offset"), "additionsOffsetX")}
-                            {renderAgentDiffOffsetControl(t("settings.agentDiffTextOffsetY", "Vertical offset"), "additionsOffsetY")}
-                            <div className="settings-agent-offset-title">{t("settings.agentDiffDeleteTextOffset", "Deletion text offset")}</div>
-                            {renderAgentDiffOffsetControl(t("settings.agentDiffTextOffsetX", "Horizontal offset"), "deletionsOffsetX")}
-                            {renderAgentDiffOffsetControl(t("settings.agentDiffTextOffsetY", "Vertical offset"), "deletionsOffsetY")}
-                          </div>
-                        )}
                       </div>
+                      {!diffOffsetCollapsed && (
+                        <div className="settings-agent-offset-list">
+                          <div className="settings-agent-offset-title">{t("settings.agentDiffAddTextOffset", "Addition text offset")}</div>
+                          {renderAgentDiffOffsetControl(t("settings.agentDiffTextOffsetX", "Horizontal offset"), "additionsOffsetX")}
+                          {renderAgentDiffOffsetControl(t("settings.agentDiffTextOffsetY", "Vertical offset"), "additionsOffsetY")}
+                          <div className="settings-agent-offset-title">{t("settings.agentDiffDeleteTextOffset", "Deletion text offset")}</div>
+                          {renderAgentDiffOffsetControl(t("settings.agentDiffTextOffsetX", "Horizontal offset"), "deletionsOffsetX")}
+                          {renderAgentDiffOffsetControl(t("settings.agentDiffTextOffsetY", "Vertical offset"), "deletionsOffsetY")}
+                        </div>
+                      )}
                     </div>
                   </div>
                 </div>

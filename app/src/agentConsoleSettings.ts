@@ -4,6 +4,7 @@ export type AgentTopbarIndicatorMode = "hidden" | "text" | "textAndGraphic";
 export type AgentDiffColorPresetId = "classic" | "soft" | "vscode";
 export type AgentProcessStepDefaultMode = "tabs" | "timeline";
 export type AgentNavigationIndicatorOrder = "leftToRight" | "rightToLeft";
+export type AgentNavigationGroupBackgroundMode = "hidden" | "hover" | "alternate";
 
 export interface AgentDiffColorPreset {
   id: AgentDiffColorPresetId;
@@ -31,6 +32,7 @@ export interface AgentConsoleSettings {
   defaultExpandHeaderDetails: boolean;
   showStickyUserMessageBar: boolean;
   navigationIndicatorOrder: AgentNavigationIndicatorOrder;
+  navigationGroupBackgroundMode: AgentNavigationGroupBackgroundMode;
   diffVisual: AgentDiffVisualSettings;
 }
 
@@ -53,6 +55,7 @@ const DEFAULT_SETTINGS: AgentConsoleSettings = {
   defaultExpandHeaderDetails: false,
   showStickyUserMessageBar: true,
   navigationIndicatorOrder: "leftToRight",
+  navigationGroupBackgroundMode: "alternate",
   diffVisual: {
     colorPresetId: "classic",
     additionsOffsetX: 0,
@@ -79,6 +82,10 @@ function isProcessStepDefaultMode(value: unknown): value is AgentProcessStepDefa
 
 function isNavigationIndicatorOrder(value: unknown): value is AgentNavigationIndicatorOrder {
   return value === "leftToRight" || value === "rightToLeft";
+}
+
+function isNavigationGroupBackgroundMode(value: unknown): value is AgentNavigationGroupBackgroundMode {
+  return value === "hidden" || value === "hover" || value === "alternate";
 }
 
 function clampTextOffset(value: unknown): number {
@@ -113,6 +120,7 @@ export function getAgentConsoleSettings(): AgentConsoleSettings {
       defaultExpandHeaderDetails: typeof parsed.defaultExpandHeaderDetails === "boolean" ? parsed.defaultExpandHeaderDetails : DEFAULT_SETTINGS.defaultExpandHeaderDetails,
       showStickyUserMessageBar: typeof parsed.showStickyUserMessageBar === "boolean" ? parsed.showStickyUserMessageBar : DEFAULT_SETTINGS.showStickyUserMessageBar,
       navigationIndicatorOrder: isNavigationIndicatorOrder(parsed.navigationIndicatorOrder) ? parsed.navigationIndicatorOrder : DEFAULT_SETTINGS.navigationIndicatorOrder,
+      navigationGroupBackgroundMode: isNavigationGroupBackgroundMode(parsed.navigationGroupBackgroundMode) ? parsed.navigationGroupBackgroundMode : DEFAULT_SETTINGS.navigationGroupBackgroundMode,
       diffVisual: {
         colorPresetId: isColorPresetId(parsedDiffVisual?.colorPresetId) ? parsedDiffVisual.colorPresetId : DEFAULT_SETTINGS.diffVisual.colorPresetId,
         additionsOffsetX: parsedDiffVisual?.additionsOffsetX == null ? legacyOffsetX : clampTextOffset(parsedDiffVisual.additionsOffsetX),
