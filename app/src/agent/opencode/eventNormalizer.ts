@@ -378,6 +378,8 @@ function normalizeCompactionPart(part: OpenCodeMessagePart): AgentCompactionBloc
     status: time.end || time.completed ? "completed" : "running",
     auto: asBoolean(part.auto),
     overflow: asBoolean(part.overflow),
+    providerCompactionMessageId: asString(part.messageID),
+    tailStartId: asString(part.tail_start_id),
     ...(content ? { content } : {}),
   };
 }

@@ -242,6 +242,7 @@ export interface OpenCodeMessageInfo {
   providerID?: string;
   mode?: string;
   agent?: string;
+  summary?: boolean;
   cost?: number;
   tokens?: OpenCodeMessageTokens;
   finish?: string;
@@ -259,6 +260,12 @@ export type OpenCodeMessagePart = Record<string, unknown> & {
   type?: string;
   sessionID?: string;
   messageID?: string;
+  text?: string;
+  content?: string;
+  summary?: string;
+  auto?: boolean;
+  overflow?: boolean;
+  tail_start_id?: string;
 };
 
 export interface OpenCodeMessage {

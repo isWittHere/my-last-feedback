@@ -6,7 +6,7 @@ import { createAgentSession } from "../agent/sessionFactory";
 import { buildSubmittedComposerPayload, collectSubmittedResourceLinks } from "../composer/submittedFeedback";
 import { getAgentConsoleSettings } from "../agentConsoleSettings";
 import { getOpenCodeDefaultPermissionRules, setOpenCodePreferredModel, syncOpenCodeModels } from "../openCodeSettings";
-import type { AgentChoiceOption, AgentContentBlock, AgentContextUsage, AgentDiagnosticEntry, AgentMessage, AgentModelCapabilities, AgentProviderMessagePart, AgentSession, AgentSessionFileDiff, AgentSubmittedAttachmentTag } from "../agent/types";
+import type { AgentChoiceOption, AgentCompactionBlock, AgentContentBlock, AgentContextUsage, AgentDiagnosticEntry, AgentMessage, AgentModelCapabilities, AgentProviderMessagePart, AgentSession, AgentSessionFileDiff, AgentSubmittedAttachmentTag } from "../agent/types";
 import type { AgentProviderId } from "../agent/types";
 import type { GitAction, ImageAttachment, MlcAttachment, WebAttachment } from "./feedbackStore";
 
@@ -66,6 +66,14 @@ interface PacedTextBuffer {
 }
 
 const pacedTextBuffers = new Map<string, PacedTextBuffer>();
+
+interface CompactionSummaryRoute {
+  sessionId: string;
+  blockId: string;
+  providerCompactionMessageId?: string;
+}
+
+const compactionSummaryRoutes = new Map<string, CompactionSummaryRoute>();
 
 interface AgentStoreState {
   sessions: AgentSession[];
@@ -182,6 +190,38 @@ function createStreamingAssistantMessage(messageId?: string): AgentMessage {
     providerMessageId: messageId,
     providerMessageIds: messageId ? [messageId] : undefined,
     createdAt: nowIso(),
+  };
+}
+
+function createCompactionBlock(options: Partial<AgentCompactionBlock> = {}): AgentCompactionBlock {
+  return {
+    id: options.id || newId("agent_compaction"),
+    type: "compaction",
+    status: options.status || "running",
+    origin: options.origin || { phase: "process", placement: "standalone" },
+    createdAt: options.createdAt || nowIso(),
+    updatedAt: options.updatedAt,
+    auto: options.auto,
+    overflow: options.overflow,
+    content: options.content,
+    providerCompactionMessageId: options.providerCompactionMessageId,
+    providerSummaryMessageId: options.providerSummaryMessageId,
+    tailStartId: options.tailStartId,
+    summaryComplete: options.summaryComplete,
+  };
+}
+
+function createStandaloneCompactionMessage(block: AgentCompactionBlock): AgentMessage {
+  const providerMessageIds = [block.providerCompactionMessageId, block.providerSummaryMessageId].filter((item): item is string => Boolean(item));
+  return {
+    id: newId("agent_assistant_msg"),
+    role: "assistant",
+    status: block.status === "failed" ? "error" : block.status === "completed" ? "complete" : "streaming",
+    blocks: [block],
+    providerMessageId: providerMessageIds[0],
+    providerMessageIds: providerMessageIds.length > 0 ? providerMessageIds : undefined,
+    createdAt: block.createdAt,
+    updatedAt: block.updatedAt,
   };
 }
 
@@ -448,13 +488,51 @@ function openCodeModelIdFromInfo(info: OpenCodeMessageInfo | undefined): string 
   return [info.providerID, info.modelID].filter(Boolean).join("/") || undefined;
 }
 
+function isOpenCodeCompactionSummaryInfo(info: OpenCodeMessageInfo | undefined): boolean {
+  return Boolean(info && info.role === "assistant" && (info.summary === true || info.mode === "compaction" || info.agent === "compaction"));
+}
+
+function isOpenCodeCompactionPart(part: OpenCodeMessagePart | undefined): boolean {
+  return part?.type === "compaction";
+}
+
+function isOpenCodeCompactionOnlyMessage(message: OpenCodeMessage): boolean {
+  const parts = message.parts || [];
+  return message.info?.role === "user" && parts.length > 0 && parts.every(isOpenCodeCompactionPart);
+}
+
+function openCodePartText(part: OpenCodeMessagePart): string {
+  return [part.text, part.content, part.summary]
+    .filter((item): item is string => typeof item === "string" && item.trim().length > 0)
+    .join("\n\n")
+    .trim();
+}
+
+function openCodeMessageText(message: OpenCodeMessage | undefined): string | undefined {
+  const text = (message?.parts || [])
+    .filter((part) => part.type === "text")
+    .map(openCodePartText)
+    .filter(Boolean)
+    .join("\n\n")
+    .trim();
+  return text || undefined;
+}
+
+function latestOpenCodeMessageTime(message: OpenCodeMessage | undefined): string | undefined {
+  const time = message?.info?.time;
+  const value = typeof time?.completed === "number" ? time.completed : typeof time?.created === "number" ? time.created : undefined;
+  return value ? new Date(value).toISOString() : undefined;
+}
+
 function openCodeSelectionFromMessages(messages: OpenCodeMessage[]): { modelId?: string; modeId?: string } {
   const selection: { modelId?: string; modeId?: string } = {};
   for (let index = messages.length - 1; index >= 0; index -= 1) {
     const info = messages[index].info;
     if (!info) continue;
     selection.modelId ||= openCodeModelIdFromInfo(info);
-    selection.modeId ||= typeof info.agent === "string" && info.agent ? info.agent : typeof info.mode === "string" && info.mode ? info.mode : undefined;
+    if (!isOpenCodeCompactionSummaryInfo(info)) {
+      selection.modeId ||= typeof info.agent === "string" && info.agent ? info.agent : typeof info.mode === "string" && info.mode ? info.mode : undefined;
+    }
     if (selection.modelId && selection.modeId) break;
   }
   return selection;
@@ -583,9 +661,71 @@ function findLatestAssistantAfterLastUser(messages: AgentMessage[]): number {
 }
 
 function agentMessagesFromOpenCodeMessages(messages: OpenCodeMessage[]): AgentMessage[] {
-  const mappedMessages = messages.map((message) => {
+  const summaryByParentId = new Map<string, OpenCodeMessage>();
+  for (const message of messages) {
+    if (isOpenCodeCompactionSummaryInfo(message.info) && message.info?.parentID) {
+      summaryByParentId.set(message.info.parentID, message);
+    }
+  }
+  const consumedSummaryIds = new Set<string>();
+  const mappedMessages = messages.flatMap((message): AgentMessage[] => {
+    if (message.info?.id && consumedSummaryIds.has(message.info.id)) return [];
     const updatedTime = typeof message.info?.time?.updated === "number" ? message.info.time.updated : null;
     const messageStatus = message.info?.time?.completed || message.info?.status === "complete" ? "complete" : message.info?.status === "error" ? "error" : "complete";
+    if (isOpenCodeCompactionOnlyMessage(message)) {
+      const summaryMessage = message.info?.id ? summaryByParentId.get(message.info.id) : undefined;
+      if (summaryMessage?.info?.id) consumedSummaryIds.add(summaryMessage.info.id);
+      const summaryText = openCodeMessageText(summaryMessage);
+      const summaryTime = latestOpenCodeMessageTime(summaryMessage);
+      const pairUpdatedAt = summaryTime || (updatedTime ? new Date(updatedTime).toISOString() : undefined);
+      const blocks = (message.parts || [])
+        .map((part) => normalizeOpenCodePart(part))
+        .filter((block): block is AgentCompactionBlock => Boolean(block && block.type === "compaction"))
+        .map((block) => ({
+          ...block,
+          status: summaryMessage?.info?.error ? "failed" as const : "completed" as const,
+          content: summaryText || block.content,
+          providerCompactionMessageId: message.info?.id || block.providerCompactionMessageId,
+          providerSummaryMessageId: summaryMessage?.info?.id,
+          updatedAt: summaryTime || block.updatedAt || nowIso(),
+          summaryComplete: Boolean(summaryText),
+        }));
+      const block = blocks[0] || createCompactionBlock({
+        status: summaryMessage?.info?.error ? "failed" : "completed",
+        content: summaryText,
+        providerCompactionMessageId: message.info?.id,
+        providerSummaryMessageId: summaryMessage?.info?.id,
+        createdAt: message.info?.time?.created ? new Date(message.info.time.created).toISOString() : nowIso(),
+        updatedAt: summaryTime,
+        summaryComplete: Boolean(summaryText),
+      });
+      const providerMessageIds = [message.info?.id, summaryMessage?.info?.id].filter((item): item is string => Boolean(item));
+      return [{
+        id: message.info?.id || newId("msg"),
+        role: "assistant",
+        status: block.status === "failed" ? "error" : "complete",
+        blocks: [block],
+        providerMessageId: providerMessageIds[0],
+        providerMessageIds: providerMessageIds.length > 0 ? providerMessageIds : undefined,
+        providerParentMessageId: message.info?.parentID,
+        providerParts: summarizeOpenCodeParts(message.parts),
+        modelId: openCodeModelIdFromInfo(summaryMessage?.info) || openCodeModelIdFromInfo(message.info),
+        createdAt: message.info?.time?.created ? new Date(message.info.time.created).toISOString() : nowIso(),
+        updatedAt: pairUpdatedAt || nowIso(),
+      } satisfies AgentMessage];
+    }
+    if (isOpenCodeCompactionSummaryInfo(message.info)) {
+      const summaryText = openCodeMessageText(message);
+      const block = createCompactionBlock({
+        status: message.info?.error ? "failed" : "completed",
+        content: summaryText,
+        providerSummaryMessageId: message.info?.id,
+        createdAt: message.info?.time?.created ? new Date(message.info.time.created).toISOString() : nowIso(),
+        updatedAt: latestOpenCodeMessageTime(message),
+        summaryComplete: Boolean(summaryText),
+      });
+      return [createStandaloneCompactionMessage(block)];
+    }
     const blocks = (message.parts || [])
       .map((part) => normalizeOpenCodePart(part))
       .filter((block): block is AgentContentBlock => Boolean(block))
@@ -595,7 +735,7 @@ function agentMessagesFromOpenCodeMessages(messages: OpenCodeMessage[]): AgentMe
     const role = message.info?.role === "user" && !isCompactionOnlyMessage ? "user" : "assistant";
     const providerParts = summarizeOpenCodeParts(message.parts);
     const restoredPayload = role === "user" ? restoredUserMessagePayload(providerParts) : {};
-    return {
+    return [{
       id: message.info?.id || newId("msg"),
       role,
       status: messageStatus,
@@ -609,9 +749,13 @@ function agentMessagesFromOpenCodeMessages(messages: OpenCodeMessage[]): AgentMe
       modelId: openCodeModelIdFromInfo(message.info),
       createdAt: message.info?.time?.created ? new Date(message.info.time.created).toISOString() : nowIso(),
       updatedAt: updatedTime ? new Date(updatedTime).toISOString() : nowIso(),
-    } satisfies AgentMessage;
+    } satisfies AgentMessage];
   });
   return mergeContiguousAssistantMessages(mappedMessages);
+}
+
+function isCompactionUiMessage(message: AgentMessage): boolean {
+  return message.blocks.some((block) => block.type === "compaction");
 }
 
 function mergeMessageStatus(current: AgentMessage["status"], next: AgentMessage["status"]): AgentMessage["status"] {
@@ -630,7 +774,7 @@ function mergeContiguousAssistantMessages(messages: AgentMessage[]): AgentMessag
   const merged: AgentMessage[] = [];
   for (const message of messages) {
     const previous = merged[merged.length - 1];
-    if (message.role === "assistant" && previous?.role === "assistant") {
+    if (message.role === "assistant" && previous?.role === "assistant" && !isCompactionUiMessage(previous) && !isCompactionUiMessage(message)) {
       merged[merged.length - 1] = {
         ...previous,
         blocks: [...previous.blocks, ...message.blocks],
@@ -1172,15 +1316,101 @@ function completeCompactionInSession(session: AgentSession): AgentSession {
   };
 }
 
+function addProviderMessageIds(message: AgentMessage, ids: Array<string | undefined>): AgentMessage {
+  const nextIds = ids.filter((item): item is string => Boolean(item));
+  if (nextIds.length === 0) return message;
+  const existingIds = message.providerMessageIds || (message.providerMessageId ? [message.providerMessageId] : []);
+  const providerMessageIds = [...new Set([...existingIds, ...nextIds])];
+  return {
+    ...message,
+    providerMessageId: message.providerMessageId || providerMessageIds[0],
+    providerMessageIds,
+  };
+}
+
+function findCompactionBlockLocation(session: AgentSession, options: { providerCompactionMessageId?: string; providerSummaryMessageId?: string; blockId?: string } = {}): { messageIndex: number; blockIndex: number; block: AgentCompactionBlock } | null {
+  for (let messageIndex = session.messages.length - 1; messageIndex >= 0; messageIndex -= 1) {
+    const message = session.messages[messageIndex];
+    if (message.role !== "assistant") continue;
+    for (let blockIndex = message.blocks.length - 1; blockIndex >= 0; blockIndex -= 1) {
+      const block = message.blocks[blockIndex];
+      if (block.type !== "compaction") continue;
+      if (options.blockId && block.id === options.blockId) return { messageIndex, blockIndex, block };
+      if (options.providerSummaryMessageId && block.providerSummaryMessageId === options.providerSummaryMessageId) return { messageIndex, blockIndex, block };
+      if (options.providerCompactionMessageId && block.providerCompactionMessageId === options.providerCompactionMessageId) return { messageIndex, blockIndex, block };
+    }
+  }
+  if (!options.providerCompactionMessageId && !options.providerSummaryMessageId && !options.blockId) {
+    for (let messageIndex = session.messages.length - 1; messageIndex >= 0; messageIndex -= 1) {
+      const message = session.messages[messageIndex];
+      if (message.role !== "assistant") continue;
+      for (let blockIndex = message.blocks.length - 1; blockIndex >= 0; blockIndex -= 1) {
+        const block = message.blocks[blockIndex];
+        if (block.type === "compaction" && block.status === "running") return { messageIndex, blockIndex, block };
+      }
+    }
+  }
+  return null;
+}
+
+function updateCompactionBlock(session: AgentSession, location: { messageIndex: number; blockIndex: number }, update: (block: AgentCompactionBlock) => AgentCompactionBlock, providerMessageIds: Array<string | undefined> = []): AgentSession {
+  const messages = [...session.messages];
+  const message = messages[location.messageIndex];
+  const blocks = [...message.blocks];
+  const block = blocks[location.blockIndex];
+  if (block.type !== "compaction") return session;
+  blocks[location.blockIndex] = update(block);
+  messages[location.messageIndex] = addProviderMessageIds({ ...message, blocks, updatedAt: nowIso() }, providerMessageIds);
+  return { ...session, messages, updatedAt: nowIso() };
+}
+
+function bindCompactionSummaryMessage(session: AgentSession, info: OpenCodeMessageInfo): AgentSession {
+  const location = findCompactionBlockLocation(session, { providerCompactionMessageId: info.parentID }) || findCompactionBlockLocation(session);
+  if (!location || !info.id) return session;
+  compactionSummaryRoutes.set(info.id, { sessionId: session.id, blockId: location.block.id, providerCompactionMessageId: info.parentID });
+  return updateCompactionBlock(session, location, (block) => ({
+    ...block,
+    providerCompactionMessageId: block.providerCompactionMessageId || info.parentID,
+    providerSummaryMessageId: info.id,
+    updatedAt: nowIso(),
+  }), [info.parentID, info.id]);
+}
+
+function appendCompactionSummaryText(session: AgentSession, route: CompactionSummaryRoute, text: string, providerSummaryMessageId?: string): AgentSession {
+  if (!text) return session;
+  const location = findCompactionBlockLocation(session, { blockId: route.blockId, providerSummaryMessageId })
+    || findCompactionBlockLocation(session, { providerCompactionMessageId: route.providerCompactionMessageId });
+  if (!location) return session;
+  return updateCompactionBlock(session, location, (block) => ({
+    ...block,
+    providerSummaryMessageId: providerSummaryMessageId || block.providerSummaryMessageId,
+    content: `${block.content || ""}${text}`,
+    updatedAt: nowIso(),
+  }), [route.providerCompactionMessageId, providerSummaryMessageId]);
+}
+
+function setCompactionSummaryText(session: AgentSession, route: CompactionSummaryRoute, text: string, providerSummaryMessageId?: string): AgentSession {
+  const location = findCompactionBlockLocation(session, { blockId: route.blockId, providerSummaryMessageId })
+    || findCompactionBlockLocation(session, { providerCompactionMessageId: route.providerCompactionMessageId });
+  if (!location) return session;
+  return updateCompactionBlock(session, location, (block) => ({
+    ...block,
+    providerSummaryMessageId: providerSummaryMessageId || block.providerSummaryMessageId,
+    content: text || block.content,
+    updatedAt: nowIso(),
+  }), [route.providerCompactionMessageId, providerSummaryMessageId]);
+}
+
 function startCompactionInSession(session: AgentSession): AgentSession {
-  const started = upsertAssistantBlock(session, {
-    id: `compaction-${session.id}`,
-    type: "compaction",
+  const block = createCompactionBlock();
+  return {
+    ...session,
+    messages: [...session.messages, createStandaloneCompactionMessage(block)],
+    compacting: true,
+    compactError: undefined,
     status: "running",
-    origin: { phase: "process", placement: "standalone" },
-    createdAt: nowIso(),
-  });
-  return { ...started, compacting: true, compactError: undefined, status: "running", updatedAt: nowIso() };
+    updatedAt: nowIso(),
+  };
 }
 
 function failCompactionInSession(session: AgentSession, message: string): AgentSession {
@@ -1212,11 +1442,21 @@ function applyOpenCodeBusEvent(session: AgentSession, event: OpenCodeBusEvent): 
     if (normalized.type === "text.delta") {
       if (nextSession.status === "cancelling") continue;
       if (isProviderUserMessage(nextSession, normalized.messageId)) continue;
+      const compactionRoute = normalized.messageId ? compactionSummaryRoutes.get(normalized.messageId) : undefined;
+      if (compactionRoute?.sessionId === nextSession.id) {
+        nextSession = appendCompactionSummaryText(nextSession, compactionRoute, normalized.delta, normalized.messageId);
+        continue;
+      }
       nextSession = appendAssistantTextChunk(nextSession, normalized.phase, normalized.delta, normalized.messageId, normalized.partId);
       continue;
     }
     if (normalized.type === "block.updated") {
       if (isProviderUserMessage(nextSession, normalized.messageId)) {
+        continue;
+      }
+      const compactionRoute = normalized.messageId ? compactionSummaryRoutes.get(normalized.messageId) : undefined;
+      if (compactionRoute?.sessionId === nextSession.id && normalized.block.type === "text") {
+        nextSession = setCompactionSummaryText(nextSession, compactionRoute, normalized.block.content, normalized.messageId);
         continue;
       }
       if (normalized.block.type === "text" || normalized.block.type === "thinking") {
@@ -1273,6 +1513,10 @@ function applyOpenCodeBusEvent(session: AgentSession, event: OpenCodeBusEvent): 
     }
     if (normalized.type === "message.updated") {
       const isAbortUpdate = isOpenCodeAbortError(normalized.info?.error);
+      const isCompactionSummary = isOpenCodeCompactionSummaryInfo(normalized.info);
+      if (isCompactionSummary && normalized.info) {
+        nextSession = bindCompactionSummaryMessage(nextSession, normalized.info);
+      }
       const modelId = normalized.modelId || openCodeModelIdFromInfo(normalized.info) || nextSession.modelId;
       if (normalized.role === "user") {
         nextSession = bindProviderUserMessage(nextSession, normalized.messageId, normalized.info);
@@ -1289,7 +1533,7 @@ function applyOpenCodeBusEvent(session: AgentSession, event: OpenCodeBusEvent): 
           updatedAt: nowIso(),
         };
       }
-      if (normalized.info?.agent || normalized.info?.mode) nextSession = { ...nextSession, modeId: normalized.info.agent || normalized.info.mode, updatedAt: nowIso() };
+      if (!isCompactionSummary && (normalized.info?.agent || normalized.info?.mode)) nextSession = { ...nextSession, modeId: normalized.info.agent || normalized.info.mode, updatedAt: nowIso() };
       if (isAbortUpdate) {
         clearPacedTextBuffers(nextSession.id);
         nextSession = { ...completeStreamingAssistant(nextSession), status: "idle", updatedAt: nowIso() };

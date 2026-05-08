@@ -40,6 +40,10 @@ export interface AgentCompactionBlock extends AgentBlockBase {
   auto?: boolean;
   overflow?: boolean;
   content?: string;
+  providerCompactionMessageId?: string;
+  providerSummaryMessageId?: string;
+  tailStartId?: string;
+  summaryComplete?: boolean;
 }
 
 export interface AgentToolCallBlock extends AgentBlockBase {

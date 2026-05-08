@@ -867,10 +867,8 @@ body,
   background: transparent;
 }
 .layout-dropdown .settings-segmented-control {
-  background: color-mix(in srgb, var(--color-bg-input-raised) 78%, transparent);
+  background: var(--color-bg-input-raised);
   box-shadow: 0 6px 18px rgba(0, 0, 0, 0.32);
-  backdrop-filter: blur(12px);
-  -webkit-backdrop-filter: blur(12px);
 }
 .layout-dropdown-item {
   display: flex;
@@ -1481,10 +1479,8 @@ body,
   background: transparent;
 }
 .session-mode-menu .settings-segmented-control {
-  background: color-mix(in srgb, var(--color-bg-input-raised) 78%, transparent);
+  background: var(--color-bg-input-raised);
   box-shadow: 0 6px 18px rgba(0, 0, 0, 0.32);
-  backdrop-filter: blur(12px);
-  -webkit-backdrop-filter: blur(12px);
 }
 .mlc-panel-tab-menu .session-item-menu-danger {
   color: #ef4444;
