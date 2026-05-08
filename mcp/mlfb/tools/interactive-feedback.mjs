@@ -143,16 +143,6 @@ export function registerInteractiveFeedback(server) {
         content.push({ type: "text", text: "(No feedback provided)" });
       }
 
-      // transfer_to_alias overrides caller_alias; caller_alias overrides original alias.
-      const transferTo = result.transfer_to_alias || null;
-      const effectiveAlias = transferTo || result.caller_alias || alias;
-
-      const systemText = transferTo
-        ? `[System] Agent identifier has been TRANSFERRED from "${alias}" to "${effectiveAlias}". From now on you MUST include agent_name="${effectiveAlias}" in ALL subsequent interactive_feedback calls. Discard the previous agent_name.\n[System] ${REQUEST_TYPE_HINT}\n[System] IMPORTANT: In your summary parameter, use standard Markdown only. Do NOT use escape characters such as \\n, \\t, \\\\n, or any other backslash-escaped sequences. Write actual line breaks and formatting directly in Markdown.`
-        : `[System] Agent identifier "${effectiveAlias}" confirmed. You MUST include agent_name="${effectiveAlias}" in ALL subsequent interactive_feedback calls.\n[System] ${REQUEST_TYPE_HINT}\n[System] IMPORTANT: In your summary parameter, use standard Markdown only. Do NOT use escape characters such as \\n, \\t, \\\\n, or any other backslash-escaped sequences. Write actual line breaks and formatting directly in Markdown.`;
-
-      content.push({ type: "text", text: systemText });
-
       return { content };
     }
   );

@@ -151,11 +151,15 @@ export function AttachmentTagBar({
     if (gitReminderProgress.ready) return t("gitAction.buttonTooltipTimedReady", "Timed Git reminder ready now");
     return t("gitAction.buttonTooltipNextTimed", "Next timed Git reminder in {{count}} min", { count: gitReminderProgress.minutesUntil ?? 0 });
   }, [gitReminderProgress, t]);
-  const gitActionCountdownStyle = gitReminderProgress?.enabled ? {
+  const isGitReminderReady = gitReminderProgress?.ready === true;
+  const useGitReadyActiveTheme = showGitPanel && isGitReminderReady;
+  const showGitCountdownBorder = gitReminderProgress?.enabled === true && !showGitPanel;
+  const gitActiveBackground = useGitReadyActiveTheme ? "var(--color-git-countdown)" : callerColor;
+  const gitActionCountdownStyle = showGitCountdownBorder ? {
     "--git-countdown-angle": `${Math.round(gitReminderProgress.progress * 360)}deg`,
     "--git-countdown-color": "var(--color-git-countdown)",
-    "--git-countdown-fill": showGitPanel ? callerColor : "var(--color-bg-elevated)",
-    "--git-countdown-track": showGitPanel ? "color-mix(in srgb, var(--color-git-countdown) 34%, transparent)" : "var(--color-border)",
+    "--git-countdown-fill": "var(--color-bg-elevated)",
+    "--git-countdown-track": "var(--color-border)",
   } as CSSProperties : undefined;
   const hasTags = images.length > 0 || hasTestLog || showTestLog || hasGitAction || timedGitReady || hasMlcAttachments || hasWebAttachments;
   const tagAreaRef = useRef<HTMLDivElement>(null);
@@ -304,12 +308,12 @@ export function AttachmentTagBar({
           )}
         </button>
         <button
-          className={`btn${gitReminderProgress?.enabled ? " git-action-countdown-btn" : ""}${gitReminderProgress?.ready ? " git-action-countdown-ready" : ""}`}
+          className={`btn${showGitCountdownBorder ? " git-action-countdown-btn" : ""}${showGitCountdownBorder && isGitReminderReady ? " git-action-countdown-ready" : ""}`}
           style={{
             fontSize: 11,
             padding: "3px 10px",
-            background: showGitPanel ? callerColor : undefined,
-            borderColor: showGitPanel ? callerColor : undefined,
+            background: showGitPanel ? gitActiveBackground : undefined,
+            borderColor: showGitPanel ? gitActiveBackground : undefined,
             color: showGitPanel ? "#fff" : undefined,
             ...gitActionCountdownStyle,
           }}

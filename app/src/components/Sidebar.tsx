@@ -16,6 +16,7 @@ import { timeAgo, getTimeGroup } from "./timeUtils";
 import type { TimeGroup } from "./timeUtils";
 import { SESSION_LIST_MODE_OPTIONS, type SessionListMode } from "../sessionNavigationSettings";
 import { SessionNavigationModeIcon } from "./SessionNavigationModeIcon";
+import { SettingsSegmentedControl } from "./SettingsSegmentedControl";
 
 function sortSessionsForNavigation(sessions: Session[]): Session[] {
   return [...sessions].sort((a, b) => {
@@ -466,22 +467,18 @@ export function Sidebar({ mode, onModeChange }: { mode: SessionListMode; onModeC
       onMouseDown={(event) => event.stopPropagation()}
       onContextMenu={(event) => event.preventDefault()}
     >
-      <div className="cm-column-mode-group session-nav-mode-group" role="group" aria-label={t("settings.sessionNavigationMode", "Navigation display mode")}>
-        {SESSION_LIST_MODE_OPTIONS.map((option) => (
-          <button
-            key={option.mode}
-            type="button"
-            role="menuitemradio"
-            aria-checked={option.mode === mode}
-            className={`cm-column-mode-button${option.mode === mode ? " active" : ""}`}
-            title={t(option.labelKey, option.defaultLabel)}
-            aria-label={`${t("settings.sessionNavigationMode", "Navigation display mode")}: ${t(option.labelKey, option.defaultLabel)}`}
-            onClick={() => selectMode(option.mode)}
-          >
-            <SessionNavigationModeIcon mode={option.mode} />
-          </button>
-        ))}
-      </div>
+      <SettingsSegmentedControl
+        ariaLabel={t("settings.sessionNavigationMode", "Navigation display mode")}
+        value={mode}
+        onChange={(value) => selectMode(value as SessionListMode)}
+        className="settings-segmented-icon-only settings-segmented-visual-options settings-session-nav-options"
+        options={SESSION_LIST_MODE_OPTIONS.map((option) => ({
+          id: option.mode,
+          label: t(option.labelKey, option.defaultLabel),
+          icon: <SessionNavigationModeIcon mode={option.mode} />,
+          ariaLabel: `${t("settings.sessionNavigationMode", "Navigation display mode")}: ${t(option.labelKey, option.defaultLabel)}`,
+        }))}
+      />
     </div>,
     document.body
   );

@@ -1,4 +1,5 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { createPortal } from "react-dom";
 import { useTranslation } from "react-i18next";
 import { useFeedbackStore, type CallerColumnMode, type DockColumnId, type DockTabId } from "../store/feedbackStore";
 import { CallerTabs } from "./CallerTabs";
@@ -6,6 +7,7 @@ import { CallerPanel } from "./CallerPanel";
 import { SettingsDialog } from "./SettingsDialog";
 import { WelcomeHome } from "./WelcomeHome";
 import { DockColumn } from "./DockColumn";
+import { SettingsSegmentedControl } from "./SettingsSegmentedControl";
 import { PreviewBrowserEventBridge } from "./PreviewBrowserEventBridge";
 import { MLRAView } from "./MLRAView";
 import { MLRACallerTabs } from "./MLRACallerTabs";
@@ -882,7 +884,21 @@ function LayoutModeButton({
   const pushNativeWebViewBlocker = useFeedbackStore((s) => s.pushNativeWebViewBlocker);
   const popNativeWebViewBlocker = useFeedbackStore((s) => s.popNativeWebViewBlocker);
   const [showDropdown, setShowDropdown] = useState(false);
+  const [dropdownPosition, setDropdownPosition] = useState<{ left: number; top: number } | null>(null);
+  const buttonRef = useRef<HTMLButtonElement>(null);
   const hideTimer = useRef<ReturnType<typeof setTimeout>>(undefined);
+
+  const updateDropdownPosition = useCallback(() => {
+    const button = buttonRef.current;
+    if (!button) return;
+    const rect = button.getBoundingClientRect();
+    const dropdownWidth = 154;
+    const dropdownHeight = 42;
+    setDropdownPosition({
+      left: Math.min(Math.max(8, rect.right - dropdownWidth), Math.max(8, window.innerWidth - dropdownWidth - 8)),
+      top: Math.min(rect.bottom + 6, Math.max(8, window.innerHeight - dropdownHeight - 8)),
+    });
+  }, []);
 
   useEffect(() => {
     if (!showDropdown) return;
@@ -890,8 +906,16 @@ function LayoutModeButton({
     return () => popNativeWebViewBlocker("layout-dropdown");
   }, [popNativeWebViewBlocker, pushNativeWebViewBlocker, showDropdown]);
 
+  useEffect(() => {
+    if (!showDropdown) return;
+    updateDropdownPosition();
+    window.addEventListener("resize", updateDropdownPosition);
+    return () => window.removeEventListener("resize", updateDropdownPosition);
+  }, [showDropdown, updateDropdownPosition]);
+
   const handleMouseEnter = () => {
     clearTimeout(hideTimer.current);
+    updateDropdownPosition();
     setShowDropdown(true);
   };
   const handleMouseLeave = () => {
@@ -904,32 +928,43 @@ function LayoutModeButton({
   };
 
   const modeIcon = (m: CallerColumnMode) => {
-    // Simple column icons
-    const cols = m === "auto" ? 0 : m;
-    if (cols === 0) {
-      // Auto: "A" label
-      return (
-        <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-          <rect x="3" y="3" width="18" height="18" rx="2" />
-          <text x="12" y="16" textAnchor="middle" fill="currentColor" stroke="none" fontSize="11" fontWeight="bold" fontFamily="sans-serif">A</text>
-        </svg>
-      );
-    }
-    // Draw column dividers inside a rectangle
-    const dividers: React.ReactNode[] = [];
-    for (let i = 1; i < cols; i++) {
-      const x = 3 + (18 / cols) * i;
-      dividers.push(<line key={i} x1={x} y1="3" x2={x} y2="21" />);
-    }
+    const columnCount = m === "auto" ? 2 : m;
     return (
-      <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-        <rect x="3" y="3" width="18" height="18" rx="2" />
-        {dividers}
-      </svg>
+      <span className={`cm-column-mode-icon cm-column-mode-icon-${String(m)}`} aria-hidden="true">
+        {Array.from({ length: columnCount }, (_, columnIndex) => (
+          <span key={columnIndex} className="cm-column-mode-cell" />
+        ))}
+        {m === "auto" ? <span className="cm-column-mode-auto-mark">A</span> : null}
+      </span>
     );
   };
 
   const allModes: CallerColumnMode[] = ["auto", 1, 2, 3];
+  const dropdown = showDropdown && dropdownPosition ? createPortal(
+    <div
+      className="layout-dropdown"
+      data-preview-overlay
+      style={{ left: dropdownPosition.left, top: dropdownPosition.top }}
+      onMouseEnter={handleMouseEnter}
+      onMouseLeave={handleMouseLeave}
+      onMouseDown={(event) => event.stopPropagation()}
+    >
+      <SettingsSegmentedControl
+        ariaLabel={t("titlebar.layoutMode", "Layout: {{mode}}", { mode: modeLabel(layoutMode) })}
+        value={String(layoutMode)}
+        onChange={(value) => {
+          onSelect(value === "auto" ? "auto" : Number(value) as CallerColumnMode);
+          setShowDropdown(false);
+        }}
+        className="settings-segmented-icon-only settings-segmented-visual-options settings-caller-column-options"
+        options={allModes.map((mode) => {
+          const label = modeLabel(mode);
+          return { id: String(mode), label, icon: modeIcon(mode), ariaLabel: `${t("titlebar.layoutMode", "Layout: {{mode}}", { mode: label })}` };
+        })}
+      />
+    </div>,
+    document.body
+  ) : null;
 
   return (
     <div
@@ -938,26 +973,14 @@ function LayoutModeButton({
       onMouseLeave={handleMouseLeave}
     >
       <button
+        ref={buttonRef}
         onClick={onCycle}
         className={`titlebar-btn${layoutMode !== "auto" ? " titlebar-btn-active" : ""}`}
         title={t("titlebar.layoutMode", "Layout: {{mode}}", { mode: modeLabel(layoutMode) })}
       >
         {modeIcon(layoutMode)}
       </button>
-      {showDropdown && (
-        <div className="layout-dropdown">
-          {allModes.map((m) => (
-            <button
-              key={String(m)}
-              className={`layout-dropdown-item${m === layoutMode ? " active" : ""}`}
-              onClick={() => { onSelect(m); setShowDropdown(false); }}
-            >
-              {modeIcon(m)}
-              <span>{modeLabel(m)}</span>
-            </button>
-          ))}
-        </div>
-      )}
+      {dropdown}
     </div>
   );
 }

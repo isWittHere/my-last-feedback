@@ -2,6 +2,8 @@ use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
 use std::ffi::OsString;
 use std::io::{Read, Write};
+#[cfg(target_os = "windows")]
+use std::os::windows::process::CommandExt;
 use std::path::PathBuf;
 use std::process::{Child, ChildStdin, Command, Stdio};
 use std::sync::{Arc, Mutex, MutexGuard};
@@ -11,6 +13,8 @@ use uuid::Uuid;
 
 const MAX_PROCESS_BUFFER_BYTES: usize = 512 * 1024;
 const BUFFER_TRIM_LINE_SCAN_BYTES: usize = 4096;
+#[cfg(target_os = "windows")]
+const CREATE_NO_WINDOW: u32 = 0x08000000;
 
 #[derive(Clone, Default)]
 pub struct AgentProcessManager {
@@ -353,6 +357,8 @@ pub fn agent_process_start(
         .stdin(Stdio::piped())
         .stdout(Stdio::piped())
         .stderr(Stdio::piped());
+    #[cfg(target_os = "windows")]
+    command.creation_flags(CREATE_NO_WINDOW);
     if let Some(env) = &options.env {
         command.envs(env);
     }
