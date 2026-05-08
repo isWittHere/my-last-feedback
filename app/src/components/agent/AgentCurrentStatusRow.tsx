@@ -15,7 +15,7 @@ function permissionOptionLabel(t: ReturnType<typeof useTranslation>["t"], option
   return t("agentConsole.reject", "Reject");
 }
 
-function AgentApprovalActions({ sessionId, requestId, options }: { sessionId: string; requestId: string; options: AgentPermissionOption[] }) {
+export function AgentApprovalActions({ sessionId, requestId, options }: { sessionId: string; requestId: string; options: AgentPermissionOption[] }) {
   const { t } = useTranslation();
   const [allowMenuOpen, setAllowMenuOpen] = useState(false);
   const allowMenuRef = useRef<HTMLDivElement>(null);

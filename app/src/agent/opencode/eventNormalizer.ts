@@ -170,6 +170,17 @@ function stringifyOutput(value: unknown): string | undefined {
   }
 }
 
+function parseJsonArray(value: unknown): unknown[] {
+  if (Array.isArray(value)) return value;
+  if (typeof value !== "string") return [];
+  try {
+    const parsed = JSON.parse(value) as unknown;
+    return Array.isArray(parsed) ? parsed : [];
+  } catch {
+    return [];
+  }
+}
+
 function normalizeToolStatus(status: string | undefined, error?: string, output?: unknown, time?: Record<string, unknown>): AgentToolCallBlock["status"] {
   if (error || status === "error" || status === "failed") return "failed";
   if (status === "completed" || time?.end || time?.completed || output !== undefined) return "completed";
@@ -373,16 +384,34 @@ function normalizeCompactionPart(part: OpenCodeMessagePart): AgentCompactionBloc
   };
 }
 
-function normalizeToolPart(part: OpenCodeMessagePart): AgentToolCallBlock {
+function normalizeToolPart(part: OpenCodeMessagePart): AgentToolCallBlock | AgentTaskListBlock {
   const state = asRecord(part.state);
   const time = asRecord(state.time || part.time);
   const input = asRecord(state.input ?? part.input);
   const toolName = asString(part.tool) || "tool";
+  const normalizedToolName = toolName.toLowerCase();
   const status = asString(state.status) || asString(part.status);
   const outputValue = state.output !== undefined ? state.output : part.output;
   const output = stringifyOutput(outputValue);
   const error = asString(state.error) || asString(part.error);
   const staleRunningState = !error && (status === "running" || status === "pending") && Boolean(time?.end || time?.completed || outputValue !== undefined);
+  if (normalizedToolName === "todowrite") {
+    const metadata = asRecord(state.metadata || part.metadata);
+    const todos = Array.isArray(input.todos)
+      ? input.todos
+      : Array.isArray(metadata.todos)
+        ? metadata.todos
+        : parseJsonArray(outputValue);
+    const block = normalizeOpenCodeTodos(todos, asString(part.sessionID));
+    return {
+      ...block,
+      id: asString(part.callID) || asString(part.id) || block.id,
+      origin: blockOrigin(asString(part.messageID)),
+      createdAt: timestampFromMs(time.start),
+      updatedAt: timestampFromMs(time.end || time.start),
+      title: "待办更新",
+    };
+  }
   return {
     id: asString(part.callID) || asString(part.id) || `tool-${toolName}`,
     type: "tool_call",

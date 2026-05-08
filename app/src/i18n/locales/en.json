@@ -210,6 +210,7 @@
       "search": "Search",
       "fileEdit": "File edit",
       "commandExecution": "Command execution",
+      "approvalRejected": "Approval rejected",
       "todoUpdate": "Todo update",
       "taskList": "Task list",
       "permission": "Permission request",

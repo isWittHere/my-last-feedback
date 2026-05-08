@@ -210,6 +210,7 @@
       "search": "搜索",
       "fileEdit": "编辑文件",
       "commandExecution": "命令执行",
+      "approvalRejected": "审批拒绝",
       "todoUpdate": "待办更新",
       "taskList": "任务列表",
       "permission": "权限请求",

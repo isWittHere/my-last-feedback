@@ -245,7 +245,7 @@ export function AgentMessageItem({ session, message, projectDirectory }: { sessi
             <span>{says}</span>
           </header>
         )}
-        <AgentProcessGroup blocks={processBlocks} messageId={message.id} isStreaming={isStreaming} projectDirectory={projectDirectory} staleActivityNotice={staleActivityNotice} />
+        <AgentProcessGroup blocks={processBlocks} messageId={message.id} sessionId={session.id} isStreaming={isStreaming} projectDirectory={projectDirectory} staleActivityNotice={staleActivityNotice} />
         <ResultBlocks blocks={resultBlocks} projectDirectory={projectDirectory} />
         <AgentMessageActions session={session} message={message} copyText={assistantText} disabled={isStreaming} />
       </div>

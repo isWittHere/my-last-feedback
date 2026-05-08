@@ -1,9 +1,9 @@
-import type { AgentContentBlock, AgentMessage, AgentSession, AgentTaskItem } from "./types";
+import type { AgentContentBlock, AgentMessage, AgentPermissionBlock, AgentSession, AgentTaskItem } from "./types";
 
 export type AgentStepKind = "thinking" | "compaction" | "tool" | "task_list" | "artifacts" | "permission" | "error";
 export type AgentStepStatus = "pending" | "running" | "completed" | "failed";
 export type AgentTokenStatKind = AgentStepKind | "user" | "result";
-export type AgentStepTone = "document_change" | "document_read" | "document_search" | "command_execution" | "todo_update" | "artifact_output";
+export type AgentStepTone = "document_change" | "document_read" | "document_search" | "command_execution" | "todo_update" | "artifact_output" | "approval_rejected";
 
 export interface AgentStepItem {
   id: string;
@@ -15,6 +15,7 @@ export interface AgentStepItem {
   detail?: string;
   args?: Record<string, unknown>;
   result?: string;
+  permissions?: AgentPermissionBlock[];
   tasks?: AgentTaskItem[];
   blocks?: AgentContentBlock[];
   staleRunningState?: boolean;
@@ -58,7 +59,7 @@ export function estimateTokenCount(text: string): number {
 
 function tokenTextForStep(step: AgentStepItem): string {
   if (step.kind === "thinking" || step.kind === "compaction") return [step.label, step.detail].filter(Boolean).join("\n");
-  if (step.kind === "tool") return [step.label, stringifyForStats(step.args), step.result].filter(Boolean).join("\n");
+  if (step.kind === "tool") return [step.label, stringifyForStats(step.args), step.result, ...(step.permissions || []).map((permission) => permission.title)].filter(Boolean).join("\n");
   if (step.kind === "task_list") return [step.label, ...(step.tasks || []).map((task) => task.title)].join("\n");
   if (step.kind === "permission" || step.kind === "error") return [step.label, step.detail].filter(Boolean).join("\n");
   return [
@@ -153,26 +154,75 @@ function isActiveSessionStatus(status: AgentSession["status"]): boolean {
   return status === "starting" || status === "running" || status === "cancelling";
 }
 
+function isActiveProcessBlock(block: AgentContentBlock): boolean {
+  if (block.type === "thinking") return block.status === "running";
+  if (block.type === "compaction") return block.status === "running";
+  if (block.type === "tool_call") return block.status === "running" || block.status === "pending";
+  if (block.type === "permission") return block.status === "pending";
+  return false;
+}
+
+function activeProcessBlockId(blocks: AgentContentBlock[], messageIsStreaming: boolean): string | undefined {
+  if (!messageIsStreaming) return undefined;
+  return [...blocks].reverse().find(isActiveProcessBlock)?.id;
+}
+
+function completeIfSuperseded(status: AgentStepStatus, blockId: string, currentActiveBlockId: string | undefined, messageIsStreaming: boolean): AgentStepStatus {
+  if (!messageIsStreaming || status === "completed" || status === "failed") return status;
+  return blockId === currentActiveBlockId ? status : "completed";
+}
+
+function permissionBlocksByToolId(blocks: AgentContentBlock[]): Map<string, AgentPermissionBlock[]> {
+  const grouped = new Map<string, AgentPermissionBlock[]>();
+  const toolIds = new Set(blocks.filter((block) => block.type === "tool_call").map((block) => block.id));
+  blocks.forEach((block, index) => {
+    if (block.type !== "permission") return;
+    let targetToolId = block.toolCallId && toolIds.has(block.toolCallId) ? block.toolCallId : undefined;
+    if (!targetToolId) {
+      for (let previousIndex = index - 1; previousIndex >= 0; previousIndex -= 1) {
+        const previousBlock = blocks[previousIndex];
+        if (previousBlock.type === "tool_call") {
+          targetToolId = previousBlock.id;
+          break;
+        }
+      }
+    }
+    if (!targetToolId) return;
+    grouped.set(targetToolId, [...(grouped.get(targetToolId) || []), block]);
+  });
+  return grouped;
+}
+
+function isRejectedPermission(permission: AgentPermissionBlock): boolean {
+  if (!permission.selectedOptionId) return false;
+  const selectedOption = permission.options.find((option) => option.id === permission.selectedOptionId);
+  if (selectedOption?.kind === "reject_once") return true;
+  return /reject|deny/i.test(permission.selectedOptionId);
+}
+
 export function buildAgentProcessSteps(blocks: AgentContentBlock[], messageId?: string, messageStatus?: AgentMessage["status"]): AgentStepItem[] {
   const steps: AgentStepItem[] = [];
   const messageIsStreaming = messageStatus === "streaming";
+  const currentActiveBlockId = activeProcessBlockId(blocks, messageIsStreaming);
+  const permissionsByToolId = permissionBlocksByToolId(blocks);
   for (const block of blocks) {
     if (block.type === "thinking") {
       const staleRunningState = Boolean(block.staleRunningState || (!messageIsStreaming && block.status === "running"));
+      const status = completeIfSuperseded(block.status === "running" ? "running" : "completed", block.id, currentActiveBlockId, messageIsStreaming);
       steps.push({
         id: block.id,
         messageId,
         blockIds: [block.id],
         kind: "thinking",
         label: "思考",
-        status: messageIsStreaming && block.status === "running" ? "running" : "completed",
+        status,
         detail: block.content,
         staleRunningState,
       });
       continue;
     }
     if (block.type === "compaction") {
-      const status: AgentStepStatus = block.status === "failed" ? "failed" : messageIsStreaming && block.status === "running" ? "running" : "completed";
+      const status = completeIfSuperseded(block.status === "failed" ? "failed" : block.status === "running" ? "running" : "completed", block.id, currentActiveBlockId, messageIsStreaming);
       const staleRunningState = Boolean(block.staleRunningState || (block.status !== "failed" && !messageIsStreaming && block.status === "running"));
       steps.push({
         id: block.id,
@@ -187,28 +237,36 @@ export function buildAgentProcessSteps(blocks: AgentContentBlock[], messageId?: 
       continue;
     }
     if (block.type === "tool_call") {
-      const status: AgentStepStatus = isToolCallFailure(block) ? "failed" : messageIsStreaming ? block.status || "completed" : "completed";
+      const permissions = permissionsByToolId.get(block.id);
+      const hasPendingPermission = Boolean(permissions?.some((permission) => permission.status === "pending"));
+      const hasRejectedPermission = Boolean(permissions?.some(isRejectedPermission));
+      const status = hasPendingPermission
+        ? "pending"
+        : hasRejectedPermission
+          ? "failed"
+        : completeIfSuperseded(isToolCallFailure(block) ? "failed" : messageIsStreaming ? block.status || "completed" : "completed", block.id, currentActiveBlockId, messageIsStreaming);
       const staleRunningState = Boolean(block.staleRunningState || (block.status !== "failed" && !messageIsStreaming && (block.status === "running" || block.status === "pending")));
       steps.push({
         id: block.id,
         messageId,
-        blockIds: [block.id],
+        blockIds: [block.id, ...(permissions || []).map((permission) => permission.id)],
         kind: "tool",
         label: block.label || block.title || (typeof block.args?.label === "string" ? block.args.label : block.name),
         status,
         args: block.args,
         result: block.result,
+        permissions,
         staleRunningState,
-        tone: toolStepTone(block),
+        tone: hasRejectedPermission ? "approval_rejected" : toolStepTone(block),
       });
       continue;
     }
     if (block.type === "task_list" && block.tasks.length > 0) {
       const completedCount = block.tasks.filter((task) => task.status === "completed").length;
       const hasRunningTask = block.tasks.some((task) => task.status === "in-progress");
-      const status: AgentStepStatus = messageStatus === "streaming"
+      const status = completeIfSuperseded(messageStatus === "streaming"
         ? hasRunningTask ? "running" : completedCount < block.tasks.length ? "pending" : "completed"
-        : "completed";
+        : "completed", block.id, currentActiveBlockId, messageIsStreaming);
       steps.push({
         id: block.id,
         messageId,
@@ -232,18 +290,7 @@ export function buildAgentProcessSteps(blocks: AgentContentBlock[], messageId?: 
       }
       continue;
     }
-    if (block.type === "permission") {
-      steps.push({
-        id: block.id,
-        messageId,
-        blockIds: [block.id],
-        kind: "permission",
-        label: block.title,
-        status: block.status === "pending" ? "pending" : "completed",
-        detail: block.status === "pending" ? "等待用户确认" : "权限请求已处理",
-      });
-      continue;
-    }
+    if (block.type === "permission") continue;
     if (block.type === "error") {
       steps.push({ id: block.id, messageId, blockIds: [block.id], kind: "error", label: "错误", status: "failed", detail: block.detail || block.message });
     }

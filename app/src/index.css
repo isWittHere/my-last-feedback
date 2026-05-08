@@ -5001,6 +5001,62 @@ body,
   border-top: 1px solid var(--color-border-subtle);
 }
 
+.agent-process-pre-section-approval {
+  padding-block: 6px;
+}
+
+.agent-process-attached-approval {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  min-width: 0;
+}
+
+.agent-process-attached-approval[data-compact="true"] {
+  gap: 6px;
+}
+
+.agent-process-attached-approval[data-rejected="true"] {
+  color: var(--color-danger);
+}
+
+.agent-process-attached-approval-main {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  min-width: 0;
+  color: var(--color-text-secondary);
+  font-size: 12px;
+}
+
+.agent-process-attached-approval[data-rejected="true"] .agent-process-attached-approval-main,
+.agent-process-attached-approval[data-rejected="true"] .agent-process-attached-approval-title {
+  color: var(--color-danger);
+}
+
+.agent-process-attached-approval-main > svg {
+  flex: 0 0 auto;
+}
+
+.agent-process-attached-approval-title {
+  min-width: 0;
+  overflow: hidden;
+  color: var(--color-text-muted);
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.agent-process-attached-approval-state {
+  flex: 0 0 auto;
+  margin-left: auto;
+  color: var(--color-text-muted);
+  font-size: 12px;
+}
+
+.agent-process-attached-approval .agent-approval-row-actions {
+  margin-left: auto;
+}
+
 .agent-process-pre-label {
   margin-bottom: 4px;
   color: var(--color-text-muted);

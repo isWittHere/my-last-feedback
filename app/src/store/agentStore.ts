@@ -803,6 +803,7 @@ function mergeContiguousAssistantMessages(messages: AgentMessage[]): AgentMessag
 
 function appendRestoredTaskList(messages: AgentMessage[], todos: unknown[], providerSessionId: string): AgentMessage[] {
   if (todos.length === 0) return messages;
+  if (messages.some((message) => message.blocks.some((block) => block.type === "task_list"))) return messages;
   const block = normalizeOpenCodeTodos(todos, providerSessionId);
   if (block.tasks.length === 0) return messages;
   let targetIndex = -1;
@@ -828,23 +829,6 @@ function replaceLatestTaskListBlock(blocks: AgentContentBlock[], block: AgentCon
     }
   }
   return [...blocks, block];
-}
-
-function upsertLatestTaskListBlock(session: AgentSession, block: AgentContentBlock): AgentSession {
-  if (block.type !== "task_list") return upsertAssistantBlock(session, block);
-  const messages = [...session.messages];
-  for (let messageIndex = messages.length - 1; messageIndex >= 0; messageIndex -= 1) {
-    const message = messages[messageIndex];
-    if (message.role !== "assistant") continue;
-    if (!message.blocks.some((item) => item.type === "task_list")) continue;
-    messages[messageIndex] = {
-      ...message,
-      blocks: replaceLatestTaskListBlock(message.blocks, block),
-      updatedAt: nowIso(),
-    };
-    return { ...session, messages, updatedAt: nowIso() };
-  }
-  return upsertAssistantBlock(session, block);
 }
 
 function initializedProviderSession(providerId: AgentProviderId, sessions: AgentSession[]): AgentSession | undefined {
@@ -1526,7 +1510,6 @@ function applyOpenCodeBusEvent(session: AgentSession, event: OpenCodeBusEvent): 
       continue;
     }
     if (normalized.type === "todo.updated") {
-      nextSession = upsertLatestTaskListBlock(nextSession, normalized.block);
       continue;
     }
     if (normalized.type === "session.status") {

@@ -57,6 +57,7 @@ export function basenameResourcePath(path: string): string {
 }
 
 export function getAgentStepVisualDescriptor(input: AgentStepVisualInput): AgentStepVisualDescriptor {
+  if (input.tone === "approval_rejected") return { iconName: "circle-x", labelKey: "agentConsole.stepTypes.approvalRejected", defaultLabel: "Approval rejected" };
   if (input.status === "failed") return { iconName: "circle-x", labelKey: "agentConsole.stepTypes.error", defaultLabel: "Error step" };
 
   if (input.tone === "document_read") return { iconName: "eye", labelKey: "agentConsole.stepTypes.fileRead", defaultLabel: "File read" };

@@ -8,6 +8,7 @@ import { useFeedbackStore } from "../../store/feedbackStore";
 import { CatppuccinResourceIcon } from "../CatppuccinResourceIcon";
 import { Icon } from "../Icons";
 import { MarkdownContent } from "../MarkdownContent";
+import { AgentApprovalActions } from "./AgentCurrentStatusRow";
 
 type ProcessViewMode = AgentProcessStepDefaultMode;
 
@@ -75,7 +76,7 @@ function stepIconName(step: AgentStepItem): string {
 function stepHasContent(step: AgentStepItem): boolean {
   if (step.kind === "thinking") return Boolean(step.detail);
   if (step.kind === "compaction") return true;
-  if (step.kind === "tool") return Boolean(step.args || step.result);
+  if (step.kind === "tool") return Boolean(step.args || step.result || step.permissions?.length);
   if (step.kind === "task_list") return Boolean(step.tasks?.length);
   if (step.kind === "artifacts") return Boolean(step.blocks?.length);
   return Boolean(step.detail);
@@ -114,7 +115,54 @@ function stepHasFileTarget(step: AgentStepItem): boolean {
   return Boolean(getAgentStepTarget(step) && (step.tone === "document_change" || step.tone === "document_read"));
 }
 
-function StepDetail({ step, projectDirectory }: { step: AgentStepItem; projectDirectory?: string }) {
+function isRejectedPermission(permission: NonNullable<AgentStepItem["permissions"]>[number]): boolean {
+  if (!permission.selectedOptionId) return false;
+  const selectedOption = permission.options.find((option) => option.id === permission.selectedOptionId);
+  if (selectedOption?.kind === "reject_once") return true;
+  return /reject|deny/i.test(permission.selectedOptionId);
+}
+
+function stringMetadata(permission: NonNullable<AgentStepItem["permissions"]>[number], key: string): string | undefined {
+  const value = permission.metadata?.[key];
+  return typeof value === "string" && value.trim() ? value.trim() : undefined;
+}
+
+function commandApprovalDescription(step: AgentStepItem, permission: NonNullable<AgentStepItem["permissions"]>[number]): string {
+  const metadataDescription = stringMetadata(permission, "description") || stringMetadata(permission, "command") || stringMetadata(permission, "pattern");
+  if (metadataDescription) return metadataDescription;
+  const argCommand = step.args && ["description", "command", "cmd", "script"].map((key) => step.args?.[key]).find((value) => typeof value === "string" && value.trim());
+  if (typeof argCommand === "string") return argCommand.trim();
+  return permission.title;
+}
+
+function AgentProcessAttachedApproval({ step, permission, sessionId }: { step: AgentStepItem; permission: NonNullable<AgentStepItem["permissions"]>[number]; sessionId?: string }) {
+  const { t } = useTranslation();
+  const isPending = permission.status === "pending";
+  const isRejected = isRejectedPermission(permission);
+  const isCommandApproval = step.tone === "command_execution" || step.tone === "approval_rejected";
+  const description = isCommandApproval ? commandApprovalDescription(step, permission) : permission.title;
+  const statusLabel = isRejected
+    ? t("agentConsole.stepTypes.approvalRejected", "Approval rejected")
+    : isPending
+      ? t("agentConsole.requestApproval", "Request approval")
+      : t("agentConsole.permissionResolved", "Permission request resolved");
+  return (
+    <div className="agent-process-attached-approval" data-status={permission.status} data-rejected={isRejected ? "true" : undefined} data-compact={isCommandApproval ? "true" : undefined}>
+      <div className="agent-process-attached-approval-main">
+        {!isCommandApproval && <Icon name={isRejected ? "circle-x" : isPending ? "shield" : "check"} size={13} />}
+        <span className={isPending ? "agent-silver-shimmer-text" : undefined}>{statusLabel}</span>
+        <span className="agent-process-attached-approval-title" title={description}>{description}</span>
+      </div>
+      {isPending && sessionId ? (
+        <AgentApprovalActions sessionId={sessionId} requestId={permission.requestId} options={permission.options} />
+      ) : !isRejected ? (
+        <span className="agent-process-attached-approval-state">{t("agentConsole.permissionResolvedShort", "已处理")}</span>
+      ) : null}
+    </div>
+  );
+}
+
+function StepDetail({ step, projectDirectory, sessionId }: { step: AgentStepItem; projectDirectory?: string; sessionId?: string }) {
   if (step.kind === "thinking" && step.detail) {
     return <MarkdownContent markdown={step.detail} projectDirectory={projectDirectory} className="agent-process-markdown" variant="feedback" enableComposerTokens />;
   }
@@ -138,6 +186,11 @@ function StepDetail({ step, projectDirectory }: { step: AgentStepItem; projectDi
             <pre>{normalizeResult(step.result)}</pre>
           </div>
         )}
+        {step.permissions?.map((permission) => (
+          <div key={permission.id} className="agent-process-pre-section agent-process-pre-section-approval">
+            <AgentProcessAttachedApproval step={step} permission={permission} sessionId={sessionId} />
+          </div>
+        ))}
       </div>
     );
   }
@@ -182,7 +235,7 @@ interface AgentFocusStepEventDetail {
   stepId?: string;
 }
 
-export function AgentProcessGroup({ blocks, messageId, isStreaming = false, projectDirectory, staleActivityNotice }: { blocks: AgentContentBlock[]; messageId?: string; isStreaming?: boolean; projectDirectory?: string; staleActivityNotice?: string }) {
+export function AgentProcessGroup({ blocks, messageId, sessionId, isStreaming = false, projectDirectory, staleActivityNotice }: { blocks: AgentContentBlock[]; messageId?: string; sessionId?: string; isStreaming?: boolean; projectDirectory?: string; staleActivityNotice?: string }) {
   const { t } = useTranslation();
   const { processStepDefaultMode } = useAgentConsoleSettings();
   const steps = useMemo(() => buildAgentProcessSteps(blocks, messageId, isStreaming ? "streaming" : "complete"), [blocks, messageId, isStreaming]);
@@ -399,7 +452,7 @@ export function AgentProcessGroup({ blocks, messageId, isStreaming = false, proj
         <div className="agent-process-stream-body">
           {isSingleInlineProcess ? (
             <div className="agent-process-single-thinking" data-kind={steps[0].kind}>
-              <StepDetail step={steps[0]} projectDirectory={projectDirectory} />
+              <StepDetail step={steps[0]} projectDirectory={projectDirectory} sessionId={sessionId} />
             </div>
           ) : mode === "timeline" ? (
             <div className="agent-process-timeline-compact">
@@ -431,11 +484,11 @@ export function AgentProcessGroup({ blocks, messageId, isStreaming = false, proj
                             {showStepTopShadow && <div className="agent-process-edge-shadow agent-process-edge-shadow-top" />}
                             {showStepBottomShadow && <div className="agent-process-edge-shadow agent-process-edge-shadow-bottom" />}
                             <div ref={stepScrollRef} className="agent-process-step-detail-scroll" data-streaming="true">
-                              <StepDetail step={step} projectDirectory={projectDirectory} />
+                              <StepDetail step={step} projectDirectory={projectDirectory} sessionId={sessionId} />
                             </div>
                           </div>
                         ) : (
-                          <StepDetail step={step} projectDirectory={projectDirectory} />
+                          <StepDetail step={step} projectDirectory={projectDirectory} sessionId={sessionId} />
                         )}
                       </div>
                     )}
@@ -464,7 +517,7 @@ export function AgentProcessGroup({ blocks, messageId, isStreaming = false, proj
                   {showTabTopShadow && <div className="agent-process-edge-shadow agent-process-edge-shadow-top" />}
                   {showTabBottomShadow && <div className="agent-process-edge-shadow agent-process-edge-shadow-bottom" />}
                   <div ref={tabScrollRef} key={`${activeStep.kind}-${activeIndex}`} className="agent-process-tab-detail" data-kind={activeStep.kind}>
-                    <StepDetail step={activeStep} projectDirectory={projectDirectory} />
+                    <StepDetail step={activeStep} projectDirectory={projectDirectory} sessionId={sessionId} />
                   </div>
                 </div>
               )}
