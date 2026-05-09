@@ -199,6 +199,8 @@
     "inputTokens": "Input",
     "reasoningTokens": "Reasoning",
     "cacheTokens": "Cache",
+    "cacheReadTokens": "Cache read",
+    "cacheWriteTokens": "Cache write",
     "userTokens": "User",
     "processTokens": "Process",
     "outputTokens": "Output",

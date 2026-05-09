@@ -199,6 +199,8 @@
     "inputTokens": "输入",
     "reasoningTokens": "推理",
     "cacheTokens": "缓存",
+    "cacheReadTokens": "缓存读",
+    "cacheWriteTokens": "缓存写",
     "userTokens": "用户",
     "processTokens": "过程",
     "outputTokens": "输出",

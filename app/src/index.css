@@ -3775,7 +3775,15 @@ body,
 
 .agent-context-popover-metric span {
   flex: 0 0 auto;
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  min-width: 0;
   color: var(--color-text-muted);
+}
+
+.agent-context-popover-metric svg {
+  flex: 0 0 auto;
 }
 
 .agent-context-popover-metric strong {

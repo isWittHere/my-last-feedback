@@ -4,10 +4,20 @@ import { useAgentConsoleSettings } from "../../agentConsoleSettings";
 import type { AgentSession } from "../../agent/types";
 import { formatCompactTokenCount, getAgentTokenStatsSummary } from "../../agent/tokenStats";
 import { useAgentStore } from "../../store/agentStore";
+import { Icon } from "../Icons";
 
 function percentWidth(value: number, total: number): string {
   if (total <= 0 || value <= 0) return "0%";
   return `${Math.min(100, (value / total) * 100)}%`;
+}
+
+function ContextMetric({ iconName, label, value, wide = false }: { iconName: string; label: string; value: string; wide?: boolean }) {
+  return (
+    <div className={`agent-context-popover-metric${wide ? " agent-context-popover-metric-wide" : ""}`}>
+      <span><Icon name={iconName} size={11} />{label}</span>
+      <strong>{value}</strong>
+    </div>
+  );
 }
 
 export function AgentContextIndicator({ session }: { session: AgentSession }) {
@@ -59,51 +69,27 @@ export function AgentContextIndicator({ session }: { session: AgentSession }) {
           <strong>{summary.contextLimit == null ? t("agentConsole.estimated", "estimated") : `${usedPercent}%`}</strong>
         </div>
         <div className="agent-context-popover-grid">
-          <div className="agent-context-popover-metric agent-context-popover-metric-wide">
-            <span>{t("agentConsole.model", "Model")}</span>
-            <strong>{session.modelId || t("agentConsole.unknown", "Unknown")}</strong>
-          </div>
-          <div className="agent-context-popover-metric">
-            <span>{t("agentConsole.window", "Window")}</span>
-            <strong>{windowLabel}</strong>
-          </div>
-          <div className="agent-context-popover-metric">
-            <span>{t("agentConsole.used", "Used")}</span>
-            <strong>{formatCompactTokenCount(summary.totalTokens)} {summary.estimated ? t("agentConsole.estimatedShort", "est.") : ""}</strong>
-          </div>
-          <div className="agent-context-popover-metric">
-            <span>{t("agentConsole.remaining", "Remaining")}</span>
-            <strong>{remainingLabel}</strong>
-          </div>
+          <ContextMetric iconName="robot" label={t("agentConsole.model", "Model")} value={session.modelId || t("agentConsole.unknown", "Unknown")} wide />
+          <ContextMetric iconName="page-sidebar" label={t("agentConsole.window", "Window")} value={windowLabel} />
+          <ContextMetric iconName="circle-check" label={t("agentConsole.used", "Used")} value={`${formatCompactTokenCount(summary.totalTokens)}${summary.estimated ? ` ${t("agentConsole.estimatedShort", "est.")}` : ""}`} />
+          <ContextMetric iconName="clock" label={t("agentConsole.remaining", "Remaining")} value={remainingLabel} />
           {contextTokenLabel && (
-            <div className="agent-context-popover-metric">
-              <span>{t("agentConsole.contextTokens", "Input context")}</span>
-              <strong>{contextTokenLabel}</strong>
-            </div>
+            <ContextMetric iconName="message-dot" label={t("agentConsole.contextTokens", "Input context")} value={contextTokenLabel} />
           )}
           {summary.inputTokens != null && (
-            <div className="agent-context-popover-metric">
-              <span>{t("agentConsole.inputTokens", "Input")}</span>
-              <strong>{formatCompactTokenCount(summary.inputTokens)}</strong>
-            </div>
+            <ContextMetric iconName="inbox" label={t("agentConsole.inputTokens", "Input")} value={formatCompactTokenCount(summary.inputTokens)} />
           )}
           {summary.outputTokens != null && (
-            <div className="agent-context-popover-metric">
-              <span>{t("agentConsole.outputTokens", "Output")}</span>
-              <strong>{formatCompactTokenCount(summary.outputTokens)}</strong>
-            </div>
+            <ContextMetric iconName="send" label={t("agentConsole.outputTokens", "Output")} value={formatCompactTokenCount(summary.outputTokens)} />
           )}
           {summary.reasoningTokens != null && summary.reasoningTokens > 0 && (
-            <div className="agent-context-popover-metric">
-              <span>{t("agentConsole.reasoningTokens", "Reasoning")}</span>
-              <strong>{formatCompactTokenCount(summary.reasoningTokens)}</strong>
-            </div>
+            <ContextMetric iconName="info" label={t("agentConsole.reasoningTokens", "Reasoning")} value={formatCompactTokenCount(summary.reasoningTokens)} />
           )}
-          {(summary.cacheReadTokens != null || summary.cacheWriteTokens != null) && (
-            <div className="agent-context-popover-metric">
-              <span>{t("agentConsole.cacheTokens", "Cache")}</span>
-              <strong>{formatCompactTokenCount(summary.cacheReadTokens ?? 0)} / {formatCompactTokenCount(summary.cacheWriteTokens ?? 0)}</strong>
-            </div>
+          {summary.cacheReadTokens != null && (
+            <ContextMetric iconName="download" label={t("agentConsole.cacheReadTokens", "Cache read")} value={formatCompactTokenCount(summary.cacheReadTokens)} />
+          )}
+          {summary.cacheWriteTokens != null && (
+            <ContextMetric iconName="upload" label={t("agentConsole.cacheWriteTokens", "Cache write")} value={formatCompactTokenCount(summary.cacheWriteTokens)} />
           )}
         </div>
         <div className="agent-context-combined-bar" aria-label={t("agentConsole.contextUsage", "Context usage")}>
