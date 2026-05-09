@@ -9,6 +9,12 @@ const MODEL_CONTEXT_LIMITS: Record<string, number> = {
 export interface AgentTokenStatsSummary {
   stats: AgentStepTokenStat[];
   totalTokens: number;
+  contextTokens: number | null;
+  inputTokens: number | null;
+  outputTokens: number | null;
+  reasoningTokens: number | null;
+  cacheReadTokens: number | null;
+  cacheWriteTokens: number | null;
   userTokens: number;
   processTokens: number;
   resultTokens: number;
@@ -31,11 +37,19 @@ function getSessionModelContextLimit(session: AgentSession): number | null {
 
 export function getAgentTokenStatsSummary(session: AgentSession): AgentTokenStatsSummary {
   const stats = collectAgentStepTokenStats(session);
-  const estimatedTotalTokens = stats.reduce((sum, stat) => sum + stat.tokenCount, 0);
-  const totalTokens = session.contextUsage?.usedTokens ?? estimatedTotalTokens;
-  const userTokens = stats.filter((stat) => stat.kind === "user").reduce((sum, stat) => sum + stat.tokenCount, 0);
-  const resultTokens = stats.filter((stat) => stat.kind === "result").reduce((sum, stat) => sum + stat.tokenCount, 0);
-  const processTokens = Math.max(0, (session.contextUsage ? totalTokens : estimatedTotalTokens) - userTokens - resultTokens);
+  const visualStats = stats.filter((stat) => stat.kind !== "model_step");
+  const estimatedTotalTokens = visualStats.reduce((sum, stat) => sum + stat.tokenCount, 0);
+  const measuredTotalTokens = session.contextUsage?.totalTokens ?? session.contextUsage?.usedTokens;
+  const totalTokens = measuredTotalTokens ?? estimatedTotalTokens;
+  const estimatedUserTokens = visualStats.filter((stat) => stat.kind === "user").reduce((sum, stat) => sum + stat.tokenCount, 0);
+  const estimatedResultTokens = visualStats.filter((stat) => stat.kind === "result").reduce((sum, stat) => sum + stat.tokenCount, 0);
+  const estimatedProcessTokens = Math.max(0, estimatedTotalTokens - estimatedUserTokens - estimatedResultTokens);
+  const scale = measuredTotalTokens && estimatedTotalTokens > 0 ? measuredTotalTokens / estimatedTotalTokens : 1;
+  const userTokens = Math.round(estimatedUserTokens * scale);
+  const resultTokens = Math.round(estimatedResultTokens * scale);
+  const processTokens = measuredTotalTokens
+    ? Math.max(0, totalTokens - userTokens - resultTokens)
+    : estimatedProcessTokens;
   const contextLimit = getSessionModelContextLimit(session);
   const remainingTokens = contextLimit == null ? null : Math.max(0, contextLimit - totalTokens);
   const usedPercent = contextLimit == null || contextLimit <= 0 ? null : Math.min(100, Math.round((totalTokens / contextLimit) * 1000) / 10);
@@ -43,6 +57,12 @@ export function getAgentTokenStatsSummary(session: AgentSession): AgentTokenStat
   return {
     stats,
     totalTokens,
+    contextTokens: session.contextUsage?.contextTokens ?? null,
+    inputTokens: session.contextUsage?.inputTokens ?? null,
+    outputTokens: session.contextUsage?.outputTokens ?? null,
+    reasoningTokens: session.contextUsage?.reasoningTokens ?? null,
+    cacheReadTokens: session.contextUsage?.cacheReadTokens ?? null,
+    cacheWriteTokens: session.contextUsage?.cacheWriteTokens ?? null,
     userTokens,
     processTokens,
     resultTokens,

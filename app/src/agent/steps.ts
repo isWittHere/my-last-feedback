@@ -1,8 +1,8 @@
-import type { AgentContentBlock, AgentMessage, AgentPermissionBlock, AgentSession, AgentTaskItem } from "./types";
+import type { AgentContentBlock, AgentMessage, AgentPermissionBlock, AgentProviderMessagePart, AgentSession, AgentTaskItem, AgentTokenUsage } from "./types";
 
 export type AgentStepKind = "thinking" | "compaction" | "tool" | "task_list" | "artifacts" | "permission" | "error";
 export type AgentStepStatus = "pending" | "running" | "completed" | "failed";
-export type AgentTokenStatKind = AgentStepKind | "user" | "result";
+export type AgentTokenStatKind = AgentStepKind | "user" | "result" | "model_step";
 export type AgentStepTone = "document_change" | "document_read" | "document_search" | "command_execution" | "todo_update" | "artifact_output" | "approval_rejected";
 export type AgentDocumentChangeKind = "create" | "edit" | "delete";
 
@@ -41,6 +41,48 @@ export interface AgentStepTokenStat {
   args?: Record<string, unknown>;
   result?: string;
   metadata?: Record<string, unknown>;
+  usage?: AgentTokenUsage;
+}
+
+function finiteNonNegativeNumber(value: unknown): number | undefined {
+  return typeof value === "number" && Number.isFinite(value) && value >= 0 ? value : undefined;
+}
+
+function tokenUsageFromRawTokens(tokens: AgentProviderMessagePart["tokens"], cost?: number): AgentTokenUsage | undefined {
+  if (!tokens || typeof tokens !== "object") return undefined;
+  const value = tokens as { total?: unknown; input?: unknown; output?: unknown; reasoning?: unknown; cache?: { read?: unknown; write?: unknown } };
+  const inputTokens = finiteNonNegativeNumber(value.input) ?? 0;
+  const outputTokens = finiteNonNegativeNumber(value.output) ?? 0;
+  const reasoningTokens = finiteNonNegativeNumber(value.reasoning) ?? 0;
+  const cacheReadTokens = finiteNonNegativeNumber(value.cache?.read) ?? 0;
+  const cacheWriteTokens = finiteNonNegativeNumber(value.cache?.write) ?? 0;
+  const calculatedTotal = inputTokens + outputTokens + reasoningTokens + cacheReadTokens + cacheWriteTokens;
+  const totalTokens = finiteNonNegativeNumber(value.total) || calculatedTotal;
+  const contextTokens = inputTokens + cacheReadTokens;
+  if (totalTokens <= 0 && contextTokens <= 0) return undefined;
+  return {
+    inputTokens,
+    outputTokens,
+    reasoningTokens,
+    cacheReadTokens,
+    cacheWriteTokens,
+    totalTokens: totalTokens > 0 ? totalTokens : contextTokens,
+    contextTokens: contextTokens > 0 ? contextTokens : totalTokens,
+    ...(cost !== undefined && Number.isFinite(cost) && cost > 0 ? { cost } : {}),
+    source: "opencode",
+  };
+}
+
+function measuredTokenUsagesForMessage(message: AgentMessage): Array<{ id: string; usage: AgentTokenUsage }> {
+  const finishPartUsages = (message.providerParts || [])
+    .filter((part) => part.type === "step-finish" && part.tokens)
+    .map((part, index) => {
+      const usage = tokenUsageFromRawTokens(part.tokens, part.cost);
+      return usage ? { id: part.id || `step-finish-${index}`, usage } : null;
+    })
+    .filter((item): item is { id: string; usage: AgentTokenUsage } => Boolean(item));
+  if (finishPartUsages.length > 0) return finishPartUsages;
+  return message.providerTokenUsage ? [{ id: "model-step", usage: message.providerTokenUsage }] : [];
 }
 
 function stringifyForStats(value: unknown): string {
@@ -367,6 +409,22 @@ export function collectAgentStepTokenStats(session: AgentSession): AgentStepToke
         metadata: step.metadata,
       });
     }
+    const measuredUsages = measuredTokenUsagesForMessage(message);
+    measuredUsages.forEach((measured, measuredIndex) => {
+      stats.push({
+        id: `${message.id}:${measured.id}`,
+        messageId: message.id,
+        blockIds: message.blocks.map((block) => block.id),
+        kind: "model_step",
+        label: measuredUsages.length > 1 ? `模型步骤 ${measuredIndex + 1}` : "模型步骤",
+        status: message.status === "streaming" ? "running" : message.status === "error" ? "failed" : "completed",
+        tokenCount: measured.usage.totalTokens,
+        estimated: false,
+        index: stats.length,
+        target: "message",
+        usage: measured.usage,
+      });
+    });
     const resultTokenCount = estimateTokenCount(tokenTextForBlocks(resultBlocks));
     if (resultTokenCount > 0) {
       stats.push({

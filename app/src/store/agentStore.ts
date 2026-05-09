@@ -6,7 +6,7 @@ import { createAgentSession } from "../agent/sessionFactory";
 import { buildSubmittedComposerPayload, collectSubmittedResourceLinks } from "../composer/submittedFeedback";
 import { getAgentConsoleSettings } from "../agentConsoleSettings";
 import { getOpenCodeDefaultPermissionRules, setOpenCodePreferredModel, syncOpenCodeModels } from "../openCodeSettings";
-import type { AgentChoiceOption, AgentCompactionBlock, AgentContentBlock, AgentContextUsage, AgentDiagnosticEntry, AgentMessage, AgentModelCapabilities, AgentProviderMessagePart, AgentSession, AgentSessionFileDiff, AgentSubmittedAttachmentTag, AgentThinkingBlock } from "../agent/types";
+import type { AgentChoiceOption, AgentCompactionBlock, AgentContentBlock, AgentContextUsage, AgentDiagnosticEntry, AgentMessage, AgentModelCapabilities, AgentProviderMessagePart, AgentSession, AgentSessionFileDiff, AgentSubmittedAttachmentTag, AgentThinkingBlock, AgentTokenUsage } from "../agent/types";
 import type { AgentProviderId } from "../agent/types";
 import type { GitAction, ImageAttachment, MlcAttachment, WebAttachment } from "./feedbackStore";
 
@@ -231,6 +231,10 @@ function appendDiagnosticToSession(session: AgentSession, level: AgentDiagnostic
 
 function finitePositiveNumber(value: unknown): number | undefined {
   return typeof value === "number" && Number.isFinite(value) && value > 0 ? value : undefined;
+}
+
+function finiteNonNegativeNumber(value: unknown): number | undefined {
+  return typeof value === "number" && Number.isFinite(value) && value >= 0 ? value : undefined;
 }
 
 function recordFromUnknown(value: unknown): Record<string, unknown> | undefined {
@@ -530,26 +534,50 @@ function contextLimitForModel(availableModels: AgentChoiceOption[] | undefined, 
   return availableModels?.find((model) => model.id === modelId)?.contextLimit;
 }
 
-function openCodeMessageUsedTokens(info: OpenCodeMessageInfo | undefined): number | undefined {
+function openCodeTokenUsageFromInfo(info: OpenCodeMessageInfo | undefined, costAmount?: number): AgentTokenUsage | undefined {
   const tokens = info?.tokens;
   if (!tokens) return undefined;
-  const input = finitePositiveNumber(tokens.input) ?? 0;
-  const output = finitePositiveNumber(tokens.output) ?? 0;
-  const reasoning = finitePositiveNumber(tokens.reasoning) ?? 0;
-  const cacheRead = finitePositiveNumber(tokens.cache?.read) ?? 0;
-  const cacheWrite = finitePositiveNumber(tokens.cache?.write) ?? 0;
-  const contextUsed = input + cacheRead;
-  const totalUsed = input + output + reasoning + cacheRead + cacheWrite;
-  return contextUsed > 0 ? contextUsed : totalUsed > 0 ? totalUsed : undefined;
+  const inputTokens = finiteNonNegativeNumber(tokens.input) ?? 0;
+  const outputTokens = finiteNonNegativeNumber(tokens.output) ?? 0;
+  const reasoningTokens = finiteNonNegativeNumber(tokens.reasoning) ?? 0;
+  const cacheReadTokens = finiteNonNegativeNumber(tokens.cache?.read) ?? 0;
+  const cacheWriteTokens = finiteNonNegativeNumber(tokens.cache?.write) ?? 0;
+  const calculatedTotal = inputTokens + outputTokens + reasoningTokens + cacheReadTokens + cacheWriteTokens;
+  const totalTokens = finitePositiveNumber(tokens.total) ?? calculatedTotal;
+  const contextTokens = inputTokens + cacheReadTokens;
+  const cost = finitePositiveNumber(info?.cost) ?? finitePositiveNumber(costAmount);
+  if (totalTokens <= 0 && contextTokens <= 0) return undefined;
+  return {
+    inputTokens,
+    outputTokens,
+    reasoningTokens,
+    cacheReadTokens,
+    cacheWriteTokens,
+    totalTokens: totalTokens > 0 ? totalTokens : contextTokens,
+    contextTokens: contextTokens > 0 ? contextTokens : totalTokens,
+    ...(cost !== undefined ? { cost } : {}),
+    source: "opencode",
+  };
+}
+
+function openCodeMessageUsedTokens(info: OpenCodeMessageInfo | undefined): number | undefined {
+  return openCodeTokenUsageFromInfo(info)?.totalTokens;
 }
 
 function openCodeContextUsageFromInfo(info: OpenCodeMessageInfo | undefined, contextLimit: number | undefined, costAmount?: number): AgentContextUsage | undefined {
-  const usedTokens = openCodeMessageUsedTokens(info);
-  if (!usedTokens || !contextLimit) return undefined;
+  const usage = openCodeTokenUsageFromInfo(info, costAmount);
+  if (!usage || !contextLimit) return undefined;
   return {
-    usedTokens,
+    usedTokens: usage.totalTokens,
+    totalTokens: usage.totalTokens,
+    contextTokens: usage.contextTokens,
+    inputTokens: usage.inputTokens,
+    outputTokens: usage.outputTokens,
+    reasoningTokens: usage.reasoningTokens,
+    cacheReadTokens: usage.cacheReadTokens,
+    cacheWriteTokens: usage.cacheWriteTokens,
     contextLimit,
-    ...(costAmount !== undefined && costAmount > 0 ? { cost: { amount: costAmount, currency: "USD" } } : {}),
+    ...(usage.cost !== undefined && usage.cost > 0 ? { cost: { amount: usage.cost, currency: "USD" } } : {}),
     updatedAt: nowIso(),
   };
 }
@@ -568,6 +596,9 @@ function summarizeOpenCodeParts(parts: OpenCodeMessagePart[] | undefined): Agent
     text: typeof part.text === "string" ? part.text : undefined,
     synthetic: part.synthetic === true,
     ignored: part.ignored === true,
+    reason: typeof part.reason === "string" ? part.reason : undefined,
+    cost: finiteNonNegativeNumber(part.cost),
+    tokens: part.tokens,
   }));
 }
 
@@ -740,6 +771,7 @@ function agentMessagesFromOpenCodeMessages(messages: OpenCodeMessage[]): AgentMe
         providerMessageIds: providerMessageIds.length > 0 ? providerMessageIds : undefined,
         providerParentMessageId: message.info?.parentID,
         providerParts: summarizeOpenCodeParts(message.parts),
+        providerTokenUsage: openCodeTokenUsageFromInfo(summaryMessage?.info) || openCodeTokenUsageFromInfo(message.info),
         modelId: openCodeModelIdFromInfo(summaryMessage?.info) || openCodeModelIdFromInfo(message.info),
         createdAt: message.info?.time?.created ? new Date(message.info.time.created).toISOString() : nowIso(),
         updatedAt: pairUpdatedAt || nowIso(),
@@ -782,6 +814,7 @@ function agentMessagesFromOpenCodeMessages(messages: OpenCodeMessage[]): AgentMe
       providerMessageIds: message.info?.id ? [message.info.id] : undefined,
       providerParentMessageId: message.info?.parentID,
       providerParts,
+      providerTokenUsage: role === "assistant" ? openCodeTokenUsageFromInfo(message.info) : undefined,
       composerDraft: restoredPayload.composerDraft,
       submittedMarkdown: restoredPayload.submittedMarkdown,
       modelId: openCodeModelIdFromInfo(message.info),
@@ -818,6 +851,8 @@ function mergeContiguousAssistantMessages(messages: AgentMessage[]): AgentMessag
         blocks: [...previous.blocks, ...message.blocks],
         status: mergeMessageStatus(previous.status, message.status),
         modelId: previous.modelId || message.modelId,
+        providerParts: [...(previous.providerParts || []), ...(message.providerParts || [])],
+        providerTokenUsage: message.providerTokenUsage || previous.providerTokenUsage,
         providerMessageIds: [...new Set([...(previous.providerMessageIds || (previous.providerMessageId ? [previous.providerMessageId] : [])), ...(message.providerMessageIds || (message.providerMessageId ? [message.providerMessageId] : []))])],
         updatedAt: latestIso(previous.updatedAt || previous.createdAt, message.updatedAt || message.createdAt),
       };
@@ -1217,6 +1252,25 @@ function bindProviderUserMessage(session: AgentSession, providerMessageId?: stri
   return session;
 }
 
+function bindAssistantProviderMessageInfo(session: AgentSession, providerMessageId?: string, info?: OpenCodeMessageInfo): AgentSession {
+  if (!providerMessageId) return session;
+  const messages = [...session.messages];
+  let targetIndex = findAssistantProviderPartMessageIndex(messages, providerMessageId);
+  if (targetIndex < 0) targetIndex = findLatestAssistantAfterLastUser(messages);
+  if (targetIndex < 0) return session;
+  const message = messages[targetIndex];
+  if (message.role !== "assistant") return session;
+  const providerTokenUsage = openCodeTokenUsageFromInfo(info);
+  messages[targetIndex] = {
+    ...bindAssistantProviderMessageId(message, providerMessageId),
+    providerParentMessageId: info?.parentID || message.providerParentMessageId,
+    providerTokenUsage: providerTokenUsage || message.providerTokenUsage,
+    modelId: openCodeModelIdFromInfo(info) || message.modelId,
+    updatedAt: nowIso(),
+  };
+  return { ...session, messages, updatedAt: nowIso() };
+}
+
 function completeCompactionInSession(session: AgentSession): AgentSession {
   let changed = false;
   const messages = session.messages.map((message) => {
@@ -1474,6 +1528,9 @@ function applyOpenCodeBusEvent(session: AgentSession, event: OpenCodeBusEvent): 
       const modelId = normalized.modelId || openCodeModelIdFromInfo(normalized.info) || nextSession.modelId;
       if (normalized.role === "user") {
         nextSession = bindProviderUserMessage(nextSession, normalized.messageId, normalized.info);
+      }
+      if (normalized.role === "assistant") {
+        nextSession = bindAssistantProviderMessageInfo(nextSession, normalized.messageId, normalized.info);
       }
       if (modelId) {
         const contextLimit = contextLimitForModel(nextSession.availableModels, modelId) ?? nextSession.contextUsage?.contextLimit;

@@ -161,6 +161,7 @@ export function getAgentStepVisualDescriptor(input: AgentStepVisualInput): Agent
   if (input.tone === "artifact_output") return { iconName: "file-text", labelKey: "agentConsole.stepTypes.artifactOutput", defaultLabel: "Artifact output" };
 
   if (input.kind === "user") return { iconName: "message", labelKey: "agentConsole.stepTypes.userInput", defaultLabel: "User input" };
+  if (input.kind === "model_step") return { iconName: "code", labelKey: "agentConsole.stepTypes.modelStep", defaultLabel: "Model step" };
   if (input.kind === "result") return { iconName: "robot", labelKey: "agentConsole.stepTypes.agentOutput", defaultLabel: "Agent output" };
   if (input.kind === "thinking") return { iconName: "message-dot", labelKey: "agentConsole.stepTypes.thinking", defaultLabel: "Thinking process" };
   if (input.kind === "compaction") return { iconName: "list-tree", labelKey: "agentConsole.stepTypes.contextCompaction", defaultLabel: "Context compaction" };

@@ -22,6 +22,7 @@ export function AgentContextIndicator({ session }: { session: AgentSession }) {
     : `${formatCompactTokenCount(summary.totalTokens)}/${formatCompactTokenCount(summary.contextLimit)}`;
   const windowLabel = summary.contextLimit == null ? t("agentConsole.unknown", "Unknown") : formatCompactTokenCount(summary.contextLimit);
   const remainingLabel = summary.remainingTokens == null ? t("agentConsole.unknown", "Unknown") : formatCompactTokenCount(summary.remainingTokens);
+  const contextTokenLabel = summary.contextTokens == null ? null : formatCompactTokenCount(summary.contextTokens);
   const contextTotal = summary.contextLimit ?? summary.totalTokens;
   const idleTokens = summary.contextLimit == null ? 0 : Math.max(0, summary.contextLimit - summary.totalTokens);
   const compactDisabled = !session.providerSessionId || session.compacting;
@@ -60,6 +61,36 @@ export function AgentContextIndicator({ session }: { session: AgentSession }) {
           <strong>{windowLabel}</strong>
           <span>{t("agentConsole.used", "Used")}</span>
           <strong>{formatCompactTokenCount(summary.totalTokens)} {summary.estimated ? t("agentConsole.estimatedShort", "est.") : ""}</strong>
+          {contextTokenLabel && (
+            <>
+              <span>{t("agentConsole.contextTokens", "Input context")}</span>
+              <strong>{contextTokenLabel}</strong>
+            </>
+          )}
+          {summary.inputTokens != null && (
+            <>
+              <span>{t("agentConsole.inputTokens", "Input")}</span>
+              <strong>{formatCompactTokenCount(summary.inputTokens)}</strong>
+            </>
+          )}
+          {summary.outputTokens != null && (
+            <>
+              <span>{t("agentConsole.outputTokens", "Output")}</span>
+              <strong>{formatCompactTokenCount(summary.outputTokens)}</strong>
+            </>
+          )}
+          {summary.reasoningTokens != null && summary.reasoningTokens > 0 && (
+            <>
+              <span>{t("agentConsole.reasoningTokens", "Reasoning")}</span>
+              <strong>{formatCompactTokenCount(summary.reasoningTokens)}</strong>
+            </>
+          )}
+          {(summary.cacheReadTokens != null || summary.cacheWriteTokens != null) && (
+            <>
+              <span>{t("agentConsole.cacheTokens", "Cache")}</span>
+              <strong>{formatCompactTokenCount(summary.cacheReadTokens ?? 0)} / {formatCompactTokenCount(summary.cacheWriteTokens ?? 0)}</strong>
+            </>
+          )}
           <span>{t("agentConsole.remaining", "Remaining")}</span>
           <strong>{remainingLabel}</strong>
         </div>

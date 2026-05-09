@@ -127,6 +127,18 @@ export type AgentContentBlock =
   | AgentCitationBlock
   | AgentErrorBlock;
 
+export interface AgentTokenUsage {
+  inputTokens: number;
+  outputTokens: number;
+  reasoningTokens: number;
+  cacheReadTokens: number;
+  cacheWriteTokens: number;
+  totalTokens: number;
+  contextTokens: number;
+  cost?: number;
+  source: "opencode" | "estimated";
+}
+
 export interface AgentMessage {
   id: string;
   role: "user" | "assistant" | "system";
@@ -137,6 +149,7 @@ export interface AgentMessage {
   providerMessageIds?: string[];
   providerParentMessageId?: string;
   providerParts?: AgentProviderMessagePart[];
+  providerTokenUsage?: AgentTokenUsage;
   composerDraft?: string;
   submittedMarkdown?: string;
   submittedAttachmentTags?: AgentSubmittedAttachmentTag[];
@@ -159,6 +172,20 @@ export interface AgentProviderMessagePart {
   text?: string;
   synthetic?: boolean;
   ignored?: boolean;
+  reason?: string;
+  cost?: number;
+  tokens?: {
+    total?: number;
+    input?: number;
+    output?: number;
+    reasoning?: number;
+    cache?: {
+      read?: number;
+      write?: number;
+      [key: string]: unknown;
+    };
+    [key: string]: unknown;
+  };
 }
 
 export interface AgentDiagnosticEntry {
@@ -216,6 +243,13 @@ export interface AgentChoiceOption {
 
 export interface AgentContextUsage {
   usedTokens: number;
+  totalTokens?: number;
+  contextTokens?: number;
+  inputTokens?: number;
+  outputTokens?: number;
+  reasoningTokens?: number;
+  cacheReadTokens?: number;
+  cacheWriteTokens?: number;
   contextLimit: number;
   cost?: {
     amount?: number;

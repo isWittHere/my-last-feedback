@@ -198,6 +198,7 @@ export interface OpenCodePromptModel {
 }
 
 export interface OpenCodeMessageTokens {
+  total?: number;
   input?: number;
   output?: number;
   reasoning?: number;
@@ -258,6 +259,9 @@ export interface OpenCodeMessageInfo {
 export type OpenCodeMessagePart = Record<string, unknown> & {
   id?: string;
   type?: string;
+  reason?: string;
+  cost?: number;
+  tokens?: OpenCodeMessageTokens;
   sessionID?: string;
   messageID?: string;
   text?: string;
