@@ -5,6 +5,7 @@ export type AgentDiffColorPresetId = "classic" | "soft" | "vscode";
 export type AgentProcessStepDefaultMode = "tabs" | "timeline";
 export type AgentTimelineStreamingStepMode = "hidden" | "collapseHistory" | "expandAll";
 export type AgentTodoUpdateDisplayMode = "countOnly" | "panel";
+export type AgentTaskPanelTemplateStyle = "list" | "tags";
 export type AgentApprovalDisplayMode = "step" | "statusPanel" | "all";
 export type AgentNavigationIndicatorOrder = "leftToRight" | "rightToLeft";
 export type AgentNavigationGroupBackgroundMode = "hidden" | "hover" | "alternate";
@@ -34,6 +35,7 @@ export interface AgentConsoleSettings {
   processStepDefaultMode: AgentProcessStepDefaultMode;
   timelineStreamingStepMode: AgentTimelineStreamingStepMode;
   todoUpdateDisplayMode: AgentTodoUpdateDisplayMode;
+  taskPanelTemplateStyle: AgentTaskPanelTemplateStyle;
   approvalDisplayMode: AgentApprovalDisplayMode;
   collapseEditApprovalDiffByDefault: boolean;
   collapseConsecutiveOutputBlankLines: boolean;
@@ -64,6 +66,7 @@ const DEFAULT_SETTINGS: AgentConsoleSettings = {
   processStepDefaultMode: "tabs",
   timelineStreamingStepMode: "collapseHistory",
   todoUpdateDisplayMode: "panel",
+  taskPanelTemplateStyle: "list",
   approvalDisplayMode: "all",
   collapseEditApprovalDiffByDefault: false,
   collapseConsecutiveOutputBlankLines: false,
@@ -104,6 +107,10 @@ function isTimelineStreamingStepMode(value: unknown): value is AgentTimelineStre
 
 function isTodoUpdateDisplayMode(value: unknown): value is AgentTodoUpdateDisplayMode {
   return value === "countOnly" || value === "panel";
+}
+
+function isTaskPanelTemplateStyle(value: unknown): value is AgentTaskPanelTemplateStyle {
+  return value === "list" || value === "tags";
 }
 
 function isApprovalDisplayMode(value: unknown): value is AgentApprovalDisplayMode {
@@ -159,6 +166,7 @@ export function getAgentConsoleSettings(): AgentConsoleSettings {
       processStepDefaultMode: isProcessStepDefaultMode(parsed.processStepDefaultMode) ? parsed.processStepDefaultMode : DEFAULT_SETTINGS.processStepDefaultMode,
       timelineStreamingStepMode: isTimelineStreamingStepMode(parsed.timelineStreamingStepMode) ? parsed.timelineStreamingStepMode : DEFAULT_SETTINGS.timelineStreamingStepMode,
       todoUpdateDisplayMode: isTodoUpdateDisplayMode(parsed.todoUpdateDisplayMode) ? parsed.todoUpdateDisplayMode : DEFAULT_SETTINGS.todoUpdateDisplayMode,
+      taskPanelTemplateStyle: isTaskPanelTemplateStyle(parsed.taskPanelTemplateStyle) ? parsed.taskPanelTemplateStyle : DEFAULT_SETTINGS.taskPanelTemplateStyle,
       approvalDisplayMode: isApprovalDisplayMode(parsed.approvalDisplayMode) ? parsed.approvalDisplayMode : DEFAULT_SETTINGS.approvalDisplayMode,
       collapseEditApprovalDiffByDefault: typeof parsed.collapseEditApprovalDiffByDefault === "boolean" ? parsed.collapseEditApprovalDiffByDefault : DEFAULT_SETTINGS.collapseEditApprovalDiffByDefault,
       collapseConsecutiveOutputBlankLines: typeof parsed.collapseConsecutiveOutputBlankLines === "boolean" ? parsed.collapseConsecutiveOutputBlankLines : DEFAULT_SETTINGS.collapseConsecutiveOutputBlankLines,

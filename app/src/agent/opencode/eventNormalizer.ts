@@ -394,6 +394,7 @@ function normalizeToolPart(part: OpenCodeMessagePart): AgentToolCallBlock | Agen
   const outputValue = state.output !== undefined ? state.output : part.output;
   const output = stringifyOutput(outputValue);
   const error = asString(state.error) || asString(part.error);
+  const metadata = asRecord(state.metadata || part.metadata);
   const staleRunningState = !error && (status === "running" || status === "pending") && Boolean(time?.end || time?.completed || outputValue !== undefined);
   if (normalizedToolName === "todowrite") {
     const metadata = asRecord(state.metadata || part.metadata);
@@ -424,6 +425,7 @@ function normalizeToolPart(part: OpenCodeMessagePart): AgentToolCallBlock | Agen
     status: normalizeToolStatus(status, error, outputValue, time),
     args: input,
     result: error || output,
+    metadata,
     ...(staleRunningState ? { staleRunningState } : {}),
   };
 }

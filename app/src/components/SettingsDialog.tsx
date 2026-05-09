@@ -16,7 +16,7 @@ import { getSubmittedViewSettings, saveSubmittedViewSettings, SUBMITTED_VIEW_SEC
 import { getTerminalSettings, saveTerminalSettings, type TerminalSettings, type TerminalShellId } from "../terminalSettings";
 import { getComposerSettings, saveComposerSettings, type ComposerSettings } from "../composerSettings";
 import { formatGitFolderBlacklistText, getGitOperationSettings, GIT_TIMED_REMINDER_MAX_MINUTES, GIT_TIMED_REMINDER_MIN_MINUTES, GIT_TIMED_REMINDER_STEP_MINUTES, parseGitFolderBlacklistText, saveGitOperationSettings, type GitOperationSettings } from "../gitOperationSettings";
-import { AGENT_DIFF_COLOR_PRESETS, getAgentConsoleSettings, saveAgentConsoleSettings, type AgentApprovalDisplayMode, type AgentConsoleSettings, type AgentDiffColorPresetId, type AgentNavigationGroupBackgroundMode, type AgentNavigationIndicatorOrder, type AgentNavigationVisualizationMode, type AgentProcessStepDefaultMode, type AgentTimelineStreamingStepMode, type AgentTodoUpdateDisplayMode, type AgentTopbarIndicatorMode } from "../agentConsoleSettings";
+import { AGENT_DIFF_COLOR_PRESETS, getAgentConsoleSettings, saveAgentConsoleSettings, type AgentApprovalDisplayMode, type AgentConsoleSettings, type AgentDiffColorPresetId, type AgentNavigationGroupBackgroundMode, type AgentNavigationIndicatorOrder, type AgentNavigationVisualizationMode, type AgentProcessStepDefaultMode, type AgentTaskPanelTemplateStyle, type AgentTimelineStreamingStepMode, type AgentTodoUpdateDisplayMode, type AgentTopbarIndicatorMode } from "../agentConsoleSettings";
 import { getOpenCodePermissionPresetAction, getOpenCodeSettings, OPEN_CODE_PERMISSION_DEFINITIONS, setOpenCodeDefaultPermissionAction, setOpenCodeModelEnabled, setOpenCodePreferredModel, type OpenCodePermissionAction, type OpenCodeSettings } from "../openCodeSettings";
 import { SESSION_LIST_MODE_OPTIONS } from "../sessionNavigationSettings";
 import { SessionNavigationModeIcon } from "./SessionNavigationModeIcon";
@@ -32,6 +32,7 @@ const AGENT_TOPBAR_INDICATOR_MODE_OPTIONS: AgentTopbarIndicatorMode[] = ["hidden
 const AGENT_PROCESS_STEP_MODE_OPTIONS: AgentProcessStepDefaultMode[] = ["tabs", "timeline"];
 const AGENT_TIMELINE_STREAMING_STEP_MODE_OPTIONS: AgentTimelineStreamingStepMode[] = ["hidden", "collapseHistory", "expandAll"];
 const AGENT_TODO_UPDATE_DISPLAY_MODE_OPTIONS: AgentTodoUpdateDisplayMode[] = ["countOnly", "panel"];
+const AGENT_TASK_PANEL_TEMPLATE_STYLE_OPTIONS: AgentTaskPanelTemplateStyle[] = ["list", "tags"];
 const AGENT_APPROVAL_DISPLAY_MODE_OPTIONS: AgentApprovalDisplayMode[] = ["step", "statusPanel", "all"];
 const AGENT_NAVIGATION_VISUALIZATION_MODE_OPTIONS: AgentNavigationVisualizationMode[] = ["bars", "lineArea"];
 const AGENT_NAVIGATION_INDICATOR_ORDER_OPTIONS: AgentNavigationIndicatorOrder[] = ["leftToRight", "rightToLeft"];
@@ -432,6 +433,14 @@ export function SettingsDialog({ open, onClose }: { open: boolean; onClose: () =
     });
   }, []);
 
+  const handleAgentTaskPanelTemplateStyleChange = useCallback((taskPanelTemplateStyle: AgentTaskPanelTemplateStyle) => {
+    setAgentConsoleSettings((prev) => {
+      const next = { ...prev, taskPanelTemplateStyle };
+      saveAgentConsoleSettings(next);
+      return next;
+    });
+  }, []);
+
   const handleAgentApprovalDisplayModeChange = useCallback((approvalDisplayMode: AgentApprovalDisplayMode) => {
     setAgentConsoleSettings((prev) => {
       const stepOnlyDisabled = prev.processStepDefaultMode === "timeline" && prev.timelineStreamingStepMode === "hidden";
@@ -622,6 +631,22 @@ export function SettingsDialog({ open, onClose }: { open: boolean; onClose: () =
       options={AGENT_TODO_UPDATE_DISPLAY_MODE_OPTIONS.map((mode) => {
         const label = todoUpdateDisplayModeLabel(mode);
         return { id: mode, label, icon: <Icon name={mode === "countOnly" ? "list" : "checklist"} size={13} /> };
+      })}
+    />
+  );
+
+  const taskPanelTemplateStyleLabel = (style: AgentTaskPanelTemplateStyle) => style === "tags"
+    ? t("settings.agentTaskPanelTemplateTags", "Tags")
+    : t("settings.agentTaskPanelTemplateList", "List");
+
+  const renderAgentTaskPanelTemplateStyleGroup = () => (
+    <SettingsSegmentedControl
+      ariaLabel={t("settings.agentTaskPanelTemplateStyle", "Task list template style")}
+      value={agentConsoleSettings.taskPanelTemplateStyle}
+      onChange={(style) => handleAgentTaskPanelTemplateStyleChange(style as AgentTaskPanelTemplateStyle)}
+      options={AGENT_TASK_PANEL_TEMPLATE_STYLE_OPTIONS.map((style) => {
+        const label = taskPanelTemplateStyleLabel(style);
+        return { id: style, label, icon: <Icon name={style === "tags" ? "rows" : "list"} size={13} /> };
       })}
     />
   );
@@ -1423,6 +1448,13 @@ export function SettingsDialog({ open, onClose }: { open: boolean; onClose: () =
                       <span className="settings-sublabel">{t("settings.agentProcessStepDefaultModeDesc", "Choose whether new Agent process steps open in tabs or timeline view by default.")}</span>
                     </div>
                     {renderAgentProcessStepModeGroup()}
+                  </div>
+                  <div className="settings-row">
+                    <div className="settings-row-info">
+                      <span className="settings-label">{t("settings.agentTaskPanelTemplateStyle", "Task list template style")}</span>
+                      <span className="settings-sublabel">{t("settings.agentTaskPanelTemplateStyleDesc", "Choose how the todo panel above the composer lays out tasks.")}</span>
+                    </div>
+                    {renderAgentTaskPanelTemplateStyleGroup()}
                   </div>
                   {agentConsoleSettings.processStepDefaultMode === "timeline" && (
                     <>

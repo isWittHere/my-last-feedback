@@ -29,7 +29,7 @@ function taskPriorityLabel(priority: AgentTaskItem["priority"]): string {
 
 export function AgentTaskPanel({ session }: { session: AgentSession }) {
   const [expanded, setExpanded] = useState(false);
-  const { processStepDefaultMode, todoUpdateDisplayMode } = useAgentConsoleSettings();
+  const { processStepDefaultMode, taskPanelTemplateStyle, todoUpdateDisplayMode } = useAgentConsoleSettings();
   const tasks = useMemo(() => latestTasks(session), [session]);
 
   if (processStepDefaultMode === "timeline" && todoUpdateDisplayMode === "countOnly") return null;
@@ -47,7 +47,7 @@ export function AgentTaskPanel({ session }: { session: AgentSession }) {
           {!expanded && inProgressTask && <span className="agent-task-panel-current">· {inProgressTask.title}</span>}
         </button>
         {expanded && (
-          <div className="agent-task-panel-body">
+          <div className="agent-task-panel-body" data-template={taskPanelTemplateStyle}>
             {tasks.map((task) => (
               <div key={task.id} className="agent-task-panel-row" data-status={task.status}>
                 <Icon name={taskIconName(task.status)} size={13} />

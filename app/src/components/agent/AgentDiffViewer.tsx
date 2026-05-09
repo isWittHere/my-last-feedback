@@ -135,10 +135,13 @@ export function permissionBlockToDiffFiles(block: AgentPermissionBlock | undefin
   return [{ path, patch, additions: counts.additions, deletions: counts.deletions, status: "edit" }];
 }
 
-export function toolCallToDiffFiles(args: Record<string, unknown> | undefined, result: string | undefined): AgentUiDiffFile[] {
+export function toolCallToDiffFiles(args: Record<string, unknown> | undefined, result: string | undefined, metadata: Record<string, unknown> | undefined): AgentUiDiffFile[] {
   const argsRecord = asRecord(args);
+  const metadataRecord = asRecord(metadata);
   const resultRecord = parseJsonRecord(result);
   const arrayFiles = [
+    ...diffFilesFromArray(metadataRecord.files),
+    ...(diffFileFromRecord(metadataRecord.filediff) ? [diffFileFromRecord(metadataRecord.filediff) as AgentUiDiffFile] : []),
     ...diffFilesFromArray(argsRecord.files),
     ...diffFilesFromArray(argsRecord.edits),
     ...diffFilesFromArray(resultRecord.files),
@@ -147,8 +150,9 @@ export function toolCallToDiffFiles(args: Record<string, unknown> | undefined, r
   if (arrayFiles.length > 0) return arrayFiles;
 
   const path = firstString(argsRecord, ["relativePath", "filePath", "filepath", "path", "file"])
+    || firstString(metadataRecord, ["relativePath", "filePath", "filepath", "path", "file"])
     || firstString(resultRecord, ["relativePath", "filePath", "filepath", "path", "file"]);
-  const patch = firstString(argsRecord, ["patch", "diff"]) || firstString(resultRecord, ["patch", "diff"]);
+  const patch = firstString(metadataRecord, ["patch", "diff"]) || firstString(argsRecord, ["patch", "diff"]) || firstString(resultRecord, ["patch", "diff"]);
   if (path && patch) {
     const counts = countPatchLines(patch);
     return [{ path, patch, additions: counts.additions, deletions: counts.deletions, status: "edit" }];
@@ -156,6 +160,7 @@ export function toolCallToDiffFiles(args: Record<string, unknown> | undefined, r
 
   const oldText = firstString(argsRecord, ["oldString", "old_string", "oldText", "old_text"]);
   const newText = firstString(argsRecord, ["newString", "new_string", "newText", "new_text", "content"]);
+  if (path && !oldText && newText && metadataRecord.exists === true) return [];
   if (path && (oldText || newText)) {
     const syntheticPatch = patchFromTextChange(path, oldText, newText);
     const counts = countPatchLines(syntheticPatch);

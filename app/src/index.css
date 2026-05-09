@@ -4084,6 +4084,16 @@ body,
   scrollbar-gutter: stable;
 }
 
+.agent-task-panel-body[data-template="tags"] {
+  flex-direction: row;
+  flex-wrap: wrap;
+  align-items: flex-start;
+  gap: 5px;
+  max-height: min(24vh, 76px);
+  padding-top: 1px;
+  padding-left: 19px;
+}
+
 .agent-task-panel-row {
   min-width: 0;
   display: flex;
@@ -4093,6 +4103,22 @@ body,
   color: var(--color-text-muted);
   font-size: 12px;
   line-height: 1.5;
+}
+
+.agent-task-panel-body[data-template="tags"] .agent-task-panel-row {
+  flex: 0 1 auto;
+  max-width: min(100%, 18rem);
+  min-height: 20px;
+  gap: 3px;
+  padding: 2px 3px;
+  border: 0px solid var(--color-border-subtle);
+  border-radius: 10px;
+  background: rgba(255, 255, 255, 0.04);
+  line-height: 14px;
+}
+
+[data-theme="light"] .agent-task-panel-body[data-template="tags"] .agent-task-panel-row {
+  background: rgba(0, 0, 0, 0.03);
 }
 
 .agent-task-panel-row span {
@@ -4105,11 +4131,11 @@ body,
 .agent-task-panel-row .agent-task-priority,
 .agent-process-task-row .agent-task-priority {
   flex: 0 0 auto;
-  min-width: 16px;
-  padding: 0 4px;
+  min-width: 15px;
+  padding: 0 2px;
   border-radius: var(--radius-md);
-  font-size: 11px;
-  line-height: 15px;
+  font-size: 8px;
+  line-height: 10px;
   text-align: center;
   color: var(--color-text-muted);
   background: color-mix(in srgb, var(--color-text-muted) 12%, transparent);
@@ -4137,6 +4163,11 @@ body,
 
 .agent-task-panel-row[data-status="in-progress"] {
   color: var(--color-primary);
+}
+
+.agent-task-panel-body[data-template="tags"] .agent-task-panel-row[data-status="in-progress"] {
+  border-color: color-mix(in srgb, var(--color-primary) 42%, var(--color-border));
+  background: color-mix(in srgb, var(--color-primary) 11%, transparent);
 }
 
 .agent-task-panel-row[data-status="in-progress"] svg {
@@ -5024,7 +5055,7 @@ body,
 .agent-process-step-tabs {
   display: flex;
   flex-wrap: wrap;
-  gap: 5px;
+  gap: 3px;
   min-width: 0;
   margin: 6px 0 7px;
 }
@@ -5207,7 +5238,6 @@ body,
   align-items: center;
   gap: 8px;
   min-width: 0;
-  margin-left: 5px;
 }
 
 .agent-process-attached-approval[data-compact="true"] {

@@ -168,7 +168,7 @@ function StepDetail({ step, projectDirectory, sessionId, approvalDisplayMode = "
       : <p className="agent-process-detail-note">{step.status === "running" ? "正在压缩上下文" : step.status === "failed" ? "上下文压缩失败" : "上下文已压缩"}</p>;
   }
   if (step.kind === "tool") {
-    const editDiffFiles = step.tone === "document_change" ? toolCallToDiffFiles(step.args, step.result) : [];
+    const editDiffFiles = step.tone === "document_change" ? toolCallToDiffFiles(step.args, step.result, step.metadata) : [];
     if (editDiffFiles.length > 0) {
       return (
         <div className="agent-process-edit-tool-panel">
@@ -277,6 +277,10 @@ function displayStepHasContent(item: AgentDisplayStepItem, options: { todoUpdate
 
 function displayStepDetailKind(item: AgentDisplayStepItem): string {
   return item.mergedToolSteps.length > 0 ? "mixed" : item.step.kind;
+}
+
+function displayStepHasStaleRunningState(item: AgentDisplayStepItem): boolean {
+  return Boolean(item.step.staleRunningState || item.displayStep.staleRunningState || item.mergedToolSteps.some((step) => step.staleRunningState));
 }
 
 function DisplayStepDetail({ item, projectDirectory, sessionId, approvalDisplayMode, collapseOutputBlankLines, todoUpdateDisplayMode }: { item: AgentDisplayStepItem; projectDirectory?: string; sessionId?: string; approvalDisplayMode: AgentApprovalDisplayMode; collapseOutputBlankLines: boolean; todoUpdateDisplayMode: AgentTodoUpdateDisplayMode }) {
@@ -538,7 +542,8 @@ export function AgentProcessGroup({ blocks, messageId, sessionId, isStreaming = 
                 const isLast = timelineIndex === displayItems.length - 1;
                 const isStreamingStep = isStreaming && (index === steps.length - 1 || mergedIndexes.includes(steps.length - 1));
                 const hasContent = displayStepHasContent(item, { approvalDisplayMode: effectiveApprovalDisplayMode, todoUpdateDisplayMode: effectiveTodoUpdateDisplayMode });
-                const hasFileTarget = stepHasFileTarget(step);
+                const hasFileTarget = stepHasFileTarget(item.displayStep);
+                const hasStaleRunningState = displayStepHasStaleRunningState(item);
                 const detailKind = displayStepDetailKind(item);
                 return (
                   <div key={`${step.kind}-${index}`} className="agent-process-step-compact" data-kind={step.kind} data-status={step.status} data-has-content={hasContent}>
@@ -546,7 +551,7 @@ export function AgentProcessGroup({ blocks, messageId, sessionId, isStreaming = 
                     <button type="button" className="agent-process-step-head" data-has-file-target={hasFileTarget ? "true" : undefined} onClick={() => hasContent && toggleStep(index)}>
                         <Icon name={stepIconName(item.displayStep)} size={13} />
                         <StepHeadLabel step={item.displayStep} fallbackLabel={item.displayStep.label} />
-                      {step.staleRunningState && (
+                      {hasStaleRunningState && (
                         <span className="agent-process-stale-step-icon">
                           <Icon name="circle-warning" size={13} />
                           <span className="agent-process-stale-step-tip">{staleStepTooltip}</span>
@@ -572,18 +577,21 @@ export function AgentProcessGroup({ blocks, messageId, sessionId, isStreaming = 
           ) : (
             <div className="agent-process-tab-mode">
               <div className="agent-process-step-tabs" role="tablist">
-                {displayItems.map((item) => (
-                  <button key={`${item.step.kind}-${item.index}`} type="button" className={activeDisplayItem?.index === item.index ? "active" : ""} data-status={item.displayStep.status} data-has-file-target={stepHasFileTarget(item.displayStep) ? "true" : undefined} onClick={() => setActiveIndex(item.index)}>
-                    <Icon name={stepIconName(item.displayStep)} size={11} />
-                    <StepHeadLabel step={item.displayStep} fallbackLabel={item.displayStep.label} shimmer={item.displayStep.status === "running" || item.displayStep.status === "pending"} />
-                    {item.step.staleRunningState && (
-                      <span className="agent-process-stale-step-icon">
-                        <Icon name="circle-warning" size={13} />
-                        <span className="agent-process-stale-step-tip">{staleStepTooltip}</span>
-                      </span>
-                    )}
-                  </button>
-                ))}
+                {displayItems.map((item) => {
+                  const hasStaleRunningState = displayStepHasStaleRunningState(item);
+                  return (
+                    <button key={`${item.step.kind}-${item.index}`} type="button" className={activeDisplayItem?.index === item.index ? "active" : ""} data-status={item.displayStep.status} data-has-file-target={stepHasFileTarget(item.displayStep) ? "true" : undefined} onClick={() => setActiveIndex(item.index)}>
+                      <Icon name={stepIconName(item.displayStep)} size={11} />
+                      <StepHeadLabel step={item.displayStep} fallbackLabel={item.displayStep.label} shimmer={item.displayStep.status === "running" || item.displayStep.status === "pending"} />
+                      {hasStaleRunningState && (
+                        <span className="agent-process-stale-step-icon">
+                          <Icon name="circle-warning" size={13} />
+                          <span className="agent-process-stale-step-tip">{staleStepTooltip}</span>
+                        </span>
+                      )}
+                    </button>
+                  );
+                })}
               </div>
               {activeDisplayItem && (
                 <div className="agent-process-scroll-shell" data-kind="tab">

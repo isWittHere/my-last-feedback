@@ -54,6 +54,7 @@ export interface AgentToolCallBlock extends AgentBlockBase {
   status?: "pending" | "running" | "completed" | "failed";
   args?: Record<string, unknown>;
   result?: string;
+  metadata?: Record<string, unknown>;
 }
 
 export interface AgentPermissionOption {

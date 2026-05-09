@@ -4,6 +4,7 @@ export type AgentStepKind = "thinking" | "compaction" | "tool" | "task_list" | "
 export type AgentStepStatus = "pending" | "running" | "completed" | "failed";
 export type AgentTokenStatKind = AgentStepKind | "user" | "result";
 export type AgentStepTone = "document_change" | "document_read" | "document_search" | "command_execution" | "todo_update" | "artifact_output" | "approval_rejected";
+export type AgentDocumentChangeKind = "create" | "edit" | "delete";
 
 export interface AgentStepItem {
   id: string;
@@ -15,6 +16,7 @@ export interface AgentStepItem {
   detail?: string;
   args?: Record<string, unknown>;
   result?: string;
+  metadata?: Record<string, unknown>;
   permissions?: AgentPermissionBlock[];
   tasks?: AgentTaskItem[];
   blocks?: AgentContentBlock[];
@@ -36,6 +38,9 @@ export interface AgentStepTokenStat {
   stepId?: string;
   staleRunningState?: boolean;
   tone?: AgentStepTone;
+  args?: Record<string, unknown>;
+  result?: string;
+  metadata?: Record<string, unknown>;
 }
 
 function stringifyForStats(value: unknown): string {
@@ -59,7 +64,7 @@ export function estimateTokenCount(text: string): number {
 
 function tokenTextForStep(step: AgentStepItem): string {
   if (step.kind === "thinking" || step.kind === "compaction") return [step.label, step.detail].filter(Boolean).join("\n");
-  if (step.kind === "tool") return [step.label, stringifyForStats(step.args), step.result, ...(step.permissions || []).map((permission) => permission.title)].filter(Boolean).join("\n");
+  if (step.kind === "tool") return [step.label, stringifyForStats(step.args), step.result, stringifyForStats(step.metadata), ...(step.permissions || []).map((permission) => permission.title)].filter(Boolean).join("\n");
   if (step.kind === "task_list") return [step.label, ...(step.tasks || []).map((task) => task.title)].join("\n");
   if (step.kind === "permission" || step.kind === "error") return [step.label, step.detail].filter(Boolean).join("\n");
   return [
@@ -255,6 +260,7 @@ export function buildAgentProcessSteps(blocks: AgentContentBlock[], messageId?: 
         status,
         args: block.args,
         result: block.result,
+        metadata: block.metadata,
         permissions,
         staleRunningState,
         tone: hasRejectedPermission ? "approval_rejected" : toolStepTone(block),
@@ -346,6 +352,9 @@ export function collectAgentStepTokenStats(session: AgentSession): AgentStepToke
         stepId: step.id,
         staleRunningState: step.staleRunningState,
         tone: step.tone,
+        args: step.args,
+        result: step.result,
+        metadata: step.metadata,
       });
     }
     const resultTokenCount = estimateTokenCount(tokenTextForBlocks(resultBlocks));
