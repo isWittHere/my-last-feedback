@@ -97,6 +97,14 @@ function toolIdentityText(block: Extract<AgentContentBlock, { type: "tool_call" 
   return [block.name, block.title, block.label].filter(Boolean).join("\n").toLowerCase();
 }
 
+function isUserRejectedToolPermission(block: Extract<AgentContentBlock, { type: "tool_call" }>): boolean {
+  return [block.title, block.label, block.result]
+    .filter(Boolean)
+    .join("\n")
+    .toLowerCase()
+    .includes("the user rejected permission to use this specific tool call.");
+}
+
 function isReadToolIdentity(identityText: string): boolean {
   return /\b(read|view|open|cat|list|ls)\b|读取|查看|列出/.test(identityText);
 }
@@ -113,6 +121,7 @@ function hasArgKey(args: Record<string, unknown> | undefined, names: string[]): 
 
 function isToolCallFailure(block: Extract<AgentContentBlock, { type: "tool_call" }>): boolean {
   if (block.status === "failed") return true;
+  if (isUserRejectedToolPermission(block)) return true;
   const identityText = toolIdentityText(block);
   if (block.name.toLowerCase() === "invalid") return true;
   if (/unavailable tool|invalid tool|invalid arguments|model tried to call unavailable tool/.test(identityText)) return true;
@@ -245,9 +254,10 @@ export function buildAgentProcessSteps(blocks: AgentContentBlock[], messageId?: 
       const permissions = permissionsByToolId.get(block.id);
       const hasPendingPermission = Boolean(permissions?.some((permission) => permission.status === "pending"));
       const hasRejectedPermission = Boolean(permissions?.some(isRejectedPermission));
+      const hasRejectedToolPermission = isUserRejectedToolPermission(block);
       const status = hasPendingPermission
         ? "pending"
-        : hasRejectedPermission
+        : hasRejectedPermission || hasRejectedToolPermission
           ? "failed"
         : completeIfSuperseded(isToolCallFailure(block) ? "failed" : messageIsStreaming ? block.status || "completed" : "completed", block.id, currentActiveBlockId, messageIsStreaming);
       const staleRunningState = Boolean(block.staleRunningState || (block.status !== "failed" && !messageIsStreaming && (block.status === "running" || block.status === "pending")));
@@ -263,7 +273,7 @@ export function buildAgentProcessSteps(blocks: AgentContentBlock[], messageId?: 
         metadata: block.metadata,
         permissions,
         staleRunningState,
-        tone: hasRejectedPermission ? "approval_rejected" : toolStepTone(block),
+        tone: hasRejectedPermission || hasRejectedToolPermission ? "approval_rejected" : toolStepTone(block),
       });
       continue;
     }

@@ -3907,7 +3907,7 @@ body,
 
 .agent-header-diagnostic span {
   min-width: 0;
-  white-space: normal;
+  white-space: pre-wrap;
   overflow-wrap: anywhere;
   word-break: break-word;
 }
@@ -4693,10 +4693,10 @@ body,
 .agent-sticky-user-letter-text {
   flex: 0 1 auto;
   width: fit-content;
-  max-width: min(80%, 760px);
+  max-width: min(100%, 760px);
   max-height: 4.35em;
   min-width: 0;
-  padding-right: 4px;
+  padding-right: 2px;
   overflow-x: hidden;
   overflow-y: auto;
   overscroll-behavior: auto;
@@ -4978,7 +4978,7 @@ body,
 
 .agent-process-stream {
   min-width: 0;
-  margin: 1px 0 4px;
+  margin: 0px 0 0px;
 }
 
 .agent-process-stream[data-streaming="true"] .agent-process-summary {
@@ -5077,11 +5077,13 @@ body,
 .agent-process-stale-step-icon {
   position: relative;
   flex: 0 0 auto;
+  align-self: center;
   display: inline-flex;
   align-items: center;
   justify-content: center;
   width: 13px;
   height: 13px;
+  line-height: 0;
   background: transparent;
   color: var(--color-warning);
   opacity: 0.86;
@@ -5095,6 +5097,16 @@ body,
 
 .agent-process-rejected-step-icon {
   color: var(--color-danger);
+}
+
+.agent-process-step-tabs button .agent-process-stale-step-icon {
+  width: 11px;
+  height: 11px;
+}
+
+.agent-process-step-tabs button .agent-process-stale-step-icon svg {
+  width: 11px;
+  height: 11px;
 }
 
 .agent-process-stale-step-tip {
@@ -5139,6 +5151,7 @@ body,
 .agent-process-scroll-shell {
   position: relative;
   min-width: 0;
+  padding: 2px 12px 0 20px;
 }
 
 .agent-process-edge-shadow {
@@ -5672,6 +5685,7 @@ body,
 .agent-process-task-list,
 .agent-process-artifacts {
   padding: 5px 0;
+  margin: 2px 0;
 }
 
 .agent-process-task-row,

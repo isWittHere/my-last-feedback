@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useRef, useState } from "react";
+import { Fragment, useCallback, useEffect, useRef, useState } from "react";
 import { useAgentConsoleSettings } from "../../agentConsoleSettings";
 import type { AgentContentBlock, AgentProviderMessagePart, AgentSession } from "../../agent/types";
 import { AgentMessageItem } from "./AgentMessageItem";
@@ -63,6 +63,15 @@ function userPromptText(message: AgentSession["messages"][number]): string {
   if (submittedPrompt) return submittedPrompt;
   const rawText = blocksText(message.blocks);
   return extractPromptSection(rawText) || rawText;
+}
+
+function StickyUserText({ text }: { text: string }) {
+  return text.split(/\r\n|\n|\r/).map((line, index) => (
+    <Fragment key={index}>
+      {index > 0 && <br />}
+      {line}
+    </Fragment>
+  ));
 }
 
   interface AgentFocusStepEventDetail {
@@ -220,7 +229,7 @@ export function AgentMessageTimeline({ session }: { session: AgentSession }) {
               tabIndex={stickyUserContent ? 0 : -1}
               aria-hidden={!stickyUserContent}
             >
-              <span className="agent-sticky-user-letter-text">{stickyUserContent || ""}</span>
+              <span className="agent-sticky-user-letter-text"><StickyUserText text={stickyUserContent || ""} /></span>
             </button>
           </div>
         )}
