@@ -163,33 +163,6 @@ const toolMorphPreset: MatrixPreset = {
   },
 };
 
-const approvalGatePreset: MatrixPreset = {
-  id: "approval-gate",
-  interval: 85,
-  gen: function* () {
-    while (true) {
-      for (let frameIndex = 0; frameIndex < 36; frameIndex += 1) {
-        const frame = emptyFrame();
-        const pulseLevel = 2 + Math.round(((Math.sin((frameIndex / 36) * Math.PI * 2) + 1) / 2) * 2);
-        for (let columnIndex = 1; columnIndex < 6; columnIndex += 1) {
-          frame[1][columnIndex] = columnIndex === 3 ? pulseLevel : 2;
-          frame[5][columnIndex] = columnIndex === 3 ? pulseLevel : 2;
-        }
-        for (let rowIndex = 2; rowIndex < 5; rowIndex += 1) {
-          frame[rowIndex][1] = 2;
-          frame[rowIndex][5] = 2;
-        }
-        frame[3][2] = 1;
-        frame[3][3] = pulseLevel;
-        frame[3][4] = 1;
-        frame[2][3] = 2;
-        frame[4][3] = 2;
-        yield frame;
-      }
-    }
-  },
-};
-
 const settleScanPreset: MatrixPreset = {
   id: "settle-scan",
   interval: 55,
@@ -219,7 +192,7 @@ const phasePresets: Record<AgentActivityMatrixPhase, MatrixPreset[]> = {
   thinking: [thinkingPreset],
   output: [outputRainPreset],
   tool: [toolRipplePreset, toolMorphPreset],
-  approval: [approvalGatePreset],
+  approval: [toolMorphPreset],
   settle: [settleScanPreset],
 };
 

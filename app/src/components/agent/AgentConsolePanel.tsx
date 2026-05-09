@@ -1,4 +1,5 @@
-import { useCallback, useEffect, useRef, useState } from "react";
+import { useCallback, useEffect, useLayoutEffect, useRef, useState } from "react";
+import type { AgentSession } from "../../agent/types";
 import { useAgentStore } from "../../store/agentStore";
 import { AgentComposer } from "./AgentComposer";
 import { AgentCurrentStatusRow } from "./AgentCurrentStatusRow";
@@ -8,6 +9,32 @@ import { AgentTaskPanel } from "./AgentTaskPanel";
 const INPUT_DEFAULT = 0.28;
 const INPUT_AUTO_MAX = 0.58;
 const PANEL_MIN_SIZE = 0.08;
+
+function AgentStatusPanelSlot({ session }: { session: AgentSession }) {
+  const innerRef = useRef<HTMLDivElement>(null);
+  const [height, setHeight] = useState(0);
+
+  useLayoutEffect(() => {
+    const node = innerRef.current;
+    if (!node) return;
+    const updateHeight = () => setHeight(node.scrollHeight);
+    updateHeight();
+    const observer = new ResizeObserver(updateHeight);
+    observer.observe(node);
+    return () => observer.disconnect();
+  }, [session.id]);
+
+  const open = height > 0;
+
+  return (
+    <div className="agent-session-status-stack" data-open={open ? "true" : "false"} style={{ height: open ? height : 0 }} aria-hidden={open ? undefined : true}>
+      <div ref={innerRef} className="agent-session-status-stack-inner">
+        <AgentCurrentStatusRow session={session} />
+        <AgentTaskPanel session={session} />
+      </div>
+    </div>
+  );
+}
 
 export function AgentConsolePanel() {
   const activeSession = useAgentStore((state) => state.getActiveSession());
@@ -86,10 +113,7 @@ export function AgentConsolePanel() {
       <div ref={containerRef} className="agent-console-resizable-body">
         <div className="agent-console-timeline-region panel-card" style={{ flex: `0 0 calc(${panelSizes[0] * 100}% - 1px)`, minHeight: 48 }}>
           <AgentMessageTimeline session={activeSession} />
-          <div className="agent-session-status-stack">
-            <AgentCurrentStatusRow session={activeSession} />
-            <AgentTaskPanel session={activeSession} />
-          </div>
+          <AgentStatusPanelSlot session={activeSession} />
         </div>
         <div className="resize-handle" onMouseDown={(event) => handleMouseDown(0, event)} />
         <div ref={inputPanelRef} className="agent-console-input-region panel-card panel-feedback panel-feedback-editable" data-tooltip-placement="top" style={{ flex: `0 0 ${panelSizes[1] * 100}%`, minHeight: 92, position: "relative" }}>
