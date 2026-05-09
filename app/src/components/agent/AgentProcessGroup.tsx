@@ -211,7 +211,7 @@ function StepDetail({ step, projectDirectory, sessionId, approvalDisplayMode = "
           <div key={task.id} className="agent-process-task-row" data-status={task.status}>
             <Icon name={task.status === "completed" ? "check" : task.status === "in-progress" ? "spinner" : "minus"} size={12} />
             <span>{task.title}</span>
-            {task.priority && <span className="agent-task-priority" data-priority={task.priority}>{task.priority === "high" ? "高" : task.priority === "medium" ? "中" : "低"}</span>}
+            {task.priority && <span className="agent-task-priority" data-priority={task.priority} title={task.priority === "high" ? "高" : task.priority === "medium" ? "中" : "低"} aria-label={task.priority === "high" ? "高" : task.priority === "medium" ? "中" : "低"} />}
           </div>
         ))}
       </div>

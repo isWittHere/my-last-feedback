@@ -23,7 +23,7 @@ import { SessionNavigationModeIcon } from "./SessionNavigationModeIcon";
 import { AppSelect, type AppSelectOption } from "./AppSelect";
 import { SettingsSegmentedControl } from "./SettingsSegmentedControl";
 
-type Tab = "general" | "display" | "callers" | "submitted" | "prompts" | "sessionNavigation" | "gitOperations" | "layoutPanels" | "agentConsole" | "agentChat" | "agentSessionManager" | "openCode" | "openCodePermissions" | "terminal" | "resources" | "notification" | "about";
+type Tab = "general" | "display" | "callers" | "submitted" | "prompts" | "sessionNavigation" | "gitOperations" | "layoutPanels" | "agentConsole" | "agentStepDisplay" | "agentChat" | "agentSessionManager" | "openCode" | "openCodePermissions" | "terminal" | "resources" | "notification" | "about";
 type SettingsGroupId = "mlfb" | "agent" | "layout";
 
 const SETTINGS_DOCK_COLUMN_IDS: DockColumnId[] = ["leftSidebar", "leftPage", "rightPage", "rightSidebar"];
@@ -641,7 +641,7 @@ export function SettingsDialog({ open, onClose }: { open: boolean; onClose: () =
 
   const renderAgentTaskPanelTemplateStyleGroup = () => (
     <SettingsSegmentedControl
-      ariaLabel={t("settings.agentTaskPanelTemplateStyle", "Task list template style")}
+      ariaLabel={t("settings.agentTaskPanelTemplateStyle", "Task management panel style")}
       value={agentConsoleSettings.taskPanelTemplateStyle}
       onChange={(style) => handleAgentTaskPanelTemplateStyleChange(style as AgentTaskPanelTemplateStyle)}
       options={AGENT_TASK_PANEL_TEMPLATE_STYLE_OPTIONS.map((style) => {
@@ -1023,9 +1023,10 @@ export function SettingsDialog({ open, onClose }: { open: boolean; onClose: () =
                 {renderSettingsNavItem("gitOperations", "git-branch", t("settings.gitOperations", "Git operations"), true)}
               </>
             ))}
-            {renderSettingsNavGroup("agent", t("settings.agent", "Agent"), ["agentConsole", "agentChat", "agentSessionManager", "openCode", "openCodePermissions"], (
+            {renderSettingsNavGroup("agent", t("settings.agent", "Agent"), ["agentConsole", "agentStepDisplay", "agentChat", "agentSessionManager", "openCode", "openCodePermissions"], (
               <>
                 {renderSettingsNavItem("agentConsole", "robot", t("settings.agentConsoleDisplay", "Navigation bar"), true)}
+                {renderSettingsNavItem("agentStepDisplay", "rows", t("settings.agentStepDisplay", "Step display"), true)}
                 {renderSettingsNavItem("agentChat", "message-dot", t("settings.agentChat", "Chat"), true)}
                 {renderSettingsNavItem("agentSessionManager", "message", t("settings.agentSessionManager", "Session manager"), true)}
                 {renderSettingsNavItem("openCode", "code", t("settings.openCode", "Models"), true)}
@@ -1424,124 +1425,115 @@ export function SettingsDialog({ open, onClose }: { open: boolean; onClose: () =
               </div>
             )}
 
-            {tab === "agentChat" && (
+            {tab === "agentStepDisplay" && (
               <div className="settings-section settings-agent-section">
                 <div className="settings-row settings-row-stacked">
-                  <div className="settings-row">
-                    <div className="settings-row-info">
-                      <span className="settings-label">{t("settings.agentMessageSpeakerLine", "Show session avatar and name during chat")}</span>
-                      <span className="settings-sublabel">{t("settings.agentMessageSpeakerLineDesc", "Show the session avatar and name above each Agent message.")}</span>
-                    </div>
-                    <button
-                      type="button"
-                      className={`settings-toggle${agentConsoleSettings.showMessageSpeakerLine ? " settings-toggle-on" : ""}`}
-                      onClick={handleAgentMessageSpeakerToggle}
-                      aria-label={t("settings.agentMessageSpeakerLine", "Show session avatar and name during chat")}
-                      aria-pressed={agentConsoleSettings.showMessageSpeakerLine}
-                    >
-                      <span className="settings-toggle-knob" />
-                    </button>
+                  <div className="settings-row-info">
+                    <span className="settings-label">{t("settings.agentStepDisplay", "Step display")}</span>
+                    <span className="settings-sublabel">{t("settings.agentStepDisplayDesc", "Configure how Agent step progress is shown in chat.")}</span>
                   </div>
-                  <div className="settings-row">
+                  <div className="settings-row settings-agent-toggle-row settings-agent-step-primary-row">
                     <div className="settings-row-info">
                       <span className="settings-label">{t("settings.agentProcessStepDefaultMode", "Step process default view")}</span>
                       <span className="settings-sublabel">{t("settings.agentProcessStepDefaultModeDesc", "Choose whether new Agent process steps open in tabs or timeline view by default.")}</span>
                     </div>
                     {renderAgentProcessStepModeGroup()}
                   </div>
-                  <div className="settings-row">
-                    <div className="settings-row-info">
-                      <span className="settings-label">{t("settings.agentTaskPanelTemplateStyle", "Task list template style")}</span>
-                      <span className="settings-sublabel">{t("settings.agentTaskPanelTemplateStyleDesc", "Choose how the todo panel above the composer lays out tasks.")}</span>
-                    </div>
-                    {renderAgentTaskPanelTemplateStyleGroup()}
-                  </div>
-                  {agentConsoleSettings.processStepDefaultMode === "timeline" && (
-                    <>
-                      <div className="settings-row">
-                        <div className="settings-row-info">
-                          <span className="settings-label">{t("settings.agentTimelineStreamingStepMode", "Streaming step default style")}</span>
-                          <span className="settings-sublabel">{t("settings.agentTimelineStreamingStepModeDesc", "Only affects timeline view while an Agent is streaming.")}</span>
-                        </div>
-                        {renderAgentTimelineStreamingStepModeGroup()}
+                  <div className="settings-agent-topbar-options settings-agent-step-options">
+                    <div className="settings-row settings-agent-toggle-row settings-agent-control-card">
+                      <div className="settings-row-info">
+                        <span className="settings-label">{t("settings.agentTimelineStreamingStepMode", "Streaming step default style")}</span>
+                        <span className="settings-sublabel">{t("settings.agentTimelineStreamingStepModeDesc", "Only affects how steps expand while an Agent is streaming in timeline view.")}</span>
                       </div>
-                      <div className="settings-row">
-                        <div className="settings-row-info">
-                          <span className="settings-label">{t("settings.agentTodoUpdateDisplayMode", "Todo update style")}</span>
-                          <span className="settings-sublabel">{t("settings.agentTodoUpdateDisplayModeDesc", "Only affects timeline-style todo updates.")}</span>
-                        </div>
-                        {renderAgentTodoUpdateDisplayModeGroup()}
+                      {renderAgentTimelineStreamingStepModeGroup()}
+                    </div>
+                    <div className="settings-row settings-agent-toggle-row settings-agent-control-card">
+                      <div className="settings-row-info">
+                        <span className="settings-label">{t("settings.agentTodoUpdateDisplayMode", "Todo update style")}</span>
+                        <span className="settings-sublabel">{t("settings.agentTodoUpdateDisplayModeDesc", "Choose whether timeline todo updates show a count summary or the task panel.")}</span>
                       </div>
-                    </>
-                  )}
-                  <div className="settings-row">
-                    <div className="settings-row-info">
-                      <span className="settings-label">{t("settings.agentApprovalDisplayMode", "Approval handling style")}</span>
-                      <span className="settings-sublabel">{agentConsoleSettings.processStepDefaultMode === "timeline" && agentConsoleSettings.timelineStreamingStepMode === "hidden"
-                        ? t("settings.agentApprovalDisplayModeStepDisabledDesc", "In-step approval is disabled when streaming steps are hidden by default.")
-                        : t("settings.agentApprovalDisplayModeDesc", "Choose where pending approval actions appear.")}</span>
+                      {renderAgentTodoUpdateDisplayModeGroup()}
                     </div>
-                    {renderAgentApprovalDisplayModeGroup()}
+                    <div className="settings-row settings-agent-toggle-row">
+                      <div className="settings-row-info">
+                        <span className="settings-label">{t("settings.agentCollapseOutputBlankLines", "Collapse consecutive blank lines in output")}</span>
+                        <span className="settings-sublabel">{t("settings.agentCollapseOutputBlankLinesDesc", "When enabled, repeated blank lines in Agent output are reduced to a single blank line.")}</span>
+                      </div>
+                      <button
+                        type="button"
+                        className={`settings-toggle${agentConsoleSettings.collapseConsecutiveOutputBlankLines ? " settings-toggle-on" : ""}`}
+                        onClick={handleAgentCollapseOutputBlankLinesToggle}
+                        aria-label={t("settings.agentCollapseOutputBlankLines", "Collapse consecutive blank lines in output")}
+                        aria-pressed={agentConsoleSettings.collapseConsecutiveOutputBlankLines}
+                      >
+                        <span className="settings-toggle-knob" />
+                      </button>
+                    </div>
+                    <div className="settings-row settings-agent-toggle-row">
+                      <div className="settings-row-info">
+                        <span className="settings-label">{t("settings.agentMergeThinkingToolSteps", "Merge tool steps with thinking")}</span>
+                        <span className="settings-sublabel">{t("settings.agentMergeThinkingToolStepsDesc", "When a visible thinking step precedes a tool step, show the tool card inside the thinking step instead of as a separate step.")}</span>
+                      </div>
+                      <button
+                        type="button"
+                        className={`settings-toggle${agentConsoleSettings.mergeThinkingToolSteps ? " settings-toggle-on" : ""}`}
+                        onClick={handleAgentMergeThinkingToolStepsToggle}
+                        aria-label={t("settings.agentMergeThinkingToolSteps", "Merge tool steps with thinking")}
+                        aria-pressed={agentConsoleSettings.mergeThinkingToolSteps}
+                      >
+                        <span className="settings-toggle-knob" />
+                      </button>
+                    </div>
                   </div>
-                  <div className="settings-row">
-                    <div className="settings-row-info">
-                      <span className="settings-label">{t("settings.agentCollapseEditApprovalDiff", "Collapse edit approval details by default")}</span>
-                      <span className="settings-sublabel">{t("settings.agentCollapseEditApprovalDiffDesc", "When enabled, file edit details in the approval panel start collapsed.")}</span>
-                    </div>
-                    <button
-                      type="button"
-                      className={`settings-toggle${agentConsoleSettings.collapseEditApprovalDiffByDefault ? " settings-toggle-on" : ""}`}
-                      onClick={handleAgentCollapseEditApprovalDiffToggle}
-                      aria-label={t("settings.agentCollapseEditApprovalDiff", "Collapse edit approval details by default")}
-                      aria-pressed={agentConsoleSettings.collapseEditApprovalDiffByDefault}
-                    >
-                      <span className="settings-toggle-knob" />
-                    </button>
+                </div>
+              </div>
+            )}
+
+            {tab === "agentChat" && (
+              <div className="settings-section settings-agent-section">
+                <div className="settings-row settings-row-stacked">
+                  <div className="settings-row-info">
+                    <span className="settings-label">{t("settings.agentChat", "Chat")}</span>
+                    <span className="settings-sublabel">{t("settings.agentChatDesc", "Configure Agent conversation behavior.")}</span>
                   </div>
-                  <div className="settings-row">
-                    <div className="settings-row-info">
-                      <span className="settings-label">{t("settings.agentSmoothStreamingOutput", "Smooth streaming output")}</span>
-                      <span className="settings-sublabel">{t("settings.agentSmoothStreamingOutputDesc", "Pace Agent text updates so fast model chunks still appear progressively.")}</span>
+                  <div className="settings-agent-topbar-options settings-agent-chat-options">
+                    <div className="settings-row settings-agent-toggle-row">
+                      <div className="settings-row-info">
+                        <span className="settings-label">{t("settings.agentMessageSpeakerLine", "Show session avatar and name during chat")}</span>
+                        <span className="settings-sublabel">{t("settings.agentMessageSpeakerLineDesc", "Show the session avatar and name above each Agent message.")}</span>
+                      </div>
+                      <button
+                        type="button"
+                        className={`settings-toggle${agentConsoleSettings.showMessageSpeakerLine ? " settings-toggle-on" : ""}`}
+                        onClick={handleAgentMessageSpeakerToggle}
+                        aria-label={t("settings.agentMessageSpeakerLine", "Show session avatar and name during chat")}
+                        aria-pressed={agentConsoleSettings.showMessageSpeakerLine}
+                      >
+                        <span className="settings-toggle-knob" />
+                      </button>
                     </div>
-                    <button
-                      type="button"
-                      className={`settings-toggle${agentConsoleSettings.smoothStreamingOutput ? " settings-toggle-on" : ""}`}
-                      onClick={handleAgentSmoothStreamingToggle}
-                      aria-label={t("settings.agentSmoothStreamingOutput", "Smooth streaming output")}
-                      aria-pressed={agentConsoleSettings.smoothStreamingOutput}
-                    >
-                      <span className="settings-toggle-knob" />
-                    </button>
-                  </div>
-                  <div className="settings-row">
-                    <div className="settings-row-info">
-                      <span className="settings-label">{t("settings.agentCollapseOutputBlankLines", "Collapse consecutive blank lines in output")}</span>
-                      <span className="settings-sublabel">{t("settings.agentCollapseOutputBlankLinesDesc", "When enabled, repeated blank lines in Agent output are reduced to a single blank line.")}</span>
+                    <div className="settings-row settings-agent-toggle-row settings-agent-control-card">
+                      <div className="settings-row-info">
+                        <span className="settings-label">{t("settings.agentTaskPanelTemplateStyle", "Task management panel style")}</span>
+                        <span className="settings-sublabel">{t("settings.agentTaskPanelTemplateStyleDesc", "Choose how the task management panel above the composer lays out tasks.")}</span>
+                      </div>
+                      {renderAgentTaskPanelTemplateStyleGroup()}
                     </div>
-                    <button
-                      type="button"
-                      className={`settings-toggle${agentConsoleSettings.collapseConsecutiveOutputBlankLines ? " settings-toggle-on" : ""}`}
-                      onClick={handleAgentCollapseOutputBlankLinesToggle}
-                      aria-label={t("settings.agentCollapseOutputBlankLines", "Collapse consecutive blank lines in output")}
-                      aria-pressed={agentConsoleSettings.collapseConsecutiveOutputBlankLines}
-                    >
-                      <span className="settings-toggle-knob" />
-                    </button>
-                  </div>
-                  <div className="settings-row">
-                    <div className="settings-row-info">
-                      <span className="settings-label">{t("settings.agentMergeThinkingToolSteps", "Merge tool steps with thinking")}</span>
-                      <span className="settings-sublabel">{t("settings.agentMergeThinkingToolStepsDesc", "When a visible thinking step precedes a tool step, show the tool card inside the thinking step instead of as a separate step.")}</span>
+                    <div className="settings-row settings-agent-toggle-row">
+                      <div className="settings-row-info">
+                        <span className="settings-label">{t("settings.agentSmoothStreamingOutput", "Smooth streaming output")}</span>
+                        <span className="settings-sublabel">{t("settings.agentSmoothStreamingOutputDesc", "Pace Agent text updates so fast model chunks still appear progressively.")}</span>
+                      </div>
+                      <button
+                        type="button"
+                        className={`settings-toggle${agentConsoleSettings.smoothStreamingOutput ? " settings-toggle-on" : ""}`}
+                        onClick={handleAgentSmoothStreamingToggle}
+                        aria-label={t("settings.agentSmoothStreamingOutput", "Smooth streaming output")}
+                        aria-pressed={agentConsoleSettings.smoothStreamingOutput}
+                      >
+                        <span className="settings-toggle-knob" />
+                      </button>
                     </div>
-                    <button
-                      type="button"
-                      className={`settings-toggle${agentConsoleSettings.mergeThinkingToolSteps ? " settings-toggle-on" : ""}`}
-                      onClick={handleAgentMergeThinkingToolStepsToggle}
-                      aria-label={t("settings.agentMergeThinkingToolSteps", "Merge tool steps with thinking")}
-                      aria-pressed={agentConsoleSettings.mergeThinkingToolSteps}
-                    >
-                      <span className="settings-toggle-knob" />
-                    </button>
                   </div>
                 </div>
               </div>
@@ -1684,7 +1676,45 @@ export function SettingsDialog({ open, onClose }: { open: boolean; onClose: () =
             )}
 
             {tab === "openCode" && renderOpenCodeModelLibrary()}
-            {tab === "openCodePermissions" && renderOpenCodePermissionDefaults()}
+            {tab === "openCodePermissions" && (
+              <>
+                <div className="settings-section settings-agent-section">
+                  <div className="settings-row settings-row-stacked">
+                    <div className="settings-row-info">
+                      <span className="settings-label">{t("settings.openCodeApprovalPermissions", "Approval permissions")}</span>
+                      <span className="settings-sublabel">{t("settings.agentApprovalPermissionsDesc", "Configure how Agent approval requests appear and how edit details open by default.")}</span>
+                    </div>
+                    <div className="settings-agent-topbar-options settings-agent-approval-options">
+                      <div className="settings-row settings-agent-toggle-row settings-agent-control-card">
+                        <div className="settings-row-info">
+                          <span className="settings-label">{t("settings.agentApprovalDisplayMode", "Approval handling style")}</span>
+                          <span className="settings-sublabel">{agentConsoleSettings.processStepDefaultMode === "timeline" && agentConsoleSettings.timelineStreamingStepMode === "hidden"
+                            ? t("settings.agentApprovalDisplayModeStepDisabledDesc", "In-step approval is disabled when streaming steps are hidden by default.")
+                            : t("settings.agentApprovalDisplayModeDesc", "Choose where pending approval actions appear.")}</span>
+                        </div>
+                        {renderAgentApprovalDisplayModeGroup()}
+                      </div>
+                      <div className="settings-row settings-agent-toggle-row">
+                        <div className="settings-row-info">
+                          <span className="settings-label">{t("settings.agentCollapseEditApprovalDiff", "Collapse edit approval details by default")}</span>
+                          <span className="settings-sublabel">{t("settings.agentCollapseEditApprovalDiffDesc", "When enabled, file edit details in the approval panel start collapsed.")}</span>
+                        </div>
+                        <button
+                          type="button"
+                          className={`settings-toggle${agentConsoleSettings.collapseEditApprovalDiffByDefault ? " settings-toggle-on" : ""}`}
+                          onClick={handleAgentCollapseEditApprovalDiffToggle}
+                          aria-label={t("settings.agentCollapseEditApprovalDiff", "Collapse edit approval details by default")}
+                          aria-pressed={agentConsoleSettings.collapseEditApprovalDiffByDefault}
+                        >
+                          <span className="settings-toggle-knob" />
+                        </button>
+                      </div>
+                    </div>
+                  </div>
+                </div>
+                {renderOpenCodePermissionDefaults()}
+              </>
+            )}
 
             {tab === "resources" && (
               <div className="settings-section">

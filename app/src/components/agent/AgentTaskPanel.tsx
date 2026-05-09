@@ -52,7 +52,7 @@ export function AgentTaskPanel({ session }: { session: AgentSession }) {
               <div key={task.id} className="agent-task-panel-row" data-status={task.status}>
                 <Icon name={taskIconName(task.status)} size={13} />
                 <span>{task.title}</span>
-                {task.priority && <span className="agent-task-priority" data-priority={task.priority}>{taskPriorityLabel(task.priority)}</span>}
+                {task.priority && <span className="agent-task-priority" data-priority={task.priority} title={taskPriorityLabel(task.priority)} aria-label={taskPriorityLabel(task.priority)} />}
               </div>
             ))}
           </div>
