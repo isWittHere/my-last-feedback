@@ -70,17 +70,17 @@ export function AgentContextIndicator({ session }: { session: AgentSession }) {
         </div>
         <div className="agent-context-popover-grid">
           <ContextMetric iconName="robot" label={t("agentConsole.model", "Model")} value={session.modelId || t("agentConsole.unknown", "Unknown")} wide />
-          <ContextMetric iconName="page-sidebar" label={t("agentConsole.window", "Window")} value={windowLabel} />
           <ContextMetric iconName="circle-check" label={t("agentConsole.used", "Used")} value={`${formatCompactTokenCount(summary.totalTokens)}${summary.estimated ? ` ${t("agentConsole.estimatedShort", "est.")}` : ""}`} />
-          <ContextMetric iconName="clock" label={t("agentConsole.remaining", "Remaining")} value={remainingLabel} />
+          <ContextMetric iconName="page-sidebar" label={t("agentConsole.window", "Window")} value={windowLabel} />
           {contextTokenLabel && (
-            <ContextMetric iconName="message-dot" label={t("agentConsole.contextTokens", "Input context")} value={contextTokenLabel} />
-          )}
-          {summary.inputTokens != null && (
-            <ContextMetric iconName="inbox" label={t("agentConsole.inputTokens", "Input")} value={formatCompactTokenCount(summary.inputTokens)} />
+            <ContextMetric iconName="arrow-up" label={t("agentConsole.contextTokens", "Input")} value={contextTokenLabel} />
           )}
           {summary.outputTokens != null && (
-            <ContextMetric iconName="send" label={t("agentConsole.outputTokens", "Output")} value={formatCompactTokenCount(summary.outputTokens)} />
+            <ContextMetric iconName="arrow-down" label={t("agentConsole.outputTokens", "Output")} value={formatCompactTokenCount(summary.outputTokens)} />
+          )}
+          <ContextMetric iconName="clock" label={t("agentConsole.remaining", "Remaining")} value={remainingLabel} />
+          {summary.inputTokens != null && (
+            <ContextMetric iconName="message-dot" label={t("agentConsole.inputTokens", "User prompt")} value={formatCompactTokenCount(summary.inputTokens)} />
           )}
           {summary.reasoningTokens != null && summary.reasoningTokens > 0 && (
             <ContextMetric iconName="info" label={t("agentConsole.reasoningTokens", "Reasoning")} value={formatCompactTokenCount(summary.reasoningTokens)} />

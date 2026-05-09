@@ -38,6 +38,12 @@ const ICONS: Record<string, IconDef> = {
   "arrow-right": {
     paths: '<line x1="5" y1="12" x2="19" y2="12" /><polyline points="12 5 19 12 12 19" />',
   },
+  "arrow-up": {
+    paths: '<line x1="12" y1="19" x2="12" y2="5" /><polyline points="5 12 12 5 19 12" />',
+  },
+  "arrow-down": {
+    paths: '<line x1="12" y1="5" x2="12" y2="19" /><polyline points="19 12 12 19 5 12" />',
+  },
   "arrow-right-left": {
     paths: '<polyline points="17 3 21 7 17 11" /><line x1="21" y1="7" x2="9" y2="7" /><polyline points="7 21 3 17 7 13" /><line x1="15" y1="17" x2="3" y2="17" />',
   },
