@@ -11,7 +11,49 @@ import { Icon } from "../Icons";
 import { AgentActivityMatrix, type AgentActivityMatrixPhase } from "./AgentActivityMatrix";
 import { AgentDiffPatchList, permissionBlockToDiffFiles } from "./AgentDiffViewer";
 
-const STATUS_ROW_EXIT_MS = 180;
+const STATUS_ROW_DRAWER_MS = 180;
+
+function AgentStatusDrawer({ children }: { children: ReactNode | null }) {
+  const open = children !== null;
+  const removalTimerRef = useRef<number | null>(null);
+  const [present, setPresent] = useState(open);
+  const [renderedChildren, setRenderedChildren] = useState<ReactNode | null>(children);
+
+  useEffect(() => {
+    if (removalTimerRef.current) {
+      window.clearTimeout(removalTimerRef.current);
+      removalTimerRef.current = null;
+    }
+
+    if (open) {
+      setRenderedChildren(children);
+      setPresent(true);
+      return;
+    }
+
+    if (!present) return;
+
+    removalTimerRef.current = window.setTimeout(() => {
+      removalTimerRef.current = null;
+      setPresent(false);
+      setRenderedChildren(null);
+    }, STATUS_ROW_DRAWER_MS);
+  }, [children, open, present]);
+
+  useEffect(() => () => {
+    if (removalTimerRef.current) window.clearTimeout(removalTimerRef.current);
+  }, []);
+
+  if (!present) return null;
+
+  return (
+    <div className="agent-current-status-drawer" data-open={open ? "true" : "false"} aria-hidden={open ? undefined : true}>
+      <div className="agent-current-status-drawer-content">
+        {renderedChildren}
+      </div>
+    </div>
+  );
+}
 
 function permissionOptionLabel(t: ReturnType<typeof useTranslation>["t"], option: AgentPermissionOption): string {
   if (option.kind === "allow_once") return t("agentConsole.allowOnce", "Allow once");
@@ -170,11 +212,11 @@ function AgentSimpleStatusRow({ phase, statusKind, label, detail }: { phase: Age
   );
 }
 
-function AgentSettlingStatusRow({ exiting = false, onComplete }: { exiting?: boolean; onComplete: () => void }) {
+function AgentSettlingStatusRow({ onComplete }: { onComplete: () => void }) {
   const { t } = useTranslation();
 
   return (
-    <section className="agent-approval-row agent-current-status-row" data-status-kind="settle" data-exiting={exiting ? "true" : undefined} data-preview-overlay>
+    <section className="agent-approval-row agent-current-status-row" data-status-kind="settle" data-preview-overlay>
       <div className="agent-approval-row-main agent-current-status-row-main">
         <AgentActivityMatrix key="settle" phase="settle" onComplete={onComplete} />
         <AnimatedStatusText className="agent-approval-row-label agent-silver-shimmer-text" textKey="settling">{t("agentConsole.currentStatusSettling", "Finishing")}</AnimatedStatusText>
@@ -190,24 +232,12 @@ export function AgentCurrentStatusRow({ session }: { session: AgentSession }) {
   const sessionActive = isSessionActivityActive(session);
   const previousSessionActiveRef = useRef(sessionActive);
   const heldPhaseRef = useRef<AgentActivityMatrixPhase | null>(null);
-  const exitTimerRef = useRef<number | null>(null);
   const [heldPhase, setHeldPhaseState] = useState<AgentActivityMatrixPhase | null>(null);
   const [settling, setSettling] = useState(false);
-  const [exiting, setExiting] = useState(false);
 
   const setHeldPhase = (phase: AgentActivityMatrixPhase | null) => {
     heldPhaseRef.current = phase;
     setHeldPhaseState(phase);
-  };
-
-  const beginExit = () => {
-    setSettling(false);
-    setExiting(true);
-    if (exitTimerRef.current) window.clearTimeout(exitTimerRef.current);
-    exitTimerRef.current = window.setTimeout(() => {
-      exitTimerRef.current = null;
-      setExiting(false);
-    }, STATUS_ROW_EXIT_MS);
   };
 
   useEffect(() => {
@@ -216,19 +246,15 @@ export function AgentCurrentStatusRow({ session }: { session: AgentSession }) {
     if (status && status.kind !== "approval") {
       setHeldPhase(activityPhaseForStatus(status));
       setSettling(false);
-      setExiting(false);
     } else if (status?.kind === "approval") {
       setHeldPhase("approval");
       setSettling(false);
-      setExiting(false);
     } else if (sessionActive) {
       setHeldPhase(heldPhaseRef.current || "thinking");
       setSettling(false);
-      setExiting(false);
     } else if (previousSessionActive && heldPhaseRef.current) {
       setHeldPhase(null);
       setSettling(true);
-      setExiting(false);
     } else {
       setHeldPhase(null);
       setSettling(false);
@@ -237,21 +263,21 @@ export function AgentCurrentStatusRow({ session }: { session: AgentSession }) {
     previousSessionActiveRef.current = sessionActive;
   }, [sessionActive, status]);
 
-  useEffect(() => () => {
-    if (exitTimerRef.current) window.clearTimeout(exitTimerRef.current);
-  }, []);
+  let content: ReactNode | null = null;
 
   if (!status) {
     if (sessionActive && heldPhase) {
       const processingLabel = heldPhase === "approval"
         ? t("agentConsole.currentStatusWaitingApproval", "Waiting approval")
         : t("agentConsole.currentStatusProcessing", "Processing");
-      return <AgentSimpleStatusRow phase={heldPhase} statusKind="processing" label={processingLabel} />;
+      content = <AgentSimpleStatusRow phase={heldPhase} statusKind="processing" label={processingLabel} />;
+    } else if (settling) {
+      content = <AgentSettlingStatusRow onComplete={() => setSettling(false)} />;
     }
-    return settling || exiting ? <AgentSettlingStatusRow exiting={exiting} onComplete={beginExit} /> : null;
+    return <AgentStatusDrawer>{content}</AgentStatusDrawer>;
   }
-  if (status.kind === "approval" && approvalDisplayMode === "step") return <AgentApprovalWaitingStatusRow status={status} />;
-  if (status.kind === "approval") return <AgentApprovalStatusRow session={session} status={status} />;
+  if (status.kind === "approval" && approvalDisplayMode === "step") return <AgentStatusDrawer><AgentApprovalWaitingStatusRow status={status} /></AgentStatusDrawer>;
+  if (status.kind === "approval") return <AgentStatusDrawer><AgentApprovalStatusRow session={session} status={status} /></AgentStatusDrawer>;
   const statusCopy = status.kind === "thinking"
     ? t("agentConsole.currentStatusThinking", "Thinking")
     : status.kind === "output"
@@ -260,5 +286,5 @@ export function AgentCurrentStatusRow({ session }: { session: AgentSession }) {
   const tokenCount = status.kind === "thinking" || status.kind === "output" ? status.tokenCount : 0;
   const tokenLabel = tokenCount > 0 ? t("agentConsole.currentStatusTokenCount", "{{value}} tokens", { value: formatCompactTokenCount(tokenCount) }) : null;
   const detail = status.kind === "tool_running" ? status.label : tokenLabel;
-  return <AgentSimpleStatusRow phase={activityPhaseForStatus(status)} statusKind={status.kind} label={statusCopy} detail={detail} />;
+  return <AgentStatusDrawer><AgentSimpleStatusRow phase={activityPhaseForStatus(status)} statusKind={status.kind} label={statusCopy} detail={detail} /></AgentStatusDrawer>;
 }

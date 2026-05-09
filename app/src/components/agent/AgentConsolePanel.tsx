@@ -17,7 +17,7 @@ function AgentStatusPanelSlot({ session }: { session: AgentSession }) {
   useLayoutEffect(() => {
     const node = innerRef.current;
     if (!node) return;
-    const updateHeight = () => setHeight(node.scrollHeight);
+    const updateHeight = () => setHeight(node.getBoundingClientRect().height);
     updateHeight();
     const observer = new ResizeObserver(updateHeight);
     observer.observe(node);
@@ -27,7 +27,7 @@ function AgentStatusPanelSlot({ session }: { session: AgentSession }) {
   const open = height > 0;
 
   return (
-    <div className="agent-session-status-stack" data-open={open ? "true" : "false"} style={{ height: open ? height : 0 }} aria-hidden={open ? undefined : true}>
+    <div className="agent-session-status-stack" data-open={open ? "true" : "false"} aria-hidden={open ? undefined : true}>
       <div ref={innerRef} className="agent-session-status-stack-inner">
         <AgentCurrentStatusRow session={session} />
         <AgentTaskPanel session={session} />

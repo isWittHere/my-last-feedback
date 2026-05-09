@@ -331,6 +331,10 @@ function displayStepHasStaleRunningState(item: AgentDisplayStepItem): boolean {
   return Boolean(item.step.staleRunningState || item.displayStep.staleRunningState || item.mergedToolSteps.some((step) => step.staleRunningState));
 }
 
+function displayStepHasRejectedApproval(item: AgentDisplayStepItem): boolean {
+  return Boolean(item.step.tone === "approval_rejected" || item.displayStep.tone === "approval_rejected" || item.mergedToolSteps.some((step) => step.tone === "approval_rejected"));
+}
+
 function latestTaskListStep(steps: AgentStepItem[]): AgentStepItem | undefined {
   for (let index = steps.length - 1; index >= 0; index -= 1) {
     const step = steps[index];
@@ -362,7 +366,9 @@ export function AgentProcessGroup({ blocks, messageId, sessionId, isStreaming = 
   const { allowProcessStepModeSwitching, approvalDisplayMode, collapseConsecutiveOutputBlankLines, mergeThinkingToolSteps, processStepDefaultMode, smoothStreamingOutput, timelineStreamingStepMode, todoUpdateDisplayMode } = useAgentConsoleSettings();
   const steps = useMemo(() => buildAgentProcessSteps(blocks, messageId, isStreaming ? "streaming" : "complete"), [blocks, messageId, isStreaming]);
   const staleStepTooltip = t("agentConsole.staleProcessStepTooltip", "This process state was still marked running.");
+  const rejectedApprovalStepTooltip = t("agentConsole.rejectedApprovalStepTooltip", "This step was stopped because approval was rejected.");
   const hasBusyStep = steps.some((step) => step.status === "pending" || step.status === "running");
+  const hasRejectedApprovalStep = steps.some((step) => step.tone === "approval_rejected");
   const [expanded, setExpanded] = useState(isStreaming || hasBusyStep);
   const [mode, setMode] = useState<ProcessViewMode>(processStepDefaultMode);
   const [activeIndex, setActiveIndex] = useState(0);
@@ -548,7 +554,9 @@ export function AgentProcessGroup({ blocks, messageId, sessionId, isStreaming = 
 
   if (steps.length === 0) return null;
 
-  const toolCount = steps.filter((step) => step.kind === "tool").length;
+  const toolSteps = steps.filter((step) => step.kind === "tool");
+  const toolCount = toolSteps.length;
+  const failedToolCount = toolSteps.filter((step) => step.status === "failed").length;
   const thinkingCount = steps.filter((step) => step.kind === "thinking").length;
   const compactionCount = steps.filter((step) => step.kind === "compaction").length;
   const artifactCount = steps.reduce((count, step) => count + (step.blocks?.length || 0), 0);
@@ -556,16 +564,27 @@ export function AgentProcessGroup({ blocks, messageId, sessionId, isStreaming = 
   const completedTaskCount = taskListStep?.tasks?.filter((task) => task.status === "completed").length;
   const isSingleInlineProcess = steps.length === 1 && (steps[0]?.kind === "thinking" || steps[0]?.kind === "compaction") && !isStreaming;
   const summaryParts = [
-    !mergeThinkingToolSteps && thinkingCount > 0 ? `${thinkingCount} 次思考` : "",
-    toolCount > 0 ? `${toolCount} 个工具` : "",
-    typeof completedTaskCount === "number" ? `完成${completedTaskCount}项任务` : "",
-    compactionCount > 0 ? `${compactionCount} 次压缩` : "",
-    artifactCount > 0 ? `${artifactCount} 个产物` : "",
+    toolCount > 0
+      ? failedToolCount > 0
+        ? t("agentConsole.processToolsUsedWithFailures", "Used {{count}} tools ({{failed}} failed)", { count: toolCount, failed: failedToolCount })
+        : t("agentConsole.processToolsUsed", "Used {{count}} tools", { count: toolCount })
+      : "",
+    typeof completedTaskCount === "number" && completedTaskCount > 0 ? t("agentConsole.processTasksCompleted", "Completed {{count}} tasks", { count: completedTaskCount }) : "",
+    !mergeThinkingToolSteps && thinkingCount > 0 ? t("agentConsole.processThinkingCount", "Thought {{count}} times", { count: thinkingCount }) : "",
+    compactionCount > 0 ? t("agentConsole.processCompactionCount", "Compressed context {{count}} times", { count: compactionCount }) : "",
+    artifactCount > 0 ? t("agentConsole.processArtifactCount", "Created {{count}} artifacts", { count: artifactCount }) : "",
   ].filter(Boolean);
   const singleInlineProcessLabel = steps[0]?.kind === "thinking" && steps[0]?.status === "completed"
     ? t("agentConsole.singleThinkingCompleted", "已思考")
     : steps[0]?.label;
-  const summary = hasBusyStep || isStreaming ? "正在工作..." : isSingleInlineProcess ? singleInlineProcessLabel : summaryParts.length > 0 ? `已使用 ${summaryParts.join("、")}` : "已完成过程记录";
+  const summary = hasBusyStep || isStreaming
+    ? t("agentConsole.processWorkingSummary", "Working...")
+    : isSingleInlineProcess
+      ? singleInlineProcessLabel
+      : summaryParts.length > 0
+        ? summaryParts.join("、")
+        : t("agentConsole.processRecordComplete", "Process record completed");
+  const processNotice = staleActivityNotice || (hasRejectedApprovalStep && !isStreaming ? t("agentConsole.rejectedApprovalProcessNotice", "Approval was rejected, so the related process was stopped and shown as completed.") : undefined);
   const effectiveApprovalDisplayMode = approvalDisplayMode;
   const effectiveTodoUpdateDisplayMode = mode === "timeline" ? todoUpdateDisplayMode : "panel";
   const displayItems = buildAgentDisplayStepItems(steps, { mergeThinkingToolSteps });
@@ -589,10 +608,10 @@ export function AgentProcessGroup({ blocks, messageId, sessionId, isStreaming = 
           </button>
         )}
       </div>
-      {staleActivityNotice ? (
+      {processNotice ? (
         <p className="agent-process-stale-note">
           <Icon name="info" size={13} />
-          <span>{staleActivityNotice}</span>
+          <span>{processNotice}</span>
         </p>
       ) : null}
       {expanded && (
@@ -615,6 +634,7 @@ export function AgentProcessGroup({ blocks, messageId, sessionId, isStreaming = 
                 const hasContent = displayStepHasContent(item, { approvalDisplayMode: effectiveApprovalDisplayMode, todoUpdateDisplayMode: effectiveTodoUpdateDisplayMode });
                 const hasFileTarget = stepHasFileTarget(item.displayStep);
                 const hasStaleRunningState = displayStepHasStaleRunningState(item);
+                const hasRejectedApproval = displayStepHasRejectedApproval(item);
                 const detailKind = displayStepDetailKind(item);
                 return (
                   <div key={`${step.kind}-${index}`} className="agent-process-step-compact" data-kind={step.kind} data-status={step.status} data-has-content={hasContent}>
@@ -626,6 +646,12 @@ export function AgentProcessGroup({ blocks, messageId, sessionId, isStreaming = 
                         <span className="agent-process-stale-step-icon">
                           <Icon name="circle-warning" size={13} />
                           <span className="agent-process-stale-step-tip">{staleStepTooltip}</span>
+                        </span>
+                      )}
+                      {hasRejectedApproval && (
+                        <span className="agent-process-stale-step-icon agent-process-rejected-step-icon">
+                          <Icon name="circle-x" size={13} />
+                          <span className="agent-process-stale-step-tip">{rejectedApprovalStepTooltip}</span>
                         </span>
                       )}
                       {hasContent && <Icon name="chevron-right" size={11} className="agent-process-step-caret" style={{ transform: isOpen ? "rotate(90deg)" : undefined }} />}
@@ -650,6 +676,7 @@ export function AgentProcessGroup({ blocks, messageId, sessionId, isStreaming = 
               <div className="agent-process-step-tabs" role="tablist">
                 {displayItems.map((item) => {
                   const hasStaleRunningState = displayStepHasStaleRunningState(item);
+                  const hasRejectedApproval = displayStepHasRejectedApproval(item);
                   return (
                     <button key={`${item.step.kind}-${item.index}`} type="button" className={activeDisplayItem?.index === item.index ? "active" : ""} data-status={item.displayStep.status} data-has-file-target={stepHasFileTarget(item.displayStep) ? "true" : undefined} onClick={() => setActiveIndex(item.index)}>
                       <Icon name={stepIconName(item.displayStep)} size={11} />
@@ -658,6 +685,12 @@ export function AgentProcessGroup({ blocks, messageId, sessionId, isStreaming = 
                         <span className="agent-process-stale-step-icon">
                           <Icon name="circle-warning" size={13} />
                           <span className="agent-process-stale-step-tip">{staleStepTooltip}</span>
+                        </span>
+                      )}
+                      {hasRejectedApproval && (
+                        <span className="agent-process-stale-step-icon agent-process-rejected-step-icon">
+                          <Icon name="circle-x" size={13} />
+                          <span className="agent-process-stale-step-tip">{rejectedApprovalStepTooltip}</span>
                         </span>
                       )}
                     </button>

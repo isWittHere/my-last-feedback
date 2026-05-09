@@ -69,7 +69,7 @@ const thinkingPreset: MatrixPreset = {
       for (let frameIndex = 0; frameIndex < 60; frameIndex += 1) {
         const progress = frameIndex / 60;
         const angleA = progress * Math.PI * 2;
-        const angleB = progress * Math.PI * -3;
+        const angleB = progress * Math.PI * -4;
         const angleC = progress * Math.PI * 4;
         const pointAX = 3 + Math.cos(angleA) * 3;
         const pointAY = 3 + Math.sin(angleA) * 3;
@@ -134,7 +134,7 @@ const toolRipplePreset: MatrixPreset = {
           const deltaX = Math.abs(x - 3);
           const deltaY = Math.abs(y - 3);
           const distance = Math.max(deltaX, deltaY) * 0.5 + Math.hypot(deltaX, deltaY) * 0.5;
-          return Math.sin(distance * 2 - progress * Math.PI * 2.4) * 0.9;
+          return Math.sin(distance * 2 - progress * Math.PI * 2) * 0.9;
         }, 0.42);
       }
     }
