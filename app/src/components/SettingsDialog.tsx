@@ -829,22 +829,24 @@ export function SettingsDialog({ open, onClose }: { open: boolean; onClose: () =
     return (
       <div className="settings-section settings-opencode-section">
         <div className="settings-row settings-row-stacked">
-          <div className="settings-row-info">
-            <span className="settings-label">{t("settings.openCodePermissions", "OpenCode default permissions")}</span>
-            <span className="settings-sublabel">{t("settings.openCodePermissionsDesc", "These permissions are applied to new OpenCode sessions. Active sessions can be adjusted from the Agent header.")}</span>
+          <div className="settings-opencode-permission-summary-row">
+            <div className="settings-row-info">
+              <span className="settings-label">{t("settings.openCodePermissions", "OpenCode default permissions")}</span>
+              <span className="settings-sublabel">{t("settings.openCodePermissionsDesc", "These permissions are applied to new OpenCode sessions. Active sessions can be adjusted from the Agent header.")}</span>
+            </div>
+            <SettingsSegmentedControl
+              ariaLabel={t("settings.openCodePermissionPresets", "Permission presets")}
+              value={activePresetId || ""}
+              onChange={(presetId) => handleOpenCodePermissionPresetChange(presetId as OpenCodePermissionPresetId)}
+              className="settings-opencode-preset-options"
+              options={OPEN_CODE_PERMISSION_PRESETS.map((preset) => ({
+                id: preset.id,
+                label: t(preset.labelKey, preset.defaultLabel),
+                icon: <Icon name={preset.icon} size={11} />,
+                variant: openCodePermissionPresetVariant(preset.id),
+              }))}
+            />
           </div>
-          <SettingsSegmentedControl
-            ariaLabel={t("settings.openCodePermissionPresets", "Permission presets")}
-            value={activePresetId || ""}
-            onChange={(presetId) => handleOpenCodePermissionPresetChange(presetId as OpenCodePermissionPresetId)}
-            className="settings-opencode-preset-options"
-            options={OPEN_CODE_PERMISSION_PRESETS.map((preset) => ({
-              id: preset.id,
-              label: t(preset.labelKey, preset.defaultLabel),
-              icon: <Icon name={preset.icon} size={11} />,
-              variant: openCodePermissionPresetVariant(preset.id),
-            }))}
-          />
           <div className="settings-submitted-section-list settings-opencode-permission-list">
             <div className="settings-submitted-section-head settings-opencode-permission-head">
               <span>{t("settings.openCodePermission", "Permission")}</span>

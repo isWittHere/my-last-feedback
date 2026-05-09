@@ -742,7 +742,6 @@ export function FeedbackApp() {
             <button
               className={`app-view-toggle-btn${appView === "MLFB" ? " app-view-toggle-active" : ""}`}
               onClick={() => setAppView("MLFB")}
-              title={t("app.title", "My Last Feedback")}
             >
               <Icon name="message" size={12} />
               MLFB
@@ -750,7 +749,6 @@ export function FeedbackApp() {
             <button
               className={`app-view-toggle-btn${appView === "MLRA" ? " app-view-toggle-active" : ""}`}
               onClick={() => setAppView("MLRA")}
-              title={t("mlra.title", "My Long Running Agents")}
             >
               <Icon name="clock" size={12} />
               MLRA

@@ -789,39 +789,44 @@ body,
 
 /* App view toggle (MLFB / MLRA) */
 .app-view-toggle {
-  --app-view-toggle-radius: 6px;
-  display: inline-flex;
-  background: var(--color-bg-base);
-  border-radius: var(--app-view-toggle-radius);
-  padding: 2px;
-  gap: 2px;
-  border: 1px solid var(--color-border-subtle);
-}
-.app-view-toggle-btn {
   display: inline-flex;
   align-items: center;
-  gap: 4px;
-  font-size: 10px;
-  font-weight: 600;
-  padding: 2px 8px;
-  border: none;
-  border-radius: calc(var(--app-view-toggle-radius) - 2px);
-  cursor: pointer;
+  width: max-content;
+  max-width: 100%;
+  gap: 2px;
+  padding: 2px;
+  border: 1px solid var(--color-border-subtle);
+  border-radius: 7px;
+  background: color-mix(in srgb, var(--color-bg-input-raised) 64%, transparent);
+}
+.app-view-toggle-btn {
+  flex: 0 0 auto;
+  height: 20px;
+  min-width: 28px;
+  padding: 0 8px;
+  border: 0;
+  border-radius: 4px;
   background: transparent;
   color: var(--color-text-muted);
-  transition: background 0.15s, color 0.15s;
-  line-height: 1.4;
-  letter-spacing: 0.5px;
+  font-size: 11px;
+  font-weight: 450;
+  cursor: pointer;
+  white-space: nowrap;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 3px;
+}
+.app-view-toggle-btn svg {
+  flex: 0 0 auto;
 }
 .app-view-toggle-btn:hover {
   color: var(--color-text-primary);
+  background: color-mix(in srgb, var(--color-bg-elevated) 82%, transparent);
 }
-.app-view-toggle-active {
-  background: #4db6ac;
-  color: #fff;
-}
-.app-view-toggle-active:hover {
-  color: #fff;
+.app-view-toggle-btn.app-view-toggle-active {
+  color: var(--color-text-primary);
+  background: color-mix(in srgb, var(--color-primary) 16%, transparent);
 }
 
 /* MLRA mode title bar stripes */
@@ -855,7 +860,7 @@ body,
   background: transparent;
   color: var(--color-text-secondary);
   cursor: pointer;
-  border-radius: var(--radius-md);
+  border-radius: 5px;
   transition: background 0.12s, color 0.12s;
   font-size: 10px;
   padding: 0;
@@ -882,7 +887,7 @@ body,
   box-shadow: inset 0 0 0 1px color-mix(in srgb, var(--color-border-subtle) 70%, transparent);
 }
 .titlebar-dock-group .titlebar-btn {
-  width: 20px;
+  width: 22px;
   height: 22px;
   border-radius: 5px;
   box-shadow: none;
@@ -2999,28 +3004,34 @@ body,
   background: color-mix(in srgb, var(--color-primary) 12%, transparent);
 }
 
+.agent-permission-indicator[data-permission-tone] {
+  --agent-permission-tone: var(--color-primary);
+  color: color-mix(in srgb, var(--agent-permission-tone) 82%, var(--color-text-primary));
+  border-color: transparent;
+  background: color-mix(in srgb, var(--agent-permission-tone) 12%, transparent);
+}
+
 .agent-permission-indicator[data-permission-tone="allow"] {
-  color: color-mix(in srgb, var(--color-success) 82%, var(--color-text-primary));
-  border-color: color-mix(in srgb, var(--color-success) 32%, var(--color-border));
-  background: color-mix(in srgb, var(--color-success) 10%, transparent);
+  --agent-permission-tone: var(--color-success);
 }
 
 .agent-permission-indicator[data-permission-tone="ask"] {
-  color: color-mix(in srgb, var(--color-warning) 86%, var(--color-text-primary));
-  border-color: color-mix(in srgb, var(--color-warning) 34%, var(--color-border));
-  background: color-mix(in srgb, var(--color-warning) 12%, transparent);
+  --agent-permission-tone: var(--color-warning);
 }
 
 .agent-permission-indicator[data-permission-tone="override"] {
-  color: color-mix(in srgb, #a855f7 76%, var(--color-text-primary));
-  border-color: color-mix(in srgb, #a855f7 34%, var(--color-border));
-  background: color-mix(in srgb, #a855f7 13%, transparent);
+  --agent-permission-tone: #a855f7;
 }
 
 .agent-permission-indicator[data-permission-tone="deny"] {
-  color: color-mix(in srgb, var(--color-danger) 82%, var(--color-text-primary));
-  border-color: color-mix(in srgb, var(--color-danger) 34%, var(--color-border));
-  background: color-mix(in srgb, var(--color-danger) 12%, transparent);
+  --agent-permission-tone: var(--color-danger);
+}
+
+.agent-permission-indicator[data-permission-tone]:hover,
+.agent-permission-indicator[data-permission-tone]:focus-visible,
+.agent-permission-indicator[data-permission-tone].active {
+  border-color: color-mix(in srgb, var(--agent-permission-tone) 42%, var(--color-border));
+  background: color-mix(in srgb, var(--agent-permission-tone) 16%, transparent);
 }
 
 .agent-permission-popover {
@@ -3116,7 +3127,7 @@ body,
 }
 
 .settings-segmented-option {
-  flex: 0 1 auto;
+  flex: 0 0 auto;
   height: 20px;
   min-width: 28px;
   padding: 0 8px;
@@ -3132,6 +3143,14 @@ body,
   align-items: center;
   justify-content: center;
   gap: 3px;
+}
+
+.settings-segmented-option svg {
+  flex: 0 0 auto;
+}
+
+.settings-segmented-label {
+  flex: 0 0 auto;
 }
 
 .settings-segmented-icon-only .settings-segmented-option {
@@ -3912,6 +3931,20 @@ body,
   color: var(--color-success);
   border-color: color-mix(in srgb, var(--color-success) 35%, transparent);
   background: color-mix(in srgb, var(--color-success) 12%, transparent);
+}
+
+.agent-console-topbar-action.agent-permission-indicator[data-permission-tone] {
+  color: color-mix(in srgb, var(--agent-permission-tone) 82%, var(--color-text-primary));
+  border-color: transparent;
+  background: color-mix(in srgb, var(--agent-permission-tone) 12%, transparent);
+}
+
+.agent-console-topbar-action.agent-permission-indicator[data-permission-tone]:hover,
+.agent-console-topbar-action.agent-permission-indicator[data-permission-tone]:focus-visible,
+.agent-console-topbar-action.agent-permission-indicator[data-permission-tone].active {
+  color: color-mix(in srgb, var(--agent-permission-tone) 82%, var(--color-text-primary));
+  border-color: color-mix(in srgb, var(--agent-permission-tone) 42%, var(--color-border));
+  background: color-mix(in srgb, var(--agent-permission-tone) 16%, transparent);
 }
 
 .agent-console-topbar-action:disabled {
@@ -8945,6 +8978,11 @@ body,
   gap: 8px;
 }
 
+.settings-agent-approval-options {
+  width: 100%;
+  grid-template-columns: minmax(0, 0.75fr) minmax(0, 0.55fr);
+}
+
 .settings-agent-toggle-row {
   min-width: 0;
   align-items: flex-start;
@@ -13780,13 +13818,33 @@ button.mlra-inspector-gate-pill {
   width: 100%;
 }
 
+.settings-opencode-permission-summary-row {
+  width: 100%;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+}
+
+.settings-opencode-permission-summary-row .settings-row-info {
+  min-width: 0;
+}
+
+.settings-opencode-permission-summary-row .settings-sublabel {
+  white-space: normal;
+}
+
 .settings-opencode-preset-options {
+  flex: 0 0 auto;
   align-self: flex-end;
   flex-direction: row-reverse;
+  padding: 3px;
 }
 
 .settings-opencode-preset-options .settings-segmented-option {
+  height: 26px;
   min-width: 72px;
+  font-weight: 650;
 }
 
 .settings-opencode-permission-head,
