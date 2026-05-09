@@ -4201,19 +4201,23 @@ body,
   display: inline-block;
   background: var(--agent-silver-shimmer-background, linear-gradient(
     100deg,
-    var(--color-text-muted) 0%,
-    var(--color-text-muted) 36%,
+    var(--agent-silver-shimmer-text-color, var(--color-text-muted)) 0%,
+    var(--agent-silver-shimmer-text-color, var(--color-text-muted)) 36%,
     color-mix(in srgb, var(--color-text-primary) 72%, #ffffff) 48%,
     color-mix(in srgb, var(--color-text-primary) 90%, #ffffff) 50%,
     color-mix(in srgb, var(--color-text-primary) 72%, #ffffff) 52%,
-    var(--color-text-muted) 64%,
-    var(--color-text-muted) 100%
+    var(--agent-silver-shimmer-text-color, var(--color-text-muted)) 64%,
+    var(--agent-silver-shimmer-text-color, var(--color-text-muted)) 100%
   ));
   background-size: 300% 100%;
   background-clip: text;
   -webkit-background-clip: text;
   -webkit-text-fill-color: transparent;
   animation: agent-approval-label-shimmer 2.6s linear infinite;
+}
+
+.agent-process-step-tabs .agent-silver-shimmer-text {
+  --agent-silver-shimmer-text-color: currentColor;
 }
 
 @keyframes agent-approval-label-shimmer {
@@ -4287,7 +4291,7 @@ body,
   flex: 0 0 auto;
   justify-content: flex-end;
   gap: 3px;
-  margin-left: auto;
+  margin-left: 5px;
 }
 
 .agent-current-status-row[data-status-kind="approval"] .agent-approval-row-actions {
@@ -4993,7 +4997,7 @@ body,
 .agent-process-step-detail[data-kind="thinking"] .agent-process-markdown,
 .agent-process-merged-thinking .agent-process-markdown,
 .agent-process-tab-detail[data-kind="thinking"] .agent-process-markdown {
-  opacity: 0.78;
+  opacity: 0.75;
 }
 
 .agent-process-step-detail-scroll {
@@ -5118,12 +5122,30 @@ body,
 }
 
 .agent-process-pre-card,
+.agent-process-edit-tool-panel,
 .agent-process-task-list,
 .agent-process-artifacts {
   min-width: 0;
   border: 1px solid var(--color-border-subtle);
   border-radius: var(--radius-sm);
   background: color-mix(in srgb, var(--color-bg-surface) 72%, transparent);
+}
+
+.agent-process-edit-tool-panel {
+  display: flex;
+  flex-direction: column;
+  gap: 7px;
+  padding: 0;
+  border: 0;
+  background: transparent;
+}
+
+.agent-process-edit-tool-panel .agent-diff-patch-list {
+  margin-top: 0;
+}
+
+.agent-process-edit-tool-panel .agent-diff-code-block {
+  max-height: min(36vh, 320px);
 }
 
 .agent-process-tab-detail {
@@ -5185,6 +5207,7 @@ body,
   align-items: center;
   gap: 8px;
   min-width: 0;
+  margin-left: 5px;
 }
 
 .agent-process-attached-approval[data-compact="true"] {
@@ -5224,14 +5247,12 @@ body,
 
 .agent-process-attached-approval-state {
   flex: 0 0 auto;
-  margin-left: auto;
   color: var(--color-text-muted);
   font-size: 12px;
 }
 
 .agent-process-attached-approval .agent-approval-row-actions {
   flex: 0 0 auto;
-  margin-left: auto;
 }
 
 .agent-process-pre-label {

@@ -36,6 +36,19 @@ function asRecord(value: unknown): Record<string, unknown> {
   return typeof value === "object" && value !== null ? value as Record<string, unknown> : {};
 }
 
+function parseJsonRecord(value: string | undefined): Record<string, unknown> {
+  if (!value) return {};
+  try { return asRecord(JSON.parse(value)); } catch { return {}; }
+}
+
+function firstString(record: Record<string, unknown>, names: string[]): string {
+  for (const name of names) {
+    const value = record[name];
+    if (typeof value === "string" && value.length > 0) return value;
+  }
+  return "";
+}
+
 function countPatchLines(patch: string): { additions: number; deletions: number } {
   let additions = 0;
   let deletions = 0;
@@ -52,6 +65,39 @@ function permissionFileStatus(type: unknown): AgentUiDiffFile["status"] {
   if (type === "delete") return "delete";
   if (type === "update" || type === "move") return "edit";
   return "unknown";
+}
+
+function diffFileFromRecord(value: unknown): AgentUiDiffFile | null {
+  const record = asRecord(value);
+  const path = firstString(record, ["relativePath", "filePath", "filepath", "path", "file"]);
+  const patch = firstString(record, ["patch", "diff"]);
+  if (!path || !patch) return null;
+  const counts = countPatchLines(patch);
+  return {
+    path,
+    patch,
+    additions: typeof record.additions === "number" ? record.additions : counts.additions,
+    deletions: typeof record.deletions === "number" ? record.deletions : counts.deletions,
+    status: permissionFileStatus(record.type || record.status || record.changeType),
+  };
+}
+
+function diffFilesFromArray(value: unknown): AgentUiDiffFile[] {
+  return Array.isArray(value) ? value.map(diffFileFromRecord).filter((file): file is AgentUiDiffFile => Boolean(file)) : [];
+}
+
+function patchFromTextChange(path: string, oldText: string, newText: string): string {
+  const oldLines = oldText ? oldText.split(/\r?\n/) : [];
+  const newLines = newText ? newText.split(/\r?\n/) : [];
+  return [
+    `Index: ${path}`,
+    "===================================================================",
+    `--- ${path}`,
+    `+++ ${path}`,
+    `@@ -1,${oldLines.length} +1,${newLines.length} @@`,
+    ...oldLines.map((line) => `-${line}`),
+    ...newLines.map((line) => `+${line}`),
+  ].join("\n");
 }
 
 export function sessionDiffFilesToUiFiles(files: AgentSessionFileDiff[] | undefined): AgentUiDiffFile[] {
@@ -89,6 +135,36 @@ export function permissionBlockToDiffFiles(block: AgentPermissionBlock | undefin
   return [{ path, patch, additions: counts.additions, deletions: counts.deletions, status: "edit" }];
 }
 
+export function toolCallToDiffFiles(args: Record<string, unknown> | undefined, result: string | undefined): AgentUiDiffFile[] {
+  const argsRecord = asRecord(args);
+  const resultRecord = parseJsonRecord(result);
+  const arrayFiles = [
+    ...diffFilesFromArray(argsRecord.files),
+    ...diffFilesFromArray(argsRecord.edits),
+    ...diffFilesFromArray(resultRecord.files),
+    ...diffFilesFromArray(resultRecord.edits),
+  ];
+  if (arrayFiles.length > 0) return arrayFiles;
+
+  const path = firstString(argsRecord, ["relativePath", "filePath", "filepath", "path", "file"])
+    || firstString(resultRecord, ["relativePath", "filePath", "filepath", "path", "file"]);
+  const patch = firstString(argsRecord, ["patch", "diff"]) || firstString(resultRecord, ["patch", "diff"]);
+  if (path && patch) {
+    const counts = countPatchLines(patch);
+    return [{ path, patch, additions: counts.additions, deletions: counts.deletions, status: "edit" }];
+  }
+
+  const oldText = firstString(argsRecord, ["oldString", "old_string", "oldText", "old_text"]);
+  const newText = firstString(argsRecord, ["newString", "new_string", "newText", "new_text", "content"]);
+  if (path && (oldText || newText)) {
+    const syntheticPatch = patchFromTextChange(path, oldText, newText);
+    const counts = countPatchLines(syntheticPatch);
+    return [{ path, patch: syntheticPatch, additions: counts.additions, deletions: counts.deletions, status: oldText ? "edit" : "create" }];
+  }
+
+  return [];
+}
+
 function DiffLine({ line, index }: { line: string; index: number }) {
   const kind = line.startsWith("+++") || line.startsWith("---") || line.startsWith("@@")
     ? "meta"
@@ -100,7 +176,7 @@ function DiffLine({ line, index }: { line: string; index: number }) {
   return <div className={`agent-diff-code-line agent-diff-code-line-${kind}`}><span className="agent-diff-line-number">{index + 1}</span><span className="agent-diff-line-text">{line || " "}</span></div>;
 }
 
-export function AgentDiffPatchList({ files, emptyLabel }: { files: AgentUiDiffFile[]; emptyLabel?: string }) {
+export function AgentDiffPatchList({ files, emptyLabel, defaultCollapsed = false }: { files: AgentUiDiffFile[]; emptyLabel?: string; defaultCollapsed?: boolean }) {
   const { t } = useTranslation();
   const { diffVisual } = useAgentConsoleSettings();
   const colorPreset = getAgentDiffColorPreset(diffVisual.colorPresetId);
@@ -112,7 +188,7 @@ export function AgentDiffPatchList({ files, emptyLabel }: { files: AgentUiDiffFi
   return (
     <div className="agent-diff-patch-list" style={diffVisualStyle}>
       {files.map((file) => (
-        <details key={`${file.path}-${file.patch.length}`} className="agent-diff-patch-file" open={files.length === 1}>
+        <details key={`${file.path}-${file.patch.length}`} className="agent-diff-patch-file" open={!defaultCollapsed && files.length === 1}>
           <summary className="agent-diff-patch-summary">
             <span className="agent-diff-patch-path">{file.path}</span>
             <span className="agent-diff-patch-meter" aria-hidden="true">

@@ -98,6 +98,7 @@ function formatFileSummary(t: ReturnType<typeof useTranslation>["t"], fileSummar
 
 function AgentApprovalStatusRow({ session, status }: { session: AgentSession; status: AgentApprovalCurrentStatus }) {
   const { t } = useTranslation();
+  const { collapseEditApprovalDiffByDefault } = useAgentConsoleSettings();
   const label = status.variant === "apply_edit" ? t("agentConsole.currentStatusApplyEdit", "Apply edits") : t("agentConsole.requestApproval", "Request approval");
   const title = status.title || t("agentConsole.permissionPending", "Permission request pending");
   const isCommandApproval = isCommandLikeApproval({ permission: status.permissionBlock, toolCall: status.toolCall, fallbackTitle: title });
@@ -121,7 +122,7 @@ function AgentApprovalStatusRow({ session, status }: { session: AgentSession; st
       <AgentApprovalActions sessionId={session.id} requestId={status.requestId} options={status.options} />
       {permissionDiffFiles.length > 0 && (
         <div className="agent-approval-diff-panel">
-          <AgentDiffPatchList files={permissionDiffFiles} />
+          <AgentDiffPatchList files={permissionDiffFiles} defaultCollapsed={collapseEditApprovalDiffByDefault} />
         </div>
       )}
     </section>

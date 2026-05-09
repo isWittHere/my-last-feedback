@@ -454,6 +454,8 @@
     "agentApprovalDisplayStep": "In step",
     "agentApprovalDisplayStatusPanel": "Permission panel",
     "agentApprovalDisplayAll": "All",
+    "agentCollapseEditApprovalDiff": "Collapse edit approval panel by default",
+    "agentCollapseEditApprovalDiffDesc": "When enabled, file edit details in the permission approval panel start collapsed.",
     "agentMessageSpeakerLine": "Show session avatar and name during chat",
     "agentMessageSpeakerLineDesc": "Show the session avatar and name above each Agent message.",
     "agentDiffVisualAdjustment": "Diff visual adjustment",

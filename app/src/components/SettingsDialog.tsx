@@ -325,6 +325,14 @@ export function SettingsDialog({ open, onClose }: { open: boolean; onClose: () =
     });
   }, []);
 
+  const handleAgentCollapseEditApprovalDiffToggle = useCallback(() => {
+    setAgentConsoleSettings((prev) => {
+      const next = { ...prev, collapseEditApprovalDiffByDefault: !prev.collapseEditApprovalDiffByDefault };
+      saveAgentConsoleSettings(next);
+      return next;
+    });
+  }, []);
+
   const handleAgentAutoCleanupToggle = useCallback(() => {
     let shouldCleanup = false;
     setAgentConsoleSettings((prev) => {
@@ -1442,6 +1450,21 @@ export function SettingsDialog({ open, onClose }: { open: boolean; onClose: () =
                         : t("settings.agentApprovalDisplayModeDesc", "Choose where pending approval actions appear.")}</span>
                     </div>
                     {renderAgentApprovalDisplayModeGroup()}
+                  </div>
+                  <div className="settings-row">
+                    <div className="settings-row-info">
+                      <span className="settings-label">{t("settings.agentCollapseEditApprovalDiff", "Collapse edit approval details by default")}</span>
+                      <span className="settings-sublabel">{t("settings.agentCollapseEditApprovalDiffDesc", "When enabled, file edit details in the approval panel start collapsed.")}</span>
+                    </div>
+                    <button
+                      type="button"
+                      className={`settings-toggle${agentConsoleSettings.collapseEditApprovalDiffByDefault ? " settings-toggle-on" : ""}`}
+                      onClick={handleAgentCollapseEditApprovalDiffToggle}
+                      aria-label={t("settings.agentCollapseEditApprovalDiff", "Collapse edit approval details by default")}
+                      aria-pressed={agentConsoleSettings.collapseEditApprovalDiffByDefault}
+                    >
+                      <span className="settings-toggle-knob" />
+                    </button>
                   </div>
                   <div className="settings-row">
                     <div className="settings-row-info">

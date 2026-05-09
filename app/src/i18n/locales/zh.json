@@ -454,6 +454,8 @@
     "agentApprovalDisplayStep": "在 Step 内显示",
     "agentApprovalDisplayStatusPanel": "由权限面板显示",
     "agentApprovalDisplayAll": "全部显示",
+    "agentCollapseEditApprovalDiff": "编辑权限批准面板默认折叠",
+    "agentCollapseEditApprovalDiffDesc": "开启后，权限批准面板中的文件编辑详情区会默认折叠。",
     "agentMessageSpeakerLine": "在聊天过程中显示会话头像和名称",
     "agentMessageSpeakerLineDesc": "在每条 Agent 消息上方显示会话头像和名称。",
     "agentDiffVisualAdjustment": "Diff 视觉调整",

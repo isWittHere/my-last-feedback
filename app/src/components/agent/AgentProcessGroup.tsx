@@ -10,6 +10,7 @@ import { CatppuccinResourceIcon } from "../CatppuccinResourceIcon";
 import { Icon } from "../Icons";
 import { MarkdownContent } from "../MarkdownContent";
 import { AgentApprovalActions } from "./AgentCurrentStatusRow";
+import { AgentDiffPatchList, toolCallToDiffFiles } from "./AgentDiffViewer";
 
 type ProcessViewMode = AgentProcessStepDefaultMode;
 
@@ -102,18 +103,19 @@ function AgentProcessFileTag({ path }: { path: string }) {
   );
 }
 
-function StepHeadLabel({ step, fallbackLabel }: { step: AgentStepItem; fallbackLabel: string }) {
+function StepHeadLabel({ step, fallbackLabel, shimmer = false }: { step: AgentStepItem; fallbackLabel: string; shimmer?: boolean }) {
   const { t } = useTranslation();
   const target = getAgentStepTarget(step);
+  const labelClassName = `agent-process-step-label-text${shimmer ? " agent-silver-shimmer-text" : ""}`;
   if (target && (step.tone === "document_change" || step.tone === "document_read")) {
     return (
       <>
-        <span className="agent-process-step-label-text">{getAgentStepTypeLabel(step, t)}</span>
+        <span className={labelClassName}>{getAgentStepTypeLabel(step, t)}</span>
         <AgentProcessFileTag path={target} />
       </>
     );
   }
-  return <span className="agent-process-step-label-text">{getAgentStepDisplayLabel(step, t, fallbackLabel)}</span>;
+  return <span className={labelClassName}>{getAgentStepDisplayLabel(step, t, fallbackLabel)}</span>;
 }
 
 function stepHasFileTarget(step: AgentStepItem): boolean {
@@ -166,6 +168,19 @@ function StepDetail({ step, projectDirectory, sessionId, approvalDisplayMode = "
       : <p className="agent-process-detail-note">{step.status === "running" ? "正在压缩上下文" : step.status === "failed" ? "上下文压缩失败" : "上下文已压缩"}</p>;
   }
   if (step.kind === "tool") {
+    const editDiffFiles = step.tone === "document_change" ? toolCallToDiffFiles(step.args, step.result) : [];
+    if (editDiffFiles.length > 0) {
+      return (
+        <div className="agent-process-edit-tool-panel">
+          <AgentDiffPatchList files={editDiffFiles} />
+          {approvalDisplayMode !== "statusPanel" && step.permissions?.map((permission) => (
+            <div key={permission.id} className="agent-process-pre-section agent-process-pre-section-approval">
+              <AgentProcessAttachedApproval step={step} permission={permission} sessionId={sessionId} />
+            </div>
+          ))}
+        </div>
+      );
+    }
     return (
       <div className="agent-process-pre-card">
         {step.args && (
@@ -558,9 +573,9 @@ export function AgentProcessGroup({ blocks, messageId, sessionId, isStreaming = 
             <div className="agent-process-tab-mode">
               <div className="agent-process-step-tabs" role="tablist">
                 {displayItems.map((item) => (
-                  <button key={`${item.step.kind}-${item.index}`} type="button" className={activeDisplayItem?.index === item.index ? "active" : ""} data-has-file-target={stepHasFileTarget(item.displayStep) ? "true" : undefined} onClick={() => setActiveIndex(item.index)}>
+                  <button key={`${item.step.kind}-${item.index}`} type="button" className={activeDisplayItem?.index === item.index ? "active" : ""} data-status={item.displayStep.status} data-has-file-target={stepHasFileTarget(item.displayStep) ? "true" : undefined} onClick={() => setActiveIndex(item.index)}>
                     <Icon name={stepIconName(item.displayStep)} size={11} />
-                    <StepHeadLabel step={item.displayStep} fallbackLabel={item.displayStep.label} />
+                    <StepHeadLabel step={item.displayStep} fallbackLabel={item.displayStep.label} shimmer={item.displayStep.status === "running" || item.displayStep.status === "pending"} />
                     {item.step.staleRunningState && (
                       <span className="agent-process-stale-step-icon">
                         <Icon name="circle-warning" size={13} />

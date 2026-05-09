@@ -35,6 +35,7 @@ export interface AgentConsoleSettings {
   timelineStreamingStepMode: AgentTimelineStreamingStepMode;
   todoUpdateDisplayMode: AgentTodoUpdateDisplayMode;
   approvalDisplayMode: AgentApprovalDisplayMode;
+  collapseEditApprovalDiffByDefault: boolean;
   collapseConsecutiveOutputBlankLines: boolean;
   mergeThinkingToolSteps: boolean;
   showMessageSpeakerLine: boolean;
@@ -64,6 +65,7 @@ const DEFAULT_SETTINGS: AgentConsoleSettings = {
   timelineStreamingStepMode: "collapseHistory",
   todoUpdateDisplayMode: "panel",
   approvalDisplayMode: "all",
+  collapseEditApprovalDiffByDefault: false,
   collapseConsecutiveOutputBlankLines: false,
   mergeThinkingToolSteps: false,
   showMessageSpeakerLine: true,
@@ -158,6 +160,7 @@ export function getAgentConsoleSettings(): AgentConsoleSettings {
       timelineStreamingStepMode: isTimelineStreamingStepMode(parsed.timelineStreamingStepMode) ? parsed.timelineStreamingStepMode : DEFAULT_SETTINGS.timelineStreamingStepMode,
       todoUpdateDisplayMode: isTodoUpdateDisplayMode(parsed.todoUpdateDisplayMode) ? parsed.todoUpdateDisplayMode : DEFAULT_SETTINGS.todoUpdateDisplayMode,
       approvalDisplayMode: isApprovalDisplayMode(parsed.approvalDisplayMode) ? parsed.approvalDisplayMode : DEFAULT_SETTINGS.approvalDisplayMode,
+      collapseEditApprovalDiffByDefault: typeof parsed.collapseEditApprovalDiffByDefault === "boolean" ? parsed.collapseEditApprovalDiffByDefault : DEFAULT_SETTINGS.collapseEditApprovalDiffByDefault,
       collapseConsecutiveOutputBlankLines: typeof parsed.collapseConsecutiveOutputBlankLines === "boolean" ? parsed.collapseConsecutiveOutputBlankLines : DEFAULT_SETTINGS.collapseConsecutiveOutputBlankLines,
       mergeThinkingToolSteps: typeof parsed.mergeThinkingToolSteps === "boolean" ? parsed.mergeThinkingToolSteps : DEFAULT_SETTINGS.mergeThinkingToolSteps,
       showMessageSpeakerLine: typeof parsed.showMessageSpeakerLine === "boolean" ? parsed.showMessageSpeakerLine : DEFAULT_SETTINGS.showMessageSpeakerLine,
