@@ -1,4 +1,4 @@
-import { Fragment, useCallback, useEffect, useRef, useState } from "react";
+import { Fragment, useCallback, useEffect, useRef, useState, type CSSProperties } from "react";
 import { useAgentConsoleSettings } from "../../agentConsoleSettings";
 import type { AgentContentBlock, AgentProviderMessagePart, AgentSession } from "../../agent/types";
 import { AgentMessageItem } from "./AgentMessageItem";
@@ -85,11 +85,20 @@ export function AgentMessageTimeline({ session }: { session: AgentSession }) {
   const endRef = useRef<HTMLDivElement>(null);
   const scrollRef = useRef<HTMLDivElement>(null);
   const topOverlayRef = useRef<HTMLDivElement>(null);
+  const stickyUserBarRef = useRef<HTMLButtonElement>(null);
+  const stickyUserTextRef = useRef<HTMLSpanElement>(null);
+  const stickyUserHeightRef = useRef(0);
   const messagesRef = useRef(session.messages);
   const shouldAutoFollowRef = useRef(true);
   const [stickyUserContent, setStickyUserContent] = useState<string | null>(null);
+  const [renderedStickyUserContent, setRenderedStickyUserContent] = useState<string | null>(null);
   const [stickyUserMsgId, setStickyUserMsgId] = useState<string | null>(null);
+  const [stickyUserHeight, setStickyUserHeight] = useState(0);
+  const [stickyUserResizeDirection, setStickyUserResizeDirection] = useState<"growing" | "shrinking" | "stable">("stable");
   const isStreaming = session.messages.some((message) => message.status === "streaming");
+  const hasStickyUserContent = Boolean(stickyUserContent);
+  const hasRenderedStickyUserContent = Boolean(renderedStickyUserContent);
+  const isStickyUserExiting = !hasStickyUserContent && hasRenderedStickyUserContent;
 
   messagesRef.current = session.messages;
 
@@ -159,6 +168,50 @@ export function AgentMessageTimeline({ session }: { session: AgentSession }) {
     }
   }, [showStickyUserMessageBar]);
 
+  useEffect(() => {
+    if (stickyUserContent) {
+      setRenderedStickyUserContent(stickyUserContent);
+      return;
+    }
+    if (!renderedStickyUserContent) return;
+    const timer = window.setTimeout(() => setRenderedStickyUserContent(null), 220);
+    return () => window.clearTimeout(timer);
+  }, [renderedStickyUserContent, stickyUserContent]);
+
+  useEffect(() => {
+    const element = stickyUserBarRef.current;
+    const textElement = stickyUserTextRef.current;
+    if (!element || !textElement || !showStickyUserMessageBar || !hasStickyUserContent) {
+      stickyUserHeightRef.current = 0;
+      setStickyUserResizeDirection("shrinking");
+      setStickyUserHeight(0);
+      return;
+    }
+    let frame = 0;
+    const updateHeight = () => {
+      const style = getComputedStyle(element);
+      const verticalChrome = [style.paddingTop, style.paddingBottom, style.borderTopWidth, style.borderBottomWidth]
+        .map((value) => Number.parseFloat(value) || 0)
+        .reduce((sum, value) => sum + value, 0);
+      const nextHeight = Math.ceil(Math.max(24, textElement.getBoundingClientRect().height + verticalChrome));
+      if (frame) cancelAnimationFrame(frame);
+      frame = requestAnimationFrame(() => {
+        frame = 0;
+        const currentHeight = stickyUserHeightRef.current;
+        setStickyUserResizeDirection(nextHeight < currentHeight ? "shrinking" : nextHeight > currentHeight ? "growing" : "stable");
+        stickyUserHeightRef.current = nextHeight;
+        setStickyUserHeight(nextHeight);
+      });
+    };
+    updateHeight();
+    const observer = new ResizeObserver(updateHeight);
+    observer.observe(textElement);
+    return () => {
+      observer.disconnect();
+      if (frame) cancelAnimationFrame(frame);
+    };
+  }, [hasStickyUserContent, mergeStickyUserMessageLines, showStickyUserMessageBar, stickyUserContent]);
+
   const scrollToStickyMessage = useCallback(() => {
     const container = scrollRef.current;
     if (!container || !stickyUserMsgId) return;
@@ -222,15 +275,16 @@ export function AgentMessageTimeline({ session }: { session: AgentSession }) {
       <div className="agent-timeline-top-overlay" ref={topOverlayRef}>
         <AgentSessionHeader session={session} />
         {showStickyUserMessageBar && (
-          <div className="agent-sticky-user-slot">
+          <div className="agent-sticky-user-slot" data-visible={hasRenderedStickyUserContent} data-resize={stickyUserResizeDirection} style={{ "--agent-sticky-user-height": `${stickyUserHeight}px` } as CSSProperties}>
             <button
+              ref={stickyUserBarRef}
               type="button"
-              className={`agent-sticky-user-bar${stickyUserContent ? "" : " agent-sticky-user-bar-hidden"}`}
+              className={`agent-sticky-user-bar${hasRenderedStickyUserContent ? "" : " agent-sticky-user-bar-hidden"}${isStickyUserExiting ? " agent-sticky-user-bar-exiting" : ""}`}
               onClick={scrollToStickyMessage}
-              tabIndex={stickyUserContent ? 0 : -1}
-              aria-hidden={!stickyUserContent}
+              tabIndex={hasStickyUserContent ? 0 : -1}
+              aria-hidden={!hasStickyUserContent}
             >
-              <span className="agent-sticky-user-letter-text"><StickyUserText text={stickyUserContent || ""} mergeLines={mergeStickyUserMessageLines} /></span>
+              <span ref={stickyUserTextRef} className="agent-sticky-user-letter-text"><StickyUserText text={renderedStickyUserContent || ""} mergeLines={mergeStickyUserMessageLines} /></span>
             </button>
           </div>
         )}

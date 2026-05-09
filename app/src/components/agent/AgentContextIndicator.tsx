@@ -22,9 +22,6 @@ export function AgentContextIndicator({ session }: { session: AgentSession }) {
     : `${formatCompactTokenCount(summary.totalTokens)}/${formatCompactTokenCount(summary.contextLimit)}`;
   const windowLabel = summary.contextLimit == null ? t("agentConsole.unknown", "Unknown") : formatCompactTokenCount(summary.contextLimit);
   const remainingLabel = summary.remainingTokens == null ? t("agentConsole.unknown", "Unknown") : formatCompactTokenCount(summary.remainingTokens);
-  const usableLabel = summary.usableLimit == null ? t("agentConsole.unknown", "Unknown") : formatCompactTokenCount(summary.usableLimit);
-  const usableRemainingLabel = summary.usableRemainingTokens == null ? t("agentConsole.unknown", "Unknown") : formatCompactTokenCount(summary.usableRemainingTokens);
-  const reservedLabel = summary.reservedTokens == null ? t("agentConsole.unknown", "Unknown") : formatCompactTokenCount(summary.reservedTokens);
   const contextTokenLabel = summary.contextTokens == null ? null : formatCompactTokenCount(summary.contextTokens);
   const contextTotal = summary.contextLimit ?? summary.totalTokens;
   const idleTokens = summary.contextLimit == null ? 0 : Math.max(0, (summary.usableLimit ?? summary.contextLimit) - summary.totalTokens);
@@ -62,50 +59,52 @@ export function AgentContextIndicator({ session }: { session: AgentSession }) {
           <strong>{summary.contextLimit == null ? t("agentConsole.estimated", "estimated") : `${usedPercent}%`}</strong>
         </div>
         <div className="agent-context-popover-grid">
-          <span>{t("agentConsole.model", "Model")}</span>
-          <strong>{session.modelId || t("agentConsole.unknown", "Unknown")}</strong>
-          <span>{t("agentConsole.window", "Window")}</span>
-          <strong>{windowLabel}</strong>
-          <span>{t("agentConsole.usableContext", "Usable before compression")}</span>
-          <strong>{usableLabel}</strong>
-          <span>{t("agentConsole.reservedContext", "Reserved output")}</span>
-          <strong>{reservedLabel}</strong>
-          <span>{t("agentConsole.used", "Used")}</span>
-          <strong>{formatCompactTokenCount(summary.totalTokens)} {summary.estimated ? t("agentConsole.estimatedShort", "est.") : ""}</strong>
+          <div className="agent-context-popover-metric agent-context-popover-metric-wide">
+            <span>{t("agentConsole.model", "Model")}</span>
+            <strong>{session.modelId || t("agentConsole.unknown", "Unknown")}</strong>
+          </div>
+          <div className="agent-context-popover-metric">
+            <span>{t("agentConsole.window", "Window")}</span>
+            <strong>{windowLabel}</strong>
+          </div>
+          <div className="agent-context-popover-metric">
+            <span>{t("agentConsole.used", "Used")}</span>
+            <strong>{formatCompactTokenCount(summary.totalTokens)} {summary.estimated ? t("agentConsole.estimatedShort", "est.") : ""}</strong>
+          </div>
+          <div className="agent-context-popover-metric">
+            <span>{t("agentConsole.remaining", "Remaining")}</span>
+            <strong>{remainingLabel}</strong>
+          </div>
           {contextTokenLabel && (
-            <>
+            <div className="agent-context-popover-metric">
               <span>{t("agentConsole.contextTokens", "Input context")}</span>
               <strong>{contextTokenLabel}</strong>
-            </>
+            </div>
           )}
           {summary.inputTokens != null && (
-            <>
+            <div className="agent-context-popover-metric">
               <span>{t("agentConsole.inputTokens", "Input")}</span>
               <strong>{formatCompactTokenCount(summary.inputTokens)}</strong>
-            </>
+            </div>
           )}
           {summary.outputTokens != null && (
-            <>
+            <div className="agent-context-popover-metric">
               <span>{t("agentConsole.outputTokens", "Output")}</span>
               <strong>{formatCompactTokenCount(summary.outputTokens)}</strong>
-            </>
+            </div>
           )}
           {summary.reasoningTokens != null && summary.reasoningTokens > 0 && (
-            <>
+            <div className="agent-context-popover-metric">
               <span>{t("agentConsole.reasoningTokens", "Reasoning")}</span>
               <strong>{formatCompactTokenCount(summary.reasoningTokens)}</strong>
-            </>
+            </div>
           )}
           {(summary.cacheReadTokens != null || summary.cacheWriteTokens != null) && (
-            <>
+            <div className="agent-context-popover-metric">
               <span>{t("agentConsole.cacheTokens", "Cache")}</span>
               <strong>{formatCompactTokenCount(summary.cacheReadTokens ?? 0)} / {formatCompactTokenCount(summary.cacheWriteTokens ?? 0)}</strong>
-            </>
+            </div>
           )}
-          <span>{t("agentConsole.remaining", "Remaining")}</span>
-          <strong>{remainingLabel}</strong>
-          <span>{t("agentConsole.usableRemaining", "Before compression")}</span>
-          <strong>{usableRemainingLabel}</strong>
         </div>
         <div className="agent-context-combined-bar" aria-label={t("agentConsole.contextUsage", "Context usage")}>
           {combinedBar}

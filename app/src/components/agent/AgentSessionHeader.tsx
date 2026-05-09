@@ -1,4 +1,4 @@
-import { useEffect, useState } from "react";
+import { useEffect, useState, type TransitionEvent } from "react";
 import { useTranslation } from "react-i18next";
 import { useAgentConsoleSettings } from "../../agentConsoleSettings";
 import { getAgentSessionIdentity } from "../../agent/sessionIdentity";
@@ -21,6 +21,7 @@ export function AgentSessionHeader({ session, previewMode = false }: AgentSessio
   const { t, i18n } = useTranslation();
   const { defaultExpandHeaderDetails } = useAgentConsoleSettings();
   const [expanded, setExpanded] = useState(defaultExpandHeaderDetails);
+  const [detailsOverflowVisible, setDetailsOverflowVisible] = useState(defaultExpandHeaderDetails && !previewMode);
   const [codeCopied, setCodeCopied] = useState(false);
   const identity = getAgentSessionIdentity(session, i18n.language.startsWith("zh") ? "zh" : "en");
   const identityTitle = identity.code ? `${identity.name} (${identity.code}) · ${identity.providerName}` : identity.providerName;
@@ -34,8 +35,21 @@ export function AgentSessionHeader({ session, previewMode = false }: AgentSessio
   };
 
   useEffect(() => {
-    if (!previewMode) setExpanded(defaultExpandHeaderDetails);
+    if (!previewMode) {
+      setExpanded(defaultExpandHeaderDetails);
+      setDetailsOverflowVisible(defaultExpandHeaderDetails);
+    }
   }, [defaultExpandHeaderDetails, previewMode, session.id]);
+
+  const handleDetailsToggle = () => {
+    setDetailsOverflowVisible(false);
+    setExpanded((value) => !value);
+  };
+
+  const handleDetailsTransitionEnd = (event: TransitionEvent<HTMLDivElement>) => {
+    if (event.propertyName !== "grid-template-rows") return;
+    if (expanded && !previewMode) setDetailsOverflowVisible(true);
+  };
 
   return (
     <div className={`agent-console-header${expanded ? " expanded" : ""}${previewMode ? " agent-console-header-preview" : ""}`} data-preview-overlay>
@@ -65,14 +79,20 @@ export function AgentSessionHeader({ session, previewMode = false }: AgentSessio
           {(!expanded || previewMode) && <><AgentDiffIndicator session={session} /><AgentContextIndicator session={session} /></>}
           {!previewMode && (
             <>
-              <button type="button" className="agent-console-topbar-action" onClick={() => setExpanded((value) => !value)} title={expanded ? t("agentConsole.collapseHeader", "Collapse details") : t("agentConsole.expandHeader", "Expand details")} aria-expanded={expanded}>
+              <button type="button" className="agent-console-topbar-action" onClick={handleDetailsToggle} title={expanded ? t("agentConsole.collapseHeader", "Collapse details") : t("agentConsole.expandHeader", "Expand details")} aria-expanded={expanded}>
                 <Icon name="chevron-down" size={13} style={{ transform: expanded ? "rotate(180deg)" : undefined }} />
               </button>
             </>
           )}
         </div>
       </div>
-      {expanded && !previewMode && <AgentHeaderDetailsRow session={session} />}
+      {!previewMode && (
+        <div className="agent-console-header-details-shell" data-expanded={expanded} data-overflow-visible={detailsOverflowVisible} onTransitionEnd={handleDetailsTransitionEnd}>
+          <div className="agent-console-header-details-clip">
+            <AgentHeaderDetailsRow session={session} />
+          </div>
+        </div>
+      )}
     </div>
   );
 }
