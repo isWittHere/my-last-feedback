@@ -65,7 +65,8 @@ function userPromptText(message: AgentSession["messages"][number]): string {
   return extractPromptSection(rawText) || rawText;
 }
 
-function StickyUserText({ text }: { text: string }) {
+function StickyUserText({ text, mergeLines }: { text: string; mergeLines: boolean }) {
+  if (mergeLines) return text.replace(/\s*(?:\r\n|\n|\r)\s*/g, " ").trim();
   return text.split(/\r\n|\n|\r/).map((line, index) => (
     <Fragment key={index}>
       {index > 0 && <br />}
@@ -80,7 +81,7 @@ function StickyUserText({ text }: { text: string }) {
   }
 
 export function AgentMessageTimeline({ session }: { session: AgentSession }) {
-  const { showStickyUserMessageBar } = useAgentConsoleSettings();
+  const { mergeStickyUserMessageLines, showStickyUserMessageBar } = useAgentConsoleSettings();
   const endRef = useRef<HTMLDivElement>(null);
   const scrollRef = useRef<HTMLDivElement>(null);
   const topOverlayRef = useRef<HTMLDivElement>(null);
@@ -229,7 +230,7 @@ export function AgentMessageTimeline({ session }: { session: AgentSession }) {
               tabIndex={stickyUserContent ? 0 : -1}
               aria-hidden={!stickyUserContent}
             >
-              <span className="agent-sticky-user-letter-text"><StickyUserText text={stickyUserContent || ""} /></span>
+              <span className="agent-sticky-user-letter-text"><StickyUserText text={stickyUserContent || ""} mergeLines={mergeStickyUserMessageLines} /></span>
             </button>
           </div>
         )}

@@ -44,6 +44,7 @@ export interface AgentConsoleSettings {
   showMessageSpeakerLine: boolean;
   defaultExpandHeaderDetails: boolean;
   showStickyUserMessageBar: boolean;
+  mergeStickyUserMessageLines: boolean;
   navigationVisualizationMode: AgentNavigationVisualizationMode;
   navigationIndicatorOrder: AgentNavigationIndicatorOrder;
   navigationGroupBackgroundMode: AgentNavigationGroupBackgroundMode;
@@ -76,6 +77,7 @@ const DEFAULT_SETTINGS: AgentConsoleSettings = {
   showMessageSpeakerLine: true,
   defaultExpandHeaderDetails: false,
   showStickyUserMessageBar: true,
+  mergeStickyUserMessageLines: false,
   navigationVisualizationMode: "bars",
   navigationIndicatorOrder: "leftToRight",
   navigationGroupBackgroundMode: "alternate",
@@ -177,6 +179,7 @@ export function getAgentConsoleSettings(): AgentConsoleSettings {
       showMessageSpeakerLine: typeof parsed.showMessageSpeakerLine === "boolean" ? parsed.showMessageSpeakerLine : DEFAULT_SETTINGS.showMessageSpeakerLine,
       defaultExpandHeaderDetails: typeof parsed.defaultExpandHeaderDetails === "boolean" ? parsed.defaultExpandHeaderDetails : DEFAULT_SETTINGS.defaultExpandHeaderDetails,
       showStickyUserMessageBar: typeof parsed.showStickyUserMessageBar === "boolean" ? parsed.showStickyUserMessageBar : DEFAULT_SETTINGS.showStickyUserMessageBar,
+      mergeStickyUserMessageLines: typeof parsed.mergeStickyUserMessageLines === "boolean" ? parsed.mergeStickyUserMessageLines : DEFAULT_SETTINGS.mergeStickyUserMessageLines,
       navigationVisualizationMode: isNavigationVisualizationMode(parsed.navigationVisualizationMode) ? parsed.navigationVisualizationMode : DEFAULT_SETTINGS.navigationVisualizationMode,
       navigationIndicatorOrder: isNavigationIndicatorOrder(parsed.navigationIndicatorOrder) ? parsed.navigationIndicatorOrder : DEFAULT_SETTINGS.navigationIndicatorOrder,
       navigationGroupBackgroundMode: isNavigationGroupBackgroundMode(parsed.navigationGroupBackgroundMode) ? parsed.navigationGroupBackgroundMode : DEFAULT_SETTINGS.navigationGroupBackgroundMode,

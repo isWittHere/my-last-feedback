@@ -1,4 +1,4 @@
-import { useState, useEffect, useCallback, useMemo, type DragEvent as ReactDragEvent, type ReactNode } from "react";
+import { Fragment, useState, useEffect, useCallback, useMemo, type DragEvent as ReactDragEvent, type ReactNode } from "react";
 import { useTranslation } from "react-i18next";
 import i18n from "../i18n";
 import { useFeedbackStore, type DockColumnId, type DockTabId } from "../store/feedbackStore";
@@ -25,6 +25,16 @@ import { SettingsSegmentedControl } from "./SettingsSegmentedControl";
 
 type Tab = "general" | "display" | "callers" | "submitted" | "prompts" | "sessionNavigation" | "gitOperations" | "layoutPanels" | "agentConsole" | "agentStepDisplay" | "agentChat" | "agentSessionManager" | "openCode" | "openCodePermissions" | "terminal" | "resources" | "notification" | "about";
 type SettingsGroupId = "mlfb" | "agent" | "layout";
+
+function renderStickyUserMessageText(text: string, mergeLines: boolean): ReactNode {
+  if (mergeLines) return text.replace(/\s*(?:\r\n|\n|\r)\s*/g, " ").trim();
+  return text.split(/\r\n|\n|\r/).map((line, index) => (
+    <Fragment key={index}>
+      {index > 0 && <br />}
+      {line}
+    </Fragment>
+  ));
+}
 
 const SETTINGS_DOCK_COLUMN_IDS: DockColumnId[] = ["leftSidebar", "leftPage", "rightPage", "rightSidebar"];
 const SETTINGS_DOCK_TAB_IDS: DockTabId[] = ["mlc", "mlcPreview", "resources", "previewBrowser", "previewInfo", "agentConsole", "agentSessions", "terminal"];
@@ -376,6 +386,14 @@ export function SettingsDialog({ open, onClose }: { open: boolean; onClose: () =
   const handleAgentStickyUserMessageBarToggle = useCallback(() => {
     setAgentConsoleSettings((prev) => {
       const next = { ...prev, showStickyUserMessageBar: !prev.showStickyUserMessageBar };
+      saveAgentConsoleSettings(next);
+      return next;
+    });
+  }, []);
+
+  const handleAgentStickyUserMergeLinesToggle = useCallback(() => {
+    setAgentConsoleSettings((prev) => {
+      const next = { ...prev, mergeStickyUserMessageLines: !prev.mergeStickyUserMessageLines };
       saveAgentConsoleSettings(next);
       return next;
     });
@@ -766,13 +784,14 @@ export function SettingsDialog({ open, onClose }: { open: boolean; onClose: () =
   };
 
   const renderAgentPreview = () => {
+    const stickyUserPreviewText = t("settings.agentStickyUserMessageBarPreview", "Please run the checklist:\n1. Create a markdown file\n2. Edit it and add content\n3. Delete the test files");
     return (
       <div className="settings-agent-preview" aria-label={t("settings.agentPreview", "Agent preview")}>
         <AgentSessionHeader session={agentPreviewSession} />
         {agentConsoleSettings.showStickyUserMessageBar && (
           <div className="settings-agent-sticky-user-preview" aria-hidden="true">
             <div className="agent-sticky-user-bar settings-agent-sticky-user-bar-preview">
-              <span className="agent-sticky-user-letter-text">{t("settings.agentStickyUserMessageBarPreview", "Refine the Agent header so the notification row wraps naturally without covering the conversation below.")}</span>
+              <span className="agent-sticky-user-letter-text">{renderStickyUserMessageText(stickyUserPreviewText, agentConsoleSettings.mergeStickyUserMessageLines)}</span>
             </div>
           </div>
         )}
@@ -1619,20 +1638,34 @@ export function SettingsDialog({ open, onClose }: { open: boolean; onClose: () =
                             <span className="settings-toggle-knob" />
                           </button>
                         </div>
-                        <div className="settings-row settings-agent-toggle-row">
-                          <div className="settings-row-info">
+                        <div className="settings-agent-toggle-row settings-agent-sticky-user-card">
+                          <div className="settings-row-info settings-agent-sticky-user-info">
                             <span className="settings-label">{t("settings.agentStickyUserMessageBar", "Show sticky user message row")}</span>
                             <span className="settings-sublabel">{t("settings.agentStickyUserMessageBarDesc", "Keep the latest scrolled-past user message visible at the top of the chat timeline.")}</span>
                           </div>
                           <button
                             type="button"
-                            className={`settings-toggle${agentConsoleSettings.showStickyUserMessageBar ? " settings-toggle-on" : ""}`}
+                            className={`settings-toggle settings-agent-sticky-user-main-toggle${agentConsoleSettings.showStickyUserMessageBar ? " settings-toggle-on" : ""}`}
                             onClick={handleAgentStickyUserMessageBarToggle}
                             aria-label={t("settings.agentStickyUserMessageBar", "Show sticky user message row")}
                             aria-pressed={agentConsoleSettings.showStickyUserMessageBar}
                           >
                             <span className="settings-toggle-knob" />
                           </button>
+                          <div className="settings-agent-sticky-user-subrow">
+                            <div className="settings-agent-inline-mini-toggle">
+                              <span>{t("settings.agentStickyUserMergeLines", "Merge lines")}</span>
+                              <button
+                                type="button"
+                                className={`settings-toggle settings-toggle-sm${agentConsoleSettings.mergeStickyUserMessageLines ? " settings-toggle-on" : ""}`}
+                                onClick={handleAgentStickyUserMergeLinesToggle}
+                                aria-label={t("settings.agentStickyUserMergeLines", "Merge lines")}
+                                aria-pressed={agentConsoleSettings.mergeStickyUserMessageLines}
+                              >
+                                <span className="settings-toggle-knob" />
+                              </button>
+                            </div>
+                          </div>
                         </div>
                       </div>
                     </div>

@@ -4708,6 +4708,39 @@ body,
   color: var(--color-text-muted);
 }
 
+.settings-agent-sticky-user-card {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  grid-template-areas:
+    "info switch"
+    "subrow subrow";
+  align-items: start;
+  gap: 6px;
+}
+
+.settings-agent-sticky-user-info {
+  grid-area: info;
+}
+
+.settings-agent-sticky-user-main-toggle {
+  grid-area: switch;
+}
+
+.settings-agent-sticky-user-subrow {
+  grid-area: subrow;
+  display: flex;
+  justify-content: flex-start;
+}
+
+.settings-agent-inline-mini-toggle {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  color: var(--color-text-muted);
+  font-size: 11px;
+  white-space: nowrap;
+}
+
 .agent-message {
   min-width: 0;
 }
@@ -8826,8 +8859,7 @@ body,
 }
 
 .settings-agent-sticky-user-preview {
-  background: var(--color-bg-input-raised);
-  margin: 0 4px;
+  margin: 0 8px;
 }
 
 .settings-agent-sticky-user-bar-preview {
