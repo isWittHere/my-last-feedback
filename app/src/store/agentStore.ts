@@ -38,9 +38,11 @@ interface AgentOpenCodeHttpRuntimeEntry {
   sessionId: string;
   runtime: OpenCodeServerRuntime;
   events: OpenCodeSseConnection;
+  lastBackfillAt?: number;
 }
 
 const openCodeHttpRuntimes = new Map<string, AgentOpenCodeHttpRuntimeEntry>();
+const OPEN_CODE_RECONNECT_BACKFILL_MIN_INTERVAL_MS = 30_000;
 
 interface CompactionSummaryRoute {
   sessionId: string;
@@ -1653,6 +1655,46 @@ function handleOpenCodeBusEvent(runtimeOwnerSessionId: string, event: OpenCodeBu
   }
 }
 
+async function backfillOpenCodeRuntimeSessions(processId: string | undefined): Promise<void> {
+  if (!processId) return;
+  const runtimeEntry = openCodeHttpRuntimes.get(processId);
+  if (!runtimeEntry) return;
+  const state = useAgentStore.getState();
+  const targetSessions = state.sessions.filter((session) => session.providerId === "opencode" && session.providerSessionId && openCodeHttpRuntimeForSession(session, state.sessions) === runtimeEntry);
+  if (targetSessions.length === 0) return;
+  const now = Date.now();
+  if (runtimeEntry.lastBackfillAt && now - runtimeEntry.lastBackfillAt < OPEN_CODE_RECONNECT_BACKFILL_MIN_INTERVAL_MS) return;
+  runtimeEntry.lastBackfillAt = now;
+  const statuses = await runtimeEntry.runtime.client.sessionStatuses().catch((): Record<string, unknown> => ({}));
+  await Promise.all(targetSessions.map(async (session) => {
+    const providerSessionId = session.providerSessionId;
+    if (!providerSessionId) return;
+    const [messages, todos] = await Promise.all([
+      runtimeEntry.runtime.client.messages(providerSessionId),
+      runtimeEntry.runtime.client.todos(providerSessionId).catch(() => []),
+    ]).catch(() => [null, []] as const);
+    if (!messages) return;
+    const replayedMessages = appendRestoredTaskList(agentMessagesFromOpenCodeMessages(messages), todos, providerSessionId);
+    const restoredModelId = [...messages].reverse().map((message) => openCodeModelIdFromInfo(message.info)).find((modelId): modelId is string => Boolean(modelId));
+    const restoredContextUsage = openCodeContextUsageFromMessages(messages, contextLimitForModel(session.availableModels, restoredModelId || session.modelId));
+    const providerBusy = providerStatusIsBusy(statuses[providerSessionId]);
+    useAgentStore.setState((current) => ({
+      sessions: updateSession(current.sessions, session.id, (item) => {
+        if (item.providerSessionId !== providerSessionId) return item;
+        return {
+          ...item,
+          messages: replayedMessages.length > 0 ? replayedMessages : item.messages,
+          status: providerBusy ? "running" : item.status === "cancelling" ? item.status : "idle",
+          providerSessionState: "active",
+          ...(restoredModelId ? { modelId: restoredModelId } : {}),
+          ...(restoredContextUsage ? { contextUsage: restoredContextUsage } : {}),
+          updatedAt: nowIso(),
+        };
+      }),
+    }));
+  }));
+}
+
 function handleOpenCodePermissionRequest(sessionId: string, request: Record<string, unknown>) {
   handleOpenCodeBusEvent(sessionId, { type: "permission.asked", properties: request } as OpenCodeBusEvent);
 }
@@ -1851,11 +1893,14 @@ export const useAgentStore = create<AgentStoreState>((set, get) => ({
         const events = runtime.client.openEvents({
           onEvent: (event) => handleOpenCodeBusEvent(sessionId, event),
           onError: (error) => get().appendAgentDiagnostic(sessionId, "error", `Agent event stream error: ${error.message}`),
-          onOpen: () => get().appendAgentDiagnostic(sessionId, "info", "Agent event stream connected."),
+          onOpen: () => {
+            get().appendAgentDiagnostic(sessionId, "info", "Agent event stream connected.");
+            void backfillOpenCodeRuntimeSessions(runtime.processInfo.processId);
+          },
           onClose: () => get().appendAgentDiagnostic(sessionId, "info", "Agent event stream closed."),
         });
-        events.start();
         openCodeHttpRuntimes.set(runtime.processInfo.processId, { sessionId, runtime, events });
+        events.start();
         let commandLoadError: string | undefined;
         const [providers, agents, commands, pendingPermissions, openCodeConfig] = await Promise.all([
           runtime.client.providers(),

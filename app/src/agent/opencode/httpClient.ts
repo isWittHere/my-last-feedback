@@ -53,6 +53,8 @@ function unwrapEvent(raw: unknown): OpenCodeBusEvent {
 }
 
 const SSE_FLUSH_FRAME_MS = 16;
+const SSE_RECONNECT_DELAY_MS = 250;
+const SSE_HEARTBEAT_TIMEOUT_MS = 45_000;
 
 function eventProperties(event: OpenCodeBusEvent): Record<string, unknown> {
   return typeof event.properties === "object" && event.properties !== null ? event.properties as Record<string, unknown> : {};
@@ -260,11 +262,13 @@ interface OpenCodeSseConnectionOptions {
 export class OpenCodeSseConnection {
   private readonly options: OpenCodeSseConnectionOptions;
   private readonly controller = new AbortController();
+  private attemptController: AbortController | undefined;
   private started = false;
   private eventQueue: OpenCodeBusEvent[] = [];
   private coalescedEvents = new Map<string, number>();
   private staleDeltaKeys = new Set<string>();
   private flushTimer: number | undefined;
+  private heartbeatTimer: number | undefined;
 
   constructor(options: OpenCodeSseConnectionOptions) {
     this.options = options;
@@ -277,40 +281,85 @@ export class OpenCodeSseConnection {
   }
 
   stop(): void {
+    this.started = false;
+    this.attemptController?.abort();
     this.controller.abort();
+    this.clearHeartbeat();
     this.flushEvents();
   }
 
   private async run(): Promise<void> {
-    try {
-      const response = await fetch(buildUrl(this.options.baseUrl, this.options.route, this.options.query), {
-        headers: {
-          Authorization: authHeader(this.options.auth.username, this.options.auth.password),
-          Accept: "text/event-stream",
-        },
-        signal: this.controller.signal,
-      });
-      if (!response.ok) throw new Error(`${response.status} ${response.statusText}`);
-      if (!response.body) throw new Error("OpenCode SSE response has no body");
-      this.options.handlers.onOpen?.();
-      await this.readStream(response.body.getReader());
-      this.flushEvents();
-      this.options.handlers.onClose?.();
-    } catch (error) {
-      if (error instanceof DOMException && error.name === "AbortError") {
-        this.options.handlers.onClose?.();
-        return;
+    while (this.started && !this.controller.signal.aborted) {
+      const attempt = new AbortController();
+      this.attemptController = attempt;
+      const abortAttempt = () => attempt.abort();
+      this.controller.signal.addEventListener("abort", abortAttempt, { once: true });
+
+      try {
+        const response = await fetch(buildUrl(this.options.baseUrl, this.options.route, this.options.query), {
+          headers: {
+            Authorization: authHeader(this.options.auth.username, this.options.auth.password),
+            Accept: "text/event-stream",
+          },
+          signal: attempt.signal,
+        });
+        if (!response.ok) throw new Error(`${response.status} ${response.statusText}`);
+        if (!response.body) throw new Error("OpenCode SSE response has no body");
+        this.options.handlers.onOpen?.();
+        this.resetHeartbeat(attempt);
+        await this.readStream(response.body.getReader(), () => this.resetHeartbeat(attempt));
+        this.flushEvents();
+      } catch (error) {
+        if (this.controller.signal.aborted || !this.started) break;
+        if (!(error instanceof DOMException && error.name === "AbortError")) {
+          this.options.handlers.onError?.(error instanceof Error ? error : new Error(String(error)));
+        }
+      } finally {
+        this.controller.signal.removeEventListener("abort", abortAttempt);
+        if (this.attemptController === attempt) this.attemptController = undefined;
+        this.clearHeartbeat();
       }
-      this.options.handlers.onError?.(error instanceof Error ? error : new Error(String(error)));
+
+      if (this.started && !this.controller.signal.aborted) await this.waitForReconnectDelay();
     }
+    this.flushEvents();
+    this.options.handlers.onClose?.();
   }
 
-  private async readStream(reader: ReadableStreamDefaultReader<Uint8Array>): Promise<void> {
+  private resetHeartbeat(attempt: AbortController): void {
+    this.clearHeartbeat();
+    this.heartbeatTimer = window.setTimeout(() => {
+      if (this.started && !this.controller.signal.aborted) attempt.abort();
+    }, SSE_HEARTBEAT_TIMEOUT_MS);
+  }
+
+  private clearHeartbeat(): void {
+    if (this.heartbeatTimer === undefined) return;
+    window.clearTimeout(this.heartbeatTimer);
+    this.heartbeatTimer = undefined;
+  }
+
+  private waitForReconnectDelay(): Promise<void> {
+    return new Promise((resolve) => {
+      let timer: number | undefined;
+      const done = () => {
+        if (timer !== undefined) window.clearTimeout(timer);
+        this.controller.signal.removeEventListener("abort", abort);
+        resolve();
+      };
+      const abort = () => done();
+      timer = window.setTimeout(done, SSE_RECONNECT_DELAY_MS);
+      this.controller.signal.addEventListener("abort", abort, { once: true });
+    });
+  }
+
+  private async readStream(reader: ReadableStreamDefaultReader<Uint8Array>, onChunk: () => void): Promise<void> {
     const decoder = new TextDecoder();
     let buffer = "";
     while (true) {
       const { done, value } = await reader.read();
       if (done) return;
+      onChunk();
       buffer += decoder.decode(value, { stream: true });
       const chunks = buffer.split(/\r?\n\r?\n/);
       buffer = chunks.pop() || "";
