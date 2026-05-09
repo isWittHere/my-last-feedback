@@ -4078,7 +4078,7 @@ body,
   gap: 0px;
   max-height: min(24vh, 90px);
   overflow-y: auto;
-  overscroll-behavior: contain;
+  overscroll-behavior: auto;
   padding: 0 0 3px;
   padding-right: 2px;
   scrollbar-gutter: stable;
@@ -4533,7 +4533,7 @@ body,
   padding-right: 4px;
   overflow-x: hidden;
   overflow-y: auto;
-  overscroll-behavior: contain;
+  overscroll-behavior: auto;
   white-space: normal;
   overflow-wrap: anywhere;
   text-align: left;
@@ -4980,7 +4980,7 @@ body,
 .agent-process-single-thinking {
   max-height: min(42vh, 420px);
   overflow-y: auto;
-  overscroll-behavior: contain;
+  overscroll-behavior: auto;
   padding-right: 4px;
   scrollbar-gutter: stable;
 }
@@ -4989,17 +4989,31 @@ body,
   max-height: min(42vh, 420px);
 }
 
+.agent-process-single-thinking[data-kind="thinking"] .agent-process-markdown,
+.agent-process-step-detail[data-kind="thinking"] .agent-process-markdown,
+.agent-process-tab-detail[data-kind="thinking"] .agent-process-markdown {
+  opacity: 0.78;
+}
+
 .agent-process-step-detail-scroll {
   min-width: 0;
-  max-height: min(42vh, 420px);
+  max-height: min(42vh, 280px);
   overflow-y: auto;
-  overscroll-behavior: contain;
+  overscroll-behavior: auto;
   padding-right: 4px;
   scrollbar-gutter: stable;
 }
 
 .agent-process-step-detail-scroll[data-streaming="true"] {
   max-height: 320px;
+}
+
+.agent-process-step-detail:not([data-kind="thinking"]):not([data-kind="compaction"]):not([data-kind="error"]) .agent-process-step-detail-scroll {
+  max-height: none;
+  overflow: visible;
+  overscroll-behavior: auto;
+  padding-right: 0;
+  scrollbar-gutter: auto;
 }
 
 .agent-process-step-tabs {
@@ -5112,12 +5126,22 @@ body,
 }
 
 .agent-process-tab-detail {
-  max-height: min(42vh, 420px);
-  overflow-y: auto;
-  overscroll-behavior: contain;
+  max-height: none;
+  overflow: visible;
+  overscroll-behavior: auto;
   padding: 0;
   border: 0;
   background: transparent;
+  scrollbar-gutter: auto;
+}
+
+.agent-process-tab-detail[data-kind="thinking"],
+.agent-process-tab-detail[data-kind="compaction"],
+.agent-process-tab-detail[data-kind="error"] {
+  max-height: min(42vh, 280px);
+  overflow-y: auto;
+  overscroll-behavior: auto;
+  padding-right: 4px;
   scrollbar-gutter: stable;
 }
 
@@ -5212,11 +5236,17 @@ body,
   word-break: break-word;
 }
 
-.agent-process-pre-section > .agent-tool-args,
 .agent-process-pre-section > pre {
   max-height: min(34vh, 320px);
   overflow: auto;
-  overscroll-behavior: contain;
+  overscroll-behavior: auto;
+  scrollbar-gutter: stable;
+}
+
+.agent-process-pre-section > .agent-tool-args {
+  max-height: min(30vh, 260px);
+  overflow: auto;
+  overscroll-behavior: auto;
   scrollbar-gutter: stable;
 }
 
@@ -5254,6 +5284,8 @@ body,
   display: inline-block;
   min-width: 0;
   max-width: 100%;
+  max-height: 92px;
+  overflow: auto;
   overflow-wrap: anywhere;
   border: 1px solid rgba(150, 150, 150, 0.15);
   border-radius: var(--radius-sm);
@@ -5274,6 +5306,7 @@ body,
 .agent-tool-arg-chip {
   min-width: 0;
   max-width: 100%;
+  max-height: 46px;
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;

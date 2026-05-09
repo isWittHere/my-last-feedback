@@ -1,5 +1,6 @@
 import { useEffect, useMemo, useRef, useState } from "react";
 import { useTranslation } from "react-i18next";
+import { useAgentConsoleSettings } from "../../agentConsoleSettings";
 import { getApprovalDisplayDescription, isCommandLikeApproval } from "../../agent/approvalDisplay";
 import { formatCompactTokenCount } from "../../agent/tokenStats";
 import type { AgentApprovalCurrentStatus, AgentCurrentStatus, AgentEditFileSummary } from "../../agent/currentStatus";
@@ -151,9 +152,11 @@ function AgentActivityStatusRow({ status }: { status: Exclude<AgentCurrentStatus
 }
 
 export function AgentCurrentStatusRow({ session }: { session: AgentSession }) {
+  const { approvalDisplayMode, processStepDefaultMode } = useAgentConsoleSettings();
   const status = useMemo(() => getAgentCurrentStatus(session), [session]);
 
   if (!status) return null;
+  if (status.kind === "approval" && processStepDefaultMode === "timeline" && approvalDisplayMode === "step") return null;
   if (status.kind === "approval") return <AgentApprovalStatusRow session={session} status={status} />;
   return <AgentActivityStatusRow status={status} />;
 }

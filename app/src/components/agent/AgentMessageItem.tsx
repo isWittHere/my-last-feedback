@@ -54,12 +54,17 @@ function userSubmittedText(message: AgentMessage, resultBlocks: AgentContentBloc
   return message.submittedMarkdown?.trim() || blocksText(resultBlocks).trim();
 }
 
-function ResultBlocks({ blocks, projectDirectory }: { blocks: AgentContentBlock[]; projectDirectory: string }) {
+function collapseConsecutiveBlankLines(text: string): string {
+  return text.replace(/(?:[ \t]*\n){3,}/g, "\n\n");
+}
+
+function ResultBlocks({ blocks, projectDirectory, collapseOutputBlankLines }: { blocks: AgentContentBlock[]; projectDirectory: string; collapseOutputBlankLines: boolean }) {
   return (
     <div className="agent-result-blocks">
       {blocks.map((block) => {
         if (block.type === "text") {
-          return <MarkdownContent key={block.id} markdown={block.content} projectDirectory={projectDirectory} className="agent-message-markdown" variant="feedback" enableComposerTokens />;
+          const content = collapseOutputBlankLines ? collapseConsecutiveBlankLines(block.content) : block.content;
+          return <MarkdownContent key={block.id} markdown={content} projectDirectory={projectDirectory} className="agent-message-markdown" variant="feedback" enableComposerTokens />;
         }
         if (block.type === "error") {
           return <div key={block.id} className="agent-error-block"><Icon name="warning" size={13} />{block.message}</div>;
@@ -181,7 +186,7 @@ function AgentUserAttachmentTags({ tags }: { tags?: AgentSubmittedAttachmentTag[
 export function AgentMessageItem({ session, message, projectDirectory }: { session: AgentSession; message: AgentMessage; projectDirectory: string }) {
   const { i18n, t } = useTranslation();
   const [fullInfoOpen, setFullInfoOpen] = useState(false);
-  const { showMessageSpeakerLine } = useAgentConsoleSettings();
+  const { collapseConsecutiveOutputBlankLines, showMessageSpeakerLine } = useAgentConsoleSettings();
   const { processBlocks, resultBlocks } = splitAgentMessageBlocks(message);
   const { alias, color, says, avatarKind } = actorInfo(session, message, i18n.language.startsWith("zh") ? "zh" : "en");
   const userText = message.role === "user" ? userDisplayText(message, resultBlocks) : "";
@@ -246,7 +251,7 @@ export function AgentMessageItem({ session, message, projectDirectory }: { sessi
           </header>
         )}
         <AgentProcessGroup blocks={processBlocks} messageId={message.id} sessionId={session.id} isStreaming={isStreaming} projectDirectory={projectDirectory} staleActivityNotice={staleActivityNotice} />
-        <ResultBlocks blocks={resultBlocks} projectDirectory={projectDirectory} />
+        <ResultBlocks blocks={resultBlocks} projectDirectory={projectDirectory} collapseOutputBlankLines={collapseConsecutiveOutputBlankLines} />
         <AgentMessageActions session={session} message={message} copyText={assistantText} disabled={isStreaming} />
       </div>
     </article>

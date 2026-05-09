@@ -3,6 +3,9 @@ import { useSyncExternalStore } from "react";
 export type AgentTopbarIndicatorMode = "hidden" | "text" | "textAndGraphic";
 export type AgentDiffColorPresetId = "classic" | "soft" | "vscode";
 export type AgentProcessStepDefaultMode = "tabs" | "timeline";
+export type AgentTimelineStreamingStepMode = "hidden" | "collapseHistory" | "expandAll";
+export type AgentTodoUpdateDisplayMode = "countOnly" | "panel";
+export type AgentApprovalDisplayMode = "step" | "statusPanel" | "all";
 export type AgentNavigationIndicatorOrder = "leftToRight" | "rightToLeft";
 export type AgentNavigationGroupBackgroundMode = "hidden" | "hover" | "alternate";
 export type AgentNavigationVisualizationMode = "bars" | "lineArea";
@@ -29,6 +32,10 @@ export interface AgentConsoleSettings {
   smoothStreamingOutput: boolean;
   autoCleanupEmptySessions: boolean;
   processStepDefaultMode: AgentProcessStepDefaultMode;
+  timelineStreamingStepMode: AgentTimelineStreamingStepMode;
+  todoUpdateDisplayMode: AgentTodoUpdateDisplayMode;
+  approvalDisplayMode: AgentApprovalDisplayMode;
+  collapseConsecutiveOutputBlankLines: boolean;
   showMessageSpeakerLine: boolean;
   defaultExpandHeaderDetails: boolean;
   showStickyUserMessageBar: boolean;
@@ -53,6 +60,10 @@ const DEFAULT_SETTINGS: AgentConsoleSettings = {
   smoothStreamingOutput: false,
   autoCleanupEmptySessions: true,
   processStepDefaultMode: "tabs",
+  timelineStreamingStepMode: "collapseHistory",
+  todoUpdateDisplayMode: "panel",
+  approvalDisplayMode: "all",
+  collapseConsecutiveOutputBlankLines: false,
   showMessageSpeakerLine: true,
   defaultExpandHeaderDetails: false,
   showStickyUserMessageBar: true,
@@ -83,6 +94,18 @@ function isProcessStepDefaultMode(value: unknown): value is AgentProcessStepDefa
   return value === "tabs" || value === "timeline";
 }
 
+function isTimelineStreamingStepMode(value: unknown): value is AgentTimelineStreamingStepMode {
+  return value === "hidden" || value === "collapseHistory" || value === "expandAll";
+}
+
+function isTodoUpdateDisplayMode(value: unknown): value is AgentTodoUpdateDisplayMode {
+  return value === "countOnly" || value === "panel";
+}
+
+function isApprovalDisplayMode(value: unknown): value is AgentApprovalDisplayMode {
+  return value === "step" || value === "statusPanel" || value === "all";
+}
+
 function isNavigationIndicatorOrder(value: unknown): value is AgentNavigationIndicatorOrder {
   return value === "leftToRight" || value === "rightToLeft";
 }
@@ -104,6 +127,13 @@ export function getAgentDiffColorPreset(id: AgentDiffColorPresetId): AgentDiffCo
   return AGENT_DIFF_COLOR_PRESETS.find((preset) => preset.id === id) ?? AGENT_DIFF_COLOR_PRESETS[0];
 }
 
+function normalizeAgentConsoleSettings(settings: AgentConsoleSettings): AgentConsoleSettings {
+  if (settings.timelineStreamingStepMode === "hidden" && settings.approvalDisplayMode === "step") {
+    return { ...settings, approvalDisplayMode: "all" };
+  }
+  return settings;
+}
+
 export function getAgentConsoleSettings(): AgentConsoleSettings {
   try {
     const raw = localStorage.getItem(STORAGE_KEY);
@@ -117,12 +147,16 @@ export function getAgentConsoleSettings(): AgentConsoleSettings {
     const parsedDiffVisual = parsed.diffVisual as (Partial<AgentDiffVisualSettings> & { textOffsetX?: unknown; textOffsetY?: unknown }) | undefined;
     const legacyOffsetX = clampTextOffset(parsedDiffVisual?.textOffsetX);
     const legacyOffsetY = clampTextOffset(parsedDiffVisual?.textOffsetY);
-    cachedSettings = {
+    cachedSettings = normalizeAgentConsoleSettings({
       diffIndicatorMode: isIndicatorMode(parsed.diffIndicatorMode) ? parsed.diffIndicatorMode : DEFAULT_SETTINGS.diffIndicatorMode,
       contextIndicatorMode: isIndicatorMode(parsed.contextIndicatorMode) ? parsed.contextIndicatorMode : DEFAULT_SETTINGS.contextIndicatorMode,
       smoothStreamingOutput: typeof parsed.smoothStreamingOutput === "boolean" ? parsed.smoothStreamingOutput : DEFAULT_SETTINGS.smoothStreamingOutput,
       autoCleanupEmptySessions: typeof parsed.autoCleanupEmptySessions === "boolean" ? parsed.autoCleanupEmptySessions : DEFAULT_SETTINGS.autoCleanupEmptySessions,
       processStepDefaultMode: isProcessStepDefaultMode(parsed.processStepDefaultMode) ? parsed.processStepDefaultMode : DEFAULT_SETTINGS.processStepDefaultMode,
+      timelineStreamingStepMode: isTimelineStreamingStepMode(parsed.timelineStreamingStepMode) ? parsed.timelineStreamingStepMode : DEFAULT_SETTINGS.timelineStreamingStepMode,
+      todoUpdateDisplayMode: isTodoUpdateDisplayMode(parsed.todoUpdateDisplayMode) ? parsed.todoUpdateDisplayMode : DEFAULT_SETTINGS.todoUpdateDisplayMode,
+      approvalDisplayMode: isApprovalDisplayMode(parsed.approvalDisplayMode) ? parsed.approvalDisplayMode : DEFAULT_SETTINGS.approvalDisplayMode,
+      collapseConsecutiveOutputBlankLines: typeof parsed.collapseConsecutiveOutputBlankLines === "boolean" ? parsed.collapseConsecutiveOutputBlankLines : DEFAULT_SETTINGS.collapseConsecutiveOutputBlankLines,
       showMessageSpeakerLine: typeof parsed.showMessageSpeakerLine === "boolean" ? parsed.showMessageSpeakerLine : DEFAULT_SETTINGS.showMessageSpeakerLine,
       defaultExpandHeaderDetails: typeof parsed.defaultExpandHeaderDetails === "boolean" ? parsed.defaultExpandHeaderDetails : DEFAULT_SETTINGS.defaultExpandHeaderDetails,
       showStickyUserMessageBar: typeof parsed.showStickyUserMessageBar === "boolean" ? parsed.showStickyUserMessageBar : DEFAULT_SETTINGS.showStickyUserMessageBar,
@@ -136,7 +170,7 @@ export function getAgentConsoleSettings(): AgentConsoleSettings {
         deletionsOffsetX: parsedDiffVisual?.deletionsOffsetX == null ? legacyOffsetX : clampTextOffset(parsedDiffVisual.deletionsOffsetX),
         deletionsOffsetY: parsedDiffVisual?.deletionsOffsetY == null ? legacyOffsetY : clampTextOffset(parsedDiffVisual.deletionsOffsetY),
       },
-    };
+    });
     return cachedSettings;
   } catch {
     cachedSettings = DEFAULT_SETTINGS;
@@ -145,9 +179,10 @@ export function getAgentConsoleSettings(): AgentConsoleSettings {
 }
 
 export function saveAgentConsoleSettings(settings: AgentConsoleSettings) {
-  const raw = JSON.stringify(settings);
+  const normalized = normalizeAgentConsoleSettings(settings);
+  const raw = JSON.stringify(normalized);
   cachedRaw = raw;
-  cachedSettings = settings;
+  cachedSettings = normalized;
   try { localStorage.setItem(STORAGE_KEY, raw); } catch {}
   window.dispatchEvent(new CustomEvent(CHANGE_EVENT));
 }

@@ -272,7 +272,7 @@ export function buildAgentProcessSteps(blocks: AgentContentBlock[], messageId?: 
         messageId,
         blockIds: [block.id],
         kind: "task_list",
-        label: block.title || `待办事项 (${completedCount}/${block.tasks.length})`,
+        label: `待办更新 (${completedCount}/${block.tasks.length})`,
         status,
         tasks: block.tasks,
       });

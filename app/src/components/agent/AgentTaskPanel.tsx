@@ -1,4 +1,5 @@
 import { useMemo, useState } from "react";
+import { useAgentConsoleSettings } from "../../agentConsoleSettings";
 import type { AgentSession, AgentTaskItem } from "../../agent/types";
 import { Icon } from "../Icons";
 
@@ -28,8 +29,10 @@ function taskPriorityLabel(priority: AgentTaskItem["priority"]): string {
 
 export function AgentTaskPanel({ session }: { session: AgentSession }) {
   const [expanded, setExpanded] = useState(false);
+  const { processStepDefaultMode, todoUpdateDisplayMode } = useAgentConsoleSettings();
   const tasks = useMemo(() => latestTasks(session), [session]);
 
+  if (processStepDefaultMode === "timeline" && todoUpdateDisplayMode === "countOnly") return null;
   if (tasks.length === 0) return null;
 
   const completedCount = tasks.filter((task) => task.status === "completed").length;

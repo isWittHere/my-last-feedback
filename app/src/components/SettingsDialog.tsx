@@ -16,7 +16,7 @@ import { getSubmittedViewSettings, saveSubmittedViewSettings, SUBMITTED_VIEW_SEC
 import { getTerminalSettings, saveTerminalSettings, type TerminalSettings, type TerminalShellId } from "../terminalSettings";
 import { getComposerSettings, saveComposerSettings, type ComposerSettings } from "../composerSettings";
 import { formatGitFolderBlacklistText, getGitOperationSettings, GIT_TIMED_REMINDER_MAX_MINUTES, GIT_TIMED_REMINDER_MIN_MINUTES, GIT_TIMED_REMINDER_STEP_MINUTES, parseGitFolderBlacklistText, saveGitOperationSettings, type GitOperationSettings } from "../gitOperationSettings";
-import { AGENT_DIFF_COLOR_PRESETS, getAgentConsoleSettings, saveAgentConsoleSettings, type AgentConsoleSettings, type AgentDiffColorPresetId, type AgentNavigationGroupBackgroundMode, type AgentNavigationIndicatorOrder, type AgentNavigationVisualizationMode, type AgentProcessStepDefaultMode, type AgentTopbarIndicatorMode } from "../agentConsoleSettings";
+import { AGENT_DIFF_COLOR_PRESETS, getAgentConsoleSettings, saveAgentConsoleSettings, type AgentApprovalDisplayMode, type AgentConsoleSettings, type AgentDiffColorPresetId, type AgentNavigationGroupBackgroundMode, type AgentNavigationIndicatorOrder, type AgentNavigationVisualizationMode, type AgentProcessStepDefaultMode, type AgentTimelineStreamingStepMode, type AgentTodoUpdateDisplayMode, type AgentTopbarIndicatorMode } from "../agentConsoleSettings";
 import { getOpenCodePermissionPresetAction, getOpenCodeSettings, OPEN_CODE_PERMISSION_DEFINITIONS, setOpenCodeDefaultPermissionAction, setOpenCodeModelEnabled, setOpenCodePreferredModel, type OpenCodePermissionAction, type OpenCodeSettings } from "../openCodeSettings";
 import { SESSION_LIST_MODE_OPTIONS } from "../sessionNavigationSettings";
 import { SessionNavigationModeIcon } from "./SessionNavigationModeIcon";
@@ -30,6 +30,9 @@ const SETTINGS_DOCK_COLUMN_IDS: DockColumnId[] = ["leftSidebar", "leftPage", "ri
 const SETTINGS_DOCK_TAB_IDS: DockTabId[] = ["mlc", "mlcPreview", "resources", "previewBrowser", "previewInfo", "agentConsole", "agentSessions", "terminal"];
 const AGENT_TOPBAR_INDICATOR_MODE_OPTIONS: AgentTopbarIndicatorMode[] = ["hidden", "text", "textAndGraphic"];
 const AGENT_PROCESS_STEP_MODE_OPTIONS: AgentProcessStepDefaultMode[] = ["tabs", "timeline"];
+const AGENT_TIMELINE_STREAMING_STEP_MODE_OPTIONS: AgentTimelineStreamingStepMode[] = ["hidden", "collapseHistory", "expandAll"];
+const AGENT_TODO_UPDATE_DISPLAY_MODE_OPTIONS: AgentTodoUpdateDisplayMode[] = ["countOnly", "panel"];
+const AGENT_APPROVAL_DISPLAY_MODE_OPTIONS: AgentApprovalDisplayMode[] = ["step", "statusPanel", "all"];
 const AGENT_NAVIGATION_VISUALIZATION_MODE_OPTIONS: AgentNavigationVisualizationMode[] = ["bars", "lineArea"];
 const AGENT_NAVIGATION_INDICATOR_ORDER_OPTIONS: AgentNavigationIndicatorOrder[] = ["leftToRight", "rightToLeft"];
 const AGENT_NAVIGATION_GROUP_BACKGROUND_MODE_OPTIONS: AgentNavigationGroupBackgroundMode[] = ["hidden", "hover", "alternate"];
@@ -306,6 +309,14 @@ export function SettingsDialog({ open, onClose }: { open: boolean; onClose: () =
     });
   }, []);
 
+  const handleAgentCollapseOutputBlankLinesToggle = useCallback(() => {
+    setAgentConsoleSettings((prev) => {
+      const next = { ...prev, collapseConsecutiveOutputBlankLines: !prev.collapseConsecutiveOutputBlankLines };
+      saveAgentConsoleSettings(next);
+      return next;
+    });
+  }, []);
+
   const handleAgentAutoCleanupToggle = useCallback(() => {
     let shouldCleanup = false;
     setAgentConsoleSettings((prev) => {
@@ -382,6 +393,37 @@ export function SettingsDialog({ open, onClose }: { open: boolean; onClose: () =
       const next = { ...prev, processStepDefaultMode };
       saveAgentConsoleSettings(next);
       return next;
+    });
+  }, []);
+
+  const handleAgentTimelineStreamingStepModeChange = useCallback((timelineStreamingStepMode: AgentTimelineStreamingStepMode) => {
+    setAgentConsoleSettings((prev) => {
+      const next: AgentConsoleSettings = {
+        ...prev,
+        timelineStreamingStepMode,
+        approvalDisplayMode: timelineStreamingStepMode === "hidden" && prev.approvalDisplayMode === "step" ? "all" : prev.approvalDisplayMode,
+      };
+      saveAgentConsoleSettings(next);
+      return getAgentConsoleSettings();
+    });
+  }, []);
+
+  const handleAgentTodoUpdateDisplayModeChange = useCallback((todoUpdateDisplayMode: AgentTodoUpdateDisplayMode) => {
+    setAgentConsoleSettings((prev) => {
+      const next = { ...prev, todoUpdateDisplayMode };
+      saveAgentConsoleSettings(next);
+      return next;
+    });
+  }, []);
+
+  const handleAgentApprovalDisplayModeChange = useCallback((approvalDisplayMode: AgentApprovalDisplayMode) => {
+    setAgentConsoleSettings((prev) => {
+      const next = {
+        ...prev,
+        approvalDisplayMode: prev.timelineStreamingStepMode === "hidden" && approvalDisplayMode === "step" ? "all" : approvalDisplayMode,
+      };
+      saveAgentConsoleSettings(next);
+      return getAgentConsoleSettings();
     });
   }, []);
 
@@ -529,6 +571,59 @@ export function SettingsDialog({ open, onClose }: { open: boolean; onClose: () =
       options={AGENT_PROCESS_STEP_MODE_OPTIONS.map((mode) => {
         const label = processStepModeLabel(mode);
         return { id: mode, label, icon: <Icon name={mode === "tabs" ? "rows" : "list"} size={13} /> };
+      })}
+    />
+  );
+
+  const timelineStreamingStepModeLabel = (mode: AgentTimelineStreamingStepMode) => {
+    if (mode === "hidden") return t("settings.agentTimelineStreamingStepHidden", "Hidden");
+    if (mode === "expandAll") return t("settings.agentTimelineStreamingStepExpandAll", "Expand all");
+    return t("settings.agentTimelineStreamingStepCollapseHistory", "Collapse history");
+  };
+
+  const renderAgentTimelineStreamingStepModeGroup = () => (
+    <SettingsSegmentedControl
+      ariaLabel={t("settings.agentTimelineStreamingStepMode", "Streaming step default style")}
+      value={agentConsoleSettings.timelineStreamingStepMode}
+      onChange={(mode) => handleAgentTimelineStreamingStepModeChange(mode as AgentTimelineStreamingStepMode)}
+      options={AGENT_TIMELINE_STREAMING_STEP_MODE_OPTIONS.map((mode) => {
+        const label = timelineStreamingStepModeLabel(mode);
+        return { id: mode, label, icon: <Icon name={mode === "hidden" ? "eye-off" : mode === "expandAll" ? "rows" : "list"} size={13} /> };
+      })}
+    />
+  );
+
+  const todoUpdateDisplayModeLabel = (mode: AgentTodoUpdateDisplayMode) => mode === "countOnly"
+    ? t("settings.agentTodoUpdateCountOnly", "Count only")
+    : t("settings.agentTodoUpdatePanel", "Panel");
+
+  const renderAgentTodoUpdateDisplayModeGroup = () => (
+    <SettingsSegmentedControl
+      ariaLabel={t("settings.agentTodoUpdateDisplayMode", "Todo update style")}
+      value={agentConsoleSettings.todoUpdateDisplayMode}
+      onChange={(mode) => handleAgentTodoUpdateDisplayModeChange(mode as AgentTodoUpdateDisplayMode)}
+      options={AGENT_TODO_UPDATE_DISPLAY_MODE_OPTIONS.map((mode) => {
+        const label = todoUpdateDisplayModeLabel(mode);
+        return { id: mode, label, icon: <Icon name={mode === "countOnly" ? "list" : "checklist"} size={13} /> };
+      })}
+    />
+  );
+
+  const approvalDisplayModeLabel = (mode: AgentApprovalDisplayMode) => {
+    if (mode === "step") return t("settings.agentApprovalDisplayStep", "In step");
+    if (mode === "statusPanel") return t("settings.agentApprovalDisplayStatusPanel", "Permission panel");
+    return t("settings.agentApprovalDisplayAll", "All");
+  };
+
+  const renderAgentApprovalDisplayModeGroup = () => (
+    <SettingsSegmentedControl
+      ariaLabel={t("settings.agentApprovalDisplayMode", "Approval handling style")}
+      value={agentConsoleSettings.approvalDisplayMode}
+      onChange={(mode) => handleAgentApprovalDisplayModeChange(mode as AgentApprovalDisplayMode)}
+      options={AGENT_APPROVAL_DISPLAY_MODE_OPTIONS.map((mode) => {
+        const label = approvalDisplayModeLabel(mode);
+        const disabled = mode === "step" && agentConsoleSettings.timelineStreamingStepMode === "hidden";
+        return { id: mode, label, disabled, icon: <Icon name={mode === "step" ? "list" : mode === "statusPanel" ? "shield" : "rows"} size={13} /> };
       })}
     />
   );
@@ -1312,6 +1407,33 @@ export function SettingsDialog({ open, onClose }: { open: boolean; onClose: () =
                     </div>
                     {renderAgentProcessStepModeGroup()}
                   </div>
+                  {agentConsoleSettings.processStepDefaultMode === "timeline" && (
+                    <>
+                      <div className="settings-row">
+                        <div className="settings-row-info">
+                          <span className="settings-label">{t("settings.agentTimelineStreamingStepMode", "Streaming step default style")}</span>
+                          <span className="settings-sublabel">{t("settings.agentTimelineStreamingStepModeDesc", "Only affects timeline view while an Agent is streaming.")}</span>
+                        </div>
+                        {renderAgentTimelineStreamingStepModeGroup()}
+                      </div>
+                      <div className="settings-row">
+                        <div className="settings-row-info">
+                          <span className="settings-label">{t("settings.agentTodoUpdateDisplayMode", "Todo update style")}</span>
+                          <span className="settings-sublabel">{t("settings.agentTodoUpdateDisplayModeDesc", "Only affects timeline-style todo updates.")}</span>
+                        </div>
+                        {renderAgentTodoUpdateDisplayModeGroup()}
+                      </div>
+                      <div className="settings-row">
+                        <div className="settings-row-info">
+                          <span className="settings-label">{t("settings.agentApprovalDisplayMode", "Approval handling style")}</span>
+                          <span className="settings-sublabel">{agentConsoleSettings.timelineStreamingStepMode === "hidden"
+                            ? t("settings.agentApprovalDisplayModeStepDisabledDesc", "In-step approval is disabled when streaming steps are hidden by default.")
+                            : t("settings.agentApprovalDisplayModeDesc", "Choose where pending approval actions appear.")}</span>
+                        </div>
+                        {renderAgentApprovalDisplayModeGroup()}
+                      </div>
+                    </>
+                  )}
                   <div className="settings-row">
                     <div className="settings-row-info">
                       <span className="settings-label">{t("settings.agentSmoothStreamingOutput", "Smooth streaming output")}</span>
@@ -1323,6 +1445,21 @@ export function SettingsDialog({ open, onClose }: { open: boolean; onClose: () =
                       onClick={handleAgentSmoothStreamingToggle}
                       aria-label={t("settings.agentSmoothStreamingOutput", "Smooth streaming output")}
                       aria-pressed={agentConsoleSettings.smoothStreamingOutput}
+                    >
+                      <span className="settings-toggle-knob" />
+                    </button>
+                  </div>
+                  <div className="settings-row">
+                    <div className="settings-row-info">
+                      <span className="settings-label">{t("settings.agentCollapseOutputBlankLines", "Collapse consecutive blank lines in output")}</span>
+                      <span className="settings-sublabel">{t("settings.agentCollapseOutputBlankLinesDesc", "When enabled, repeated blank lines in Agent output are reduced to a single blank line.")}</span>
+                    </div>
+                    <button
+                      type="button"
+                      className={`settings-toggle${agentConsoleSettings.collapseConsecutiveOutputBlankLines ? " settings-toggle-on" : ""}`}
+                      onClick={handleAgentCollapseOutputBlankLinesToggle}
+                      aria-label={t("settings.agentCollapseOutputBlankLines", "Collapse consecutive blank lines in output")}
+                      aria-pressed={agentConsoleSettings.collapseConsecutiveOutputBlankLines}
                     >
                       <span className="settings-toggle-knob" />
                     </button>

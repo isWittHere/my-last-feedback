@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { useTranslation } from "react-i18next";
-import { useAgentConsoleSettings, type AgentProcessStepDefaultMode } from "../../agentConsoleSettings";
+import { useAgentConsoleSettings, type AgentApprovalDisplayMode, type AgentProcessStepDefaultMode, type AgentTodoUpdateDisplayMode } from "../../agentConsoleSettings";
 import { getApprovalDisplayDescription, isCommandLikeApproval } from "../../agent/approvalDisplay";
 import type { AgentContentBlock } from "../../agent/types";
 import { buildAgentProcessSteps, type AgentStepItem } from "../../agent/steps";
@@ -59,6 +59,10 @@ function normalizeResult(result: string): string {
   return cleanResultForDisplay(result).replace(/\\n/g, "\n").replace(/\\t/g, "\t").replace(/\\r/g, "\r");
 }
 
+function collapseConsecutiveBlankLines(text: string): string {
+  return text.replace(/(?:[ \t]*\n){3,}/g, "\n\n");
+}
+
 function isRecord(value: unknown): value is Record<string, unknown> {
   return typeof value === "object" && value !== null && !Array.isArray(value);
 }
@@ -74,11 +78,11 @@ function stepIconName(step: AgentStepItem): string {
   return getAgentStepVisualDescriptor(step).iconName;
 }
 
-function stepHasContent(step: AgentStepItem): boolean {
+function stepHasContent(step: AgentStepItem, options?: { todoUpdateDisplayMode?: AgentTodoUpdateDisplayMode; approvalDisplayMode?: AgentApprovalDisplayMode }): boolean {
   if (step.kind === "thinking") return Boolean(step.detail);
   if (step.kind === "compaction") return true;
-  if (step.kind === "tool") return Boolean(step.args || step.result || step.permissions?.length);
-  if (step.kind === "task_list") return Boolean(step.tasks?.length);
+  if (step.kind === "tool") return Boolean(step.args || step.result || (options?.approvalDisplayMode !== "statusPanel" && step.permissions?.length));
+  if (step.kind === "task_list") return options?.todoUpdateDisplayMode === "countOnly" ? false : Boolean(step.tasks?.length);
   if (step.kind === "artifacts") return Boolean(step.blocks?.length);
   return Boolean(step.detail);
 }
@@ -152,7 +156,7 @@ function AgentProcessAttachedApproval({ step, permission, sessionId }: { step: A
   );
 }
 
-function StepDetail({ step, projectDirectory, sessionId }: { step: AgentStepItem; projectDirectory?: string; sessionId?: string }) {
+function StepDetail({ step, projectDirectory, sessionId, approvalDisplayMode = "all", collapseOutputBlankLines = false }: { step: AgentStepItem; projectDirectory?: string; sessionId?: string; approvalDisplayMode?: AgentApprovalDisplayMode; collapseOutputBlankLines?: boolean }) {
   if (step.kind === "thinking" && step.detail) {
     return <MarkdownContent markdown={step.detail} projectDirectory={projectDirectory} className="agent-process-markdown" variant="feedback" enableComposerTokens />;
   }
@@ -173,10 +177,10 @@ function StepDetail({ step, projectDirectory, sessionId }: { step: AgentStepItem
         {step.result && (
           <div className="agent-process-pre-section">
             <div className="agent-process-pre-label">结果</div>
-            <pre>{normalizeResult(step.result)}</pre>
+            <pre>{collapseOutputBlankLines ? collapseConsecutiveBlankLines(normalizeResult(step.result)) : normalizeResult(step.result)}</pre>
           </div>
         )}
-        {step.permissions?.map((permission) => (
+        {approvalDisplayMode !== "statusPanel" && step.permissions?.map((permission) => (
           <div key={permission.id} className="agent-process-pre-section agent-process-pre-section-approval">
             <AgentProcessAttachedApproval step={step} permission={permission} sessionId={sessionId} />
           </div>
@@ -227,7 +231,7 @@ interface AgentFocusStepEventDetail {
 
 export function AgentProcessGroup({ blocks, messageId, sessionId, isStreaming = false, projectDirectory, staleActivityNotice }: { blocks: AgentContentBlock[]; messageId?: string; sessionId?: string; isStreaming?: boolean; projectDirectory?: string; staleActivityNotice?: string }) {
   const { t } = useTranslation();
-  const { processStepDefaultMode } = useAgentConsoleSettings();
+  const { approvalDisplayMode, collapseConsecutiveOutputBlankLines, processStepDefaultMode, timelineStreamingStepMode, todoUpdateDisplayMode } = useAgentConsoleSettings();
   const steps = useMemo(() => buildAgentProcessSteps(blocks, messageId, isStreaming ? "streaming" : "complete"), [blocks, messageId, isStreaming]);
   const staleStepTooltip = t("agentConsole.staleProcessStepTooltip", "This process state was still marked running.");
   const hasBusyStep = steps.some((step) => step.status === "pending" || step.status === "running");
@@ -249,7 +253,7 @@ export function AgentProcessGroup({ blocks, messageId, sessionId, isStreaming = 
   useEffect(() => {
     if (isStreaming || hasBusyStep) {
       wasStreamingRef.current = true;
-      setExpanded(true);
+      setExpanded(mode === "timeline" && timelineStreamingStepMode === "hidden" ? false : true);
       return;
     }
     if (wasStreamingRef.current) {
@@ -269,15 +273,23 @@ export function AgentProcessGroup({ blocks, messageId, sessionId, isStreaming = 
       wasStreamingRef.current = false;
       return () => window.clearTimeout(collapseTimer);
     }
-  }, [hasBusyStep, isStreaming]);
+  }, [hasBusyStep, isStreaming, mode, timelineStreamingStepMode]);
 
   useEffect(() => {
     if (!isStreaming) return;
+    if (mode === "timeline" && timelineStreamingStepMode === "hidden") {
+      setOpenSteps({});
+      prevStepsLenRef.current = steps.length;
+      return;
+    }
     const count = steps.length;
     if (count !== prevStepsLenRef.current && count > 0) {
       const newIndex = count - 1;
       if (mode === "tabs") {
         setActiveIndex(newIndex);
+      } else if (timelineStreamingStepMode === "expandAll") {
+        setOpenSteps(Object.fromEntries(steps.map((step, stepIndex) => [stepIndex, stepHasContent(step, { approvalDisplayMode, todoUpdateDisplayMode })])));
+        autoOpenedIndexRef.current = newIndex;
       } else {
         const previousIndex = autoOpenedIndexRef.current;
         setOpenSteps((current) => {
@@ -290,7 +302,7 @@ export function AgentProcessGroup({ blocks, messageId, sessionId, isStreaming = 
       }
     }
     prevStepsLenRef.current = count;
-  }, [isStreaming, mode, steps.length]);
+  }, [approvalDisplayMode, isStreaming, mode, steps, steps.length, timelineStreamingStepMode, todoUpdateDisplayMode]);
 
   useEffect(() => {
     if (activeIndex >= steps.length) setActiveIndex(Math.max(0, steps.length - 1));
@@ -413,6 +425,8 @@ export function AgentProcessGroup({ blocks, messageId, sessionId, isStreaming = 
     : steps[0]?.label;
   const summary = hasBusyStep || isStreaming ? "正在工作..." : isSingleInlineProcess ? singleInlineProcessLabel : summaryParts.length > 0 ? `已使用 ${summaryParts.join("、")}` : "已完成过程记录";
   const activeStep = steps[activeIndex] || steps[0];
+  const effectiveApprovalDisplayMode = mode === "timeline" ? approvalDisplayMode : "all";
+  const effectiveTodoUpdateDisplayMode = mode === "timeline" ? todoUpdateDisplayMode : "panel";
 
   return (
     <section ref={groupRef} className="agent-process-stream" data-expanded={expanded} data-mode={mode} data-streaming={isStreaming || hasBusyStep}>
@@ -442,16 +456,16 @@ export function AgentProcessGroup({ blocks, messageId, sessionId, isStreaming = 
         <div className="agent-process-stream-body">
           {isSingleInlineProcess ? (
             <div className="agent-process-single-thinking" data-kind={steps[0].kind}>
-              <StepDetail step={steps[0]} projectDirectory={projectDirectory} sessionId={sessionId} />
+              <StepDetail step={steps[0]} projectDirectory={projectDirectory} sessionId={sessionId} approvalDisplayMode={effectiveApprovalDisplayMode} collapseOutputBlankLines={collapseConsecutiveOutputBlankLines} />
             </div>
           ) : mode === "timeline" ? (
             <div className="agent-process-timeline-compact">
               <div className="agent-process-timeline-corner" />
               {steps.map((step, index) => {
-                const isOpen = openSteps[index] ?? (isStreaming && index === steps.length - 1);
+                const isOpen = openSteps[index] ?? (isStreaming && timelineStreamingStepMode !== "hidden" && (timelineStreamingStepMode === "expandAll" || index === steps.length - 1));
                 const isLast = index === steps.length - 1;
                 const isStreamingStep = isStreaming && index === steps.length - 1;
-                const hasContent = stepHasContent(step);
+                const hasContent = stepHasContent(step, { approvalDisplayMode: effectiveApprovalDisplayMode, todoUpdateDisplayMode: effectiveTodoUpdateDisplayMode });
                 const hasFileTarget = stepHasFileTarget(step);
                 return (
                   <div key={`${step.kind}-${index}`} className="agent-process-step-compact" data-kind={step.kind} data-status={step.status} data-has-content={hasContent}>
@@ -473,7 +487,7 @@ export function AgentProcessGroup({ blocks, messageId, sessionId, isStreaming = 
                           {isStreamingStep && showStepTopShadow && <div className="agent-process-edge-shadow agent-process-edge-shadow-top" />}
                           {isStreamingStep && showStepBottomShadow && <div className="agent-process-edge-shadow agent-process-edge-shadow-bottom" />}
                           <div ref={isStreamingStep ? stepScrollRef : undefined} className="agent-process-step-detail-scroll" data-streaming={isStreamingStep ? "true" : undefined}>
-                            <StepDetail step={step} projectDirectory={projectDirectory} sessionId={sessionId} />
+                            <StepDetail step={step} projectDirectory={projectDirectory} sessionId={sessionId} approvalDisplayMode={effectiveApprovalDisplayMode} collapseOutputBlankLines={collapseConsecutiveOutputBlankLines} />
                           </div>
                         </div>
                       </div>
@@ -503,7 +517,7 @@ export function AgentProcessGroup({ blocks, messageId, sessionId, isStreaming = 
                   {showTabTopShadow && <div className="agent-process-edge-shadow agent-process-edge-shadow-top" />}
                   {showTabBottomShadow && <div className="agent-process-edge-shadow agent-process-edge-shadow-bottom" />}
                   <div ref={tabScrollRef} key={`${activeStep.kind}-${activeIndex}`} className="agent-process-tab-detail" data-kind={activeStep.kind}>
-                    <StepDetail step={activeStep} projectDirectory={projectDirectory} sessionId={sessionId} />
+                    <StepDetail step={activeStep} projectDirectory={projectDirectory} sessionId={sessionId} approvalDisplayMode={effectiveApprovalDisplayMode} collapseOutputBlankLines={collapseConsecutiveOutputBlankLines} />
                   </div>
                 </div>
               )}
