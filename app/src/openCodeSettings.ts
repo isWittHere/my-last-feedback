@@ -18,7 +18,20 @@ export interface OpenCodeSettings {
 
 export interface OpenCodePermissionPresetItem {
   permission: string;
+  pattern?: string;
   action: OpenCodePermissionAction;
+}
+
+export type OpenCodePermissionPresetId = "default" | "auto";
+
+export interface OpenCodePermissionPresetDefinition {
+  id: OpenCodePermissionPresetId;
+  labelKey: string;
+  defaultLabel: string;
+  descriptionKey: string;
+  defaultDescription: string;
+  icon: string;
+  rules: OpenCodePermissionRule[];
 }
 
 export interface OpenCodePermissionDefinition {
@@ -38,11 +51,74 @@ export const OPEN_CODE_PERMISSION_DEFINITIONS: OpenCodePermissionDefinition[] = 
   { permission: "list", labelKey: "settings.openCodePermissionList", defaultLabel: "List directories", descriptionKey: "settings.openCodePermissionListDesc", defaultDescription: "Inspect workspace directory structure.", defaultAction: "allow", icon: "list" },
   { permission: "edit", labelKey: "settings.openCodePermissionEdit", defaultLabel: "Modify files", descriptionKey: "settings.openCodePermissionEditDesc", defaultDescription: "Create, edit, or patch files.", defaultAction: "ask", icon: "edit" },
   { permission: "bash", labelKey: "settings.openCodePermissionBash", defaultLabel: "Command execution", descriptionKey: "settings.openCodePermissionBashDesc", defaultDescription: "Run shell commands through OpenCode.", defaultAction: "ask", icon: "terminal" },
-  { permission: "task", labelKey: "settings.openCodePermissionTask", defaultLabel: "Subtasks", descriptionKey: "settings.openCodePermissionTaskDesc", defaultDescription: "Delegate work to OpenCode subagents.", defaultAction: "ask", icon: "checklist" },
+  { permission: "task", labelKey: "settings.openCodePermissionTask", defaultLabel: "Subtasks", descriptionKey: "settings.openCodePermissionTaskDesc", defaultDescription: "Delegate work to OpenCode subagents.", defaultAction: "deny", icon: "checklist" },
   { permission: "webfetch", labelKey: "settings.openCodePermissionWebFetch", defaultLabel: "Read webpages", descriptionKey: "settings.openCodePermissionWebFetchDesc", defaultDescription: "Fetch external webpage content.", defaultAction: "ask", icon: "globe" },
   { permission: "websearch", labelKey: "settings.openCodePermissionWebSearch", defaultLabel: "Web search", descriptionKey: "settings.openCodePermissionWebSearchDesc", defaultDescription: "Search the web from OpenCode.", defaultAction: "ask", icon: "search" },
-  { permission: "external_directory", labelKey: "settings.openCodePermissionExternalDirectory", defaultLabel: "External directories", descriptionKey: "settings.openCodePermissionExternalDirectoryDesc", defaultDescription: "Access files outside the active workspace.", defaultAction: "deny", icon: "folder" },
+  { permission: "external_directory", labelKey: "settings.openCodePermissionExternalDirectory", defaultLabel: "External directories", descriptionKey: "settings.openCodePermissionExternalDirectoryDesc", defaultDescription: "Access files outside the active workspace.", defaultAction: "ask", icon: "folder" },
   { permission: "skill", labelKey: "settings.openCodePermissionSkill", defaultLabel: "Skills", descriptionKey: "settings.openCodePermissionSkillDesc", defaultDescription: "Load extra skill instructions.", defaultAction: "ask", icon: "book" },
+];
+
+const OPEN_CODE_AUTO_BASH_ASK_PATTERNS = [
+  "rm *",
+  "rmdir *",
+  "del *",
+  "Remove-Item *",
+  "git reset *",
+  "git clean *",
+  "git checkout *",
+  "git switch *",
+  "chmod *",
+  "chown *",
+  "sudo *",
+  "su *",
+  "curl *",
+  "wget *",
+  "iwr *",
+  "irm *",
+  "npm publish *",
+  "pnpm publish *",
+  "yarn publish *",
+  "docker system *",
+  "docker volume *",
+  "docker image prune *",
+];
+
+function rule(permission: string, action: OpenCodePermissionAction, pattern = "*"): OpenCodePermissionRule {
+  return { permission, pattern, action };
+}
+
+export const OPEN_CODE_PERMISSION_PRESETS: OpenCodePermissionPresetDefinition[] = [
+  {
+    id: "default",
+    labelKey: "settings.openCodePermissionPresetDefault",
+    defaultLabel: "Default",
+    descriptionKey: "settings.openCodePermissionPresetDefaultDesc",
+    defaultDescription: "Ask before edits, commands, web access, and skills; deny subtasks; ask for external directories.",
+    icon: "shield",
+    rules: OPEN_CODE_PERMISSION_DEFINITIONS.map((item) => rule(item.permission, item.defaultAction)),
+  },
+  {
+    id: "auto",
+    labelKey: "settings.openCodePermissionPresetAuto",
+    defaultLabel: "Auto",
+    descriptionKey: "settings.openCodePermissionPresetAutoDesc",
+    defaultDescription: "Allow routine edits, commands, web access, skills, and external directories; ask for risky shell commands.",
+    icon: "play",
+    rules: [
+      rule("glob", "allow"),
+      rule("grep", "allow"),
+      rule("read", "allow"),
+      rule("list", "allow"),
+      rule("edit", "allow"),
+      rule("bash", "allow"),
+      ...OPEN_CODE_AUTO_BASH_ASK_PATTERNS.map((pattern) => rule("bash", "ask", pattern)),
+      rule("task", "deny"),
+      rule("webfetch", "allow"),
+      rule("websearch", "allow"),
+      rule("external_directory", "allow"),
+      rule("skill", "allow"),
+    ],
+  },
 ];
 
 const STORAGE_KEY = "mlfb-opencode-settings-v1";
@@ -51,7 +127,7 @@ const CHANGE_EVENT = "mlfb-opencode-settings-changed";
 const DEFAULT_SETTINGS: OpenCodeSettings = {
   models: [],
   preferredModelId: undefined,
-  defaultPermissionPreset: OPEN_CODE_PERMISSION_DEFINITIONS.map((item) => ({ permission: item.permission, action: item.defaultAction })),
+  defaultPermissionPreset: OPEN_CODE_PERMISSION_PRESETS[0].rules,
 };
 
 let cachedRaw: string | null = null;
@@ -81,20 +157,26 @@ function normalizePermissionAction(action: unknown, fallback: OpenCodePermission
 }
 
 function normalizePermissionPreset(value: unknown): OpenCodePermissionPresetItem[] {
-  const byPermission = new Map<string, OpenCodePermissionAction>();
+  const rules: OpenCodePermissionPresetItem[] = [];
+  const wildcardByPermission = new Map<string, OpenCodePermissionAction>();
   if (Array.isArray(value)) {
     for (const item of value) {
       if (!item || typeof item !== "object") continue;
       const parsed = item as Partial<OpenCodePermissionPresetItem>;
       if (typeof parsed.permission !== "string" || !parsed.permission) continue;
       const definition = OPEN_CODE_PERMISSION_DEFINITIONS.find((entry) => entry.permission === parsed.permission);
-      byPermission.set(parsed.permission, normalizePermissionAction(parsed.action, definition?.defaultAction || "ask"));
+      const action = normalizePermissionAction(parsed.action, definition?.defaultAction || "ask");
+      const pattern = typeof parsed.pattern === "string" && parsed.pattern ? parsed.pattern : "*";
+      rules.push({ permission: parsed.permission, pattern, action });
+      if (pattern === "*") wildcardByPermission.set(parsed.permission, action);
     }
   }
-  return OPEN_CODE_PERMISSION_DEFINITIONS.map((definition) => ({
-    permission: definition.permission,
-    action: byPermission.get(definition.permission) || definition.defaultAction,
-  }));
+  for (const definition of OPEN_CODE_PERMISSION_DEFINITIONS) {
+    if (!wildcardByPermission.has(definition.permission)) {
+      rules.unshift({ permission: definition.permission, pattern: "*", action: definition.defaultAction });
+    }
+  }
+  return rules;
 }
 
 function normalizeSettings(value: unknown): OpenCodeSettings {
@@ -131,24 +213,62 @@ export function saveOpenCodeSettings(settings: OpenCodeSettings) {
 }
 
 export function openCodePermissionPresetToRules(preset: OpenCodePermissionPresetItem[]): OpenCodePermissionRule[] {
-  return normalizePermissionPreset(preset).map((item) => ({ permission: item.permission, pattern: "*", action: item.action }));
+  return normalizePermissionPreset(preset).map((item) => ({ permission: item.permission, pattern: item.pattern || "*", action: item.action }));
 }
 
 export function getOpenCodeDefaultPermissionRules(): OpenCodePermissionRule[] {
   return openCodePermissionPresetToRules(getOpenCodeSettings().defaultPermissionPreset);
 }
 
+export function getOpenCodePermissionPresetRules(presetId: OpenCodePermissionPresetId): OpenCodePermissionRule[] {
+  const preset = OPEN_CODE_PERMISSION_PRESETS.find((item) => item.id === presetId) || OPEN_CODE_PERMISSION_PRESETS[0];
+  return preset.rules.map((item) => ({ ...item }));
+}
+
+function permissionRuleKey(rule: OpenCodePermissionRule): string {
+  return `${rule.permission}\u0000${rule.pattern}\u0000${rule.action}`;
+}
+
+export function getOpenCodePermissionPresetId(rules: OpenCodePermissionPresetItem[] | OpenCodePermissionRule[] | undefined): OpenCodePermissionPresetId | undefined {
+  const normalized = openCodePermissionPresetToRules(rules || []);
+  const normalizedKeys = normalized.map(permissionRuleKey).join("\u0001");
+  const exact = OPEN_CODE_PERMISSION_PRESETS.find((preset) => preset.rules.map(permissionRuleKey).join("\u0001") === normalizedKeys)?.id;
+  if (exact) return exact;
+  return OPEN_CODE_PERMISSION_PRESETS.find((preset) => {
+    if (normalized.length < preset.rules.length) return false;
+    const tail = normalized.slice(-preset.rules.length);
+    return tail.map(permissionRuleKey).join("\u0001") === preset.rules.map(permissionRuleKey).join("\u0001");
+  })?.id;
+}
+
 export function getOpenCodePermissionPresetAction(preset: OpenCodePermissionPresetItem[] | undefined, permission: string): OpenCodePermissionAction {
   const definition = OPEN_CODE_PERMISSION_DEFINITIONS.find((item) => item.permission === permission);
   const normalized = normalizePermissionPreset(preset);
-  return normalized.find((item) => item.permission === permission)?.action || definition?.defaultAction || "ask";
+  for (let index = normalized.length - 1; index >= 0; index -= 1) {
+    const item = normalized[index];
+    if (item.permission === permission && (item.pattern || "*") === "*") return item.action;
+  }
+  return definition?.defaultAction || "ask";
+}
+
+export function setOpenCodeDefaultPermissionPreset(presetId: OpenCodePermissionPresetId): OpenCodeSettings {
+  const current = getOpenCodeSettings();
+  const next = {
+    ...current,
+    defaultPermissionPreset: getOpenCodePermissionPresetRules(presetId),
+  };
+  saveOpenCodeSettings(next);
+  return next;
 }
 
 export function setOpenCodeDefaultPermissionAction(permission: string, action: OpenCodePermissionAction): OpenCodeSettings {
   const current = getOpenCodeSettings();
   const next = {
     ...current,
-    defaultPermissionPreset: normalizePermissionPreset(current.defaultPermissionPreset).map((item) => item.permission === permission ? { ...item, action } : item),
+    defaultPermissionPreset: [
+      ...normalizePermissionPreset(current.defaultPermissionPreset).filter((item) => item.permission !== permission),
+      { permission, pattern: "*", action },
+    ],
   };
   saveOpenCodeSettings(next);
   return next;

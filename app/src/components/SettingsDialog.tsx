@@ -17,7 +17,7 @@ import { getTerminalSettings, saveTerminalSettings, type TerminalSettings, type 
 import { getComposerSettings, saveComposerSettings, type ComposerSettings } from "../composerSettings";
 import { formatGitFolderBlacklistText, getGitOperationSettings, GIT_TIMED_REMINDER_MAX_MINUTES, GIT_TIMED_REMINDER_MIN_MINUTES, GIT_TIMED_REMINDER_STEP_MINUTES, parseGitFolderBlacklistText, saveGitOperationSettings, type GitOperationSettings } from "../gitOperationSettings";
 import { AGENT_DIFF_COLOR_PRESETS, getAgentConsoleSettings, saveAgentConsoleSettings, type AgentApprovalDisplayMode, type AgentConsoleSettings, type AgentDiffColorPresetId, type AgentNavigationGroupBackgroundMode, type AgentNavigationIndicatorOrder, type AgentNavigationVisualizationMode, type AgentProcessStepDefaultMode, type AgentTaskPanelTemplateStyle, type AgentTimelineStreamingStepMode, type AgentTodoUpdateDisplayMode, type AgentTopbarIndicatorMode } from "../agentConsoleSettings";
-import { getOpenCodePermissionPresetAction, getOpenCodeSettings, OPEN_CODE_PERMISSION_DEFINITIONS, setOpenCodeDefaultPermissionAction, setOpenCodeModelEnabled, setOpenCodePreferredModel, type OpenCodePermissionAction, type OpenCodeSettings } from "../openCodeSettings";
+import { getOpenCodePermissionPresetAction, getOpenCodePermissionPresetId, getOpenCodeSettings, OPEN_CODE_PERMISSION_DEFINITIONS, OPEN_CODE_PERMISSION_PRESETS, setOpenCodeDefaultPermissionAction, setOpenCodeDefaultPermissionPreset, setOpenCodeModelEnabled, setOpenCodePreferredModel, type OpenCodePermissionAction, type OpenCodePermissionPresetId, type OpenCodeSettings } from "../openCodeSettings";
 import { SESSION_LIST_MODE_OPTIONS } from "../sessionNavigationSettings";
 import { SessionNavigationModeIcon } from "./SessionNavigationModeIcon";
 import { AppSelect, type AppSelectOption } from "./AppSelect";
@@ -508,6 +508,10 @@ export function SettingsDialog({ open, onClose }: { open: boolean; onClose: () =
     setOpenCodeSettings(setOpenCodeDefaultPermissionAction(permission, action));
   }, []);
 
+  const handleOpenCodePermissionPresetChange = useCallback((presetId: OpenCodePermissionPresetId) => {
+    setOpenCodeSettings(setOpenCodeDefaultPermissionPreset(presetId));
+  }, []);
+
   const filteredOpenCodeModels = useMemo(() => {
     const query = openCodeModelQuery.trim().toLowerCase();
     const models = query
@@ -812,12 +816,33 @@ export function SettingsDialog({ open, onClose }: { open: boolean; onClose: () =
   };
 
   const renderOpenCodePermissionDefaults = () => {
+    const activePresetId = getOpenCodePermissionPresetId(openCodeSettings.defaultPermissionPreset);
     return (
       <div className="settings-section settings-opencode-section">
         <div className="settings-row settings-row-stacked">
           <div className="settings-row-info">
             <span className="settings-label">{t("settings.openCodePermissions", "OpenCode default permissions")}</span>
             <span className="settings-sublabel">{t("settings.openCodePermissionsDesc", "These permissions are applied to new OpenCode sessions. Active sessions can be adjusted from the Agent header.")}</span>
+          </div>
+          <div className="settings-opencode-preset-list" aria-label={t("settings.openCodePermissionPresets", "Permission presets")}>
+            {OPEN_CODE_PERMISSION_PRESETS.map((preset) => {
+              const isActive = activePresetId === preset.id;
+              return (
+                <button
+                  key={preset.id}
+                  type="button"
+                  className={`settings-opencode-preset-button${isActive ? " active" : ""}`}
+                  onClick={() => handleOpenCodePermissionPresetChange(preset.id)}
+                  aria-pressed={isActive}
+                >
+                  <span className="settings-list-icon-slot"><Icon name={preset.icon} size={13} /></span>
+                  <span className="settings-opencode-preset-copy">
+                    <span>{t(preset.labelKey, preset.defaultLabel)}</span>
+                    <span>{t(preset.descriptionKey, preset.defaultDescription)}</span>
+                  </span>
+                </button>
+              );
+            })}
           </div>
           <div className="settings-submitted-section-list settings-opencode-permission-list">
             <div className="settings-submitted-section-head settings-opencode-permission-head">

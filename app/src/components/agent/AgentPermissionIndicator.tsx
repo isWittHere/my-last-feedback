@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useRef, useState } from "react";
 import { useTranslation } from "react-i18next";
-import { getOpenCodeDefaultPermissionRules, OPEN_CODE_PERMISSION_DEFINITIONS, type OpenCodePermissionAction } from "../../openCodeSettings";
+import { getOpenCodeDefaultPermissionRules, getOpenCodePermissionPresetId, OPEN_CODE_PERMISSION_DEFINITIONS, OPEN_CODE_PERMISSION_PRESETS, type OpenCodePermissionAction } from "../../openCodeSettings";
 import type { AgentOpenCodePermissionRule, AgentSession } from "../../agent/types";
 import { useAgentStore } from "../../store/agentStore";
 import { Icon } from "../Icons";
@@ -21,6 +21,7 @@ export function AgentPermissionIndicator({ session }: { session: AgentSession })
   const [open, setOpen] = useState(false);
   const rootRef = useRef<HTMLDivElement | null>(null);
   const updateOpenCodeSessionPermission = useAgentStore((state) => state.updateOpenCodeSessionPermission);
+  const applyOpenCodeSessionPermissionPreset = useAgentStore((state) => state.applyOpenCodeSessionPermissionPreset);
   const resetOpenCodeSessionPermissions = useAgentStore((state) => state.resetOpenCodeSessionPermissions);
 
   const currentRules = useMemo<AgentOpenCodePermissionRule[]>(() => {
@@ -57,6 +58,8 @@ export function AgentPermissionIndicator({ session }: { session: AgentSession })
     void updateOpenCodeSessionPermission(session.id, permission, action);
   };
 
+  const activePresetId = getOpenCodePermissionPresetId(currentRules);
+
   return (
     <div ref={rootRef} className={`agent-permission-indicator-wrap${open ? " open" : ""}`}>
       <button
@@ -74,6 +77,24 @@ export function AgentPermissionIndicator({ session }: { session: AgentSession })
           <div className="agent-permission-popover-head">
             <span>{t("agentConsole.sessionPermissions", "Session permissions")}</span>
             {session.openCodePermissionUpdating && <strong>{t("agentConsole.permissionUpdating", "Updating")}</strong>}
+          </div>
+          <div className="agent-permission-preset-list" aria-label={t("agentConsole.permissionPresets", "Permission presets")}>
+            {OPEN_CODE_PERMISSION_PRESETS.map((preset) => {
+              const isActive = activePresetId === preset.id;
+              return (
+                <button
+                  key={preset.id}
+                  type="button"
+                  className={`agent-permission-preset${isActive ? " active" : ""}`}
+                  onClick={() => void applyOpenCodeSessionPermissionPreset(session.id, preset.id)}
+                  disabled={session.openCodePermissionUpdating}
+                  aria-pressed={isActive}
+                >
+                  <Icon name={preset.icon} size={12} />
+                  <span>{t(preset.labelKey, preset.defaultLabel)}</span>
+                </button>
+              );
+            })}
           </div>
           <div className="agent-permission-list">
             {OPEN_CODE_PERMISSION_DEFINITIONS.map((definition) => {

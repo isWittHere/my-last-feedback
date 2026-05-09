@@ -5,7 +5,7 @@ import type { OpenCodeAgentInfo, OpenCodeBusEvent, OpenCodeCommandFilePart, Open
 import { createAgentSession } from "../agent/sessionFactory";
 import { buildSubmittedComposerPayload, collectSubmittedResourceLinks } from "../composer/submittedFeedback";
 import { getAgentConsoleSettings } from "../agentConsoleSettings";
-import { getOpenCodeDefaultPermissionRules, setOpenCodePreferredModel, syncOpenCodeModels } from "../openCodeSettings";
+import { getOpenCodeDefaultPermissionRules, getOpenCodePermissionPresetRules, setOpenCodePreferredModel, syncOpenCodeModels, type OpenCodePermissionPresetId } from "../openCodeSettings";
 import type { AgentChoiceOption, AgentCompactionBlock, AgentContentBlock, AgentContextCompactionConfig, AgentContextUsage, AgentDiagnosticEntry, AgentMessage, AgentModelCapabilities, AgentProviderMessagePart, AgentSession, AgentSessionFileDiff, AgentSubmittedAttachmentTag, AgentThinkingBlock, AgentTokenUsage } from "../agent/types";
 import type { AgentProviderId } from "../agent/types";
 import type { GitAction, ImageAttachment, MlcAttachment, WebAttachment } from "./feedbackStore";
@@ -88,6 +88,7 @@ interface AgentStoreState {
   renameProviderSession: (providerId: AgentProviderId, providerSessionId: string, title: string) => Promise<void>;
   deleteProviderSession: (providerId: AgentProviderId, providerSessionId: string) => Promise<void>;
   updateOpenCodeSessionPermission: (sessionId: string, permission: string, action: "allow" | "ask" | "deny") => Promise<void>;
+  applyOpenCodeSessionPermissionPreset: (sessionId: string, presetId: OpenCodePermissionPresetId) => Promise<void>;
   resetOpenCodeSessionPermissions: (sessionId: string) => Promise<void>;
   resolveAgentPermission: (sessionId: string, requestId: string, optionId: string) => void;
   refreshAgentSessionDiff: (sessionId: string, options?: AgentSessionDiffRefreshOptions) => Promise<void>;
@@ -2638,6 +2639,47 @@ export const useAgentStore = create<AgentStoreState>((set, get) => ({
               openCodePermissionError: message,
               updatedAt: nowIso(),
             }, "error", `Failed to update OpenCode permission: ${message}`)),
+          }));
+    }
+  },
+
+  applyOpenCodeSessionPermissionPreset: async (sessionId, presetId) => {
+        const session = get().sessions.find((item) => item.id === sessionId);
+        const httpRuntime = openCodeHttpRuntimeForSession(session, get().sessions);
+        if (!session?.providerSessionId || !httpRuntime) {
+          get().appendAgentDiagnostic(sessionId, "warn", "OpenCode session is not ready for permission updates.");
+          return;
+        }
+        const permissionRules = getOpenCodePermissionPresetRules(presetId);
+        set((state) => ({
+          sessions: updateSession(state.sessions, sessionId, (item) => ({
+            ...item,
+            openCodePermissionUpdating: true,
+            openCodePermissionError: undefined,
+            updatedAt: nowIso(),
+          })),
+        }));
+        try {
+          const updated = await httpRuntime.runtime.client.updateSession(session.providerSessionId, { permission: permissionRules });
+          const updatedRules = Array.isArray(updated.permission) ? updated.permission : [...(session.openCodePermissionRules || []), ...permissionRules];
+          set((state) => ({
+            sessions: updateSession(state.sessions, sessionId, (item) => appendDiagnosticToSession({
+              ...item,
+              openCodePermissionRules: updatedRules,
+              openCodePermissionUpdating: false,
+              openCodePermissionError: undefined,
+              updatedAt: nowIso(),
+            }, "info", `OpenCode permission preset applied: ${presetId}.`)),
+          }));
+        } catch (error) {
+          const message = error instanceof Error ? error.message : String(error);
+          set((state) => ({
+            sessions: updateSession(state.sessions, sessionId, (item) => appendDiagnosticToSession({
+              ...item,
+              openCodePermissionUpdating: false,
+              openCodePermissionError: message,
+              updatedAt: nowIso(),
+            }, "error", `Failed to apply OpenCode permission preset: ${message}`)),
           }));
     }
   },
