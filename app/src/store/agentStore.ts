@@ -44,6 +44,9 @@ interface AgentOpenCodeHttpRuntimeEntry {
 const openCodeHttpRuntimes = new Map<string, AgentOpenCodeHttpRuntimeEntry>();
 const OPEN_CODE_RECONNECT_BACKFILL_MIN_INTERVAL_MS = 30_000;
 
+let openCodeIdLastTimestamp = 0;
+let openCodeIdCounter = 0;
+
 interface CompactionSummaryRoute {
   sessionId: string;
   blockId: string;
@@ -101,6 +104,44 @@ interface AgentStoreState {
 
 function newId(prefix: string): string {
   return `${prefix}_${crypto.randomUUID?.() || `${Date.now()}_${Math.random().toString(16).slice(2)}`}`;
+}
+
+function randomBase62(length: number): string {
+  const chars = "0123456789ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz";
+  const bytes = new Uint8Array(length);
+  if (crypto.getRandomValues) crypto.getRandomValues(bytes);
+  else for (let index = 0; index < length; index += 1) bytes[index] = Math.floor(Math.random() * 256);
+  return Array.from(bytes, (byte) => chars[byte % chars.length]).join("");
+}
+
+function createOpenCodeAscendingId(prefix: "message" | "part"): string {
+  const currentTimestamp = Date.now();
+  if (currentTimestamp !== openCodeIdLastTimestamp) {
+    openCodeIdLastTimestamp = currentTimestamp;
+    openCodeIdCounter = 0;
+  }
+  openCodeIdCounter += 1;
+  const prefixText = prefix === "message" ? "msg" : "prt";
+  const encoded = BigInt(currentTimestamp) * BigInt(0x1000) + BigInt(openCodeIdCounter);
+  const hex = encoded.toString(16).padStart(12, "0").slice(-12);
+  return `${prefixText}_${hex}${randomBase62(14)}`;
+}
+
+function openCodePromptPartsWithIds(parts: OpenCodePromptPart[]): OpenCodePromptPart[] {
+  return parts.map((part) => ({ ...part, id: part.id || createOpenCodeAscendingId("part") }));
+}
+
+function normalizeOpenCodeDirectory(value: string | null | undefined): string | undefined {
+  const normalized = value?.trim().replace(/\\/g, "/").replace(/\/+$/, "").toLowerCase();
+  return normalized || undefined;
+}
+
+function openCodeGlobalEventMatchesRuntime(event: OpenCodeBusEvent, runtime: OpenCodeServerRuntime, ownerSession: AgentSession): boolean {
+  const eventDirectory = normalizeOpenCodeDirectory(event.directory);
+  if (!eventDirectory) return true;
+  const runtimeDirectory = normalizeOpenCodeDirectory(runtime.processInfo.cwd);
+  const sessionDirectory = normalizeOpenCodeDirectory(ownerSession.cwd);
+  return eventDirectory === runtimeDirectory || eventDirectory === sessionDirectory;
 }
 
 function nowIso(): string {
@@ -1655,6 +1696,38 @@ function handleOpenCodeBusEvent(runtimeOwnerSessionId: string, event: OpenCodeBu
   }
 }
 
+async function backfillOpenCodeSession(runtimeEntry: AgentOpenCodeHttpRuntimeEntry, sessionId: string, providerSessionId: string, options: { assumeBusyUntilAssistant?: boolean } = {}): Promise<boolean> {
+  const statuses = await runtimeEntry.runtime.client.sessionStatuses().catch((): Record<string, unknown> => ({}));
+  const [messages, todos] = await Promise.all([
+    runtimeEntry.runtime.client.messages(providerSessionId),
+    runtimeEntry.runtime.client.todos(providerSessionId).catch(() => []),
+  ]).catch(() => [null, []] as const);
+  if (!messages) return false;
+  const session = useAgentStore.getState().sessions.find((item) => item.id === sessionId);
+  if (!session || session.providerSessionId !== providerSessionId) return false;
+  const replayedMessages = appendRestoredTaskList(agentMessagesFromOpenCodeMessages(messages), todos, providerSessionId);
+  const restoredModelId = [...messages].reverse().map((message) => openCodeModelIdFromInfo(message.info)).find((modelId): modelId is string => Boolean(modelId));
+  const restoredContextUsage = openCodeContextUsageFromMessages(messages, contextLimitForModel(session.availableModels, restoredModelId || session.modelId));
+  const lastAssistant = [...messages].reverse().find((message) => message.info?.role === "assistant");
+  const assistantComplete = Boolean(lastAssistant?.info?.time?.completed || lastAssistant?.info?.finish || lastAssistant?.info?.error);
+  const providerBusy = providerStatusIsBusy(statuses[providerSessionId]) || (options.assumeBusyUntilAssistant && !lastAssistant) || Boolean(lastAssistant && !assistantComplete);
+  useAgentStore.setState((current) => ({
+    sessions: updateSession(current.sessions, sessionId, (item) => {
+      if (item.providerSessionId !== providerSessionId) return item;
+      return {
+        ...item,
+        messages: replayedMessages.length > 0 ? replayedMessages : item.messages,
+        status: providerBusy ? "running" : item.status === "cancelling" ? item.status : "idle",
+        providerSessionState: "active",
+        ...(restoredModelId ? { modelId: restoredModelId } : {}),
+        ...(restoredContextUsage ? { contextUsage: restoredContextUsage } : {}),
+        updatedAt: nowIso(),
+      };
+    }),
+  }));
+  return providerBusy;
+}
+
 async function backfillOpenCodeRuntimeSessions(processId: string | undefined): Promise<void> {
   if (!processId) return;
   const runtimeEntry = openCodeHttpRuntimes.get(processId);
@@ -1665,34 +1738,7 @@ async function backfillOpenCodeRuntimeSessions(processId: string | undefined): P
   const now = Date.now();
   if (runtimeEntry.lastBackfillAt && now - runtimeEntry.lastBackfillAt < OPEN_CODE_RECONNECT_BACKFILL_MIN_INTERVAL_MS) return;
   runtimeEntry.lastBackfillAt = now;
-  const statuses = await runtimeEntry.runtime.client.sessionStatuses().catch((): Record<string, unknown> => ({}));
-  await Promise.all(targetSessions.map(async (session) => {
-    const providerSessionId = session.providerSessionId;
-    if (!providerSessionId) return;
-    const [messages, todos] = await Promise.all([
-      runtimeEntry.runtime.client.messages(providerSessionId),
-      runtimeEntry.runtime.client.todos(providerSessionId).catch(() => []),
-    ]).catch(() => [null, []] as const);
-    if (!messages) return;
-    const replayedMessages = appendRestoredTaskList(agentMessagesFromOpenCodeMessages(messages), todos, providerSessionId);
-    const restoredModelId = [...messages].reverse().map((message) => openCodeModelIdFromInfo(message.info)).find((modelId): modelId is string => Boolean(modelId));
-    const restoredContextUsage = openCodeContextUsageFromMessages(messages, contextLimitForModel(session.availableModels, restoredModelId || session.modelId));
-    const providerBusy = providerStatusIsBusy(statuses[providerSessionId]);
-    useAgentStore.setState((current) => ({
-      sessions: updateSession(current.sessions, session.id, (item) => {
-        if (item.providerSessionId !== providerSessionId) return item;
-        return {
-          ...item,
-          messages: replayedMessages.length > 0 ? replayedMessages : item.messages,
-          status: providerBusy ? "running" : item.status === "cancelling" ? item.status : "idle",
-          providerSessionState: "active",
-          ...(restoredModelId ? { modelId: restoredModelId } : {}),
-          ...(restoredContextUsage ? { contextUsage: restoredContextUsage } : {}),
-          updatedAt: nowIso(),
-        };
-      }),
-    }));
-  }));
+  await Promise.all(targetSessions.map((session) => session.providerSessionId ? backfillOpenCodeSession(runtimeEntry, session.id, session.providerSessionId) : Promise.resolve(false)));
 }
 
 function handleOpenCodePermissionRequest(sessionId: string, request: Record<string, unknown>) {
@@ -1890,14 +1936,17 @@ export const useAgentStore = create<AgentStoreState>((set, get) => ({
 
       try {
         const runtime = await startOpenCodeServerRuntime({ cwd: session.cwd, port: createOpenCodeHttpPort() });
-        const events = runtime.client.openEvents({
-          onEvent: (event) => handleOpenCodeBusEvent(sessionId, event),
+        const events = runtime.client.openGlobalEvents({
+          onEvent: (event) => {
+            if (!openCodeGlobalEventMatchesRuntime(event, runtime, session)) return;
+            handleOpenCodeBusEvent(sessionId, event);
+          },
           onError: (error) => get().appendAgentDiagnostic(sessionId, "error", `Agent event stream error: ${error.message}`),
           onOpen: () => {
-            get().appendAgentDiagnostic(sessionId, "info", "Agent event stream connected.");
+            get().appendAgentDiagnostic(sessionId, "info", "Agent global event stream connected.");
             void backfillOpenCodeRuntimeSessions(runtime.processInfo.processId);
           },
-          onClose: () => get().appendAgentDiagnostic(sessionId, "info", "Agent event stream closed."),
+          onClose: () => get().appendAgentDiagnostic(sessionId, "info", "Agent global event stream closed."),
         });
         openCodeHttpRuntimes.set(runtime.processInfo.processId, { sessionId, runtime, events });
         events.start();
@@ -2198,6 +2247,8 @@ export const useAgentStore = create<AgentStoreState>((set, get) => ({
     const promptSession = get().sessions.find((item) => item.id === sessionId) || session;
     if (!promptSession) return;
     const promptDelivery = openCodePromptPartsFromSession(promptSession, submittedPrompt.markdown);
+    const promptMessageId = createOpenCodeAscendingId("message");
+    const promptParts = openCodePromptPartsWithIds(promptDelivery.parts);
     if (promptDelivery.removedImageCount > 0) {
       get().appendAgentDiagnostic(sessionId, "warn", "Images were removed because the selected model does not support image input.");
     }
@@ -2216,7 +2267,9 @@ export const useAgentStore = create<AgentStoreState>((set, get) => ({
           messages: [
             ...item.messages,
             createUserMessage(composerDraft.trim() || submittedPrompt.historyText.trim(), {
-              providerParts: [{ type: "text", text: composerDraft }],
+              id: promptMessageId,
+              providerMessageId: promptMessageId,
+              providerParts: promptParts.map((part) => ({ ...part, messageID: promptMessageId })),
               composerDraft,
               submittedMarkdown: promptDelivery.markdown,
               submittedAttachmentTags,
@@ -2261,7 +2314,8 @@ export const useAgentStore = create<AgentStoreState>((set, get) => ({
 
         const configuredSession = get().sessions.find((item) => item.id === sessionId) || session;
         await httpRuntime.runtime.client.promptAsync(providerSessionId, {
-          parts: promptDelivery.parts,
+          messageID: promptMessageId,
+          parts: promptParts,
           model: openCodeModelFromSession(configuredSession),
           ...(configuredSession.modeId ? { agent: configuredSession.modeId } : {}),
         });

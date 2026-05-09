@@ -303,6 +303,9 @@ export interface OpenCodeErrorInfo {
 export interface OpenCodeBusEvent<TProperties = Record<string, unknown>> {
   type: string;
   properties: TProperties;
+  directory?: string;
+  project?: string;
+  workspace?: string;
   raw: unknown;
 }
 

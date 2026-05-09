@@ -47,6 +47,9 @@ function unwrapEvent(raw: unknown): OpenCodeBusEvent {
   const properties = typeof payload.properties === "object" && payload.properties !== null ? (payload.properties as Record<string, unknown>) : {};
   return {
     raw,
+    directory: typeof rawObject.directory === "string" ? rawObject.directory : undefined,
+    project: typeof rawObject.project === "string" ? rawObject.project : undefined,
+    workspace: typeof rawObject.workspace === "string" ? rawObject.workspace : undefined,
     type: typeof payload.type === "string" ? payload.type : "unknown",
     properties,
   };
@@ -66,13 +69,14 @@ function eventPart(properties: Record<string, unknown>): Record<string, unknown>
 
 function sseEventKey(event: OpenCodeBusEvent): string | undefined {
   const properties = eventProperties(event);
-  if (event.type === "session.status") return `session.status:${String(properties.sessionID || "")}`;
-  if (event.type === "lsp.updated") return "lsp.updated";
+  const directory = event.directory || "";
+  if (event.type === "session.status") return `session.status:${directory}:${String(properties.sessionID || "")}`;
+  if (event.type === "lsp.updated") return `lsp.updated:${directory}`;
   if (event.type !== "message.part.updated") return undefined;
   const part = eventPart(properties);
   const messageId = String(part?.messageID || properties.messageID || "");
   const partId = String(part?.id || properties.partID || "");
-  return messageId && partId ? `message.part.updated:${messageId}:${partId}` : undefined;
+  return messageId && partId ? `message.part.updated:${directory}:${messageId}:${partId}` : undefined;
 }
 
 function sseDeltaKey(event: OpenCodeBusEvent): string | undefined {
@@ -81,12 +85,12 @@ function sseDeltaKey(event: OpenCodeBusEvent): string | undefined {
     const part = eventPart(properties);
     const messageId = String(part?.messageID || properties.messageID || "");
     const partId = String(part?.id || properties.partID || "");
-    return messageId && partId ? `${messageId}:${partId}` : undefined;
+    return messageId && partId ? `${event.directory || ""}:${messageId}:${partId}` : undefined;
   }
   if (event.type === "message.part.delta") {
     const messageId = String(properties.messageID || "");
     const partId = String(properties.partID || "");
-    return messageId && partId ? `${messageId}:${partId}` : undefined;
+    return messageId && partId ? `${event.directory || ""}:${messageId}:${partId}` : undefined;
   }
   return undefined;
 }
@@ -382,6 +386,7 @@ export class OpenCodeSseConnection {
   }
 
   private enqueueEvent(event: OpenCodeBusEvent): void {
+    if (event.type === "sync") return;
     const key = sseEventKey(event);
     if (key) {
       const existingIndex = this.coalescedEvents.get(key);
