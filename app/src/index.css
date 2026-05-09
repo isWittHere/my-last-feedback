@@ -8626,14 +8626,21 @@ body,
   flex-direction: column;
   align-items: stretch;
   justify-content: flex-start;
+  gap: 8px;
 }
 
 .settings-agent-control-card .settings-segmented-control {
-  align-self: flex-start;
+  align-self: flex-end;
+  margin-top: auto;
 }
 
 .settings-agent-step-primary-row {
   align-items: center;
+}
+
+.settings-agent-navigation-behavior-group,
+.settings-agent-indicator-group {
+  margin-top: 6px;
 }
 
 .settings-agent-mode-group {
@@ -8648,12 +8655,14 @@ body,
 }
 
 .settings-agent-preview {
-  position: relative;
-  z-index: 1;
+  position: sticky;
+  top: 0;
+  z-index: 12;
   min-height: 31px;
   margin: 0 -18px 12px;
   padding: 0;
   background: var(--color-bg-surface);
+  box-shadow: 0 0px 0 var(--color-border-subtle);
   overflow: visible;
 }
 

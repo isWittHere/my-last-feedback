@@ -577,7 +577,6 @@ export function SettingsDialog({ open, onClose }: { open: boolean; onClose: () =
       ariaLabel={ariaLabel}
       value={currentMode}
       onChange={(mode) => handleAgentIndicatorModeChange(key, mode as AgentTopbarIndicatorMode)}
-      className="settings-segmented-icon-only"
       options={AGENT_TOPBAR_INDICATOR_MODE_OPTIONS.map((mode) => {
         const label = agentIndicatorModeLabel(mode);
         return { id: mode, label, icon: <AgentTopbarIndicatorModeIcon mode={mode} />, ariaLabel: `${ariaLabel}: ${label}` };
@@ -696,7 +695,6 @@ export function SettingsDialog({ open, onClose }: { open: boolean; onClose: () =
       ariaLabel={t("settings.agentNavigationIndicatorOrder", "Navigation indicator order")}
       value={agentConsoleSettings.navigationIndicatorOrder}
       onChange={(navigationIndicatorOrder) => handleAgentNavigationIndicatorOrderChange(navigationIndicatorOrder as AgentNavigationIndicatorOrder)}
-      className="settings-segmented-icon-only"
       options={AGENT_NAVIGATION_INDICATOR_ORDER_OPTIONS.map((navigationIndicatorOrder) => {
         const label = navigationIndicatorOrderLabel(navigationIndicatorOrder);
         return { id: navigationIndicatorOrder, label, ariaLabel: `${t("settings.agentNavigationIndicatorOrder", "Navigation indicator order")}: ${label}`, icon: <Icon name="arrow-right" size={13} style={{ transform: navigationIndicatorOrder === "rightToLeft" ? "rotate(180deg)" : undefined }} /> };
@@ -718,13 +716,12 @@ export function SettingsDialog({ open, onClose }: { open: boolean; onClose: () =
 
   const renderAgentNavigationGroupBackgroundModeGroup = () => (
     <SettingsSegmentedControl
-      ariaLabel={t("settings.agentNavigationGroupBackgroundMode", "Round grouping background")}
+      ariaLabel={t("settings.agentNavigationGroupBackgroundMode", "Round group background")}
       value={agentConsoleSettings.navigationGroupBackgroundMode}
       onChange={(mode) => handleAgentNavigationGroupBackgroundModeChange(mode as AgentNavigationGroupBackgroundMode)}
-      className="settings-segmented-icon-only"
       options={AGENT_NAVIGATION_GROUP_BACKGROUND_MODE_OPTIONS.map((mode) => {
         const label = navigationGroupBackgroundModeLabel(mode);
-        return { id: mode, label, icon: navigationGroupBackgroundModeIcon(mode), ariaLabel: `${t("settings.agentNavigationGroupBackgroundMode", "Round grouping background")}: ${label}` };
+        return { id: mode, label, icon: navigationGroupBackgroundModeIcon(mode), ariaLabel: `${t("settings.agentNavigationGroupBackgroundMode", "Round group background")}: ${label}` };
       })}
     />
   );
@@ -1440,20 +1437,24 @@ export function SettingsDialog({ open, onClose }: { open: boolean; onClose: () =
                     {renderAgentProcessStepModeGroup()}
                   </div>
                   <div className="settings-agent-topbar-options settings-agent-step-options">
-                    <div className="settings-row settings-agent-toggle-row settings-agent-control-card">
-                      <div className="settings-row-info">
-                        <span className="settings-label">{t("settings.agentTimelineStreamingStepMode", "Streaming step default style")}</span>
-                        <span className="settings-sublabel">{t("settings.agentTimelineStreamingStepModeDesc", "Only affects how steps expand while an Agent is streaming in timeline view.")}</span>
-                      </div>
-                      {renderAgentTimelineStreamingStepModeGroup()}
-                    </div>
-                    <div className="settings-row settings-agent-toggle-row settings-agent-control-card">
-                      <div className="settings-row-info">
-                        <span className="settings-label">{t("settings.agentTodoUpdateDisplayMode", "Todo update style")}</span>
-                        <span className="settings-sublabel">{t("settings.agentTodoUpdateDisplayModeDesc", "Choose whether timeline todo updates show a count summary or the task panel.")}</span>
-                      </div>
-                      {renderAgentTodoUpdateDisplayModeGroup()}
-                    </div>
+                    {agentConsoleSettings.processStepDefaultMode === "timeline" && (
+                      <>
+                        <div className="settings-row settings-agent-toggle-row settings-agent-control-card">
+                          <div className="settings-row-info">
+                            <span className="settings-label">{t("settings.agentTimelineStreamingStepMode", "Streaming step default style")}</span>
+                            <span className="settings-sublabel">{t("settings.agentTimelineStreamingStepModeDesc", "Only affects how steps expand while an Agent is streaming in timeline view.")}</span>
+                          </div>
+                          {renderAgentTimelineStreamingStepModeGroup()}
+                        </div>
+                        <div className="settings-row settings-agent-toggle-row settings-agent-control-card">
+                          <div className="settings-row-info">
+                            <span className="settings-label">{t("settings.agentTodoUpdateDisplayMode", "Todo update style")}</span>
+                            <span className="settings-sublabel">{t("settings.agentTodoUpdateDisplayModeDesc", "Choose whether timeline todo updates show a count summary or the task panel.")}</span>
+                          </div>
+                          {renderAgentTodoUpdateDisplayModeGroup()}
+                        </div>
+                      </>
+                    )}
                     <div className="settings-row settings-agent-toggle-row">
                       <div className="settings-row-info">
                         <span className="settings-label">{t("settings.agentCollapseOutputBlankLines", "Collapse consecutive blank lines in output")}</span>
@@ -1548,73 +1549,89 @@ export function SettingsDialog({ open, onClose }: { open: boolean; onClose: () =
                       <span className="settings-label">{t("settings.agentTopbarIndicators", "Topbar indicators")}</span>
                       <span className="settings-sublabel">{t("settings.agentTopbarIndicatorsDesc", "Configure how Agent Console diff and context indicators appear in the topbar.")}</span>
                     </div>
+                    <div className="settings-row settings-agent-toggle-row settings-agent-navigation-primary-row">
+                      <div className="settings-row-info">
+                        <span className="settings-label">{t("settings.agentNavigationVisualizationMode", "Navigation visualization")}</span>
+                        <span className="settings-sublabel">{t("settings.agentNavigationVisualizationModeDesc", "Choose whether Agent navigation uses compact bars or a smooth line-area chart.")}</span>
+                      </div>
+                      {renderAgentNavigationVisualizationModeGroup()}
+                    </div>
                     <div className="settings-agent-topbar-options">
-                      <div className="settings-row settings-agent-toggle-row">
-                        <div className="settings-row-info">
-                          <span className="settings-label">{t("settings.agentNavigationVisualizationMode", "Navigation visualization")}</span>
-                          <span className="settings-sublabel">{t("settings.agentNavigationVisualizationModeDesc", "Choose whether Agent navigation uses compact bars or a smooth line-area chart.")}</span>
-                        </div>
-                        {renderAgentNavigationVisualizationModeGroup()}
-                      </div>
-                      <div className="settings-row settings-agent-toggle-row">
-                        <div className="settings-row-info">
-                          <span className="settings-label">{t("settings.agentDefaultExpandHeaderDetails", "Default-expand second row")}</span>
-                          <span className="settings-sublabel">{t("settings.agentDefaultExpandHeaderDetailsDesc", "Open the Agent navigation detail row by default for each session.")}</span>
-                        </div>
-                        <button
-                          type="button"
-                          className={`settings-toggle${agentConsoleSettings.defaultExpandHeaderDetails ? " settings-toggle-on" : ""}`}
-                          onClick={handleAgentHeaderDefaultExpandToggle}
-                          aria-label={t("settings.agentDefaultExpandHeaderDetails", "Default-expand second row")}
-                          aria-pressed={agentConsoleSettings.defaultExpandHeaderDetails}
-                        >
-                          <span className="settings-toggle-knob" />
-                        </button>
-                      </div>
-                      <div className="settings-row settings-agent-toggle-row">
-                        <div className="settings-row-info">
-                          <span className="settings-label">{t("settings.agentStickyUserMessageBar", "Show sticky user message row")}</span>
-                          <span className="settings-sublabel">{t("settings.agentStickyUserMessageBarDesc", "Keep the latest scrolled-past user message visible at the top of the chat timeline.")}</span>
-                        </div>
-                        <button
-                          type="button"
-                          className={`settings-toggle${agentConsoleSettings.showStickyUserMessageBar ? " settings-toggle-on" : ""}`}
-                          onClick={handleAgentStickyUserMessageBarToggle}
-                          aria-label={t("settings.agentStickyUserMessageBar", "Show sticky user message row")}
-                          aria-pressed={agentConsoleSettings.showStickyUserMessageBar}
-                        >
-                          <span className="settings-toggle-knob" />
-                        </button>
-                      </div>
-                      <div className="settings-row settings-agent-toggle-row">
+                      <div className="settings-row settings-agent-toggle-row settings-agent-control-card">
                         <div className="settings-row-info">
                           <span className="settings-label">{t("settings.agentNavigationIndicatorOrder", "Navigation indicator order")}</span>
                           <span className="settings-sublabel">{t("settings.agentNavigationIndicatorOrderDesc", "Choose whether process indicator columns read from oldest to newest or newest to oldest.")}</span>
                         </div>
                         {renderAgentNavigationIndicatorOrderGroup()}
                       </div>
-                      <div className="settings-row settings-agent-toggle-row">
-                        <div className="settings-row-info">
-                          <span className="settings-label">{t("settings.agentNavigationGroupBackgroundMode", "Round grouping background")}</span>
-                          <span className="settings-sublabel">{t("settings.agentNavigationGroupBackgroundModeDesc", "Choose when conversation-round grouping backgrounds appear in the Agent navigation bar.")}</span>
+                      {agentConsoleSettings.navigationVisualizationMode === "bars" && (
+                        <div className="settings-row settings-agent-toggle-row settings-agent-control-card">
+                          <div className="settings-row-info">
+                            <span className="settings-label">{t("settings.agentNavigationGroupBackgroundMode", "Round group background")}</span>
+                            <span className="settings-sublabel">{t("settings.agentNavigationGroupBackgroundModeDesc", "Choose when conversation-round grouping backgrounds appear in the Agent navigation bar.")}</span>
+                          </div>
+                          {renderAgentNavigationGroupBackgroundModeGroup()}
                         </div>
-                        {renderAgentNavigationGroupBackgroundModeGroup()}
+                      )}
+                    </div>
+                    <div className="settings-row settings-row-stacked settings-agent-navigation-behavior-group">
+                      <div className="settings-row-info">
+                        <span className="settings-label">{t("settings.agentNavigationBehavior", "Navigation behavior")}</span>
+                        <span className="settings-sublabel">{t("settings.agentNavigationBehaviorDesc", "Configure the navigation detail row and sticky user-message row behavior.")}</span>
+                      </div>
+                      <div className="settings-agent-topbar-options settings-agent-navigation-behavior-options">
+                        <div className="settings-row settings-agent-toggle-row">
+                          <div className="settings-row-info">
+                            <span className="settings-label">{t("settings.agentDefaultExpandHeaderDetails", "Default-expand second row")}</span>
+                            <span className="settings-sublabel">{t("settings.agentDefaultExpandHeaderDetailsDesc", "Open the Agent navigation detail row by default for each session.")}</span>
+                          </div>
+                          <button
+                            type="button"
+                            className={`settings-toggle${agentConsoleSettings.defaultExpandHeaderDetails ? " settings-toggle-on" : ""}`}
+                            onClick={handleAgentHeaderDefaultExpandToggle}
+                            aria-label={t("settings.agentDefaultExpandHeaderDetails", "Default-expand second row")}
+                            aria-pressed={agentConsoleSettings.defaultExpandHeaderDetails}
+                          >
+                            <span className="settings-toggle-knob" />
+                          </button>
+                        </div>
+                        <div className="settings-row settings-agent-toggle-row">
+                          <div className="settings-row-info">
+                            <span className="settings-label">{t("settings.agentStickyUserMessageBar", "Show sticky user message row")}</span>
+                            <span className="settings-sublabel">{t("settings.agentStickyUserMessageBarDesc", "Keep the latest scrolled-past user message visible at the top of the chat timeline.")}</span>
+                          </div>
+                          <button
+                            type="button"
+                            className={`settings-toggle${agentConsoleSettings.showStickyUserMessageBar ? " settings-toggle-on" : ""}`}
+                            onClick={handleAgentStickyUserMessageBarToggle}
+                            aria-label={t("settings.agentStickyUserMessageBar", "Show sticky user message row")}
+                            aria-pressed={agentConsoleSettings.showStickyUserMessageBar}
+                          >
+                            <span className="settings-toggle-knob" />
+                          </button>
+                        </div>
                       </div>
                     </div>
-                    <div className="settings-agent-indicator-list">
-                      <div className="settings-row settings-agent-toggle-row">
-                        <div className="settings-row-info">
-                          <span className="settings-label">{t("settings.agentDiffIndicator", "Diff indicator")}</span>
-                          <span className="settings-sublabel">{t("settings.agentDiffIndicatorDesc", "Choose whether diff activity appears as text, graphics, or stays hidden in the Agent topbar.")}</span>
-                        </div>
-                        {renderAgentIndicatorModeGroup("diffIndicatorMode", agentConsoleSettings.diffIndicatorMode, t("settings.agentDiffIndicator", "Diff indicator"))}
+                    <div className="settings-row settings-row-stacked settings-agent-indicator-group">
+                      <div className="settings-row-info">
+                        <span className="settings-label">{t("settings.agentIndicatorGroup", "Indicators")}</span>
+                        <span className="settings-sublabel">{t("settings.agentIndicatorGroupDesc", "Configure how Agent topbar diff and context indicators are shown.")}</span>
                       </div>
-                      <div className="settings-row settings-agent-toggle-row">
-                        <div className="settings-row-info">
-                          <span className="settings-label">{t("settings.agentContextIndicator", "Context indicator")}</span>
-                          <span className="settings-sublabel">{t("settings.agentContextIndicatorDesc", "Choose whether context usage appears as text, graphics, or stays hidden in the Agent topbar.")}</span>
+                      <div className="settings-agent-indicator-list">
+                        <div className="settings-row settings-agent-toggle-row settings-agent-control-card">
+                          <div className="settings-row-info">
+                            <span className="settings-label">{t("settings.agentDiffIndicator", "Diff indicator")}</span>
+                            <span className="settings-sublabel">{t("settings.agentDiffIndicatorDesc", "Choose whether diff activity appears as text, graphics, or stays hidden in the Agent topbar.")}</span>
+                          </div>
+                          {renderAgentIndicatorModeGroup("diffIndicatorMode", agentConsoleSettings.diffIndicatorMode, t("settings.agentDiffIndicator", "Diff indicator"))}
                         </div>
-                        {renderAgentIndicatorModeGroup("contextIndicatorMode", agentConsoleSettings.contextIndicatorMode, t("settings.agentContextIndicator", "Context indicator"))}
+                        <div className="settings-row settings-agent-toggle-row settings-agent-control-card">
+                          <div className="settings-row-info">
+                            <span className="settings-label">{t("settings.agentContextIndicator", "Context indicator")}</span>
+                            <span className="settings-sublabel">{t("settings.agentContextIndicatorDesc", "Choose whether context usage appears as text, graphics, or stays hidden in the Agent topbar.")}</span>
+                          </div>
+                          {renderAgentIndicatorModeGroup("contextIndicatorMode", agentConsoleSettings.contextIndicatorMode, t("settings.agentContextIndicator", "Context indicator"))}
+                        </div>
                       </div>
                     </div>
                     <div className="settings-agent-visual-group settings-agent-toggle-row">

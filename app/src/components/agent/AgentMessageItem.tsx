@@ -1,5 +1,5 @@
 import type { CSSProperties } from "react";
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { useTranslation } from "react-i18next";
 import { useAgentConsoleSettings } from "../../agentConsoleSettings";
 import { getAgentSessionIdentity } from "../../agent/sessionIdentity";
@@ -56,6 +56,81 @@ function userSubmittedText(message: AgentMessage, resultBlocks: AgentContentBloc
 
 function collapseConsecutiveBlankLines(text: string): string {
   return text.replace(/(?:[ \t]*\n){3,}/g, "\n\n");
+}
+
+function streamingDelayMs(lag: number, upstreamActive: boolean): number {
+  if (lag > 300) return upstreamActive ? 4 : 2;
+  if (lag > 160) return upstreamActive ? 7 : 4;
+  if (lag > 80) return upstreamActive ? 12 : 7;
+  if (lag > 32) return upstreamActive ? 20 : 12;
+  return upstreamActive ? 34 : 18;
+}
+
+function useSmoothStreamingBlocks(blocks: AgentContentBlock[], enabled: boolean, upstreamActive: boolean): AgentContentBlock[] {
+  const [smoothActive, setSmoothActive] = useState(false);
+  const [visibleCounts, setVisibleCounts] = useState<Record<string, number>>({});
+  const textTargets = useMemo(() => blocks
+    .filter((block): block is Extract<AgentContentBlock, { type: "text" }> => block.type === "text")
+    .map((block) => ({ id: block.id, chars: Array.from(block.content) })), [blocks]);
+  const targetKey = useMemo(() => textTargets.map((target) => `${target.id}:${target.chars.length}`).join("|"), [textTargets]);
+
+  useEffect(() => {
+    if (enabled && upstreamActive) {
+      setSmoothActive(true);
+      return;
+    }
+    if (!enabled) {
+      setSmoothActive(false);
+      setVisibleCounts({});
+    }
+  }, [enabled, upstreamActive]);
+
+  useEffect(() => {
+    if (!smoothActive) return;
+    setVisibleCounts((current) => {
+      const next: Record<string, number> = {};
+      for (const target of textTargets) {
+        next[target.id] = Math.min(current[target.id] ?? 0, target.chars.length);
+      }
+      return next;
+    });
+  }, [smoothActive, targetKey]);
+
+  const totalLag = smoothActive
+    ? textTargets.reduce((sum, target) => sum + Math.max(0, target.chars.length - (visibleCounts[target.id] ?? 0)), 0)
+    : 0;
+
+  useEffect(() => {
+    if (!smoothActive) return;
+    if (totalLag <= 0) {
+      if (!upstreamActive) setSmoothActive(false);
+      return;
+    }
+    const timer = window.setTimeout(() => {
+      setVisibleCounts((current) => {
+        const next = { ...current };
+        for (const target of textTargets) {
+          const currentCount = Math.min(next[target.id] ?? 0, target.chars.length);
+          if (currentCount < target.chars.length) {
+            next[target.id] = currentCount + 1;
+            break;
+          }
+        }
+        return next;
+      });
+    }, streamingDelayMs(totalLag, upstreamActive));
+    return () => window.clearTimeout(timer);
+  }, [smoothActive, targetKey, totalLag, upstreamActive]);
+
+  return useMemo(() => {
+    if (!smoothActive) return blocks;
+    return blocks.map((block) => {
+      if (block.type !== "text") return block;
+      const visibleCount = visibleCounts[block.id] ?? 0;
+      const visibleContent = Array.from(block.content).slice(0, visibleCount).join("");
+      return visibleContent === block.content ? block : { ...block, content: visibleContent };
+    });
+  }, [blocks, smoothActive, visibleCounts]);
 }
 
 function ResultBlocks({ blocks, projectDirectory, collapseOutputBlankLines }: { blocks: AgentContentBlock[]; projectDirectory: string; collapseOutputBlankLines: boolean }) {
@@ -186,7 +261,7 @@ function AgentUserAttachmentTags({ tags }: { tags?: AgentSubmittedAttachmentTag[
 export function AgentMessageItem({ session, message, projectDirectory }: { session: AgentSession; message: AgentMessage; projectDirectory: string }) {
   const { i18n, t } = useTranslation();
   const [fullInfoOpen, setFullInfoOpen] = useState(false);
-  const { collapseConsecutiveOutputBlankLines, showMessageSpeakerLine } = useAgentConsoleSettings();
+  const { collapseConsecutiveOutputBlankLines, showMessageSpeakerLine, smoothStreamingOutput } = useAgentConsoleSettings();
   const { processBlocks, resultBlocks } = splitAgentMessageBlocks(message);
   const { alias, color, says, avatarKind } = actorInfo(session, message, i18n.language.startsWith("zh") ? "zh" : "en");
   const userText = message.role === "user" ? userDisplayText(message, resultBlocks) : "";
@@ -203,6 +278,7 @@ export function AgentMessageItem({ session, message, projectDirectory }: { sessi
   const staleActivityNotice = hasStaleProcessState
     ? t("agentConsole.staleProcessNotice", "The session or message has ended, but some process state was still marked running, so it is shown as completed.")
     : undefined;
+  const displayedResultBlocks = useSmoothStreamingBlocks(resultBlocks, smoothStreamingOutput && message.role === "assistant", isStreaming);
 
   if (message.role === "user") {
     return (
@@ -251,7 +327,7 @@ export function AgentMessageItem({ session, message, projectDirectory }: { sessi
           </header>
         )}
         <AgentProcessGroup blocks={processBlocks} messageId={message.id} sessionId={session.id} isStreaming={isStreaming} projectDirectory={projectDirectory} staleActivityNotice={staleActivityNotice} />
-        <ResultBlocks blocks={resultBlocks} projectDirectory={projectDirectory} collapseOutputBlankLines={collapseConsecutiveOutputBlankLines} />
+        <ResultBlocks blocks={displayedResultBlocks} projectDirectory={projectDirectory} collapseOutputBlankLines={collapseConsecutiveOutputBlankLines} />
         <AgentMessageActions session={session} message={message} copyText={assistantText} disabled={isStreaming} />
       </div>
     </article>
