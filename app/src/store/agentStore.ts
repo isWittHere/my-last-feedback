@@ -5,8 +5,8 @@ import type { OpenCodeAgentInfo, OpenCodeBusEvent, OpenCodeCommandFilePart, Open
 import { createAgentSession } from "../agent/sessionFactory";
 import { buildSubmittedComposerPayload, collectSubmittedResourceLinks } from "../composer/submittedFeedback";
 import { getAgentConsoleSettings } from "../agentConsoleSettings";
-import { evaluateOpenCodePermissionRuleAction, getOpenCodeDefaultPermissionRules, getOpenCodePermissionPresetRules, openCodePermissionActionToRules, setOpenCodePreferredModel, syncOpenCodeModels, type OpenCodePermissionPresetId, type OpenCodePermissionSettingAction } from "../openCodeSettings";
-import type { AgentChoiceOption, AgentCompactionBlock, AgentContentBlock, AgentContextCompactionConfig, AgentContextUsage, AgentDiagnosticEntry, AgentMessage, AgentModelCapabilities, AgentPermissionBlock, AgentProviderMessagePart, AgentSession, AgentSessionFileDiff, AgentSubmittedAttachmentTag, AgentThinkingBlock, AgentTokenUsage } from "../agent/types";
+import { getOpenCodeDefaultPermissionRules, getOpenCodePermissionPresetRules, openCodePermissionActionToRules, setOpenCodePreferredModel, syncOpenCodeModels, type OpenCodePermissionPresetId, type OpenCodePermissionSettingAction } from "../openCodeSettings";
+import type { AgentChoiceOption, AgentCompactionBlock, AgentContentBlock, AgentContextCompactionConfig, AgentContextUsage, AgentDiagnosticEntry, AgentMessage, AgentModelCapabilities, AgentProviderMessagePart, AgentSession, AgentSessionFileDiff, AgentSubmittedAttachmentTag, AgentThinkingBlock, AgentTokenUsage } from "../agent/types";
 import type { AgentProviderId } from "../agent/types";
 import type { GitAction, ImageAttachment, MlcAttachment, WebAttachment } from "./feedbackStore";
 
@@ -1677,33 +1677,6 @@ function resolvePermissionInSession(session: AgentSession, requestId: string, op
   };
 }
 
-function pendingPermissionBlocks(session: AgentSession): AgentPermissionBlock[] {
-  return session.messages.flatMap((message) => message.blocks.filter((block): block is AgentPermissionBlock => block.type === "permission" && block.status === "pending"));
-}
-
-function openCodePermissionReplyForRules(permission: AgentPermissionBlock, rules: OpenCodePermissionRule[]): OpenCodePermissionReply | undefined {
-  if (!permission.permission) return undefined;
-  const patterns = permission.patterns && permission.patterns.length > 0 ? permission.patterns : ["*"];
-  const actions = patterns.map((pattern) => evaluateOpenCodePermissionRuleAction(rules, permission.permission || "", pattern));
-  if (actions.some((action) => action === "deny")) return "reject";
-  if (actions.every((action) => action === "allow")) return "always";
-  return undefined;
-}
-
-function autoResolvePendingOpenCodePermissions(session: AgentSession, httpRuntime: AgentOpenCodeHttpRuntimeEntry | null, rules: OpenCodePermissionRule[]) {
-  if (!session.providerSessionId || !httpRuntime) return;
-  for (const permission of pendingPermissionBlocks(session)) {
-    const reply = openCodePermissionReplyForRules(permission, rules);
-    if (!reply) continue;
-    void httpRuntime.runtime.client.replyPermission(permission.requestId, { reply })
-      .catch(() => httpRuntime.runtime.client.respondPermission(session.providerSessionId!, permission.requestId, reply))
-      .catch((error) => useAgentStore.getState().appendAgentDiagnostic(session.id, "error", `Failed to apply updated OpenCode permission: ${error instanceof Error ? error.message : String(error)}`));
-    useAgentStore.setState((state) => ({
-      sessions: updateSession(state.sessions, session.id, (item) => resolvePermissionInSession(item, permission.requestId, reply)),
-    }));
-  }
-}
-
 function updateSession(sessions: AgentSession[], sessionId: string, updater: (session: AgentSession) => AgentSession): AgentSession[] {
   return sessions.map((session) => session.id === sessionId ? updater(session) : session);
 }
@@ -2656,7 +2629,6 @@ export const useAgentStore = create<AgentStoreState>((set, get) => ({
             updatedAt: nowIso(),
           })),
         }));
-        autoResolvePendingOpenCodePermissions(session, httpRuntime, nextPermissionRules);
         if (!session.providerSessionId || !httpRuntime) {
           return;
         }
@@ -2699,7 +2671,6 @@ export const useAgentStore = create<AgentStoreState>((set, get) => ({
             updatedAt: nowIso(),
           })),
         }));
-        autoResolvePendingOpenCodePermissions(session, httpRuntime, permissionRules);
         if (!session.providerSessionId || !httpRuntime) {
           return;
         }
@@ -2742,7 +2713,6 @@ export const useAgentStore = create<AgentStoreState>((set, get) => ({
             updatedAt: nowIso(),
           })),
         }));
-        autoResolvePendingOpenCodePermissions(session, httpRuntime, permissionRules);
         if (!session.providerSessionId || !httpRuntime) {
           return;
         }

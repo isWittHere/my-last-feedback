@@ -73,6 +73,7 @@ export function AgentPermissionIndicator({ session }: { session: AgentSession })
 
   const activePresetId = getOpenCodePermissionPresetId(currentRules);
   const permissionTone = activePresetId ? presetVariant(activePresetId) : getOpenCodePermissionPresetAction(currentRules, "bash");
+  const permissionControlsDisabled = session.openCodePermissionUpdating || session.status === "starting" || session.status === "running" || session.status === "cancelling";
 
   return (
     <div ref={rootRef} className={`agent-permission-indicator-wrap${open ? " open" : ""}`}>
@@ -93,16 +94,16 @@ export function AgentPermissionIndicator({ session }: { session: AgentSession })
             <span>{t("agentConsole.sessionPermissions", "Session permissions")}</span>
             {session.openCodePermissionUpdating && <strong>{t("agentConsole.permissionUpdating", "Updating")}</strong>}
           </div>
-          {session.status === "running" && (
+          {permissionControlsDisabled && !session.openCodePermissionUpdating && (
             <div className="agent-permission-running-note">
-              {t("agentConsole.permissionRunningNote", "Applies fully on the next turn; pending approvals are handled immediately when possible.")}
+              {t("agentConsole.permissionRunningNote", "Permission changes are locked while the current prompt is running.")}
             </div>
           )}
           <SettingsSegmentedControl
             ariaLabel={t("agentConsole.permissionPresets", "Permission presets")}
             value={activePresetId || ""}
             onChange={(presetId) => void applyOpenCodeSessionPermissionPreset(session.id, presetId as OpenCodePermissionPresetId)}
-            disabled={session.openCodePermissionUpdating}
+            disabled={permissionControlsDisabled}
             className="agent-permission-preset-options"
             options={OPEN_CODE_PERMISSION_PRESETS.map((preset) => ({
               id: preset.id,
@@ -125,7 +126,7 @@ export function AgentPermissionIndicator({ session }: { session: AgentSession })
                     ariaLabel={t(definition.labelKey, definition.defaultLabel)}
                     value={currentAction}
                     onChange={(action) => handleActionChange(definition.permission, action as OpenCodePermissionSettingAction)}
-                    disabled={session.openCodePermissionUpdating}
+                    disabled={permissionControlsDisabled}
                     className="agent-permission-actions"
                     options={actionOptions.map((action) => ({
                       id: action,
@@ -143,7 +144,7 @@ export function AgentPermissionIndicator({ session }: { session: AgentSession })
             type="button"
             className="agent-permission-reset"
             onClick={() => void resetOpenCodeSessionPermissions(session.id)}
-            disabled={session.openCodePermissionUpdating}
+            disabled={permissionControlsDisabled}
           >
             <Icon name="refresh" size={12} />
             <span>{t("agentConsole.restoreDefaultPermissions", "Restore defaults")}</span>
