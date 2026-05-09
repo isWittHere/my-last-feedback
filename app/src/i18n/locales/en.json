@@ -135,6 +135,7 @@
     "permissionAsk": "Ask",
     "permissionDeny": "Deny",
     "permissionUpdating": "Updating",
+    "permissionRunningNote": "Applies fully on the next turn; pending approvals are handled immediately when possible.",
     "restoreDefaultPermissions": "Restore defaults",
     "approvalMoreCount": "+{{count}} more",
     "allow": "Allow",

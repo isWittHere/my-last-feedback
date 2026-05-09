@@ -8,7 +8,7 @@ function latestTasks(session: AgentSession): AgentTaskItem[] {
     const message = session.messages[messageIndex];
     for (let blockIndex = message.blocks.length - 1; blockIndex >= 0; blockIndex -= 1) {
       const block = message.blocks[blockIndex];
-      if (block.type === "task_list" && block.tasks.length > 0) return block.tasks;
+      if (block.type === "task_list") return block.tasks;
     }
   }
   return [];

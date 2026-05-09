@@ -5,8 +5,8 @@ import type { OpenCodeAgentInfo, OpenCodeBusEvent, OpenCodeCommandFilePart, Open
 import { createAgentSession } from "../agent/sessionFactory";
 import { buildSubmittedComposerPayload, collectSubmittedResourceLinks } from "../composer/submittedFeedback";
 import { getAgentConsoleSettings } from "../agentConsoleSettings";
-import { getOpenCodeDefaultPermissionRules, getOpenCodePermissionPresetRules, openCodePermissionActionToRules, setOpenCodePreferredModel, syncOpenCodeModels, type OpenCodePermissionPresetId, type OpenCodePermissionSettingAction } from "../openCodeSettings";
-import type { AgentChoiceOption, AgentCompactionBlock, AgentContentBlock, AgentContextCompactionConfig, AgentContextUsage, AgentDiagnosticEntry, AgentMessage, AgentModelCapabilities, AgentProviderMessagePart, AgentSession, AgentSessionFileDiff, AgentSubmittedAttachmentTag, AgentThinkingBlock, AgentTokenUsage } from "../agent/types";
+import { evaluateOpenCodePermissionRuleAction, getOpenCodeDefaultPermissionRules, getOpenCodePermissionPresetRules, openCodePermissionActionToRules, setOpenCodePreferredModel, syncOpenCodeModels, type OpenCodePermissionPresetId, type OpenCodePermissionSettingAction } from "../openCodeSettings";
+import type { AgentChoiceOption, AgentCompactionBlock, AgentContentBlock, AgentContextCompactionConfig, AgentContextUsage, AgentDiagnosticEntry, AgentMessage, AgentModelCapabilities, AgentPermissionBlock, AgentProviderMessagePart, AgentSession, AgentSessionFileDiff, AgentSubmittedAttachmentTag, AgentThinkingBlock, AgentTokenUsage } from "../agent/types";
 import type { AgentProviderId } from "../agent/types";
 import type { GitAction, ImageAttachment, MlcAttachment, WebAttachment } from "./feedbackStore";
 
@@ -371,6 +371,19 @@ function createOpenCodeHttpPort(): number {
 
 function openCodeConfiguredPermissionRules(): OpenCodePermissionRule[] {
   return getOpenCodeDefaultPermissionRules();
+}
+
+function openCodeSessionPermissionRulesForCreate(session: AgentSession): OpenCodePermissionRule[] {
+  return session.openCodePermissionRules && session.openCodePermissionRules.length > 0
+    ? session.openCodePermissionRules
+    : openCodeConfiguredPermissionRules();
+}
+
+function mergeOpenCodeSessionPermissionRules(session: AgentSession, permissionRules: OpenCodePermissionRule[]): OpenCodePermissionRule[] {
+  const baseRules = session.openCodePermissionRules && session.openCodePermissionRules.length > 0
+    ? session.openCodePermissionRules
+    : openCodeConfiguredPermissionRules();
+  return [...baseRules, ...permissionRules];
 }
 
 function normalizeOpenCodeFileDiffs(diff: unknown[]): AgentSessionFileDiff[] {
@@ -1664,6 +1677,33 @@ function resolvePermissionInSession(session: AgentSession, requestId: string, op
   };
 }
 
+function pendingPermissionBlocks(session: AgentSession): AgentPermissionBlock[] {
+  return session.messages.flatMap((message) => message.blocks.filter((block): block is AgentPermissionBlock => block.type === "permission" && block.status === "pending"));
+}
+
+function openCodePermissionReplyForRules(permission: AgentPermissionBlock, rules: OpenCodePermissionRule[]): OpenCodePermissionReply | undefined {
+  if (!permission.permission) return undefined;
+  const patterns = permission.patterns && permission.patterns.length > 0 ? permission.patterns : ["*"];
+  const actions = patterns.map((pattern) => evaluateOpenCodePermissionRuleAction(rules, permission.permission || "", pattern));
+  if (actions.some((action) => action === "deny")) return "reject";
+  if (actions.every((action) => action === "allow")) return "always";
+  return undefined;
+}
+
+function autoResolvePendingOpenCodePermissions(session: AgentSession, httpRuntime: AgentOpenCodeHttpRuntimeEntry | null, rules: OpenCodePermissionRule[]) {
+  if (!session.providerSessionId || !httpRuntime) return;
+  for (const permission of pendingPermissionBlocks(session)) {
+    const reply = openCodePermissionReplyForRules(permission, rules);
+    if (!reply) continue;
+    void httpRuntime.runtime.client.replyPermission(permission.requestId, { reply })
+      .catch(() => httpRuntime.runtime.client.respondPermission(session.providerSessionId!, permission.requestId, reply))
+      .catch((error) => useAgentStore.getState().appendAgentDiagnostic(session.id, "error", `Failed to apply updated OpenCode permission: ${error instanceof Error ? error.message : String(error)}`));
+    useAgentStore.setState((state) => ({
+      sessions: updateSession(state.sessions, session.id, (item) => resolvePermissionInSession(item, permission.requestId, reply)),
+    }));
+  }
+}
+
 function updateSession(sessions: AgentSession[], sessionId: string, updater: (session: AgentSession) => AgentSession): AgentSession[] {
   return sessions.map((session) => session.id === sessionId ? updater(session) : session);
 }
@@ -1699,6 +1739,9 @@ export const useAgentStore = create<AgentStoreState>((set, get) => ({
       availableCommandsError: inheritOpenCodeCommands ? activeSession?.availableCommandsError : undefined,
       availableCommandsLoadedAt: inheritOpenCodeCommands ? activeSession?.availableCommandsLoadedAt : undefined,
       configOptions: activeSession?.configOptions || [],
+      openCodePermissionRules: activeSession?.openCodePermissionRules && activeSession.openCodePermissionRules.length > 0
+        ? activeSession.openCodePermissionRules
+        : openCodeConfiguredPermissionRules(),
       status: "idle",
       createdAt,
       updatedAt: createdAt,
@@ -2068,7 +2111,7 @@ export const useAgentStore = create<AgentStoreState>((set, get) => ({
           if (!providerSessionId) {
             const created = await httpRuntime.runtime.client.createSession();
             providerSessionId = created.id;
-            const permissionRules = openCodeConfiguredPermissionRules();
+            const permissionRules = openCodeSessionPermissionRulesForCreate(session);
             await httpRuntime.runtime.client.updateSession(providerSessionId, { permission: permissionRules }).catch((error) => {
               get().appendAgentDiagnostic(sessionId, "warn", `Failed to apply OpenCode permissions: ${error instanceof Error ? error.message : String(error)}`);
             });
@@ -2183,7 +2226,7 @@ export const useAgentStore = create<AgentStoreState>((set, get) => ({
         if (!providerSessionId) {
           const created = await httpRuntime.runtime.client.createSession();
           providerSessionId = created.id;
-          const permissionRules = openCodeConfiguredPermissionRules();
+          const permissionRules = openCodeSessionPermissionRulesForCreate(session);
           await httpRuntime.runtime.client.updateSession(providerSessionId, { permission: permissionRules }).catch((error) => {
             get().appendAgentDiagnostic(sessionId, "warn", `Failed to apply OpenCode permissions: ${error instanceof Error ? error.message : String(error)}`);
           });
@@ -2601,22 +2644,25 @@ export const useAgentStore = create<AgentStoreState>((set, get) => ({
   updateOpenCodeSessionPermission: async (sessionId, permission, action) => {
         const session = get().sessions.find((item) => item.id === sessionId);
         const httpRuntime = openCodeHttpRuntimeForSession(session, get().sessions);
-        if (!session?.providerSessionId || !httpRuntime) {
-          get().appendAgentDiagnostic(sessionId, "warn", "OpenCode session is not ready for permission updates.");
-          return;
-        }
+        if (!session) return;
         const permissionRules = openCodePermissionActionToRules(permission, action);
+        const nextPermissionRules = mergeOpenCodeSessionPermissionRules(session, permissionRules);
         set((state) => ({
           sessions: updateSession(state.sessions, sessionId, (item) => ({
             ...item,
-            openCodePermissionUpdating: true,
+            openCodePermissionRules: nextPermissionRules,
+            openCodePermissionUpdating: Boolean(session.providerSessionId && httpRuntime),
             openCodePermissionError: undefined,
             updatedAt: nowIso(),
           })),
         }));
+        autoResolvePendingOpenCodePermissions(session, httpRuntime, nextPermissionRules);
+        if (!session.providerSessionId || !httpRuntime) {
+          return;
+        }
         try {
-          const updated = await httpRuntime.runtime.client.updateSession(session.providerSessionId, { permission: permissionRules });
-          const updatedRules = Array.isArray(updated.permission) ? updated.permission : [...(session.openCodePermissionRules || []), ...permissionRules];
+          const updated = await httpRuntime.runtime.client.updateSession(session.providerSessionId, { permission: nextPermissionRules });
+          const updatedRules = Array.isArray(updated.permission) ? updated.permission : nextPermissionRules;
           set((state) => ({
             sessions: updateSession(state.sessions, sessionId, (item) => appendDiagnosticToSession({
               ...item,
@@ -2642,22 +2688,24 @@ export const useAgentStore = create<AgentStoreState>((set, get) => ({
   applyOpenCodeSessionPermissionPreset: async (sessionId, presetId) => {
         const session = get().sessions.find((item) => item.id === sessionId);
         const httpRuntime = openCodeHttpRuntimeForSession(session, get().sessions);
-        if (!session?.providerSessionId || !httpRuntime) {
-          get().appendAgentDiagnostic(sessionId, "warn", "OpenCode session is not ready for permission updates.");
-          return;
-        }
+        if (!session) return;
         const permissionRules = getOpenCodePermissionPresetRules(presetId);
         set((state) => ({
           sessions: updateSession(state.sessions, sessionId, (item) => ({
             ...item,
-            openCodePermissionUpdating: true,
+            openCodePermissionRules: permissionRules,
+            openCodePermissionUpdating: Boolean(session.providerSessionId && httpRuntime),
             openCodePermissionError: undefined,
             updatedAt: nowIso(),
           })),
         }));
+        autoResolvePendingOpenCodePermissions(session, httpRuntime, permissionRules);
+        if (!session.providerSessionId || !httpRuntime) {
+          return;
+        }
         try {
           const updated = await httpRuntime.runtime.client.updateSession(session.providerSessionId, { permission: permissionRules });
-          const updatedRules = Array.isArray(updated.permission) ? updated.permission : [...(session.openCodePermissionRules || []), ...permissionRules];
+          const updatedRules = Array.isArray(updated.permission) ? updated.permission : permissionRules;
           set((state) => ({
             sessions: updateSession(state.sessions, sessionId, (item) => appendDiagnosticToSession({
               ...item,
@@ -2683,22 +2731,24 @@ export const useAgentStore = create<AgentStoreState>((set, get) => ({
   resetOpenCodeSessionPermissions: async (sessionId) => {
         const session = get().sessions.find((item) => item.id === sessionId);
         const httpRuntime = openCodeHttpRuntimeForSession(session, get().sessions);
-        if (!session?.providerSessionId || !httpRuntime) {
-          get().appendAgentDiagnostic(sessionId, "warn", "OpenCode session is not ready for permission updates.");
-          return;
-        }
+        if (!session) return;
         const permissionRules = openCodeConfiguredPermissionRules();
         set((state) => ({
           sessions: updateSession(state.sessions, sessionId, (item) => ({
             ...item,
-            openCodePermissionUpdating: true,
+            openCodePermissionRules: permissionRules,
+            openCodePermissionUpdating: Boolean(session.providerSessionId && httpRuntime),
             openCodePermissionError: undefined,
             updatedAt: nowIso(),
           })),
         }));
+        autoResolvePendingOpenCodePermissions(session, httpRuntime, permissionRules);
+        if (!session.providerSessionId || !httpRuntime) {
+          return;
+        }
         try {
           const updated = await httpRuntime.runtime.client.updateSession(session.providerSessionId, { permission: permissionRules });
-          const updatedRules = Array.isArray(updated.permission) ? updated.permission : [...(session.openCodePermissionRules || []), ...permissionRules];
+          const updatedRules = Array.isArray(updated.permission) ? updated.permission : permissionRules;
           set((state) => ({
             sessions: updateSession(state.sessions, sessionId, (item) => appendDiagnosticToSession({
               ...item,

@@ -277,7 +277,7 @@ export function buildAgentProcessSteps(blocks: AgentContentBlock[], messageId?: 
       });
       continue;
     }
-    if (block.type === "task_list" && block.tasks.length > 0) {
+    if (block.type === "task_list") {
       const completedCount = block.tasks.filter((task) => task.status === "completed").length;
       const hasRunningTask = block.tasks.some((task) => task.status === "in-progress");
       const status = completeIfSuperseded(messageStatus === "streaming"
@@ -288,7 +288,7 @@ export function buildAgentProcessSteps(blocks: AgentContentBlock[], messageId?: 
         messageId,
         blockIds: [block.id],
         kind: "task_list",
-        label: `待办更新 (${completedCount}/${block.tasks.length})`,
+        label: block.tasks.length > 0 ? `待办更新 (${completedCount}/${block.tasks.length})` : block.title || "待办已清空",
         status,
         tasks: block.tasks,
       });

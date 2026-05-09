@@ -51,7 +51,7 @@ export function AgentPermissionIndicator({ session }: { session: AgentSession })
     return () => document.removeEventListener("mousedown", handlePointerDown);
   }, [open]);
 
-  if (session.providerId !== "opencode" || !session.providerSessionId) return null;
+  if (session.providerId !== "opencode") return null;
 
   const actionLabel = (action: OpenCodePermissionSettingAction) => {
     if (action === "allow") return t("agentConsole.permissionAllow", "Allow");
@@ -93,6 +93,11 @@ export function AgentPermissionIndicator({ session }: { session: AgentSession })
             <span>{t("agentConsole.sessionPermissions", "Session permissions")}</span>
             {session.openCodePermissionUpdating && <strong>{t("agentConsole.permissionUpdating", "Updating")}</strong>}
           </div>
+          {session.status === "running" && (
+            <div className="agent-permission-running-note">
+              {t("agentConsole.permissionRunningNote", "Applies fully on the next turn; pending approvals are handled immediately when possible.")}
+            </div>
+          )}
           <SettingsSegmentedControl
             ariaLabel={t("agentConsole.permissionPresets", "Permission presets")}
             value={activePresetId || ""}

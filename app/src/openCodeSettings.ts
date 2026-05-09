@@ -279,16 +279,51 @@ function permissionRuleKey(rule: OpenCodePermissionRule): string {
   return `${rule.permission}\u0000${rule.pattern}\u0000${rule.action}`;
 }
 
+function wildcardMatches(value: string, pattern: string): boolean {
+  if (pattern === "*") return true;
+  const escaped = pattern.replace(/[.+?^${}()|[\]\\]/g, "\\$&").replace(/\*/g, ".*");
+  return new RegExp(`^${escaped}$`).test(value);
+}
+
+export function evaluateOpenCodePermissionRuleAction(rules: OpenCodePermissionRule[], permission: string, pattern: string): OpenCodePermissionAction {
+  for (let index = rules.length - 1; index >= 0; index -= 1) {
+    const rule = rules[index];
+    if (wildcardMatches(permission, rule.permission) && wildcardMatches(pattern, rule.pattern)) return rule.action;
+  }
+  return "ask";
+}
+
+function presetMatchesEffectiveRules(rules: OpenCodePermissionRule[], preset: OpenCodePermissionPresetDefinition): boolean {
+  const presetRules = preset.rules.map((item) => ({ ...item }));
+  const patternsByPermission = new Map<string, Set<string>>();
+  for (const definition of OPEN_CODE_PERMISSION_DEFINITIONS) {
+    patternsByPermission.set(definition.permission, new Set(["*"]));
+  }
+  for (const rule of presetRules) {
+    const patterns = patternsByPermission.get(rule.permission) || new Set<string>();
+    patterns.add(rule.pattern);
+    patternsByPermission.set(rule.permission, patterns);
+  }
+  for (const [permission, patterns] of patternsByPermission.entries()) {
+    for (const pattern of patterns) {
+      if (evaluateOpenCodePermissionRuleAction(rules, permission, pattern) !== evaluateOpenCodePermissionRuleAction(presetRules, permission, pattern)) return false;
+    }
+  }
+  return true;
+}
+
 export function getOpenCodePermissionPresetId(rules: OpenCodePermissionPresetItem[] | OpenCodePermissionRule[] | undefined): OpenCodePermissionPresetId | undefined {
   const normalized = openCodePermissionPresetToRules(rules || []);
   const normalizedKeys = normalized.map(permissionRuleKey).join("\u0001");
   const exact = OPEN_CODE_PERMISSION_PRESETS.find((preset) => preset.rules.map(permissionRuleKey).join("\u0001") === normalizedKeys)?.id;
   if (exact) return exact;
-  return OPEN_CODE_PERMISSION_PRESETS.find((preset) => {
+  const tail = OPEN_CODE_PERMISSION_PRESETS.find((preset) => {
     if (normalized.length < preset.rules.length) return false;
-    const tail = normalized.slice(-preset.rules.length);
-    return tail.map(permissionRuleKey).join("\u0001") === preset.rules.map(permissionRuleKey).join("\u0001");
+    const tailRules = normalized.slice(-preset.rules.length);
+    return tailRules.map(permissionRuleKey).join("\u0001") === preset.rules.map(permissionRuleKey).join("\u0001");
   })?.id;
+  if (tail) return tail;
+  return OPEN_CODE_PERMISSION_PRESETS.find((preset) => presetMatchesEffectiveRules(normalized, preset))?.id;
 }
 
 function bashModeFromRules(rules: OpenCodePermissionRule[]): OpenCodePermissionSettingAction | undefined {

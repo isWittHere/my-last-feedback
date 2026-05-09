@@ -3064,6 +3064,17 @@ body,
   text-transform: uppercase;
 }
 
+.agent-permission-running-note {
+  margin-bottom: 8px;
+  padding: 6px 7px;
+  border: 1px solid color-mix(in srgb, var(--color-warning) 22%, transparent);
+  border-radius: 5px;
+  background: color-mix(in srgb, var(--color-warning) 9%, transparent);
+  color: var(--color-text-secondary);
+  font-size: 11px;
+  line-height: 1.35;
+}
+
 .agent-permission-list {
   display: grid;
   gap: 2px;
@@ -3274,7 +3285,37 @@ body,
   align-items: center;
   justify-content: center;
   gap: 3px;
-  cursor: default;
+  cursor: pointer;
+}
+
+.agent-diff-indicator-text {
+  width: 100%;
+  min-width: 0;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 6px;
+  color: var(--color-text-secondary);
+  font-size: 11px;
+  font-weight: 700;
+  font-variant-numeric: tabular-nums;
+  line-height: 1;
+  white-space: nowrap;
+  pointer-events: none;
+}
+
+.agent-diff-indicator-add {
+  color: var(--agent-diff-add-color, #22c55e);
+  transform: translate(var(--agent-diff-add-text-offset-x, 0), var(--agent-diff-add-text-offset-y, 0));
+}
+
+.agent-diff-indicator-delete {
+  color: var(--agent-diff-delete-color, #ef4444);
+  transform: translate(var(--agent-diff-delete-text-offset-x, 0), var(--agent-diff-delete-text-offset-y, 0));
+}
+
+.agent-diff-indicator-text-only {
+  min-width: 54px;
 }
 
 .agent-diff-indicator-mini {

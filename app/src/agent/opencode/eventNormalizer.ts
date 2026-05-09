@@ -505,7 +505,7 @@ export function normalizeOpenCodeTodos(todos: unknown[], sessionId?: string): Ag
     type: "task_list",
     origin: { phase: "process", placement: "standalone" },
     createdAt: new Date().toISOString(),
-    title: tasks.length > 0 ? `${tasks.length} todos` : "Todo",
+    title: tasks.length > 0 ? `${tasks.length} todos` : "待办已清空",
     tasks,
   };
 }

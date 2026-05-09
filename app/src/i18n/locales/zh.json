@@ -135,6 +135,7 @@
     "permissionAsk": "询问",
     "permissionDeny": "拒绝",
     "permissionUpdating": "更新中",
+    "permissionRunningNote": "完整规则下一轮生效；已有待审批请求会尽量立即按新规则处理。",
     "restoreDefaultPermissions": "恢复默认权限",
     "approvalMoreCount": "+{{count}} 个请求",
     "allow": "允许",
