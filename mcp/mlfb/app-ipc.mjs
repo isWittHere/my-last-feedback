@@ -14,19 +14,16 @@ import { PORT_CONFIG, findAppBinary } from "./paths.mjs";
 export const activeSessions = new Map();
 
 const REQUEST_TYPE_VALUES = new Set([
-  "explanation",
-  "question",
-  "planning",
+  "analysis",
   "completion",
-  "analysis_report",
-  "document_completed",
-  "verification_completed",
+  "planning",
+  "document",
   "default",
 ]);
 
-function assertRequestType(requestType) {
+function normalizeRequestType(requestType) {
   if (typeof requestType === "string" && REQUEST_TYPE_VALUES.has(requestType)) return requestType;
-  throw new Error("request_type is required and must be one of: explanation, question, planning, completion, analysis_report, document_completed, verification_completed, default.");
+  return "default";
 }
 
 /** Attempt to connect to an already-running app. */
@@ -98,7 +95,7 @@ export async function cancelAllActiveSessions() {
  */
 export function requestFeedbackViaIpc(socket, projectDirectory, summary, requestName, requestType, callerInfo, questions) {
   const sessionId = randomUUID();
-  const checkedRequestType = assertRequestType(requestType);
+  const checkedRequestType = normalizeRequestType(requestType);
 
   const request = JSON.stringify({
     type: "feedback_request",

@@ -3,7 +3,7 @@ import { useTranslation } from "react-i18next";
 import { useAgentConsoleSettings } from "../../agentConsoleSettings";
 import { getApprovalDisplayDescription, isCommandLikeApproval } from "../../agent/approvalDisplay";
 import { formatCompactTokenCount } from "../../agent/tokenStats";
-import type { AgentApprovalCurrentStatus, AgentCurrentStatus, AgentEditFileSummary } from "../../agent/currentStatus";
+import type { AgentApprovalCurrentStatus, AgentCurrentStatus } from "../../agent/currentStatus";
 import { getAgentCurrentStatus } from "../../agent/currentStatus";
 import type { AgentPermissionOption, AgentSession } from "../../agent/types";
 import { useAgentStore } from "../../store/agentStore";

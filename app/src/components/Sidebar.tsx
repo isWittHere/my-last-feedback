@@ -76,20 +76,14 @@ function SessionStatusIcon({ session, size = 12 }: { session: Session; size?: nu
 
 function getRequestTypeLabel(requestType: Session["requestType"], t: (key: string, defaultValue: string) => string): string {
   switch (requestType) {
-    case "explanation":
-      return t("sidebar.requestType.explanation", "Explanation");
-    case "question":
-      return t("sidebar.requestType.question", "Question");
+    case "analysis":
+      return t("sidebar.requestType.analysis", "Analysis");
     case "planning":
       return t("sidebar.requestType.planning", "Planning");
     case "completion":
       return t("sidebar.requestType.completion", "Completion");
-    case "analysis_report":
-      return t("sidebar.requestType.analysisReport", "Analysis report");
-    case "document_completed":
-      return t("sidebar.requestType.documentCompleted", "Document completed");
-    case "verification_completed":
-      return t("sidebar.requestType.verificationCompleted", "Verification completed");
+    case "document":
+      return t("sidebar.requestType.document", "Document");
     case "default":
     default:
       return t("sidebar.requestType.default", "Default");
@@ -101,19 +95,14 @@ function getTopbarStatsColor(session: Session): string {
   if (session.status === "cancelled") return "var(--stats-nav-error)";
 
   switch (session.requestType) {
-    case "explanation":
+    case "analysis":
       return "var(--stats-nav-tertiary)";
-    case "question":
     case "planning":
       return "var(--stats-nav-secondary)";
     case "completion":
       return "var(--stats-nav-primary)";
-    case "analysis_report":
-      return "var(--stats-nav-tertiary)";
-    case "document_completed":
+    case "document":
       return "var(--stats-nav-document)";
-    case "verification_completed":
-      return "var(--stats-nav-primary)";
     case "default":
     default:
       return "var(--stats-nav-neutral)";

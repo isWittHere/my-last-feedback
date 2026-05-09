@@ -1475,9 +1475,7 @@ body,
 .session-topbar-item-cancelled.active {
   opacity: 1;
 }
-.session-topbar-type-explanation:not(.session-topbar-item-pending):not(.session-topbar-item-cancelled),
-.session-topbar-type-verification_completed:not(.session-topbar-item-pending):not(.session-topbar-item-cancelled),
-.session-topbar-type-document_completed:not(.session-topbar-item-pending):not(.session-topbar-item-cancelled) {
+.session-topbar-type-document:not(.session-topbar-item-pending):not(.session-topbar-item-cancelled) {
   background-color: var(--session-topbar-card-bg, var(--stats-nav-document));
   background-image: repeating-linear-gradient(
     135deg,
@@ -1487,9 +1485,7 @@ body,
     transparent 4px
   );
 }
-[data-theme="light"] .session-topbar-type-explanation:not(.session-topbar-item-pending):not(.session-topbar-item-cancelled),
-[data-theme="light"] .session-topbar-type-verification_completed:not(.session-topbar-item-pending):not(.session-topbar-item-cancelled),
-[data-theme="light"] .session-topbar-type-document_completed:not(.session-topbar-item-pending):not(.session-topbar-item-cancelled) {
+[data-theme="light"] .session-topbar-type-document:not(.session-topbar-item-pending):not(.session-topbar-item-cancelled) {
   background-color: var(--session-topbar-card-bg, var(--stats-nav-document));
   background-image: repeating-linear-gradient(
     135deg,

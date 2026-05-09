@@ -335,13 +335,10 @@
     "expand": "Expand sidebar",
     "summaryCharacters": "{{count}} chars",
     "requestType": {
-      "explanation": "Explanation",
-      "question": "Question",
+      "analysis": "Analysis",
       "planning": "Planning",
       "completion": "Completion",
-      "analysisReport": "Analysis report",
-      "documentCompleted": "Document completed",
-      "verificationCompleted": "Verification completed",
+      "document": "Document",
       "default": "Default"
     }
   },

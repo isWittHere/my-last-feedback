@@ -287,12 +287,6 @@ const ICONS: Record<string, IconDef> = {
   flag: {
     paths: '<path d="M4 15s1-1 4-1 5 2 8 2 4-1 4-1V3s-1 1-4 1-5-2-8-2-4 1-4 1z" /><line x1="4" y1="22" x2="4" y2="15" />',
   },
-  "arrow-down": {
-    paths: '<line x1="12" y1="5" x2="12" y2="19" /><polyline points="19 12 12 19 5 12" />',
-  },
-  "arrow-up": {
-    paths: '<line x1="12" y1="19" x2="12" y2="5" /><polyline points="5 12 12 5 19 12" />',
-  },
 };
 
 export interface IconProps {

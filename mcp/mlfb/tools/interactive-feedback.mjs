@@ -19,17 +19,14 @@ const MIME_BY_EXT = {
 };
 
 const REQUEST_TYPE_VALUES = [
-  "explanation",
-  "question",
-  "planning",
+  "analysis",
   "completion",
-  "analysis_report",
-  "document_completed",
-  "verification_completed",
+  "planning",
+  "document",
   "default",
 ];
 const REQUEST_TYPE_SET = new Set(REQUEST_TYPE_VALUES);
-const REQUEST_TYPE_HINT = "request_type is REQUIRED and MUST be one of: explanation, question, planning, completion, analysis_report, document_completed, verification_completed, default. It is metadata for categorization and visual display only; it does not change tool behavior, permissions, routing, or available capabilities.";
+const REQUEST_TYPE_HINT = "request_type is REQUIRED and should be one of: analysis, completion, planning, document, default. Unknown values are treated as default. It is metadata for categorization and visual display only; it does not change tool behavior, permissions, routing, or available capabilities.";
 
 const TOOL_DESCRIPTION = `Request interactive feedback from the user via a desktop GUI window.
 The user may provide text feedback, test logs, and/or attach images.
@@ -42,12 +39,12 @@ IMPORTANT - rules for AI agents calling this tool:
 1. request_name MUST always be provided with a meaningful task title. Never omit it or leave it blank.
 2. summary MUST be written in standard Markdown format (headings, lists, bold, code blocks). Do NOT use escape characters such as \\n or \\t.
 3. Describe full context, suggestions, and detailed information in summary. Use questions only for concise, actionable choices or brief input fields.
-4. request_type: REQUIRED metadata only. It categorizes why you are asking for feedback and affects display/category labels only. It does NOT change tool behavior, permissions, routing, or available capabilities. Use one of: explanation (解释), question (询问), planning (规划方案), completion (修复/实现/请求任务已完成), analysis_report (分析细节报告), document_completed (完成文档), verification_completed (用户明确要求的验证/检查/测试已完成), default (默认). Never omit request_type.
+4. request_type: REQUIRED metadata only. It categorizes why you are asking for feedback and affects display/category labels only. It does NOT change tool behavior, permissions, routing, or available capabilities. Use one of: analysis (分析), completion (完成), planning (规划), document (文档), default (默认). Unknown values are treated as default. Never omit request_type.
 5. agent_name: REQUIRED. Your 4-char uppercase hex identifier assigned by the hook system (delivered via PostToolUse additionalContext, e.g. "[my-last-feedback] Your agent_name is \"A1B2\"").`;
 
-function assertRequestType(value) {
+function normalizeRequestType(value) {
   if (typeof value === "string" && REQUEST_TYPE_SET.has(value)) return value;
-  throw new Error(`${REQUEST_TYPE_HINT} Received: ${value === undefined ? "missing" : JSON.stringify(value)}.`);
+  return "default";
 }
 
 /**
@@ -69,11 +66,9 @@ export function registerInteractiveFeedback(server) {
         "A concise title (5-10 words) for the current task, displayed in the window title bar. " +
         "This parameter is REQUIRED and MUST NOT be left empty."
       ),
-      request_type: z.enum(REQUEST_TYPE_VALUES).describe(
+      request_type: z.string().describe(
         "REQUIRED metadata only. Why the agent is using this tool. This categorizes the request for display and does not change tool behavior, permissions, routing, or capabilities. " +
-        "Allowed values: explanation=解释, question=询问, planning=规划方案, completion=修复/实现/请求任务已完成, " +
-        "analysis_report=分析细节报告, document_completed=完成文档, " +
-        "verification_completed=用户明确要求的验证/检查/测试已完成, default=默认/其他."
+        "Allowed values: analysis=分析, completion=完成, planning=规划, document=文档, default=默认/其他. Unknown values are treated as default."
       ),
       agent_name: z.string().regex(/^[A-Z0-9]{4}$/, "agent_name must be 4 uppercase hex chars (e.g. A1B2)").describe(
         "REQUIRED. Your 4-char uppercase hex agent identifier (e.g. A1B2). " +
@@ -87,7 +82,7 @@ export function registerInteractiveFeedback(server) {
       ),
     },
     async ({ project_directory, summary, request_name, request_type, agent_name, questions }) => {
-      const checkedRequestType = assertRequestType(request_type);
+      const checkedRequestType = normalizeRequestType(request_type);
       const projectDir = project_directory.split("\n")[0].trim();
       const info = await resolveCallerInfo(server, { workspaceHint: projectDir });
 

@@ -40,6 +40,7 @@ export interface AgentStepTokenStat {
   tone?: AgentStepTone;
   args?: Record<string, unknown>;
   result?: string;
+  metadata?: Record<string, unknown>;
 }
 
 function stringifyForStats(value: unknown): string {

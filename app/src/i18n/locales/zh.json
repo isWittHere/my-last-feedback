@@ -335,13 +335,10 @@
     "expand": "展开侧栏",
     "summaryCharacters": "{{count}} 字",
     "requestType": {
-      "explanation": "解释",
-      "question": "询问",
+      "analysis": "分析",
       "planning": "规划方案",
       "completion": "完成",
-      "analysisReport": "分析报告",
-      "documentCompleted": "文档完成",
-      "verificationCompleted": "验证完成",
+      "document": "文档",
       "default": "默认"
     }
   },

@@ -23,13 +23,10 @@ export type CallerColumnMode = "auto" | 1 | 2 | 3;
 export type SessionStatus = "pending" | "responded" | "cancelled";
 
 export const REQUEST_TYPES = [
-  "explanation",
-  "question",
-  "planning",
+  "analysis",
   "completion",
-  "analysis_report",
-  "document_completed",
-  "verification_completed",
+  "planning",
+  "document",
   "default",
 ] as const;
 

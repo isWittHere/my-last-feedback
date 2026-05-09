@@ -129,9 +129,10 @@ Whenever you're about to complete a user request, call the interactive_feedback 
 
 ## Request Type (request_type)
 - request_type is required in every call.
-- Allowed values: explanation, question, planning, completion, analysis_report, document_completed, verification_completed, default.
+- Allowed values: analysis, completion, planning, document, default.
+- Values outside this list are treated as default; old type names are not compatibility-mapped.
 - request_type is metadata for categorization and visual display only; it does not change tool behavior, permissions, routing, or available capabilities.
-- Use question when asking the user something and completion when reporting a finished fix, implementation, or requested task. Use verification_completed only when the user's request is specifically to verify, check, or test something.
+- Use analysis for analysis or reports, completion for finished work, planning for plans, document for document-related work, and default for everything else.
 
 ## Questions Feature
 - When you need the user to supplement information or choose from options, use the questions parameter.
@@ -154,7 +155,7 @@ The agent will now pop up a feedback window whenever it needs your confirmation.
 | `project_directory` | `string` | Yes | Full path to the project directory |
 | `summary` | `string` | Yes | Work summary in Markdown format |
 | `request_name` | `string` | Yes | Concise task title (5–10 words), shown in the title bar |
-| `request_type` | `enum` | Yes | One of `explanation`, `question`, `planning`, `completion`, `analysis_report`, `document_completed`, `verification_completed`, `default` |
+| `request_type` | `string` | Yes | One of `analysis`, `completion`, `planning`, `document`, `default`; other values become `default` |
 | `agent_name` | `string` | Yes | 4-character agent identifier. Pass the assigned ID on subsequent calls |
 | `questions` | `array` | No | Structured questions: `[{ label: string, options?: string[] }]` |
 
