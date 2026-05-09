@@ -2637,11 +2637,6 @@ body,
   background: var(--step-card-output);
 }
 
-.agent-token-topbar-item-model_step {
-  background: var(--step-card-output);
-  box-shadow: inset 0 0 0 1px color-mix(in srgb, var(--color-text-primary) 18%, transparent);
-}
-
 .agent-token-topbar-item-task_list {
   background: var(--step-card-todo);
 }
@@ -2777,11 +2772,6 @@ body,
 
 [data-theme="light"] .agent-token-topbar-item-result {
   background: var(--step-card-output);
-}
-
-[data-theme="light"] .agent-token-topbar-item-model_step {
-  background: var(--step-card-output);
-  box-shadow: inset 0 0 0 1px color-mix(in srgb, var(--color-text-primary) 16%, transparent), 0 0 0 1px rgba(0, 0, 0, 0.045);
 }
 
 [data-theme="light"] .agent-token-topbar-item-task_list {
@@ -2943,12 +2933,6 @@ body,
 .agent-token-topbar-tooltip-tokens {
   color: var(--color-text-muted);
   font-weight: 600;
-  font-variant-numeric: tabular-nums;
-}
-
-.agent-token-topbar-tooltip-detail {
-  color: var(--color-text-muted);
-  font-weight: 500;
   font-variant-numeric: tabular-nums;
 }
 
@@ -3682,6 +3666,17 @@ body,
   background: color-mix(in srgb, var(--color-text-muted) 22%, transparent);
 }
 
+.agent-context-segment-reserved {
+  background:
+    repeating-linear-gradient(
+      135deg,
+      color-mix(in srgb, var(--color-text-muted) 28%, transparent) 0,
+      color-mix(in srgb, var(--color-text-muted) 28%, transparent) 3px,
+      color-mix(in srgb, var(--color-text-muted) 10%, transparent) 3px,
+      color-mix(in srgb, var(--color-text-muted) 10%, transparent) 6px
+    );
+}
+
 .agent-context-popover {
   position: absolute;
   right: 0;
@@ -4254,6 +4249,11 @@ body,
 
 .agent-task-priority[data-priority="low"] {
   color: #7f95b2;
+}
+
+.agent-task-panel-row[data-status="completed"] .agent-task-priority,
+.agent-process-task-row[data-status="completed"] .agent-task-priority {
+  color: color-mix(in srgb, var(--color-text-muted) 55%, transparent);
 }
 
 .agent-task-panel-row[data-status="completed"] {

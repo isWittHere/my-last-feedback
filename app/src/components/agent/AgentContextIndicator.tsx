@@ -22,9 +22,15 @@ export function AgentContextIndicator({ session }: { session: AgentSession }) {
     : `${formatCompactTokenCount(summary.totalTokens)}/${formatCompactTokenCount(summary.contextLimit)}`;
   const windowLabel = summary.contextLimit == null ? t("agentConsole.unknown", "Unknown") : formatCompactTokenCount(summary.contextLimit);
   const remainingLabel = summary.remainingTokens == null ? t("agentConsole.unknown", "Unknown") : formatCompactTokenCount(summary.remainingTokens);
+  const usableLabel = summary.usableLimit == null ? t("agentConsole.unknown", "Unknown") : formatCompactTokenCount(summary.usableLimit);
+  const usableRemainingLabel = summary.usableRemainingTokens == null ? t("agentConsole.unknown", "Unknown") : formatCompactTokenCount(summary.usableRemainingTokens);
+  const reservedLabel = summary.reservedTokens == null ? t("agentConsole.unknown", "Unknown") : formatCompactTokenCount(summary.reservedTokens);
   const contextTokenLabel = summary.contextTokens == null ? null : formatCompactTokenCount(summary.contextTokens);
   const contextTotal = summary.contextLimit ?? summary.totalTokens;
-  const idleTokens = summary.contextLimit == null ? 0 : Math.max(0, summary.contextLimit - summary.totalTokens);
+  const idleTokens = summary.contextLimit == null ? 0 : Math.max(0, (summary.usableLimit ?? summary.contextLimit) - summary.totalTokens);
+  const reservedVisibleTokens = summary.contextLimit == null || summary.reservedTokens == null || summary.usableLimit == null
+    ? 0
+    : Math.max(0, summary.contextLimit - Math.max(summary.totalTokens, summary.usableLimit));
   const compactDisabled = !session.providerSessionId || session.compacting;
 
   const combinedBar = (
@@ -33,6 +39,7 @@ export function AgentContextIndicator({ session }: { session: AgentSession }) {
       <span className="agent-context-segment-process" style={{ width: percentWidth(summary.processTokens, contextTotal) }} />
       <span className="agent-context-segment-result" style={{ width: percentWidth(summary.resultTokens, contextTotal) }} />
       <span className="agent-context-segment-idle" style={{ width: percentWidth(idleTokens, contextTotal) }} />
+      <span className="agent-context-segment-reserved" style={{ width: percentWidth(reservedVisibleTokens, contextTotal) }} />
     </>
   );
 
@@ -59,6 +66,10 @@ export function AgentContextIndicator({ session }: { session: AgentSession }) {
           <strong>{session.modelId || t("agentConsole.unknown", "Unknown")}</strong>
           <span>{t("agentConsole.window", "Window")}</span>
           <strong>{windowLabel}</strong>
+          <span>{t("agentConsole.usableContext", "Usable before compression")}</span>
+          <strong>{usableLabel}</strong>
+          <span>{t("agentConsole.reservedContext", "Reserved output")}</span>
+          <strong>{reservedLabel}</strong>
           <span>{t("agentConsole.used", "Used")}</span>
           <strong>{formatCompactTokenCount(summary.totalTokens)} {summary.estimated ? t("agentConsole.estimatedShort", "est.") : ""}</strong>
           {contextTokenLabel && (
@@ -93,6 +104,8 @@ export function AgentContextIndicator({ session }: { session: AgentSession }) {
           )}
           <span>{t("agentConsole.remaining", "Remaining")}</span>
           <strong>{remainingLabel}</strong>
+          <span>{t("agentConsole.usableRemaining", "Before compression")}</span>
+          <strong>{usableRemainingLabel}</strong>
         </div>
         <div className="agent-context-combined-bar" aria-label={t("agentConsole.contextUsage", "Context usage")}>
           {combinedBar}
@@ -102,6 +115,7 @@ export function AgentContextIndicator({ session }: { session: AgentSession }) {
           <span><i className="agent-context-segment-process" />{t("agentConsole.processTokens", "Process")} {formatCompactTokenCount(summary.processTokens)}</span>
           <span><i className="agent-context-segment-result" />{t("agentConsole.outputTokens", "Output")} {formatCompactTokenCount(summary.resultTokens)}</span>
           <span><i className="agent-context-segment-idle" />{t("agentConsole.idleContext", "Idle")} {formatCompactTokenCount(idleTokens)}</span>
+          {summary.reservedTokens != null && <span><i className="agent-context-segment-reserved" />{t("agentConsole.reservedContextShort", "Reserved")} {formatCompactTokenCount(summary.reservedTokens)}</span>}
         </div>
         <div className="agent-context-popover-path">{session.cwd}</div>
         <button

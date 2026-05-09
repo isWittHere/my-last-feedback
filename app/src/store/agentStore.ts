@@ -6,7 +6,7 @@ import { createAgentSession } from "../agent/sessionFactory";
 import { buildSubmittedComposerPayload, collectSubmittedResourceLinks } from "../composer/submittedFeedback";
 import { getAgentConsoleSettings } from "../agentConsoleSettings";
 import { getOpenCodeDefaultPermissionRules, setOpenCodePreferredModel, syncOpenCodeModels } from "../openCodeSettings";
-import type { AgentChoiceOption, AgentCompactionBlock, AgentContentBlock, AgentContextUsage, AgentDiagnosticEntry, AgentMessage, AgentModelCapabilities, AgentProviderMessagePart, AgentSession, AgentSessionFileDiff, AgentSubmittedAttachmentTag, AgentThinkingBlock, AgentTokenUsage } from "../agent/types";
+import type { AgentChoiceOption, AgentCompactionBlock, AgentContentBlock, AgentContextCompactionConfig, AgentContextUsage, AgentDiagnosticEntry, AgentMessage, AgentModelCapabilities, AgentProviderMessagePart, AgentSession, AgentSessionFileDiff, AgentSubmittedAttachmentTag, AgentThinkingBlock, AgentTokenUsage } from "../agent/types";
 import type { AgentProviderId } from "../agent/types";
 import type { GitAction, ImageAttachment, MlcAttachment, WebAttachment } from "./feedbackStore";
 
@@ -267,6 +267,52 @@ function extractModelContextLimit(model: unknown): number | undefined {
     ?? finitePositiveNumber(metaLimit?.context);
 }
 
+function extractModelInputLimit(model: unknown): number | undefined {
+  if (!model || typeof model !== "object") return undefined;
+  const value = model as Record<string, unknown>;
+  const meta = value._meta && typeof value._meta === "object" ? value._meta as Record<string, unknown> : undefined;
+  const limit = value.limit && typeof value.limit === "object" ? value.limit as Record<string, unknown> : undefined;
+  const metaLimit = meta?.limit && typeof meta.limit === "object" ? meta.limit as Record<string, unknown> : undefined;
+  return finitePositiveNumber(value.inputLimit)
+    ?? finitePositiveNumber(value.input)
+    ?? finitePositiveNumber(value.maxInputTokens)
+    ?? finitePositiveNumber(value.max_input_tokens)
+    ?? finitePositiveNumber(limit?.input)
+    ?? finitePositiveNumber(meta?.inputLimit)
+    ?? finitePositiveNumber(meta?.input)
+    ?? finitePositiveNumber(meta?.maxInputTokens)
+    ?? finitePositiveNumber(meta?.max_input_tokens)
+    ?? finitePositiveNumber(metaLimit?.input);
+}
+
+function extractModelOutputLimit(model: unknown): number | undefined {
+  if (!model || typeof model !== "object") return undefined;
+  const value = model as Record<string, unknown>;
+  const meta = value._meta && typeof value._meta === "object" ? value._meta as Record<string, unknown> : undefined;
+  const limit = value.limit && typeof value.limit === "object" ? value.limit as Record<string, unknown> : undefined;
+  const metaLimit = meta?.limit && typeof meta.limit === "object" ? meta.limit as Record<string, unknown> : undefined;
+  return finitePositiveNumber(value.outputLimit)
+    ?? finitePositiveNumber(value.output)
+    ?? finitePositiveNumber(value.maxOutputTokens)
+    ?? finitePositiveNumber(value.max_output_tokens)
+    ?? finitePositiveNumber(limit?.output)
+    ?? finitePositiveNumber(meta?.outputLimit)
+    ?? finitePositiveNumber(meta?.output)
+    ?? finitePositiveNumber(meta?.maxOutputTokens)
+    ?? finitePositiveNumber(meta?.max_output_tokens)
+    ?? finitePositiveNumber(metaLimit?.output);
+}
+
+function extractOpenCodeCompactionConfig(config: unknown): AgentContextCompactionConfig | undefined {
+  const root = recordFromUnknown(config);
+  const compaction = recordFromUnknown(root?.compaction);
+  if (!compaction) return undefined;
+  const auto = booleanFromUnknown(compaction.auto);
+  const reservedTokens = finiteNonNegativeNumber(compaction.reserved);
+  if (auto === undefined && reservedTokens === undefined) return undefined;
+  return { auto, reservedTokens };
+}
+
 function inputCapabilityValue(input: Record<string, unknown> | undefined, modalities: string[], key: string): boolean | undefined {
   const explicit = booleanFromUnknown(input?.[key]);
   if (explicit !== undefined) return explicit;
@@ -303,6 +349,8 @@ function toChoiceOption(id: unknown, label: unknown, description: unknown, sourc
     label: typeof label === "string" && label ? label : id,
     description: typeof description === "string" && description ? description : undefined,
     contextLimit: extractModelContextLimit(source),
+    inputLimit: extractModelInputLimit(source),
+    outputLimit: extractModelOutputLimit(source),
     capabilities: extractModelCapabilities(source),
   };
 }
@@ -1798,7 +1846,7 @@ export const useAgentStore = create<AgentStoreState>((set, get) => ({
         events.start();
         openCodeHttpRuntimes.set(runtime.processInfo.processId, { sessionId, runtime, events });
         let commandLoadError: string | undefined;
-        const [providers, agents, commands, pendingPermissions] = await Promise.all([
+        const [providers, agents, commands, pendingPermissions, openCodeConfig] = await Promise.all([
           runtime.client.providers(),
           runtime.client.agents().catch(() => [] as OpenCodeAgentInfo[]),
           runtime.client.commands().catch((error) => {
@@ -1806,10 +1854,12 @@ export const useAgentStore = create<AgentStoreState>((set, get) => ({
             return [] as OpenCodeCommandInfo[];
           }),
           runtime.client.permissions().catch(() => []),
+          runtime.client.config().catch(() => undefined),
         ]);
         const availableModels = choicesFromOpenCodeProviders(providers);
         const availableModes = choicesFromOpenCodeAgents(agents);
         const availableCommands = choicesFromOpenCodeCommands(commands);
+        const contextCompaction = extractOpenCodeCompactionConfig(openCodeConfig);
         const modeOptions = availableModes.length > 0 ? availableModes : fallbackOpenCodeAgentChoices();
         const serverModelId = session.modelId || availableModels[0]?.id;
         const openCodeSettings = availableModels.length > 0 ? syncOpenCodeModels(availableModels, serverModelId) : null;
@@ -1838,6 +1888,7 @@ export const useAgentStore = create<AgentStoreState>((set, get) => ({
             availableCommandsLoading: false,
             availableCommandsError: commandLoadError,
             availableCommandsLoadedAt: commandLoadError ? item.availableCommandsLoadedAt : nowIso(),
+            contextCompaction,
             modelId,
             modeId,
             updatedAt: nowIso(),

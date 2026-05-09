@@ -49,6 +49,12 @@ export interface OpenCodeProviderModel {
   name?: string;
   status?: string;
   context?: number;
+  limit?: {
+    context?: number;
+    input?: number;
+    output?: number;
+    [key: string]: unknown;
+  };
   cost?: Record<string, unknown>;
   attachment?: boolean;
   modalities?: {

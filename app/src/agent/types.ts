@@ -238,7 +238,14 @@ export interface AgentChoiceOption {
   label: string;
   description?: string;
   contextLimit?: number;
+  inputLimit?: number;
+  outputLimit?: number;
   capabilities?: AgentModelCapabilities;
+}
+
+export interface AgentContextCompactionConfig {
+  auto?: boolean;
+  reservedTokens?: number;
 }
 
 export interface AgentContextUsage {
@@ -274,6 +281,7 @@ export interface AgentSession {
   availableCommandsLoading?: boolean;
   availableCommandsError?: string;
   availableCommandsLoadedAt?: string;
+  contextCompaction?: AgentContextCompactionConfig;
   contextUsage?: AgentContextUsage;
   configOptions?: unknown[];
   status: AgentSessionStatus;
