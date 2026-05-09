@@ -469,17 +469,13 @@ export function AgentProcessGroup({ blocks, messageId, sessionId, isStreaming = 
                     </button>
                     {isOpen && hasContent && (
                       <div className="agent-process-step-detail" data-kind={step.kind}>
-                        {isStreamingStep ? (
-                          <div className="agent-process-scroll-shell" data-kind="step">
-                            {showStepTopShadow && <div className="agent-process-edge-shadow agent-process-edge-shadow-top" />}
-                            {showStepBottomShadow && <div className="agent-process-edge-shadow agent-process-edge-shadow-bottom" />}
-                            <div ref={stepScrollRef} className="agent-process-step-detail-scroll" data-streaming="true">
-                              <StepDetail step={step} projectDirectory={projectDirectory} sessionId={sessionId} />
-                            </div>
+                        <div className="agent-process-scroll-shell" data-kind="step">
+                          {isStreamingStep && showStepTopShadow && <div className="agent-process-edge-shadow agent-process-edge-shadow-top" />}
+                          {isStreamingStep && showStepBottomShadow && <div className="agent-process-edge-shadow agent-process-edge-shadow-bottom" />}
+                          <div ref={isStreamingStep ? stepScrollRef : undefined} className="agent-process-step-detail-scroll" data-streaming={isStreamingStep ? "true" : undefined}>
+                            <StepDetail step={step} projectDirectory={projectDirectory} sessionId={sessionId} />
                           </div>
-                        ) : (
-                          <StepDetail step={step} projectDirectory={projectDirectory} sessionId={sessionId} />
-                        )}
+                        </div>
                       </div>
                     )}
                   </div>
