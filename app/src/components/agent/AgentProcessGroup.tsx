@@ -156,7 +156,7 @@ function AgentProcessAttachedApproval({ step, permission, sessionId }: { step: A
   );
 }
 
-function StepDetail({ step, projectDirectory, sessionId, approvalDisplayMode = "all", collapseOutputBlankLines = false }: { step: AgentStepItem; projectDirectory?: string; sessionId?: string; approvalDisplayMode?: AgentApprovalDisplayMode; collapseOutputBlankLines?: boolean }) {
+function StepDetail({ step, projectDirectory, sessionId, approvalDisplayMode = "all", collapseOutputBlankLines = false, todoUpdateDisplayMode = "panel" }: { step: AgentStepItem; projectDirectory?: string; sessionId?: string; approvalDisplayMode?: AgentApprovalDisplayMode; collapseOutputBlankLines?: boolean; todoUpdateDisplayMode?: AgentTodoUpdateDisplayMode }) {
   if (step.kind === "thinking" && step.detail) {
     return <MarkdownContent markdown={step.detail} projectDirectory={projectDirectory} className="agent-process-markdown" variant="feedback" enableComposerTokens />;
   }
@@ -189,6 +189,7 @@ function StepDetail({ step, projectDirectory, sessionId, approvalDisplayMode = "
     );
   }
   if (step.kind === "task_list" && step.tasks) {
+    if (todoUpdateDisplayMode === "countOnly") return null;
     return (
       <div className="agent-process-task-list">
         {step.tasks.map((task) => (
@@ -232,38 +233,25 @@ interface AgentFocusStepEventDetail {
 interface AgentDisplayStepItem {
   step: AgentStepItem;
   displayStep: AgentStepItem;
-  displayLabel?: string;
   index: number;
   mergedToolSteps: AgentStepItem[];
-  mergedToolLabels: string[];
-  mergedTodoLabels: string[];
   mergedIndexes: number[];
 }
 
-function buildAgentDisplayStepItems(steps: AgentStepItem[], options: { mergeThinkingToolSteps: boolean; todoUpdateDisplayMode: AgentTodoUpdateDisplayMode }): AgentDisplayStepItem[] {
+function isToolLikeStep(step: AgentStepItem): boolean {
+  return step.kind === "tool" || step.kind === "task_list";
+}
+
+function buildAgentDisplayStepItems(steps: AgentStepItem[], options: { mergeThinkingToolSteps: boolean }): AgentDisplayStepItem[] {
   return steps.reduce<AgentDisplayStepItem[]>((items, step, index) => {
     const previous = items[items.length - 1];
-    if (options.mergeThinkingToolSteps && step.kind === "tool" && previous?.displayStep.kind === "thinking" && previous.mergedToolSteps.length === 0) {
+    if (options.mergeThinkingToolSteps && isToolLikeStep(step) && previous?.displayStep.kind === "thinking" && previous.mergedToolSteps.length === 0) {
       previous.displayStep = step;
-      previous.displayLabel = undefined;
       previous.mergedToolSteps.push(step);
-      previous.mergedToolLabels.push(step.label);
       previous.mergedIndexes.push(index);
       return items;
     }
-    if (options.todoUpdateDisplayMode === "countOnly" && step.kind === "task_list" && previous) {
-      if (previous.displayStep.kind === "thinking") {
-        previous.displayStep = step;
-        previous.displayLabel = undefined;
-      } else {
-        const baseLabel = previous.displayLabel || previous.displayStep.label;
-        previous.displayLabel = `${baseLabel} · ${step.label}`;
-      }
-      previous.mergedTodoLabels.push(step.label);
-      previous.mergedIndexes.push(index);
-      return items;
-    }
-    items.push({ step, displayStep: step, index, mergedToolSteps: [], mergedToolLabels: [], mergedTodoLabels: [], mergedIndexes: [] });
+    items.push({ step, displayStep: step, index, mergedToolSteps: [], mergedIndexes: [] });
     return items;
   }, []);
 }
@@ -276,17 +264,17 @@ function displayStepDetailKind(item: AgentDisplayStepItem): string {
   return item.mergedToolSteps.length > 0 ? "mixed" : item.step.kind;
 }
 
-function DisplayStepDetail({ item, projectDirectory, sessionId, approvalDisplayMode, collapseOutputBlankLines }: { item: AgentDisplayStepItem; projectDirectory?: string; sessionId?: string; approvalDisplayMode: AgentApprovalDisplayMode; collapseOutputBlankLines: boolean }) {
+function DisplayStepDetail({ item, projectDirectory, sessionId, approvalDisplayMode, collapseOutputBlankLines, todoUpdateDisplayMode }: { item: AgentDisplayStepItem; projectDirectory?: string; sessionId?: string; approvalDisplayMode: AgentApprovalDisplayMode; collapseOutputBlankLines: boolean; todoUpdateDisplayMode: AgentTodoUpdateDisplayMode }) {
   if (item.mergedToolSteps.length === 0) {
-    return <StepDetail step={item.step} projectDirectory={projectDirectory} sessionId={sessionId} approvalDisplayMode={approvalDisplayMode} collapseOutputBlankLines={collapseOutputBlankLines} />;
+    return <StepDetail step={item.step} projectDirectory={projectDirectory} sessionId={sessionId} approvalDisplayMode={approvalDisplayMode} collapseOutputBlankLines={collapseOutputBlankLines} todoUpdateDisplayMode={todoUpdateDisplayMode} />;
   }
   return (
     <div className="agent-process-merged-step-detail">
       <div className="agent-process-merged-thinking">
-        <StepDetail step={item.step} projectDirectory={projectDirectory} sessionId={sessionId} approvalDisplayMode={approvalDisplayMode} collapseOutputBlankLines={collapseOutputBlankLines} />
+        <StepDetail step={item.step} projectDirectory={projectDirectory} sessionId={sessionId} approvalDisplayMode={approvalDisplayMode} collapseOutputBlankLines={collapseOutputBlankLines} todoUpdateDisplayMode={todoUpdateDisplayMode} />
       </div>
       {item.mergedToolSteps.map((toolStep) => (
-        <StepDetail key={toolStep.id} step={toolStep} projectDirectory={projectDirectory} sessionId={sessionId} approvalDisplayMode={approvalDisplayMode} collapseOutputBlankLines={collapseOutputBlankLines} />
+        <StepDetail key={toolStep.id} step={toolStep} projectDirectory={projectDirectory} sessionId={sessionId} approvalDisplayMode={approvalDisplayMode} collapseOutputBlankLines={collapseOutputBlankLines} todoUpdateDisplayMode={todoUpdateDisplayMode} />
       ))}
     </div>
   );
@@ -474,13 +462,14 @@ export function AgentProcessGroup({ blocks, messageId, sessionId, isStreaming = 
   const thinkingCount = steps.filter((step) => step.kind === "thinking").length;
   const compactionCount = steps.filter((step) => step.kind === "compaction").length;
   const artifactCount = steps.reduce((count, step) => count + (step.blocks?.length || 0), 0);
-  const taskCount = steps.filter((step) => step.kind === "task_list").length;
+  const latestTaskListStep = steps.findLast((step) => step.kind === "task_list");
+  const completedTaskCount = latestTaskListStep?.tasks?.filter((task) => task.status === "completed").length;
   const isSingleInlineProcess = steps.length === 1 && (steps[0]?.kind === "thinking" || steps[0]?.kind === "compaction") && !isStreaming;
   const summaryParts = [
+    !mergeThinkingToolSteps && thinkingCount > 0 ? `${thinkingCount} 次思考` : "",
     toolCount > 0 ? `${toolCount} 个工具` : "",
-    thinkingCount > 0 ? `${thinkingCount} 次思考` : "",
+    typeof completedTaskCount === "number" ? `完成${completedTaskCount}项任务` : "",
     compactionCount > 0 ? `${compactionCount} 次压缩` : "",
-    taskCount > 0 ? `${taskCount} 组任务` : "",
     artifactCount > 0 ? `${artifactCount} 个产物` : "",
   ].filter(Boolean);
   const singleInlineProcessLabel = steps[0]?.kind === "thinking" && steps[0]?.status === "completed"
@@ -489,7 +478,7 @@ export function AgentProcessGroup({ blocks, messageId, sessionId, isStreaming = 
   const summary = hasBusyStep || isStreaming ? "正在工作..." : isSingleInlineProcess ? singleInlineProcessLabel : summaryParts.length > 0 ? `已使用 ${summaryParts.join("、")}` : "已完成过程记录";
   const effectiveApprovalDisplayMode = approvalDisplayMode;
   const effectiveTodoUpdateDisplayMode = mode === "timeline" ? todoUpdateDisplayMode : "panel";
-  const displayItems = buildAgentDisplayStepItems(steps, { mergeThinkingToolSteps, todoUpdateDisplayMode: effectiveTodoUpdateDisplayMode });
+  const displayItems = buildAgentDisplayStepItems(steps, { mergeThinkingToolSteps });
   const activeDisplayItem = displayItems.find((item) => item.index === activeIndex || item.mergedIndexes.includes(activeIndex)) || displayItems[0];
 
   return (
@@ -526,7 +515,7 @@ export function AgentProcessGroup({ blocks, messageId, sessionId, isStreaming = 
             <div className="agent-process-timeline-compact">
               <div className="agent-process-timeline-corner" />
               {displayItems.map((item, timelineIndex) => {
-                const { step, index, mergedTodoLabels, mergedIndexes } = item;
+                const { step, index, mergedIndexes } = item;
                 const hasStoredOpenState = openSteps[index] !== undefined || mergedIndexes.some((mergedIndex) => openSteps[mergedIndex] !== undefined);
                 const storedOpen = Boolean(openSteps[index] || mergedIndexes.some((mergedIndex) => openSteps[mergedIndex]));
                 const defaultOpen = isStreaming && timelineStreamingStepMode !== "hidden" && (timelineStreamingStepMode === "expandAll" || index === steps.length - 1 || mergedIndexes.includes(steps.length - 1));
@@ -541,14 +530,13 @@ export function AgentProcessGroup({ blocks, messageId, sessionId, isStreaming = 
                     {!isLast && <span className="agent-process-step-line" />}
                     <button type="button" className="agent-process-step-head" data-has-file-target={hasFileTarget ? "true" : undefined} onClick={() => hasContent && toggleStep(index)}>
                         <Icon name={stepIconName(item.displayStep)} size={13} />
-                        {item.displayLabel ? <span className="agent-process-step-label-text">{item.displayLabel}</span> : <StepHeadLabel step={item.displayStep} fallbackLabel={item.displayStep.label} />}
+                        <StepHeadLabel step={item.displayStep} fallbackLabel={item.displayStep.label} />
                       {step.staleRunningState && (
                         <span className="agent-process-stale-step-icon">
                           <Icon name="circle-warning" size={13} />
                           <span className="agent-process-stale-step-tip">{staleStepTooltip}</span>
                         </span>
                       )}
-                      {mergedTodoLabels.map((label) => <span key={label} className="agent-process-step-inline-note">{label}</span>)}
                       {hasContent && <Icon name="chevron-right" size={11} className="agent-process-step-caret" style={{ transform: isOpen ? "rotate(90deg)" : undefined }} />}
                     </button>
                     {isOpen && hasContent && (
@@ -557,7 +545,7 @@ export function AgentProcessGroup({ blocks, messageId, sessionId, isStreaming = 
                           {isStreamingStep && showStepTopShadow && <div className="agent-process-edge-shadow agent-process-edge-shadow-top" />}
                           {isStreamingStep && showStepBottomShadow && <div className="agent-process-edge-shadow agent-process-edge-shadow-bottom" />}
                           <div ref={isStreamingStep ? stepScrollRef : undefined} className="agent-process-step-detail-scroll" data-streaming={isStreamingStep ? "true" : undefined}>
-                            <DisplayStepDetail item={item} projectDirectory={projectDirectory} sessionId={sessionId} approvalDisplayMode={effectiveApprovalDisplayMode} collapseOutputBlankLines={collapseConsecutiveOutputBlankLines} />
+                            <DisplayStepDetail item={item} projectDirectory={projectDirectory} sessionId={sessionId} approvalDisplayMode={effectiveApprovalDisplayMode} collapseOutputBlankLines={collapseConsecutiveOutputBlankLines} todoUpdateDisplayMode={effectiveTodoUpdateDisplayMode} />
                           </div>
                         </div>
                       </div>
@@ -572,8 +560,7 @@ export function AgentProcessGroup({ blocks, messageId, sessionId, isStreaming = 
                 {displayItems.map((item) => (
                   <button key={`${item.step.kind}-${item.index}`} type="button" className={activeDisplayItem?.index === item.index ? "active" : ""} data-has-file-target={stepHasFileTarget(item.displayStep) ? "true" : undefined} onClick={() => setActiveIndex(item.index)}>
                     <Icon name={stepIconName(item.displayStep)} size={11} />
-                    {item.displayLabel ? <span className="agent-process-step-label-text">{item.displayLabel}</span> : <StepHeadLabel step={item.displayStep} fallbackLabel={item.displayStep.label} />}
-                    {item.mergedTodoLabels.map((label) => <span key={label} className="agent-process-step-inline-note">{label}</span>)}
+                    <StepHeadLabel step={item.displayStep} fallbackLabel={item.displayStep.label} />
                     {item.step.staleRunningState && (
                       <span className="agent-process-stale-step-icon">
                         <Icon name="circle-warning" size={13} />
@@ -588,7 +575,7 @@ export function AgentProcessGroup({ blocks, messageId, sessionId, isStreaming = 
                   {showTabTopShadow && <div className="agent-process-edge-shadow agent-process-edge-shadow-top" />}
                   {showTabBottomShadow && <div className="agent-process-edge-shadow agent-process-edge-shadow-bottom" />}
                   <div ref={tabScrollRef} key={`${activeDisplayItem.step.kind}-${activeDisplayItem.index}`} className="agent-process-tab-detail" data-kind={displayStepDetailKind(activeDisplayItem)}>
-                    <DisplayStepDetail item={activeDisplayItem} projectDirectory={projectDirectory} sessionId={sessionId} approvalDisplayMode={effectiveApprovalDisplayMode} collapseOutputBlankLines={collapseConsecutiveOutputBlankLines} />
+                    <DisplayStepDetail item={activeDisplayItem} projectDirectory={projectDirectory} sessionId={sessionId} approvalDisplayMode={effectiveApprovalDisplayMode} collapseOutputBlankLines={collapseConsecutiveOutputBlankLines} todoUpdateDisplayMode={effectiveTodoUpdateDisplayMode} />
                   </div>
                 </div>
               )}
