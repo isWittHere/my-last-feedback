@@ -1682,7 +1682,7 @@ function updateSession(sessions: AgentSession[], sessionId: string, updater: (se
 }
 
 export const useAgentStore = create<AgentStoreState>((set, get) => ({
-  sessions: [createAgentSession()],
+  sessions: [{ ...createAgentSession(), openCodePermissionRules: openCodeConfiguredPermissionRules() }],
   activeSessionId: "agent-session-opencode",
   providerSessionLists: {},
 
@@ -1712,9 +1712,7 @@ export const useAgentStore = create<AgentStoreState>((set, get) => ({
       availableCommandsError: inheritOpenCodeCommands ? activeSession?.availableCommandsError : undefined,
       availableCommandsLoadedAt: inheritOpenCodeCommands ? activeSession?.availableCommandsLoadedAt : undefined,
       configOptions: activeSession?.configOptions || [],
-      openCodePermissionRules: activeSession?.openCodePermissionRules && activeSession.openCodePermissionRules.length > 0
-        ? activeSession.openCodePermissionRules
-        : openCodeConfiguredPermissionRules(),
+      openCodePermissionRules: openCodeConfiguredPermissionRules(),
       status: "idle",
       createdAt,
       updatedAt: createdAt,

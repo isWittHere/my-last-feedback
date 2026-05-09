@@ -156,6 +156,7 @@ export function AgentSessionManagerPanel() {
   const lastUsedCwd = useTerminalStore((state) => state.lastUsedCwd);
   const recordRecentPath = useTerminalStore((state) => state.recordRecentPath);
   const focusedComposer = useFeedbackStore((state) => state.focusedComposer);
+  const openDockTab = useFeedbackStore((state) => state.openDockTab);
   const activeWorkspacePath = useFeedbackStore((state) => state.mlcActiveWorkspacePath || "");
   const callerNamesKey = useFeedbackStore((state) => state.callers.map((caller) => `${caller.id}\t${caller.name}`).join("\n"));
   const recentRequestPathsKey = useFeedbackStore((state) => state.sessions.map((session) => `${session.id}\t${session.projectDirectory}\t${session.callerId}\t${session.createdAt}`).join("\n"));
@@ -269,13 +270,18 @@ export function AgentSessionManagerPanel() {
 
   const defaultCwd = activeSession?.cwd || lastUsedCwd || pathCandidates[0]?.path || null;
 
+  const showAgentPanel = useCallback(() => {
+    openDockTab("agentConsole", "rightPage");
+  }, [openDockTab]);
+
   const createFromPath = useCallback((cwd: string | null, source: AgentWorkspacePathSource = "recent") => {
     const cleanPath = cwd?.trim() || null;
     const sessionId = createNewSession({ cwd: cleanPath });
     if (cleanPath) recordRecentPath(cleanPath, toTerminalPathSource(source));
     setPathMenuOpen(false);
+    showAgentPanel();
     return sessionId;
-  }, [createNewSession, recordRecentPath]);
+  }, [createNewSession, recordRecentPath, showAgentPanel]);
 
   const chooseWorkspaceFolder = useCallback(async () => {
     setActionError(null);
@@ -436,7 +442,10 @@ export function AgentSessionManagerPanel() {
                                   key={session.id}
                                   type="button"
                                   className={`session-item${session.id === activeSessionId ? " session-item-active" : ""}`}
-                                  onClick={() => setActiveSession(session.id)}
+                                  onClick={() => {
+                                    setActiveSession(session.id);
+                                    showAgentPanel();
+                                  }}
                                 >
                                   <div className="session-item-row1">
                                     <HistorySessionAvatar identity={identity} sessionId={session.providerSessionId || session.id} status={session.status} />
@@ -464,6 +473,7 @@ export function AgentSessionManagerPanel() {
                               : t("agentSessions.restore", "Restore session");
                             const handleRestore = () => {
                               if (busyAction !== null) return;
+                              showAgentPanel();
                               void runAction(restoreKey, () => restoreProviderSession(providerId, item.sessionId));
                             };
                             const handleDelete = () => {

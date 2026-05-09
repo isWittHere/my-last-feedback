@@ -44,7 +44,7 @@ export function getAgentSessionIdentity(session: AgentSession, language: "en" | 
   if (!session.providerSessionId || session.providerSessionState === "provisional") {
     return {
       providerName,
-      name: "opencode",
+      name: "My Last Code",
       code: null,
       color: "var(--color-text)",
     };

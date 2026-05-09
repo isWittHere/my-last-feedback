@@ -3030,6 +3030,20 @@ body,
   background: color-mix(in srgb, var(--agent-permission-tone) 16%, transparent);
 }
 
+.agent-permission-indicator[data-permission-locked="true"] {
+  background:
+    repeating-linear-gradient(135deg, color-mix(in srgb, var(--agent-permission-tone) 30%, transparent) 0 3px, transparent 3px 7px),
+    color-mix(in srgb, var(--agent-permission-tone) 12%, transparent);
+}
+
+.agent-permission-indicator[data-permission-locked="true"]:hover,
+.agent-permission-indicator[data-permission-locked="true"]:focus-visible,
+.agent-permission-indicator[data-permission-locked="true"].active {
+  background:
+    repeating-linear-gradient(135deg, color-mix(in srgb, var(--agent-permission-tone) 34%, transparent) 0 3px, transparent 3px 7px),
+    color-mix(in srgb, var(--agent-permission-tone) 16%, transparent);
+}
+
 .agent-permission-popover {
   position: absolute;
   right: 0;
@@ -3046,6 +3060,18 @@ body,
   z-index: 245;
 }
 
+.agent-permission-panel-standalone {
+  width: min(380px, 100%);
+  max-height: min(64vh, 560px);
+  overflow: auto;
+  padding: 8px 10px;
+  border: 0;
+  border-radius: 6px;
+  background: transparent;
+  box-shadow: none;
+  color: var(--color-text-primary);
+}
+
 .agent-permission-popover-head {
   display: flex;
   align-items: center;
@@ -3057,11 +3083,40 @@ body,
   font-weight: 700;
 }
 
+.agent-permission-head-actions {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+}
+
 .agent-permission-popover-head strong {
   color: var(--color-text-muted);
   font-size: 10px;
   font-weight: 700;
   text-transform: uppercase;
+}
+
+.agent-permission-more-button {
+  display: inline-flex;
+  align-items: center;
+  gap: 2px;
+  min-height: 20px;
+  padding: 0;
+  border: 0;
+  background: transparent;
+  color: var(--color-text-muted);
+  font-size: 11px;
+  font-weight: 700;
+  cursor: pointer;
+}
+
+.agent-permission-more-button svg {
+  transition: transform 0.16s ease;
+}
+
+.agent-permission-more-button:hover,
+.agent-permission-more-button:focus-visible {
+  color: var(--color-text-primary);
 }
 
 .agent-permission-running-note {
@@ -3078,13 +3133,14 @@ body,
 .agent-permission-list {
   display: grid;
   gap: 2px;
+  padding: 0 0 3px 0px;
 }
 
 .agent-permission-preset-options {
   width: 100%;
   flex-direction: row-reverse;
   justify-content: stretch;
-  margin-bottom: 8px;
+  margin-bottom: 3px;
 }
 
 .agent-permission-preset-options .settings-segmented-option {
@@ -3984,6 +4040,20 @@ body,
   background: color-mix(in srgb, var(--agent-permission-tone) 16%, transparent);
 }
 
+.agent-console-topbar-action.agent-permission-indicator[data-permission-locked="true"] {
+  background:
+    repeating-linear-gradient(135deg, color-mix(in srgb, var(--agent-permission-tone) 30%, transparent) 0 3px, transparent 3px 7px),
+    color-mix(in srgb, var(--agent-permission-tone) 12%, transparent);
+}
+
+.agent-console-topbar-action.agent-permission-indicator[data-permission-locked="true"]:hover,
+.agent-console-topbar-action.agent-permission-indicator[data-permission-locked="true"]:focus-visible,
+.agent-console-topbar-action.agent-permission-indicator[data-permission-locked="true"].active {
+  background:
+    repeating-linear-gradient(135deg, color-mix(in srgb, var(--agent-permission-tone) 34%, transparent) 0 3px, transparent 3px 7px),
+    color-mix(in srgb, var(--agent-permission-tone) 16%, transparent);
+}
+
 .agent-console-topbar-action:disabled {
   opacity: 0.55;
   cursor: wait;
@@ -4808,6 +4878,31 @@ body,
   overflow-y: auto;
   padding: 10px 12px 14px;
   user-select: text;
+}
+
+.agent-new-session-permission-shell {
+  flex: 1 0 auto;
+  min-height: 360px;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 18px;
+  padding: 28px 0;
+}
+
+.agent-new-session-brand {
+  display: inline-flex;
+  align-items: center;
+  gap: 10px;
+  color: var(--color-text-primary);
+  font-size: 22px;
+  font-weight: 780;
+  letter-spacing: 0;
+}
+
+.agent-new-session-brand svg {
+  flex: 0 0 auto;
 }
 
 .agent-timeline-top-overlay {

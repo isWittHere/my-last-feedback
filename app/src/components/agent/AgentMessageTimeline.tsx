@@ -1,7 +1,9 @@
 import { Fragment, useCallback, useEffect, useRef, useState, type CSSProperties } from "react";
 import { useAgentConsoleSettings } from "../../agentConsoleSettings";
 import type { AgentContentBlock, AgentProviderMessagePart, AgentSession } from "../../agent/types";
+import { MlcLogoIcon } from "../Icons";
 import { AgentMessageItem } from "./AgentMessageItem";
+import { AgentPermissionPanel } from "./AgentPermissionIndicator";
 import { AgentSessionHeader } from "./AgentSessionHeader";
 
 const STICKY_USER_SCROLL_TOP_EXTRA_OFFSET = -38;
@@ -289,6 +291,15 @@ export function AgentMessageTimeline({ session }: { session: AgentSession }) {
           </div>
         )}
       </div>
+      {session.providerId === "opencode" && session.messages.length === 0 && (
+        <div className="agent-new-session-permission-shell">
+          <div className="agent-new-session-brand" aria-label="My Last Code">
+            <MlcLogoIcon size={34} />
+            <span>My Last Code</span>
+          </div>
+          <AgentPermissionPanel session={session} variant="standalone" />
+        </div>
+      )}
       {session.messages.map((message) => (
         <AgentMessageItem key={message.id} session={session} message={message} projectDirectory={session.cwd} />
       ))}

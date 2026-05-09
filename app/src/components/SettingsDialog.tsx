@@ -832,7 +832,7 @@ export function SettingsDialog({ open, onClose }: { open: boolean; onClose: () =
           <div className="settings-opencode-permission-summary-row">
             <div className="settings-row-info">
               <span className="settings-label">{t("settings.openCodePermissions", "OpenCode default permissions")}</span>
-              <span className="settings-sublabel">{t("settings.openCodePermissionsDesc", "These permissions are applied to new OpenCode sessions. Active sessions can be adjusted from the Agent header.")}</span>
+              <span className="settings-sublabel">{t("settings.openCodePermissionsDesc", "These permissions apply by default to the next new OpenCode session. Existing sessions keep their current rules.")}</span>
             </div>
             <SettingsSegmentedControl
               ariaLabel={t("settings.openCodePermissionPresets", "Permission presets")}
