@@ -59,11 +59,11 @@ function collapseConsecutiveBlankLines(text: string): string {
 }
 
 function streamingDelayMs(lag: number, upstreamActive: boolean): number {
-  if (lag > 300) return upstreamActive ? 4 : 2;
-  if (lag > 160) return upstreamActive ? 7 : 4;
-  if (lag > 80) return upstreamActive ? 12 : 7;
-  if (lag > 32) return upstreamActive ? 20 : 12;
-  return upstreamActive ? 34 : 18;
+  if (lag > 300) return upstreamActive ? 2 : 1;
+  if (lag > 160) return upstreamActive ? 4 : 2;
+  if (lag > 80) return upstreamActive ? 7 : 4;
+  if (lag > 32) return upstreamActive ? 12 : 7;
+  return upstreamActive ? 18 : 10;
 }
 
 function useSmoothStreamingBlocks(blocks: AgentContentBlock[], enabled: boolean, upstreamActive: boolean): AgentContentBlock[] {

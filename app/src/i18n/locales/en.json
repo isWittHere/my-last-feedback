@@ -447,6 +447,8 @@
     "agentProcessStepDefaultModeDesc": "Choose whether new Agent process steps open in tabs or timeline view by default.",
     "agentProcessStepModeTabs": "Tabs",
     "agentProcessStepModeTimeline": "Timeline",
+    "agentAllowProcessStepModeSwitching": "Allow switching Step display during sessions",
+    "agentAllowProcessStepModeSwitchingDesc": "When enabled, the Step view switch appears on hover in the process row during a session.",
     "agentTaskPanelTemplateStyle": "Task management panel style",
     "agentTaskPanelTemplateStyleDesc": "Choose how the task management panel above the composer lays out tasks.",
     "agentTaskPanelTemplateList": "List",

@@ -33,6 +33,7 @@ export interface AgentConsoleSettings {
   smoothStreamingOutput: boolean;
   autoCleanupEmptySessions: boolean;
   processStepDefaultMode: AgentProcessStepDefaultMode;
+  allowProcessStepModeSwitching: boolean;
   timelineStreamingStepMode: AgentTimelineStreamingStepMode;
   todoUpdateDisplayMode: AgentTodoUpdateDisplayMode;
   taskPanelTemplateStyle: AgentTaskPanelTemplateStyle;
@@ -64,6 +65,7 @@ const DEFAULT_SETTINGS: AgentConsoleSettings = {
   smoothStreamingOutput: false,
   autoCleanupEmptySessions: true,
   processStepDefaultMode: "tabs",
+  allowProcessStepModeSwitching: true,
   timelineStreamingStepMode: "collapseHistory",
   todoUpdateDisplayMode: "countOnly",
   taskPanelTemplateStyle: "tags",
@@ -164,6 +166,7 @@ export function getAgentConsoleSettings(): AgentConsoleSettings {
       smoothStreamingOutput: typeof parsed.smoothStreamingOutput === "boolean" ? parsed.smoothStreamingOutput : DEFAULT_SETTINGS.smoothStreamingOutput,
       autoCleanupEmptySessions: typeof parsed.autoCleanupEmptySessions === "boolean" ? parsed.autoCleanupEmptySessions : DEFAULT_SETTINGS.autoCleanupEmptySessions,
       processStepDefaultMode: isProcessStepDefaultMode(parsed.processStepDefaultMode) ? parsed.processStepDefaultMode : DEFAULT_SETTINGS.processStepDefaultMode,
+      allowProcessStepModeSwitching: typeof parsed.allowProcessStepModeSwitching === "boolean" ? parsed.allowProcessStepModeSwitching : DEFAULT_SETTINGS.allowProcessStepModeSwitching,
       timelineStreamingStepMode: isTimelineStreamingStepMode(parsed.timelineStreamingStepMode) ? parsed.timelineStreamingStepMode : DEFAULT_SETTINGS.timelineStreamingStepMode,
       todoUpdateDisplayMode: isTodoUpdateDisplayMode(parsed.todoUpdateDisplayMode) ? parsed.todoUpdateDisplayMode : DEFAULT_SETTINGS.todoUpdateDisplayMode,
       taskPanelTemplateStyle: isTaskPanelTemplateStyle(parsed.taskPanelTemplateStyle) ? parsed.taskPanelTemplateStyle : DEFAULT_SETTINGS.taskPanelTemplateStyle,

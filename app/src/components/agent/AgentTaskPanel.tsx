@@ -29,10 +29,9 @@ function taskPriorityLabel(priority: AgentTaskItem["priority"]): string {
 
 export function AgentTaskPanel({ session }: { session: AgentSession }) {
   const [expanded, setExpanded] = useState(false);
-  const { processStepDefaultMode, taskPanelTemplateStyle, todoUpdateDisplayMode } = useAgentConsoleSettings();
+  const { taskPanelTemplateStyle } = useAgentConsoleSettings();
   const tasks = useMemo(() => latestTasks(session), [session]);
 
-  if (processStepDefaultMode === "timeline" && todoUpdateDisplayMode === "countOnly") return null;
   if (tasks.length === 0) return null;
 
   const completedCount = tasks.filter((task) => task.status === "completed").length;

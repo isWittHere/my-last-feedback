@@ -667,6 +667,40 @@ export function FeedbackApp() {
     setDockColumnCollapsed(columnId, !column.collapsed);
   }, [dockColumns, setDockColumnCollapsed]);
 
+  const toggleDockSideFromShortcut = useCallback((side: "left" | "right") => {
+    const sidebarId: DockColumnId = side === "left" ? "leftSidebar" : "rightSidebar";
+    const pageId: DockColumnId = side === "left" ? "leftPage" : "rightPage";
+    const sidebarColumn = dockColumns[sidebarId];
+    const pageColumn = dockColumns[pageId];
+    const sidebarOpen = sidebarColumn.tabIds.length > 0 && !sidebarColumn.collapsed;
+    const pageOpen = pageColumn.tabIds.length > 0 && !pageColumn.collapsed;
+
+    if (sidebarOpen || pageOpen) {
+      if (sidebarColumn.tabIds.length > 0) setDockColumnCollapsed(sidebarId, true);
+      if (pageColumn.tabIds.length > 0) setDockColumnCollapsed(pageId, true);
+      return;
+    }
+
+    if (sidebarColumn.tabIds.length > 0) setDockColumnCollapsed(sidebarId, false);
+    if (pageColumn.tabIds.length > 0) setDockColumnCollapsed(pageId, true);
+  }, [dockColumns, setDockColumnCollapsed]);
+
+  useEffect(() => {
+    const handleKeyDown = (event: KeyboardEvent) => {
+      if (event.defaultPrevented || event.key.toLowerCase() !== "b" || !event.ctrlKey || event.shiftKey || event.metaKey) return;
+      if (event.altKey) {
+        event.preventDefault();
+        toggleDockSideFromShortcut("right");
+        return;
+      }
+      event.preventDefault();
+      toggleDockSideFromShortcut("left");
+    };
+
+    window.addEventListener("keydown", handleKeyDown);
+    return () => window.removeEventListener("keydown", handleKeyDown);
+  }, [toggleDockSideFromShortcut]);
+
   const [settingsOpen, setSettingsOpen] = useState(false);
   const pushNativeWebViewBlocker = useFeedbackStore((s) => s.pushNativeWebViewBlocker);
   const popNativeWebViewBlocker = useFeedbackStore((s) => s.popNativeWebViewBlocker);

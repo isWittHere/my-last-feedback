@@ -4907,6 +4907,19 @@ body,
   background: transparent;
   color: var(--color-text-muted);
   cursor: pointer;
+  opacity: 1;
+  transition: opacity 0.12s ease, background 0.12s ease, color 0.12s ease;
+}
+
+.agent-process-stream[data-mode-switching="hover"] .agent-process-mode-toggle {
+  opacity: 0;
+  pointer-events: none;
+}
+
+.agent-process-stream[data-mode-switching="hover"] .agent-process-stream-head:hover .agent-process-mode-toggle,
+.agent-process-stream[data-mode-switching="hover"] .agent-process-stream-head:focus-within .agent-process-mode-toggle {
+  opacity: 1;
+  pointer-events: auto;
 }
 
 .agent-process-mode-toggle:hover {

@@ -413,6 +413,14 @@ export function SettingsDialog({ open, onClose }: { open: boolean; onClose: () =
     });
   }, []);
 
+  const handleAgentProcessStepModeSwitchingToggle = useCallback(() => {
+    setAgentConsoleSettings((prev) => {
+      const next = { ...prev, allowProcessStepModeSwitching: !prev.allowProcessStepModeSwitching };
+      saveAgentConsoleSettings(next);
+      return next;
+    });
+  }, []);
+
   const handleAgentTimelineStreamingStepModeChange = useCallback((timelineStreamingStepMode: AgentTimelineStreamingStepMode) => {
     setAgentConsoleSettings((prev) => {
       const next: AgentConsoleSettings = {
@@ -1435,6 +1443,21 @@ export function SettingsDialog({ open, onClose }: { open: boolean; onClose: () =
                       <span className="settings-sublabel">{t("settings.agentProcessStepDefaultModeDesc", "Choose whether new Agent process steps open in tabs or timeline view by default.")}</span>
                     </div>
                     {renderAgentProcessStepModeGroup()}
+                  </div>
+                  <div className="settings-row settings-agent-toggle-row">
+                    <div className="settings-row-info">
+                      <span className="settings-label">{t("settings.agentAllowProcessStepModeSwitching", "Allow switching Step display during sessions")}</span>
+                      <span className="settings-sublabel">{t("settings.agentAllowProcessStepModeSwitchingDesc", "When enabled, the Step view switch appears on hover in the process row during a session.")}</span>
+                    </div>
+                    <button
+                      type="button"
+                      className={`settings-toggle${agentConsoleSettings.allowProcessStepModeSwitching ? " settings-toggle-on" : ""}`}
+                      onClick={handleAgentProcessStepModeSwitchingToggle}
+                      aria-label={t("settings.agentAllowProcessStepModeSwitching", "Allow switching Step display during sessions")}
+                      aria-pressed={agentConsoleSettings.allowProcessStepModeSwitching}
+                    >
+                      <span className="settings-toggle-knob" />
+                    </button>
                   </div>
                   <div className="settings-agent-topbar-options settings-agent-step-options">
                     {agentConsoleSettings.processStepDefaultMode === "timeline" && (
