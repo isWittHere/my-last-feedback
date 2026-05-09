@@ -1,6 +1,6 @@
 import type { ReactNode } from "react";
 
-export type SettingsSegmentedVariant = "default" | "allow" | "ask" | "deny" | "danger";
+export type SettingsSegmentedVariant = "default" | "allow" | "override" | "ask" | "deny" | "danger";
 
 export interface SettingsSegmentedOption {
   id: string;

@@ -1,14 +1,25 @@
 import { useEffect, useMemo, useRef, useState } from "react";
 import { useTranslation } from "react-i18next";
-import { getOpenCodeDefaultPermissionRules, getOpenCodePermissionPresetId, OPEN_CODE_PERMISSION_DEFINITIONS, OPEN_CODE_PERMISSION_PRESETS, type OpenCodePermissionAction } from "../../openCodeSettings";
+import { getOpenCodeDefaultPermissionRules, getOpenCodePermissionPresetAction, getOpenCodePermissionPresetId, OPEN_CODE_PERMISSION_DEFINITIONS, OPEN_CODE_PERMISSION_PRESETS, type OpenCodePermissionPresetId, type OpenCodePermissionSettingAction } from "../../openCodeSettings";
 import type { AgentOpenCodePermissionRule, AgentSession } from "../../agent/types";
 import { useAgentStore } from "../../store/agentStore";
 import { Icon } from "../Icons";
 import { SettingsSegmentedControl } from "../SettingsSegmentedControl";
 
-const OPEN_CODE_PERMISSION_ACTIONS: OpenCodePermissionAction[] = ["allow", "ask", "deny"];
+const OPEN_CODE_PERMISSION_ACTIONS: OpenCodePermissionSettingAction[] = ["allow", "ask", "deny"];
+const OPEN_CODE_BASH_PERMISSION_ACTIONS: OpenCodePermissionSettingAction[] = ["override", "allow", "ask", "deny"];
 
-function effectivePermissionAction(rules: AgentOpenCodePermissionRule[], permission: string, fallback: OpenCodePermissionAction): OpenCodePermissionAction {
+function presetVariant(presetId: OpenCodePermissionPresetId): OpenCodePermissionSettingAction | undefined {
+  if (presetId === "default") return "ask";
+  if (presetId === "controlledAuto") return "allow";
+  if (presetId === "overrideAuto") return "override";
+}
+
+function effectivePermissionAction(rules: AgentOpenCodePermissionRule[], permission: string, fallback: OpenCodePermissionSettingAction): OpenCodePermissionSettingAction {
+  if (permission === "bash") {
+    const mode = getOpenCodePermissionPresetAction(rules, permission);
+    if (mode) return mode;
+  }
   for (let index = rules.length - 1; index >= 0; index -= 1) {
     const rule = rules[index];
     if (rule.permission === permission && rule.pattern === "*") return rule.action;
@@ -42,29 +53,33 @@ export function AgentPermissionIndicator({ session }: { session: AgentSession })
 
   if (session.providerId !== "opencode" || !session.providerSessionId) return null;
 
-  const actionLabel = (action: OpenCodePermissionAction) => {
+  const actionLabel = (action: OpenCodePermissionSettingAction) => {
     if (action === "allow") return t("agentConsole.permissionAllow", "Allow");
+    if (action === "override") return t("agentConsole.permissionOverride", "Override");
     if (action === "deny") return t("agentConsole.permissionDeny", "Deny");
     return t("agentConsole.permissionAsk", "Ask");
   };
 
-  const actionIcon = (action: OpenCodePermissionAction) => {
+  const actionIcon = (action: OpenCodePermissionSettingAction) => {
     if (action === "allow") return "check";
+    if (action === "override") return "shield";
     if (action === "deny") return "circle-x";
     return "warning";
   };
 
-  const handleActionChange = (permission: string, action: OpenCodePermissionAction) => {
+  const handleActionChange = (permission: string, action: OpenCodePermissionSettingAction) => {
     void updateOpenCodeSessionPermission(session.id, permission, action);
   };
 
   const activePresetId = getOpenCodePermissionPresetId(currentRules);
+  const permissionTone = activePresetId ? presetVariant(activePresetId) : getOpenCodePermissionPresetAction(currentRules, "bash");
 
   return (
     <div ref={rootRef} className={`agent-permission-indicator-wrap${open ? " open" : ""}`}>
       <button
         type="button"
         className={`agent-console-topbar-action agent-permission-indicator${open ? " active" : ""}`}
+        data-permission-tone={permissionTone}
         onClick={() => setOpen((value) => !value)}
         title={t("agentConsole.sessionPermissions", "Session permissions")}
         aria-expanded={open}
@@ -78,27 +93,23 @@ export function AgentPermissionIndicator({ session }: { session: AgentSession })
             <span>{t("agentConsole.sessionPermissions", "Session permissions")}</span>
             {session.openCodePermissionUpdating && <strong>{t("agentConsole.permissionUpdating", "Updating")}</strong>}
           </div>
-          <div className="agent-permission-preset-list" aria-label={t("agentConsole.permissionPresets", "Permission presets")}>
-            {OPEN_CODE_PERMISSION_PRESETS.map((preset) => {
-              const isActive = activePresetId === preset.id;
-              return (
-                <button
-                  key={preset.id}
-                  type="button"
-                  className={`agent-permission-preset${isActive ? " active" : ""}`}
-                  onClick={() => void applyOpenCodeSessionPermissionPreset(session.id, preset.id)}
-                  disabled={session.openCodePermissionUpdating}
-                  aria-pressed={isActive}
-                >
-                  <Icon name={preset.icon} size={12} />
-                  <span>{t(preset.labelKey, preset.defaultLabel)}</span>
-                </button>
-              );
-            })}
-          </div>
+          <SettingsSegmentedControl
+            ariaLabel={t("agentConsole.permissionPresets", "Permission presets")}
+            value={activePresetId || ""}
+            onChange={(presetId) => void applyOpenCodeSessionPermissionPreset(session.id, presetId as OpenCodePermissionPresetId)}
+            disabled={session.openCodePermissionUpdating}
+            className="agent-permission-preset-options"
+            options={OPEN_CODE_PERMISSION_PRESETS.map((preset) => ({
+              id: preset.id,
+              label: t(preset.labelKey, preset.defaultLabel),
+              icon: <Icon name={preset.icon} size={11} />,
+              variant: presetVariant(preset.id),
+            }))}
+          />
           <div className="agent-permission-list">
             {OPEN_CODE_PERMISSION_DEFINITIONS.map((definition) => {
               const currentAction = effectivePermissionAction(currentRules, definition.permission, definition.defaultAction);
+              const actionOptions = definition.permission === "bash" ? OPEN_CODE_BASH_PERMISSION_ACTIONS : OPEN_CODE_PERMISSION_ACTIONS;
               return (
                 <div key={definition.permission} className="agent-permission-item">
                   <div className="agent-permission-info">
@@ -108,10 +119,10 @@ export function AgentPermissionIndicator({ session }: { session: AgentSession })
                   <SettingsSegmentedControl
                     ariaLabel={t(definition.labelKey, definition.defaultLabel)}
                     value={currentAction}
-                    onChange={(action) => handleActionChange(definition.permission, action as OpenCodePermissionAction)}
+                    onChange={(action) => handleActionChange(definition.permission, action as OpenCodePermissionSettingAction)}
                     disabled={session.openCodePermissionUpdating}
                     className="agent-permission-actions"
-                    options={OPEN_CODE_PERMISSION_ACTIONS.map((action) => ({
+                    options={actionOptions.map((action) => ({
                       id: action,
                       label: actionLabel(action),
                       icon: <Icon name={actionIcon(action)} size={11} />,

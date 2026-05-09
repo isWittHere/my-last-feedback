@@ -17,7 +17,7 @@ import { getTerminalSettings, saveTerminalSettings, type TerminalSettings, type 
 import { getComposerSettings, saveComposerSettings, type ComposerSettings } from "../composerSettings";
 import { formatGitFolderBlacklistText, getGitOperationSettings, GIT_TIMED_REMINDER_MAX_MINUTES, GIT_TIMED_REMINDER_MIN_MINUTES, GIT_TIMED_REMINDER_STEP_MINUTES, parseGitFolderBlacklistText, saveGitOperationSettings, type GitOperationSettings } from "../gitOperationSettings";
 import { AGENT_DIFF_COLOR_PRESETS, getAgentConsoleSettings, saveAgentConsoleSettings, type AgentApprovalDisplayMode, type AgentConsoleSettings, type AgentDiffColorPresetId, type AgentNavigationGroupBackgroundMode, type AgentNavigationIndicatorOrder, type AgentNavigationVisualizationMode, type AgentProcessStepDefaultMode, type AgentTaskPanelTemplateStyle, type AgentTimelineStreamingStepMode, type AgentTodoUpdateDisplayMode, type AgentTopbarIndicatorMode } from "../agentConsoleSettings";
-import { getOpenCodePermissionPresetAction, getOpenCodePermissionPresetId, getOpenCodeSettings, OPEN_CODE_PERMISSION_DEFINITIONS, OPEN_CODE_PERMISSION_PRESETS, setOpenCodeDefaultPermissionAction, setOpenCodeDefaultPermissionPreset, setOpenCodeModelEnabled, setOpenCodePreferredModel, type OpenCodePermissionAction, type OpenCodePermissionPresetId, type OpenCodeSettings } from "../openCodeSettings";
+import { getOpenCodePermissionPresetAction, getOpenCodePermissionPresetId, getOpenCodeSettings, OPEN_CODE_PERMISSION_DEFINITIONS, OPEN_CODE_PERMISSION_PRESETS, setOpenCodeDefaultPermissionAction, setOpenCodeDefaultPermissionPreset, setOpenCodeModelEnabled, setOpenCodePreferredModel, type OpenCodePermissionPresetId, type OpenCodePermissionSettingAction, type OpenCodeSettings } from "../openCodeSettings";
 import { SESSION_LIST_MODE_OPTIONS } from "../sessionNavigationSettings";
 import { SessionNavigationModeIcon } from "./SessionNavigationModeIcon";
 import { AppSelect, type AppSelectOption } from "./AppSelect";
@@ -47,7 +47,14 @@ const AGENT_APPROVAL_DISPLAY_MODE_OPTIONS: AgentApprovalDisplayMode[] = ["step",
 const AGENT_NAVIGATION_VISUALIZATION_MODE_OPTIONS: AgentNavigationVisualizationMode[] = ["bars", "lineArea"];
 const AGENT_NAVIGATION_INDICATOR_ORDER_OPTIONS: AgentNavigationIndicatorOrder[] = ["leftToRight", "rightToLeft"];
 const AGENT_NAVIGATION_GROUP_BACKGROUND_MODE_OPTIONS: AgentNavigationGroupBackgroundMode[] = ["hidden", "hover", "alternate"];
-const OPEN_CODE_PERMISSION_ACTIONS: OpenCodePermissionAction[] = ["allow", "ask", "deny"];
+const OPEN_CODE_PERMISSION_ACTIONS: OpenCodePermissionSettingAction[] = ["allow", "ask", "deny"];
+const OPEN_CODE_BASH_PERMISSION_ACTIONS: OpenCodePermissionSettingAction[] = ["override", "allow", "ask", "deny"];
+
+function openCodePermissionPresetVariant(presetId: OpenCodePermissionPresetId): OpenCodePermissionSettingAction | undefined {
+  if (presetId === "default") return "ask";
+  if (presetId === "controlledAuto") return "allow";
+  if (presetId === "overrideAuto") return "override";
+}
 
 type OpenCodeModelItem = OpenCodeSettings["models"][number];
 
@@ -504,7 +511,7 @@ export function SettingsDialog({ open, onClose }: { open: boolean; onClose: () =
     setOpenCodeSettings(setOpenCodePreferredModel(modelId));
   }, []);
 
-  const handleOpenCodePermissionActionChange = useCallback((permission: string, action: OpenCodePermissionAction) => {
+  const handleOpenCodePermissionActionChange = useCallback((permission: string, action: OpenCodePermissionSettingAction) => {
     setOpenCodeSettings(setOpenCodeDefaultPermissionAction(permission, action));
   }, []);
 
@@ -803,14 +810,16 @@ export function SettingsDialog({ open, onClose }: { open: boolean; onClose: () =
     );
   };
 
-  const openCodePermissionActionLabel = (action: OpenCodePermissionAction) => {
+  const openCodePermissionActionLabel = (action: OpenCodePermissionSettingAction) => {
     if (action === "allow") return t("settings.openCodePermissionAllow", "Allow");
+    if (action === "override") return t("settings.openCodePermissionOverride", "Override");
     if (action === "deny") return t("settings.openCodePermissionDeny", "Deny");
     return t("settings.openCodePermissionAsk", "Ask");
   };
 
-  const openCodePermissionActionIcon = (action: OpenCodePermissionAction) => {
+  const openCodePermissionActionIcon = (action: OpenCodePermissionSettingAction) => {
     if (action === "allow") return "check";
+    if (action === "override") return "shield";
     if (action === "deny") return "circle-x";
     return "warning";
   };
@@ -824,26 +833,18 @@ export function SettingsDialog({ open, onClose }: { open: boolean; onClose: () =
             <span className="settings-label">{t("settings.openCodePermissions", "OpenCode default permissions")}</span>
             <span className="settings-sublabel">{t("settings.openCodePermissionsDesc", "These permissions are applied to new OpenCode sessions. Active sessions can be adjusted from the Agent header.")}</span>
           </div>
-          <div className="settings-opencode-preset-list" aria-label={t("settings.openCodePermissionPresets", "Permission presets")}>
-            {OPEN_CODE_PERMISSION_PRESETS.map((preset) => {
-              const isActive = activePresetId === preset.id;
-              return (
-                <button
-                  key={preset.id}
-                  type="button"
-                  className={`settings-opencode-preset-button${isActive ? " active" : ""}`}
-                  onClick={() => handleOpenCodePermissionPresetChange(preset.id)}
-                  aria-pressed={isActive}
-                >
-                  <span className="settings-list-icon-slot"><Icon name={preset.icon} size={13} /></span>
-                  <span className="settings-opencode-preset-copy">
-                    <span>{t(preset.labelKey, preset.defaultLabel)}</span>
-                    <span>{t(preset.descriptionKey, preset.defaultDescription)}</span>
-                  </span>
-                </button>
-              );
-            })}
-          </div>
+          <SettingsSegmentedControl
+            ariaLabel={t("settings.openCodePermissionPresets", "Permission presets")}
+            value={activePresetId || ""}
+            onChange={(presetId) => handleOpenCodePermissionPresetChange(presetId as OpenCodePermissionPresetId)}
+            className="settings-opencode-preset-options"
+            options={OPEN_CODE_PERMISSION_PRESETS.map((preset) => ({
+              id: preset.id,
+              label: t(preset.labelKey, preset.defaultLabel),
+              icon: <Icon name={preset.icon} size={11} />,
+              variant: openCodePermissionPresetVariant(preset.id),
+            }))}
+          />
           <div className="settings-submitted-section-list settings-opencode-permission-list">
             <div className="settings-submitted-section-head settings-opencode-permission-head">
               <span>{t("settings.openCodePermission", "Permission")}</span>
@@ -852,6 +853,7 @@ export function SettingsDialog({ open, onClose }: { open: boolean; onClose: () =
             {OPEN_CODE_PERMISSION_DEFINITIONS.map((definition) => {
               const currentAction = getOpenCodePermissionPresetAction(openCodeSettings.defaultPermissionPreset, definition.permission);
               const description = t(definition.descriptionKey, definition.defaultDescription);
+              const actionOptions = definition.permission === "bash" ? OPEN_CODE_BASH_PERMISSION_ACTIONS : OPEN_CODE_PERMISSION_ACTIONS;
               return (
                 <div key={definition.permission} className="settings-submitted-section-item settings-opencode-permission-item">
                   <span className="settings-submitted-section-name settings-opencode-permission-name-cell">
@@ -864,9 +866,9 @@ export function SettingsDialog({ open, onClose }: { open: boolean; onClose: () =
                   <SettingsSegmentedControl
                     ariaLabel={t(definition.labelKey, definition.defaultLabel)}
                     value={currentAction}
-                    onChange={(action) => handleOpenCodePermissionActionChange(definition.permission, action as OpenCodePermissionAction)}
+                    onChange={(action) => handleOpenCodePermissionActionChange(definition.permission, action as OpenCodePermissionSettingAction)}
                     className="settings-opencode-permission-actions"
-                    options={OPEN_CODE_PERMISSION_ACTIONS.map((action) => ({
+                    options={actionOptions.map((action) => ({
                       id: action,
                       label: openCodePermissionActionLabel(action),
                       icon: <Icon name={openCodePermissionActionIcon(action)} size={11} />,

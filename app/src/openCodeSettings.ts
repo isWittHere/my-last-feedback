@@ -3,6 +3,7 @@ import type { AgentChoiceOption } from "./agent/types";
 import type { OpenCodePermissionAction, OpenCodePermissionRule } from "./agent/opencode";
 
 export type { OpenCodePermissionAction };
+export type OpenCodePermissionSettingAction = OpenCodePermissionAction | "override";
 
 export interface OpenCodeModelSettings extends AgentChoiceOption {
   enabled: boolean;
@@ -22,7 +23,7 @@ export interface OpenCodePermissionPresetItem {
   action: OpenCodePermissionAction;
 }
 
-export type OpenCodePermissionPresetId = "default" | "auto";
+export type OpenCodePermissionPresetId = "default" | "controlledAuto" | "overrideAuto";
 
 export interface OpenCodePermissionPresetDefinition {
   id: OpenCodePermissionPresetId;
@@ -58,17 +59,19 @@ export const OPEN_CODE_PERMISSION_DEFINITIONS: OpenCodePermissionDefinition[] = 
   { permission: "skill", labelKey: "settings.openCodePermissionSkill", defaultLabel: "Skills", descriptionKey: "settings.openCodePermissionSkillDesc", defaultDescription: "Load extra skill instructions.", defaultAction: "ask", icon: "book" },
 ];
 
-const OPEN_CODE_AUTO_BASH_ASK_PATTERNS = [
-  "rm *",
-  "rmdir *",
-  "del *",
-  "Remove-Item *",
+const OPEN_CODE_EXTREME_BASH_ASK_PATTERNS = [
+  "rm -rf /",
+  "rm -rf /*",
+  "rm -fr /",
+  "rm -fr /*",
+  "rm -rf ~",
+  "rm -rf ~/*",
+  "Remove-Item C:/*",
+  "Remove-Item C:/**",
   "git reset *",
   "git clean *",
   "git checkout *",
   "git switch *",
-  "chmod *",
-  "chown *",
   "sudo *",
   "su *",
   "curl *",
@@ -81,10 +84,31 @@ const OPEN_CODE_AUTO_BASH_ASK_PATTERNS = [
   "docker system *",
   "docker volume *",
   "docker image prune *",
+  "terraform apply *",
+  "terraform destroy *",
+  "pulumi up *",
+  "pulumi destroy *",
+  "kubectl apply *",
+  "kubectl delete *",
+];
+
+const OPEN_CODE_CONTROLLED_BASH_ASK_PATTERNS = [
+  "rm *",
+  "rmdir *",
+  "del *",
+  "Remove-Item *",
+  "chmod *",
+  "chown *",
+  ...OPEN_CODE_EXTREME_BASH_ASK_PATTERNS,
 ];
 
 function rule(permission: string, action: OpenCodePermissionAction, pattern = "*"): OpenCodePermissionRule {
   return { permission, pattern, action };
+}
+
+function bashRules(mode: "controlled" | "override"): OpenCodePermissionRule[] {
+  const patterns = mode === "controlled" ? OPEN_CODE_CONTROLLED_BASH_ASK_PATTERNS : OPEN_CODE_EXTREME_BASH_ASK_PATTERNS;
+  return [rule("bash", "allow"), ...patterns.map((pattern) => rule("bash", "ask", pattern))];
 }
 
 export const OPEN_CODE_PERMISSION_PRESETS: OpenCodePermissionPresetDefinition[] = [
@@ -98,11 +122,11 @@ export const OPEN_CODE_PERMISSION_PRESETS: OpenCodePermissionPresetDefinition[] 
     rules: OPEN_CODE_PERMISSION_DEFINITIONS.map((item) => rule(item.permission, item.defaultAction)),
   },
   {
-    id: "auto",
-    labelKey: "settings.openCodePermissionPresetAuto",
-    defaultLabel: "Auto",
-    descriptionKey: "settings.openCodePermissionPresetAutoDesc",
-    defaultDescription: "Allow routine edits, commands, web access, skills, and external directories; ask for risky shell commands.",
+    id: "controlledAuto",
+    labelKey: "settings.openCodePermissionPresetControlledAuto",
+    defaultLabel: "Controlled auto",
+    descriptionKey: "settings.openCodePermissionPresetControlledAutoDesc",
+    defaultDescription: "Allow routine work while asking before destructive shell commands.",
     icon: "play",
     rules: [
       rule("glob", "allow"),
@@ -110,8 +134,28 @@ export const OPEN_CODE_PERMISSION_PRESETS: OpenCodePermissionPresetDefinition[] 
       rule("read", "allow"),
       rule("list", "allow"),
       rule("edit", "allow"),
-      rule("bash", "allow"),
-      ...OPEN_CODE_AUTO_BASH_ASK_PATTERNS.map((pattern) => rule("bash", "ask", pattern)),
+      ...bashRules("controlled"),
+      rule("task", "deny"),
+      rule("webfetch", "allow"),
+      rule("websearch", "allow"),
+      rule("external_directory", "allow"),
+      rule("skill", "allow"),
+    ],
+  },
+  {
+    id: "overrideAuto",
+    labelKey: "settings.openCodePermissionPresetOverrideAuto",
+    defaultLabel: "Override auto",
+    descriptionKey: "settings.openCodePermissionPresetOverrideAutoDesc",
+    defaultDescription: "Allow routine destructive file operations while still asking before extreme-risk commands.",
+    icon: "shield",
+    rules: [
+      rule("glob", "allow"),
+      rule("grep", "allow"),
+      rule("read", "allow"),
+      rule("list", "allow"),
+      rule("edit", "allow"),
+      ...bashRules("override"),
       rule("task", "deny"),
       rule("webfetch", "allow"),
       rule("websearch", "allow"),
@@ -225,6 +269,12 @@ export function getOpenCodePermissionPresetRules(presetId: OpenCodePermissionPre
   return preset.rules.map((item) => ({ ...item }));
 }
 
+export function openCodePermissionActionToRules(permission: string, action: OpenCodePermissionSettingAction): OpenCodePermissionRule[] {
+  if (permission === "bash" && action === "override") return bashRules("override");
+  const resolvedAction: OpenCodePermissionAction = action === "override" ? "allow" : action;
+  return [rule(permission, resolvedAction)];
+}
+
 function permissionRuleKey(rule: OpenCodePermissionRule): string {
   return `${rule.permission}\u0000${rule.pattern}\u0000${rule.action}`;
 }
@@ -241,12 +291,32 @@ export function getOpenCodePermissionPresetId(rules: OpenCodePermissionPresetIte
   })?.id;
 }
 
-export function getOpenCodePermissionPresetAction(preset: OpenCodePermissionPresetItem[] | undefined, permission: string): OpenCodePermissionAction {
+function bashModeFromRules(rules: OpenCodePermissionRule[]): OpenCodePermissionSettingAction | undefined {
+  let wildcardIndex = -1;
+  let wildcardAction: OpenCodePermissionAction | undefined;
+  for (let index = rules.length - 1; index >= 0; index -= 1) {
+    const item = rules[index];
+    if (item.permission === "bash" && item.pattern === "*") {
+      wildcardIndex = index;
+      wildcardAction = item.action;
+      break;
+    }
+  }
+  if (!wildcardAction) return undefined;
+  if (wildcardAction !== "allow") return wildcardAction;
+  const tail = rules.slice(wildcardIndex + 1).filter((item) => item.permission === "bash" && item.pattern !== "*");
+  const tailKeys = tail.map(permissionRuleKey).join("\u0001");
+  if (tailKeys === bashRules("override").slice(1).map(permissionRuleKey).join("\u0001")) return "override";
+  return "allow";
+}
+
+export function getOpenCodePermissionPresetAction(preset: OpenCodePermissionPresetItem[] | undefined, permission: string): OpenCodePermissionSettingAction {
   const definition = OPEN_CODE_PERMISSION_DEFINITIONS.find((item) => item.permission === permission);
-  const normalized = normalizePermissionPreset(preset);
+  const normalized = openCodePermissionPresetToRules(preset || []);
+  if (permission === "bash") return bashModeFromRules(normalized) || definition?.defaultAction || "ask";
   for (let index = normalized.length - 1; index >= 0; index -= 1) {
     const item = normalized[index];
-    if (item.permission === permission && (item.pattern || "*") === "*") return item.action;
+    if (item.permission === permission && item.pattern === "*") return item.action;
   }
   return definition?.defaultAction || "ask";
 }
@@ -261,13 +331,13 @@ export function setOpenCodeDefaultPermissionPreset(presetId: OpenCodePermissionP
   return next;
 }
 
-export function setOpenCodeDefaultPermissionAction(permission: string, action: OpenCodePermissionAction): OpenCodeSettings {
+export function setOpenCodeDefaultPermissionAction(permission: string, action: OpenCodePermissionSettingAction): OpenCodeSettings {
   const current = getOpenCodeSettings();
   const next = {
     ...current,
     defaultPermissionPreset: [
       ...normalizePermissionPreset(current.defaultPermissionPreset).filter((item) => item.permission !== permission),
-      { permission, pattern: "*", action },
+      ...openCodePermissionActionToRules(permission, action),
     ],
   };
   saveOpenCodeSettings(next);
