@@ -433,6 +433,8 @@
     "agentSmoothStreamingOutputDesc": "Pace Agent text updates so fast model chunks still appear progressively.",
     "agentCollapseOutputBlankLines": "Collapse consecutive blank lines in output",
     "agentCollapseOutputBlankLinesDesc": "When enabled, repeated blank lines in Agent output are reduced to a single blank line.",
+    "agentMergeThinkingToolSteps": "Merge tool steps with thinking",
+    "agentMergeThinkingToolStepsDesc": "When a visible thinking step precedes a tool step, show the tool card inside the thinking step instead of as a separate step.",
     "agentProcessStepDefaultMode": "Step process default view",
     "agentProcessStepDefaultModeDesc": "Choose whether new Agent process steps open in tabs or timeline view by default.",
     "agentProcessStepModeTabs": "Tabs",

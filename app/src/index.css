@@ -4991,6 +4991,7 @@ body,
 
 .agent-process-single-thinking[data-kind="thinking"] .agent-process-markdown,
 .agent-process-step-detail[data-kind="thinking"] .agent-process-markdown,
+.agent-process-merged-thinking .agent-process-markdown,
 .agent-process-tab-detail[data-kind="thinking"] .agent-process-markdown {
   opacity: 0.78;
 }
@@ -5139,6 +5140,22 @@ body,
 .agent-process-tab-detail[data-kind="compaction"],
 .agent-process-tab-detail[data-kind="error"] {
   max-height: min(42vh, 280px);
+  overflow-y: auto;
+  overscroll-behavior: auto;
+  padding-right: 4px;
+  scrollbar-gutter: stable;
+}
+
+.agent-process-merged-step-detail {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  min-width: 0;
+}
+
+.agent-process-merged-thinking {
+  min-width: 0;
+  max-height: min(32vh, 280px);
   overflow-y: auto;
   overscroll-behavior: auto;
   padding-right: 4px;
@@ -5404,6 +5421,15 @@ body,
   min-width: 0;
   max-width: 100%;
   overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.agent-process-step-inline-note {
+  flex: 0 0 auto;
+  max-width: min(18rem, 36vw);
+  overflow: hidden;
+  color: var(--color-text-muted);
   text-overflow: ellipsis;
   white-space: nowrap;
 }

@@ -433,6 +433,8 @@
     "agentSmoothStreamingOutputDesc": "分批显示 Agent 文本，使快速模型片段也能渐进呈现。",
     "agentCollapseOutputBlankLines": "输出结果自动省略连续空行",
     "agentCollapseOutputBlankLinesDesc": "开启后，Agent 输出结果中的连续空行会只保留一个空行。",
+    "agentMergeThinkingToolSteps": "合并带思考的工具执行",
+    "agentMergeThinkingToolStepsDesc": "当前面存在可见思考 Step 时，将工具卡片合并到该思考 Step 中，而不是显示为单独步骤。",
     "agentProcessStepDefaultMode": "Step 过程默认视图",
     "agentProcessStepDefaultModeDesc": "选择新的 Agent 过程步骤默认使用标签视图还是时间线视图。",
     "agentProcessStepModeTabs": "标签",

@@ -36,6 +36,7 @@ export interface AgentConsoleSettings {
   todoUpdateDisplayMode: AgentTodoUpdateDisplayMode;
   approvalDisplayMode: AgentApprovalDisplayMode;
   collapseConsecutiveOutputBlankLines: boolean;
+  mergeThinkingToolSteps: boolean;
   showMessageSpeakerLine: boolean;
   defaultExpandHeaderDetails: boolean;
   showStickyUserMessageBar: boolean;
@@ -64,6 +65,7 @@ const DEFAULT_SETTINGS: AgentConsoleSettings = {
   todoUpdateDisplayMode: "panel",
   approvalDisplayMode: "all",
   collapseConsecutiveOutputBlankLines: false,
+  mergeThinkingToolSteps: false,
   showMessageSpeakerLine: true,
   defaultExpandHeaderDetails: false,
   showStickyUserMessageBar: true,
@@ -128,7 +130,7 @@ export function getAgentDiffColorPreset(id: AgentDiffColorPresetId): AgentDiffCo
 }
 
 function normalizeAgentConsoleSettings(settings: AgentConsoleSettings): AgentConsoleSettings {
-  if (settings.timelineStreamingStepMode === "hidden" && settings.approvalDisplayMode === "step") {
+  if (settings.processStepDefaultMode === "timeline" && settings.timelineStreamingStepMode === "hidden" && settings.approvalDisplayMode === "step") {
     return { ...settings, approvalDisplayMode: "all" };
   }
   return settings;
@@ -157,6 +159,7 @@ export function getAgentConsoleSettings(): AgentConsoleSettings {
       todoUpdateDisplayMode: isTodoUpdateDisplayMode(parsed.todoUpdateDisplayMode) ? parsed.todoUpdateDisplayMode : DEFAULT_SETTINGS.todoUpdateDisplayMode,
       approvalDisplayMode: isApprovalDisplayMode(parsed.approvalDisplayMode) ? parsed.approvalDisplayMode : DEFAULT_SETTINGS.approvalDisplayMode,
       collapseConsecutiveOutputBlankLines: typeof parsed.collapseConsecutiveOutputBlankLines === "boolean" ? parsed.collapseConsecutiveOutputBlankLines : DEFAULT_SETTINGS.collapseConsecutiveOutputBlankLines,
+      mergeThinkingToolSteps: typeof parsed.mergeThinkingToolSteps === "boolean" ? parsed.mergeThinkingToolSteps : DEFAULT_SETTINGS.mergeThinkingToolSteps,
       showMessageSpeakerLine: typeof parsed.showMessageSpeakerLine === "boolean" ? parsed.showMessageSpeakerLine : DEFAULT_SETTINGS.showMessageSpeakerLine,
       defaultExpandHeaderDetails: typeof parsed.defaultExpandHeaderDetails === "boolean" ? parsed.defaultExpandHeaderDetails : DEFAULT_SETTINGS.defaultExpandHeaderDetails,
       showStickyUserMessageBar: typeof parsed.showStickyUserMessageBar === "boolean" ? parsed.showStickyUserMessageBar : DEFAULT_SETTINGS.showStickyUserMessageBar,

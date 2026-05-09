@@ -317,6 +317,14 @@ export function SettingsDialog({ open, onClose }: { open: boolean; onClose: () =
     });
   }, []);
 
+  const handleAgentMergeThinkingToolStepsToggle = useCallback(() => {
+    setAgentConsoleSettings((prev) => {
+      const next = { ...prev, mergeThinkingToolSteps: !prev.mergeThinkingToolSteps };
+      saveAgentConsoleSettings(next);
+      return next;
+    });
+  }, []);
+
   const handleAgentAutoCleanupToggle = useCallback(() => {
     let shouldCleanup = false;
     setAgentConsoleSettings((prev) => {
@@ -418,9 +426,10 @@ export function SettingsDialog({ open, onClose }: { open: boolean; onClose: () =
 
   const handleAgentApprovalDisplayModeChange = useCallback((approvalDisplayMode: AgentApprovalDisplayMode) => {
     setAgentConsoleSettings((prev) => {
+      const stepOnlyDisabled = prev.processStepDefaultMode === "timeline" && prev.timelineStreamingStepMode === "hidden";
       const next = {
         ...prev,
-        approvalDisplayMode: prev.timelineStreamingStepMode === "hidden" && approvalDisplayMode === "step" ? "all" : approvalDisplayMode,
+        approvalDisplayMode: stepOnlyDisabled && approvalDisplayMode === "step" ? "all" : approvalDisplayMode,
       };
       saveAgentConsoleSettings(next);
       return getAgentConsoleSettings();
@@ -622,7 +631,7 @@ export function SettingsDialog({ open, onClose }: { open: boolean; onClose: () =
       onChange={(mode) => handleAgentApprovalDisplayModeChange(mode as AgentApprovalDisplayMode)}
       options={AGENT_APPROVAL_DISPLAY_MODE_OPTIONS.map((mode) => {
         const label = approvalDisplayModeLabel(mode);
-        const disabled = mode === "step" && agentConsoleSettings.timelineStreamingStepMode === "hidden";
+        const disabled = mode === "step" && agentConsoleSettings.processStepDefaultMode === "timeline" && agentConsoleSettings.timelineStreamingStepMode === "hidden";
         return { id: mode, label, disabled, icon: <Icon name={mode === "step" ? "list" : mode === "statusPanel" ? "shield" : "rows"} size={13} /> };
       })}
     />
@@ -1423,17 +1432,17 @@ export function SettingsDialog({ open, onClose }: { open: boolean; onClose: () =
                         </div>
                         {renderAgentTodoUpdateDisplayModeGroup()}
                       </div>
-                      <div className="settings-row">
-                        <div className="settings-row-info">
-                          <span className="settings-label">{t("settings.agentApprovalDisplayMode", "Approval handling style")}</span>
-                          <span className="settings-sublabel">{agentConsoleSettings.timelineStreamingStepMode === "hidden"
-                            ? t("settings.agentApprovalDisplayModeStepDisabledDesc", "In-step approval is disabled when streaming steps are hidden by default.")
-                            : t("settings.agentApprovalDisplayModeDesc", "Choose where pending approval actions appear.")}</span>
-                        </div>
-                        {renderAgentApprovalDisplayModeGroup()}
-                      </div>
                     </>
                   )}
+                  <div className="settings-row">
+                    <div className="settings-row-info">
+                      <span className="settings-label">{t("settings.agentApprovalDisplayMode", "Approval handling style")}</span>
+                      <span className="settings-sublabel">{agentConsoleSettings.processStepDefaultMode === "timeline" && agentConsoleSettings.timelineStreamingStepMode === "hidden"
+                        ? t("settings.agentApprovalDisplayModeStepDisabledDesc", "In-step approval is disabled when streaming steps are hidden by default.")
+                        : t("settings.agentApprovalDisplayModeDesc", "Choose where pending approval actions appear.")}</span>
+                    </div>
+                    {renderAgentApprovalDisplayModeGroup()}
+                  </div>
                   <div className="settings-row">
                     <div className="settings-row-info">
                       <span className="settings-label">{t("settings.agentSmoothStreamingOutput", "Smooth streaming output")}</span>
@@ -1460,6 +1469,21 @@ export function SettingsDialog({ open, onClose }: { open: boolean; onClose: () =
                       onClick={handleAgentCollapseOutputBlankLinesToggle}
                       aria-label={t("settings.agentCollapseOutputBlankLines", "Collapse consecutive blank lines in output")}
                       aria-pressed={agentConsoleSettings.collapseConsecutiveOutputBlankLines}
+                    >
+                      <span className="settings-toggle-knob" />
+                    </button>
+                  </div>
+                  <div className="settings-row">
+                    <div className="settings-row-info">
+                      <span className="settings-label">{t("settings.agentMergeThinkingToolSteps", "Merge tool steps with thinking")}</span>
+                      <span className="settings-sublabel">{t("settings.agentMergeThinkingToolStepsDesc", "When a visible thinking step precedes a tool step, show the tool card inside the thinking step instead of as a separate step.")}</span>
+                    </div>
+                    <button
+                      type="button"
+                      className={`settings-toggle${agentConsoleSettings.mergeThinkingToolSteps ? " settings-toggle-on" : ""}`}
+                      onClick={handleAgentMergeThinkingToolStepsToggle}
+                      aria-label={t("settings.agentMergeThinkingToolSteps", "Merge tool steps with thinking")}
+                      aria-pressed={agentConsoleSettings.mergeThinkingToolSteps}
                     >
                       <span className="settings-toggle-knob" />
                     </button>
