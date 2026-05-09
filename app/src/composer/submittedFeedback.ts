@@ -140,6 +140,7 @@ function formatGitSafetyRequirements(settings: GitOperationSettings): string {
     formatGitFolderBlacklist(settings),
     "Requirements:",
     "- Do not stage or commit files under the configured blacklisted folders.",
+    "- When committing, write a meaningful git commit message that briefly summarizes the recent activity being backed up.",
   ].filter(Boolean).join("\n\n");
 }
 

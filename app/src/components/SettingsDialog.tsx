@@ -1336,6 +1336,7 @@ export function SettingsDialog({ open, onClose }: { open: boolean; onClose: () =
                     "",
                     "Requirements:",
                     "- Do not stage or commit files under the configured blacklisted folders.",
+                    "- When committing, write a meaningful git commit message that briefly summarizes the recent activity being backed up.",
                   ].join("\n")}</pre>
                 </div>
               </div>

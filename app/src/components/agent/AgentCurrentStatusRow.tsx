@@ -8,6 +8,7 @@ import { getAgentCurrentStatus } from "../../agent/currentStatus";
 import type { AgentPermissionOption, AgentSession } from "../../agent/types";
 import { useAgentStore } from "../../store/agentStore";
 import { Icon } from "../Icons";
+import { AgentActivityMatrix, type AgentActivityMatrixPhase } from "./AgentActivityMatrix";
 import { AgentDiffPatchList, permissionBlockToDiffFiles } from "./AgentDiffViewer";
 
 function permissionOptionLabel(t: ReturnType<typeof useTranslation>["t"], option: AgentPermissionOption): string {
@@ -112,6 +113,7 @@ function AgentApprovalStatusRow({ session, status }: { session: AgentSession; st
   return (
     <section className="agent-approval-row agent-current-status-row" data-status-kind="approval" data-status-variant={status.variant} data-command-approval={isCommandApproval ? "true" : undefined} data-preview-overlay>
       <div className="agent-approval-row-main agent-current-status-row-main">
+        <AgentActivityMatrix phase="approval" />
         {!isCommandApproval && <Icon name="shield" size={13} />}
         <span className="agent-approval-row-label agent-silver-shimmer-text">{label}</span>
         <span className="agent-approval-row-title" title={displayTitle}>{displayTitle}</span>
@@ -129,6 +131,34 @@ function AgentApprovalStatusRow({ session, status }: { session: AgentSession; st
   );
 }
 
+function AgentApprovalWaitingStatusRow({ status }: { status: AgentApprovalCurrentStatus }) {
+  const { t } = useTranslation();
+  const title = status.title || t("agentConsole.permissionPending", "Permission request pending");
+  const isCommandApproval = isCommandLikeApproval({ permission: status.permissionBlock, toolCall: status.toolCall, fallbackTitle: title });
+  const displayTitle = isCommandApproval ? getApprovalDisplayDescription({ permission: status.permissionBlock, toolCall: status.toolCall, fallbackTitle: title }) : title;
+
+  return (
+    <section className="agent-approval-row agent-current-status-row" data-status-kind="approval-waiting" data-status-variant={status.variant} data-preview-overlay>
+      <div className="agent-approval-row-main agent-current-status-row-main">
+        <AgentActivityMatrix phase="approval" />
+        <span className="agent-approval-row-label agent-silver-shimmer-text">{t("agentConsole.currentStatusWaitingApproval", "Waiting approval")}</span>
+        <span className="agent-approval-row-title" title={displayTitle}>{displayTitle}</span>
+      </div>
+    </section>
+  );
+}
+
+function activityPhaseForStatus(status: Exclude<AgentCurrentStatus, AgentApprovalCurrentStatus | null>): AgentActivityMatrixPhase {
+  if (status.kind === "tool_running") return "tool";
+  return status.kind;
+}
+
+function isSessionActivityActive(session: AgentSession): boolean {
+  if (session.status === "starting" || session.status === "running" || session.status === "cancelling") return true;
+  if (session.pendingPermissionIds.length > 0) return true;
+  return session.messages.some((message) => message.role === "assistant" && message.status === "streaming");
+}
+
 function AgentActivityStatusRow({ status }: { status: Exclude<AgentCurrentStatus, AgentApprovalCurrentStatus | null> }) {
   const { t } = useTranslation();
   const statusCopy = status.kind === "thinking"
@@ -139,14 +169,43 @@ function AgentActivityStatusRow({ status }: { status: Exclude<AgentCurrentStatus
   const tokenCount = status.kind === "thinking" || status.kind === "output" ? status.tokenCount : 0;
   const tokenLabel = tokenCount > 0 ? t("agentConsole.currentStatusTokenCount", "{{value}} tokens", { value: formatCompactTokenCount(tokenCount) }) : null;
   const detail = status.kind === "tool_running" ? status.label : tokenLabel;
-  const iconName = status.kind === "thinking" ? "spinner" : status.kind === "output" ? "message-dot" : "wrench";
+  const phase = activityPhaseForStatus(status);
 
   return (
     <section className="agent-approval-row agent-current-status-row" data-status-kind={status.kind} data-preview-overlay>
       <div className="agent-approval-row-main agent-current-status-row-main">
-        <Icon name={iconName} size={13} className="agent-current-status-row-icon" />
+        <AgentActivityMatrix phase={phase} />
         <span className="agent-approval-row-label agent-silver-shimmer-text">{statusCopy}</span>
         {detail && <span className="agent-current-status-row-meta">{detail}</span>}
+      </div>
+    </section>
+  );
+}
+
+function AgentSettlingStatusRow({ onComplete }: { onComplete: () => void }) {
+  const { t } = useTranslation();
+
+  return (
+    <section className="agent-approval-row agent-current-status-row" data-status-kind="settle" data-preview-overlay>
+      <div className="agent-approval-row-main agent-current-status-row-main">
+        <AgentActivityMatrix phase="settle" onComplete={onComplete} />
+        <span className="agent-approval-row-label agent-silver-shimmer-text">{t("agentConsole.currentStatusSettling", "Finishing")}</span>
+      </div>
+    </section>
+  );
+}
+
+function AgentProcessingStatusRow({ phase }: { phase: AgentActivityMatrixPhase }) {
+  const { t } = useTranslation();
+  const label = phase === "approval"
+    ? t("agentConsole.currentStatusWaitingApproval", "Waiting approval")
+    : t("agentConsole.currentStatusProcessing", "Processing");
+
+  return (
+    <section className="agent-approval-row agent-current-status-row" data-status-kind="processing" data-preview-overlay>
+      <div className="agent-approval-row-main agent-current-status-row-main">
+        <AgentActivityMatrix phase={phase} />
+        <span className="agent-approval-row-label agent-silver-shimmer-text">{label}</span>
       </div>
     </section>
   );
@@ -155,9 +214,45 @@ function AgentActivityStatusRow({ status }: { status: Exclude<AgentCurrentStatus
 export function AgentCurrentStatusRow({ session }: { session: AgentSession }) {
   const { approvalDisplayMode } = useAgentConsoleSettings();
   const status = useMemo(() => getAgentCurrentStatus(session), [session]);
+  const sessionActive = isSessionActivityActive(session);
+  const previousSessionActiveRef = useRef(sessionActive);
+  const heldPhaseRef = useRef<AgentActivityMatrixPhase | null>(null);
+  const [heldPhase, setHeldPhaseState] = useState<AgentActivityMatrixPhase | null>(null);
+  const [settling, setSettling] = useState(false);
 
-  if (!status) return null;
-  if (status.kind === "approval" && approvalDisplayMode === "step") return null;
+  const setHeldPhase = (phase: AgentActivityMatrixPhase | null) => {
+    heldPhaseRef.current = phase;
+    setHeldPhaseState(phase);
+  };
+
+  useEffect(() => {
+    const previousSessionActive = previousSessionActiveRef.current;
+
+    if (status && status.kind !== "approval") {
+      setHeldPhase(activityPhaseForStatus(status));
+      setSettling(false);
+    } else if (status?.kind === "approval") {
+      setHeldPhase("approval");
+      setSettling(false);
+    } else if (sessionActive) {
+      setHeldPhase(heldPhaseRef.current || "thinking");
+      setSettling(false);
+    } else if (previousSessionActive && heldPhaseRef.current) {
+      setHeldPhase(null);
+      setSettling(true);
+    } else {
+      setHeldPhase(null);
+      setSettling(false);
+    }
+
+    previousSessionActiveRef.current = sessionActive;
+  }, [sessionActive, status]);
+
+  if (!status) {
+    if (sessionActive && heldPhase) return <AgentProcessingStatusRow phase={heldPhase} />;
+    return settling ? <AgentSettlingStatusRow onComplete={() => setSettling(false)} /> : null;
+  }
+  if (status.kind === "approval" && approvalDisplayMode === "step") return <AgentApprovalWaitingStatusRow status={status} />;
   if (status.kind === "approval") return <AgentApprovalStatusRow session={session} status={status} />;
   return <AgentActivityStatusRow status={status} />;
 }

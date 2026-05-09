@@ -79,6 +79,10 @@
   --step-card-running: #facc15;
   --step-card-error: #991b1b;
   --step-card-stripe: rgba(255, 255, 255, 0.24);
+  --agent-dot-lv1: rgba(255, 255, 255, 0.16);
+  --agent-dot-lv2: rgba(255, 255, 255, 0.34);
+  --agent-dot-lv3: rgba(255, 255, 255, 0.58);
+  --agent-dot-lv4: rgba(255, 255, 255, 0.92);
 }
 
 [data-theme="light"] {
@@ -105,6 +109,10 @@
   --step-card-running: #ca8a04;
   --step-card-error: #c41e129a;
   --step-card-stripe: rgba(255, 255, 255, 0.42);
+  --agent-dot-lv1: rgba(0, 0, 0, 0.1);
+  --agent-dot-lv2: rgba(0, 0, 0, 0.24);
+  --agent-dot-lv3: rgba(0, 0, 0, 0.48);
+  --agent-dot-lv4: rgba(0, 0, 0, 0.82);
 }
 
 html,
@@ -4364,6 +4372,52 @@ body,
 .agent-current-status-diff-meta {
   flex: 0 0 auto;
   font-variant-numeric: tabular-nums;
+}
+
+.agent-activity-matrix {
+  --agent-activity-dot-size: 2px;
+  --agent-activity-dot-gap: 1px;
+  flex: 0 0 auto;
+  width: calc(var(--agent-activity-dot-size) * 7 + var(--agent-activity-dot-gap) * 6);
+  height: calc(var(--agent-activity-dot-size) * 7 + var(--agent-activity-dot-gap) * 6);
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  color: var(--color-text-muted);
+}
+
+.agent-activity-matrix[data-phase="thinking"] {
+  --agent-dot-lv3: color-mix(in srgb, var(--step-card-thinking) 66%, var(--color-text-primary));
+  --agent-dot-lv4: color-mix(in srgb, var(--color-primary) 78%, var(--color-text-primary));
+}
+
+.agent-activity-matrix[data-phase="output"] {
+  --agent-dot-lv3: color-mix(in srgb, var(--step-card-output) 64%, var(--color-text-primary));
+  --agent-dot-lv4: color-mix(in srgb, var(--color-primary) 86%, var(--color-text-primary));
+}
+
+.agent-activity-matrix[data-phase="tool"] {
+  --agent-dot-lv3: color-mix(in srgb, var(--step-card-command) 66%, var(--color-text-primary));
+  --agent-dot-lv4: color-mix(in srgb, var(--step-card-running) 70%, var(--color-text-primary));
+}
+
+.agent-activity-matrix[data-phase="approval"] {
+  --agent-dot-lv3: color-mix(in srgb, var(--step-card-permission) 72%, var(--color-text-primary));
+  --agent-dot-lv4: color-mix(in srgb, var(--step-card-running) 62%, var(--color-text-primary));
+}
+
+.agent-activity-matrix-grid {
+  display: grid;
+  grid-template-columns: repeat(7, var(--agent-activity-dot-size));
+  grid-auto-rows: var(--agent-activity-dot-size);
+  gap: var(--agent-activity-dot-gap);
+}
+
+.agent-activity-matrix-dot {
+  width: var(--agent-activity-dot-size);
+  height: var(--agent-activity-dot-size);
+  border-radius: 36%;
+  transition: background 0.08s ease;
 }
 
 .agent-current-status-row[data-status-kind="thinking"] .agent-current-status-row-icon,
