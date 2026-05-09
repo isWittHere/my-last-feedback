@@ -85,6 +85,7 @@ function getRequestTypeLabel(requestType: Session["requestType"], t: (key: strin
     case "document":
       return t("sidebar.requestType.document", "Document");
     case "default":
+      return t("sidebar.requestType.default", "Default");
     default:
       return t("sidebar.requestType.default", "Default");
   }
@@ -104,6 +105,7 @@ function getTopbarStatsColor(session: Session): string {
     case "document":
       return "var(--stats-nav-document)";
     case "default":
+      return "var(--stats-nav-neutral)";
     default:
       return "var(--stats-nav-neutral)";
   }

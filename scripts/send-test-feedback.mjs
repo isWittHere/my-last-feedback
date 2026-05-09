@@ -57,7 +57,7 @@ async function main() {
       summary:
         "# 转移提交测试\n\n这是一个通过 TCP 直接注入的测试请求，用于验证 **Transfer Submit** 分段按钮。\n\n## 步骤\n\n1. 点击提交按钮左侧的 `▼`\n2. 输入 `A1B2` 并确定\n3. 按钮应变为 `[✕] [→ A1B2] [📤 转移]`\n4. 点击转移按钮提交\n\n提交内容会回显到发送这条 TCP 请求的终端。",
       request_name: "TCP Test: Transfer Submit",
-      request_type: "verification_completed",
+      request_type: "completion",
       project_directory: process.cwd(),
       questions: [
         { label: "按钮形态", options: ["A-正常", "B-异常"] },

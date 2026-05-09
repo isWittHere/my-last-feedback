@@ -41,7 +41,7 @@ fn hsl_to_hex(h: f64, s: f64, l: f64) -> String {
 }
 
 const MAX_HISTORY_SESSIONS: usize = 200;
-const DEFAULT_REQUEST_TYPE: &str = "default";
+const DEFAULT_REQUEST_TYPE: &str = "analysis";
 
 fn default_request_type() -> String {
     DEFAULT_REQUEST_TYPE.to_string()

@@ -18,12 +18,11 @@ const REQUEST_TYPE_VALUES = new Set([
   "completion",
   "planning",
   "document",
-  "default",
 ]);
 
 function normalizeRequestType(requestType) {
   if (typeof requestType === "string" && REQUEST_TYPE_VALUES.has(requestType)) return requestType;
-  return "default";
+  return "analysis";
 }
 
 /** Attempt to connect to an already-running app. */

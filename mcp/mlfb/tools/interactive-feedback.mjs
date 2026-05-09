@@ -23,10 +23,9 @@ const REQUEST_TYPE_VALUES = [
   "completion",
   "planning",
   "document",
-  "default",
 ];
 const REQUEST_TYPE_SET = new Set(REQUEST_TYPE_VALUES);
-const REQUEST_TYPE_HINT = "request_type is REQUIRED and should be one of: analysis, completion, planning, document, default. Unknown values are treated as default. It is metadata for categorization and visual display only; it does not change tool behavior, permissions, routing, or available capabilities.";
+const REQUEST_TYPE_HINT = "request_type is REQUIRED and should be one of: analysis, completion, planning, document. Explanations, investigation details, analysis results, and reports should use analysis. It is metadata for categorization and visual display only; it does not change tool behavior, permissions, routing, or available capabilities.";
 
 const TOOL_DESCRIPTION = `Request interactive feedback from the user via a desktop GUI window.
 The user may provide text feedback, test logs, and/or attach images.
@@ -39,12 +38,12 @@ IMPORTANT - rules for AI agents calling this tool:
 1. request_name MUST always be provided with a meaningful task title. Never omit it or leave it blank.
 2. summary MUST be written in standard Markdown format (headings, lists, bold, code blocks). Do NOT use escape characters such as \\n or \\t.
 3. Describe full context, suggestions, and detailed information in summary. Use questions only for concise, actionable choices or brief input fields.
-4. request_type: REQUIRED metadata only. It categorizes why you are asking for feedback and affects display/category labels only. It does NOT change tool behavior, permissions, routing, or available capabilities. Use one of: analysis (分析), completion (完成), planning (规划), document (文档), default (默认). Unknown values are treated as default. Never omit request_type.
+4. request_type: REQUIRED metadata only. It categorizes why you are asking for feedback and affects display/category labels only. It does NOT change tool behavior, permissions, routing, or available capabilities. Use one of: analysis (分析), completion (完成), planning (规划), document (文档). Explanations, investigation details, analysis results, and reports should use analysis. Never omit request_type.
 5. agent_name: REQUIRED. Your 4-char uppercase hex identifier assigned by the hook system (delivered via PostToolUse additionalContext, e.g. "[my-last-feedback] Your agent_name is \"A1B2\"").`;
 
 function normalizeRequestType(value) {
   if (typeof value === "string" && REQUEST_TYPE_SET.has(value)) return value;
-  return "default";
+  return "analysis";
 }
 
 /**
@@ -68,7 +67,7 @@ export function registerInteractiveFeedback(server) {
       ),
       request_type: z.string().describe(
         "REQUIRED metadata only. Why the agent is using this tool. This categorizes the request for display and does not change tool behavior, permissions, routing, or capabilities. " +
-        "Allowed values: analysis=分析, completion=完成, planning=规划, document=文档, default=默认/其他. Unknown values are treated as default."
+        "Allowed values: analysis=分析, completion=完成, planning=规划, document=文档. Explanations, investigation details, analysis results, and reports should use analysis."
       ),
       agent_name: z.string().regex(/^[A-Z0-9]{4}$/, "agent_name must be 4 uppercase hex chars (e.g. A1B2)").describe(
         "REQUIRED. Your 4-char uppercase hex agent identifier (e.g. A1B2). " +

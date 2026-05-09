@@ -23,19 +23,15 @@ const PORT_START: u16 = 19850;
 const PORT_END: u16 = 19860;
 
 fn default_request_type() -> String {
-    "default".to_string()
+    "analysis".to_string()
 }
 
 fn normalize_request_type(value: &str) -> String {
     match value {
-        "explanation"
-        | "question"
-        | "planning"
-        | "completion"
-        | "analysis_report"
-        | "document_completed"
-        | "verification_completed"
-        | "default" => value.to_string(),
+        "analysis" | "explanation" | "question" | "analysis_report" | "default" => "analysis".to_string(),
+        "planning" => "planning".to_string(),
+        "completion" | "verification_completed" => "completion".to_string(),
+        "document" | "document_completed" => "document".to_string(),
         _ => default_request_type(),
     }
 }

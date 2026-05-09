@@ -27,15 +27,14 @@ export const REQUEST_TYPES = [
   "completion",
   "planning",
   "document",
-  "default",
 ] as const;
 
-export type RequestType = typeof REQUEST_TYPES[number];
+export type RequestType = typeof REQUEST_TYPES[number] | "default";
 
 export function normalizeRequestType(value: unknown): RequestType {
-  return typeof value === "string" && (REQUEST_TYPES as readonly string[]).includes(value)
-    ? value as RequestType
-    : "default";
+  if (typeof value === "string" && (REQUEST_TYPES as readonly string[]).includes(value)) return value as RequestType;
+  if (value === "default") return "default";
+  return "default";
 }
 
 export interface QuestionItem {

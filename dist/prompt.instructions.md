@@ -41,16 +41,14 @@ When needing users to supplement information or select from suggested options, u
 
 ## Request Type (`request_type`)
 - `request_type` is **REQUIRED** in every #tool:my-last-feedback/interactive_feedback call. Never omit it.
-- Allowed values only: `analysis`, `completion`, `planning`, `document`, `default`.
-- Values outside this list are treated as `default`; there is no historical compatibility mapping for old type names.
+- Allowed values only: `analysis`, `completion`, `planning`, `document`.
 
 | Request Type | Description |
 | --- | --- |
-| `analysis` | Use when presenting analysis results, investigation details, or reports to the user. |
+| `analysis` | Use when presenting analysis results, investigation details, reports, explanations, or general notes to the user. |
 | `completion` | Use when indicating the completion of a user's order or process. |
 | `planning` | Use when outlining plans, next steps, or strategies to the user. |
 | `document` | Use for document-related tasks and document completion notices. |
-| `default` | Use when the request does not fit into any of the above categories. |
 
 - `request_type` is metadata for categorization and visual display only. It does not change tool behavior, permissions, routing, or available capabilities.
 - you can still use `questions` in any request type when you need to ask the user questions or provide selectable options.
