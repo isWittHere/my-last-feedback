@@ -2,9 +2,10 @@ import { useCallback, useEffect, useMemo, useState, type CSSProperties, type Rea
 import { useTranslation } from "react-i18next";
 import { invoke } from "@tauri-apps/api/core";
 import { useFeedbackStore } from "../store/feedbackStore";
-import { buildWorkspaceOptions, formatWorkspaceTargetLabel, workspaceOwnerDisplayName, workspaceTargetSourceForComposerKind } from "../workspace/workspaceCandidates";
+import { buildWorkspaceOptions, formatWorkspaceTargetLabel, workspaceTargetSourceForComposerKind } from "../workspace/workspaceCandidates";
 import { cleanDisplayPath, sameWorkspacePath, workspacePathKey } from "../workspace/workspacePaths";
 import { CatppuccinResourceIcon } from "./CatppuccinResourceIcon";
+import { getFriendlyName } from "./friendlyName";
 import { Icon } from "./Icons";
 
 interface ProjectResourceEntry {
@@ -73,7 +74,13 @@ function resourceTreeChildrenContentStyle(depth: number): CSSProperties {
 }
 
 export function ProjectResourcePanel() {
-  const { t } = useTranslation();
+  const { t, i18n } = useTranslation();
+  const friendlyNameLanguage = i18n.language === "zh" ? "zh" : "en";
+  const agentNickname = useCallback((alias?: string | null, fallbackName?: string | null) => {
+    const cleanAlias = alias?.trim();
+    if (cleanAlias) return getFriendlyName(cleanAlias, friendlyNameLanguage);
+    return fallbackName?.trim() || "";
+  }, [friendlyNameLanguage]);
   const focusedComposer = useFeedbackStore((state) => state.focusedComposer);
   const targetCaller = useFeedbackStore((state) => focusedComposer?.callerId ? state.callers.find((caller) => caller.id === focusedComposer.callerId) || null : null);
   const sessionWorkspacePathsKey = useFeedbackStore((state) => {
@@ -90,7 +97,7 @@ export function ProjectResourcePanel() {
       .join("\n");
   });
   const sessionWorkspaceOwnerNamesKey = useFeedbackStore((state) => {
-    const callerNames = new Map(state.callers.map((caller) => [caller.id, workspaceOwnerDisplayName(caller.name, caller.alias)] as const));
+    const callerNames = new Map(state.callers.map((caller) => [caller.id, agentNickname(caller.alias, caller.name)] as const));
     const owners = new Map<string, string>();
     for (const session of state.sessions) {
       const key = workspacePathKey(session.projectDirectory);
@@ -116,7 +123,7 @@ export function ProjectResourcePanel() {
       const [key, ownerName] = line.split("\t");
       return [key, ownerName] as const;
     })), [sessionWorkspaceOwnerNamesKey]);
-  const targetOwnerName = workspaceOwnerDisplayName(targetCaller?.name, targetCaller?.alias) || workspaceOwnerNames.get(workspacePathKey(targetWorkspacePath)) || "";
+  const targetOwnerName = agentNickname(targetCaller?.alias, targetCaller?.name) || workspaceOwnerNames.get(workspacePathKey(targetWorkspacePath)) || "";
   const targetLabel = formatWorkspaceTargetLabel({ source: workspaceTargetSourceForComposerKind(focusedComposer?.kind), ownerName: targetOwnerName, path: targetWorkspacePath });
 
   const workspaceOptions = useMemo(() => {

@@ -16,10 +16,6 @@ export interface WorkspaceOption {
   ownerName?: string;
 }
 
-export function workspaceOwnerDisplayName(name?: string | null, alias?: string | null): string {
-  return name?.trim() || alias?.trim() || "";
-}
-
 export function workspaceTargetSourceForComposerKind(kind?: string | null): WorkspaceTargetSource {
   return kind === "agent" ? "opencode" : "mlfb";
 }
