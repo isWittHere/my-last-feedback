@@ -7,7 +7,8 @@ import { useTranslation } from "react-i18next";
 import { useFeedbackStore } from "../store/feedbackStore";
 import { useTerminalStore, type TerminalPathCandidate, type TerminalPathSource } from "../store/terminalStore";
 import { getTerminalSettings, terminalShellToCommand, TERMINAL_SETTINGS_EVENT, type TerminalSettings } from "../terminalSettings";
-import { workspaceBasename, workspacePathKey } from "../workspace/workspacePaths";
+import { pushWorkspacePathCandidate } from "../workspace/workspaceCandidates";
+import { workspaceBasename } from "../workspace/workspacePaths";
 import { Icon } from "./Icons";
 import { useIsLightTheme } from "./useIsLightTheme";
 
@@ -78,15 +79,6 @@ function sourceLabel(source: TerminalPathSource, translate: (key: string, defaul
   return translate("terminal.pathSourceFallback", "Fallback");
 }
 
-function pushCandidate(candidates: TerminalPathCandidate[], seen: Set<string>, candidate: TerminalPathCandidate) {
-  const cleanPath = candidate.path.trim();
-  if (!cleanPath) return;
-  const key = workspacePathKey(cleanPath);
-  if (seen.has(key)) return;
-  seen.add(key);
-  candidates.push({ ...candidate, path: cleanPath, label: candidate.label || workspaceBasename(cleanPath) });
-}
-
 export function TerminalPanel() {
   const { t } = useTranslation();
   const isLightTheme = useIsLightTheme();
@@ -136,11 +128,11 @@ export function TerminalPanel() {
   const pathCandidates = useMemo(() => {
     const candidates: TerminalPathCandidate[] = [];
     const seen = new Set<string>();
-    for (const path of recentPaths) pushCandidate(candidates, seen, path);
-    if (activeTab?.cwd) pushCandidate(candidates, seen, { path: activeTab.cwd, label: workspaceBasename(activeTab.cwd), source: "recent" });
-    if (lastUsedCwd) pushCandidate(candidates, seen, { path: lastUsedCwd, label: workspaceBasename(lastUsedCwd), source: "recent" });
+    for (const path of recentPaths) pushWorkspacePathCandidate(candidates, seen, path);
+    if (activeTab?.cwd) pushWorkspacePathCandidate(candidates, seen, { path: activeTab.cwd, label: workspaceBasename(activeTab.cwd), source: "recent" });
+    if (lastUsedCwd) pushWorkspacePathCandidate(candidates, seen, { path: lastUsedCwd, label: workspaceBasename(lastUsedCwd), source: "recent" });
     if (activeSessionProjectDirectory) {
-      pushCandidate(candidates, seen, {
+      pushWorkspacePathCandidate(candidates, seen, {
         path: activeSessionProjectDirectory,
         label: workspaceBasename(activeSessionProjectDirectory),
         source: "activeSession",
@@ -149,7 +141,7 @@ export function TerminalPanel() {
       });
     }
     if (focusedComposer?.projectDirectory) {
-      pushCandidate(candidates, seen, {
+      pushWorkspacePathCandidate(candidates, seen, {
         path: focusedComposer.projectDirectory,
         label: workspaceBasename(focusedComposer.projectDirectory),
         source: "caller",
@@ -157,9 +149,9 @@ export function TerminalPanel() {
         lastUsedAt: focusedComposer.focusedAt,
       });
     }
-    if (activeWorkspacePath) pushCandidate(candidates, seen, { path: activeWorkspacePath, label: workspaceBasename(activeWorkspacePath), source: "workspace" });
+    if (activeWorkspacePath) pushWorkspacePathCandidate(candidates, seen, { path: activeWorkspacePath, label: workspaceBasename(activeWorkspacePath), source: "workspace" });
     for (const session of [...recentSessionCandidates].sort((left, right) => right.createdAt.localeCompare(left.createdAt)).slice(0, 10)) {
-      pushCandidate(candidates, seen, {
+      pushWorkspacePathCandidate(candidates, seen, {
         path: session.projectDirectory,
         label: workspaceBasename(session.projectDirectory),
         source: "caller",

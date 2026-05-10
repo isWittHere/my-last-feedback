@@ -2,6 +2,7 @@ import { useCallback, useEffect, useMemo, useState, type CSSProperties, type Rea
 import { useTranslation } from "react-i18next";
 import { invoke } from "@tauri-apps/api/core";
 import { useFeedbackStore } from "../store/feedbackStore";
+import { buildWorkspaceOptions } from "../workspace/workspaceCandidates";
 import { cleanDisplayPath, sameWorkspacePath, workspaceBasename, workspacePathKey } from "../workspace/workspacePaths";
 import { CatppuccinResourceIcon } from "./CatppuccinResourceIcon";
 import { Icon } from "./Icons";
@@ -100,15 +101,11 @@ export function ProjectResourcePanel() {
   const targetWorkspacePath = focusedComposer?.projectDirectory || "";
 
   const workspaceOptions = useMemo(() => {
-    const map = new Map<string, { path: string; name: string; ownerName?: string }>();
-    const addPath = (path: string, name?: string, ownerName?: string) => {
-      if (!path) return;
-      const key = workspacePathKey(path);
-      if (!map.has(key)) map.set(key, { path, name: name || workspaceBasename(path), ownerName });
-    };
-    addPath(targetWorkspacePath, workspaceBasename(targetWorkspacePath), targetCaller?.alias || targetCaller?.name);
-    for (const path of sessionWorkspacePathsKey.split("\n")) addPath(path, workspaceBasename(path));
-    return Array.from(map.values());
+    return buildWorkspaceOptions({
+      targetWorkspacePath,
+      targetOwnerName: targetCaller?.alias || targetCaller?.name,
+      workspacePaths: sessionWorkspacePathsKey.split("\n"),
+    });
   }, [sessionWorkspacePathsKey, targetCaller?.alias, targetCaller?.name, targetWorkspacePath]);
 
   const workspacePath = useMemo(() => {

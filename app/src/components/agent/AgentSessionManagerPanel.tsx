@@ -6,7 +6,8 @@ import type { AgentProviderId, AgentSession } from "../../agent/types";
 import { useAgentStore } from "../../store/agentStore";
 import { useFeedbackStore } from "../../store/feedbackStore";
 import { useTerminalStore, type TerminalPathSource } from "../../store/terminalStore";
-import { normalizeWorkspacePath, workspaceBasename, workspacePathKey } from "../../workspace/workspacePaths";
+import { pushWorkspacePathCandidate, type WorkspacePathCandidate } from "../../workspace/workspaceCandidates";
+import { normalizeWorkspacePath } from "../../workspace/workspacePaths";
 import { Icon } from "../Icons";
 import { IdenticonAvatar } from "../IdenticonAvatar";
 import { OpenCodeInitialAvatar } from "./OpenCodeInitialAvatar";
@@ -15,13 +16,7 @@ import { getTimeGroup, timeAgo, type TimeGroup } from "../timeUtils";
 const GROUP_ORDER: TimeGroup[] = ["today", "yesterday", "lastWeek", "earlier"];
 type AgentWorkspacePathSource = TerminalPathSource | "agent" | "provider";
 
-interface AgentWorkspacePathCandidate {
-  path: string;
-  label: string;
-  source: AgentWorkspacePathSource;
-  callerName?: string;
-  lastUsedAt?: string | null;
-}
+type AgentWorkspacePathCandidate = WorkspacePathCandidate<AgentWorkspacePathSource>;
 
 function AgentSessionGroup({ label, count, children }: { label: string; count: number; children: ReactNode }) {
   const [collapsed, setCollapsed] = useState(false);
@@ -47,23 +42,6 @@ function folderNameFromPath(value?: string | null): string | null {
   if (!workspacePath) return null;
   const normalized = workspacePath.replace(/\/+$/, "");
   return normalized.split("/").filter(Boolean).pop() || normalized || null;
-}
-
-function normalizePathKey(value?: string | null): string {
-  return workspacePathKey(value);
-}
-
-function pushWorkspacePathCandidate(candidates: AgentWorkspacePathCandidate[], seen: Set<string>, candidate: Omit<AgentWorkspacePathCandidate, "label"> & { label?: string }) {
-  const cleanPath = candidate.path.trim();
-  if (!cleanPath) return;
-  const key = normalizePathKey(cleanPath);
-  if (!key || seen.has(key)) return;
-  seen.add(key);
-  candidates.push({
-    ...candidate,
-    path: cleanPath,
-    label: candidate.label || workspaceBasename(cleanPath) || cleanPath,
-  });
 }
 
 function agentPathSourceLabel(source: AgentWorkspacePathSource, translate: (key: string, defaultValue: string) => string, callerName?: string): string {

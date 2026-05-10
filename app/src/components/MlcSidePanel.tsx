@@ -7,6 +7,7 @@ import { AppSelect, type AppSelectOption } from "./AppSelect";
 import { Icon, MlcLogoIcon } from "./Icons";
 import { MLC_TYPE_TABS, getMlcTypeColor, getMlcTypeConfig, getMlcTypeLabel } from "./mlcTypeConfig";
 import { useIsLightTheme } from "./useIsLightTheme";
+import { buildWorkspaceOptions } from "../workspace/workspaceCandidates";
 import { cleanDisplayPath, sameWorkspacePath, workspaceBasename, workspacePathKey } from "../workspace/workspacePaths";
 
 type SortBy = "updated-desc" | "created-desc" | "created-asc" | "title-asc" | "title-desc";
@@ -148,15 +149,11 @@ export function MlcSidePanel() {
   const targetWorkspacePath = focusedComposer?.projectDirectory || "";
 
   const workspaceOptions = useMemo(() => {
-    const map = new Map<string, { path: string; name: string; ownerName?: string }>();
-    const addPath = (path: string, name?: string, ownerName?: string) => {
-      if (!path) return;
-      const key = workspacePathKey(path);
-      if (!map.has(key)) map.set(key, { path, name: name || workspaceBasename(path), ownerName });
-    };
-    addPath(targetWorkspacePath, workspaceBasename(targetWorkspacePath), targetCaller?.alias || targetCaller?.name);
-    for (const path of sessionWorkspacePathsKey.split("\n")) addPath(path, workspaceBasename(path));
-    return Array.from(map.values());
+    return buildWorkspaceOptions({
+      targetWorkspacePath,
+      targetOwnerName: targetCaller?.alias || targetCaller?.name,
+      workspacePaths: sessionWorkspacePathsKey.split("\n"),
+    });
   }, [sessionWorkspacePathsKey, targetCaller?.alias, targetCaller?.name, targetWorkspacePath]);
 
   const activeWorkspace = useMemo(() => {
