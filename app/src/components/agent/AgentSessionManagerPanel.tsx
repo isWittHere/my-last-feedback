@@ -433,7 +433,7 @@ export function AgentSessionManagerPanel() {
                                   }}
                                 >
                                   <div className="session-item-row1">
-                                    <HistorySessionAvatar identity={identity} sessionId={session.providerSessionId || session.id} status={session.status} />
+                                    <HistorySessionAvatar identity={identity} sessionId={session.id} status={session.status} />
                                     <span className="session-item-name">{session.title}</span>
                                   </div>
                                   <div className="session-item-row2">
@@ -450,7 +450,10 @@ export function AgentSessionManagerPanel() {
                             const boundSession = providerSessions.find((session) => session.providerSessionId === item.sessionId && session.providerSessionState !== "provisional");
                             const workspacePath = item.cwd || boundSession?.cwd;
                             const workspaceIdentity = resolveWorkspaceIdentity({ workspacePath, workspaceKey: boundSession?.workspaceKey, candidates: workspaceColorCandidates });
-                            const identity = getAgentProviderSessionIdentity(providerId, item.sessionId, i18n.language.startsWith("zh") ? "zh" : "en", providerLabel(providerId), { color: workspaceIdentity.color });
+                            const identityLanguage = i18n.language.startsWith("zh") ? "zh" : "en";
+                            const identity = boundSession
+                              ? getAgentSessionIdentity(boundSession, identityLanguage, { color: workspaceIdentity.color })
+                              : getAgentProviderSessionIdentity(providerId, item.sessionId, identityLanguage, providerLabel(providerId), { color: workspaceIdentity.color });
                             const folderName = folderNameFromPath(workspacePath);
                             const metaTitle = sessionMetaTitle(item.updatedAt, workspacePath);
                             const isActiveRemoteSession = boundSession?.id === activeSessionId;
@@ -490,7 +493,7 @@ export function AgentSessionManagerPanel() {
                                 }}
                               >
                                 <div className="session-item-row1">
-                                  <HistorySessionAvatar identity={identity} sessionId={item.sessionId} />
+                                  <HistorySessionAvatar identity={identity} sessionId={boundSession?.id || item.sessionId} />
                                   <span className="session-item-name">{item.title || shortId(item.sessionId)}</span>
                                 </div>
                                 <div className="session-item-row2">
