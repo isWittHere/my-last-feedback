@@ -7,8 +7,8 @@ import { AppSelect, type AppSelectOption } from "./AppSelect";
 import { Icon, MlcLogoIcon } from "./Icons";
 import { MLC_TYPE_TABS, getMlcTypeColor, getMlcTypeConfig, getMlcTypeLabel } from "./mlcTypeConfig";
 import { useIsLightTheme } from "./useIsLightTheme";
-import { buildWorkspaceOptions } from "../workspace/workspaceCandidates";
-import { cleanDisplayPath, sameWorkspacePath, workspaceBasename, workspacePathKey } from "../workspace/workspacePaths";
+import { buildWorkspaceOptions, formatWorkspaceTargetLabel, workspaceOwnerDisplayName, workspaceTargetSourceForComposerKind } from "../workspace/workspaceCandidates";
+import { cleanDisplayPath, sameWorkspacePath, workspacePathKey } from "../workspace/workspacePaths";
 
 type SortBy = "updated-desc" | "created-desc" | "created-asc" | "title-asc" | "title-desc";
 type ViewMode = "detail" | "compact";
@@ -115,6 +115,16 @@ export function MlcSidePanel() {
       })
       .join("\n");
   });
+  const sessionWorkspaceOwnerNamesKey = useFeedbackStore((state) => {
+    const callerNames = new Map(state.callers.map((caller) => [caller.id, workspaceOwnerDisplayName(caller.name, caller.alias)] as const));
+    const owners = new Map<string, string>();
+    for (const session of state.sessions) {
+      const key = workspacePathKey(session.projectDirectory);
+      const ownerName = callerNames.get(session.callerId);
+      if (key && ownerName && !owners.has(key)) owners.set(key, ownerName);
+    }
+    return Array.from(owners.entries()).map(([key, ownerName]) => `${key}\t${ownerName}`).join("\n");
+  });
   const activeWorkspacePath = useFeedbackStore((state) => state.mlcActiveWorkspacePath);
   const setActiveWorkspacePath = useFeedbackStore((state) => state.setMlcActiveWorkspacePath);
   const selectedMlcDocument = useFeedbackStore((state) => state.selectedMlcDocument);
@@ -147,14 +157,23 @@ export function MlcSidePanel() {
   ], [t]);
 
   const targetWorkspacePath = focusedComposer?.projectDirectory || "";
+  const workspaceOwnerNames = useMemo(() => new Map(sessionWorkspaceOwnerNamesKey
+    .split("\n")
+    .filter(Boolean)
+    .map((line) => {
+      const [key, ownerName] = line.split("\t");
+      return [key, ownerName] as const;
+    })), [sessionWorkspaceOwnerNamesKey]);
+  const targetOwnerName = workspaceOwnerDisplayName(targetCaller?.name, targetCaller?.alias) || workspaceOwnerNames.get(workspacePathKey(targetWorkspacePath)) || "";
+  const targetLabel = formatWorkspaceTargetLabel({ source: workspaceTargetSourceForComposerKind(focusedComposer?.kind), ownerName: targetOwnerName, path: targetWorkspacePath });
 
   const workspaceOptions = useMemo(() => {
     return buildWorkspaceOptions({
       targetWorkspacePath,
-      targetOwnerName: targetCaller?.alias || targetCaller?.name,
+      targetOwnerName,
       workspacePaths: sessionWorkspacePathsKey.split("\n"),
     });
-  }, [sessionWorkspacePathsKey, targetCaller?.alias, targetCaller?.name, targetWorkspacePath]);
+  }, [sessionWorkspacePathsKey, targetOwnerName, targetWorkspacePath]);
 
   const activeWorkspace = useMemo(() => {
     if (workspaceFilterMode === "target" && targetWorkspacePath) return targetWorkspacePath;
@@ -404,7 +423,7 @@ export function MlcSidePanel() {
         {targetWorkspacePath ? (
           <button className={`mlc-target-tab${workspaceFilterMode === "target" ? " active" : ""}`} onClick={() => { setWorkspaceFilterMode("target"); setActiveWorkspacePath(targetWorkspacePath); }} {...tooltipProps(`${t("mlc.target", "Target")}: ${cleanDisplayPath(targetWorkspacePath)}`)}>
             <Icon name="aim" size={11} />
-            <span>{targetCaller?.alias || targetCaller?.name || workspaceBasename(targetWorkspacePath)}</span>
+            <span>{targetLabel}</span>
           </button>
         ) : null}
         {workspaceOptions.map((workspace) => (

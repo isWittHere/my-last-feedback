@@ -1,5 +1,7 @@
 import { workspaceBasename, workspacePathKey } from "./workspacePaths";
 
+export type WorkspaceTargetSource = "mlfb" | "opencode";
+
 export interface WorkspacePathCandidate<Source extends string = string> {
   path: string;
   label: string;
@@ -12,6 +14,20 @@ export interface WorkspaceOption {
   path: string;
   name: string;
   ownerName?: string;
+}
+
+export function workspaceOwnerDisplayName(name?: string | null, alias?: string | null): string {
+  return name?.trim() || alias?.trim() || "";
+}
+
+export function workspaceTargetSourceForComposerKind(kind?: string | null): WorkspaceTargetSource {
+  return kind === "agent" ? "opencode" : "mlfb";
+}
+
+export function formatWorkspaceTargetLabel(args: { source: WorkspaceTargetSource; ownerName?: string | null; path?: string | null }): string {
+  const sourceLabel = args.source === "opencode" ? "Opencode" : "MLFB";
+  const targetName = args.ownerName?.trim() || workspaceBasename(args.path) || "";
+  return targetName ? `${sourceLabel} ${targetName}` : sourceLabel;
 }
 
 export function pushWorkspacePathCandidate<Source extends string>(
