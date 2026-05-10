@@ -39,14 +39,19 @@ function codeFromSeed(seed: string): string {
   return hashString(seed).toString(16).padStart(8, "0").slice(0, 4).toUpperCase();
 }
 
+function colorFromCode(code: string): string {
+  return AVATAR_COLORS[hashString(code) % AVATAR_COLORS.length];
+}
+
 export function getAgentSessionIdentity(session: AgentSession, language: "en" | "zh" = "en"): AgentSessionIdentity {
   const providerName = formatProviderName(session.providerRuntime?.agentInfo?.name || session.providerId);
   if (!session.providerSessionId || session.providerSessionState === "provisional") {
+    const code = codeFromSeed(`local:${session.id}:${session.workspaceKey || session.cwd || session.ownerAlias || "agent"}`);
     return {
       providerName,
       name: "My Last Code",
-      code: null,
-      color: "var(--color-text)",
+      code,
+      color: colorFromCode(code),
     };
   }
 
@@ -55,11 +60,10 @@ export function getAgentSessionIdentity(session: AgentSession, language: "en" | 
 
 export function getAgentProviderSessionIdentity(providerId: AgentProviderId, providerSessionId: string, language: "en" | "zh" = "en", providerName = formatProviderName(providerId)): AgentSessionIdentity {
   const code = codeFromSeed(`${providerId}:${providerSessionId}`);
-  const colorIndex = hashString(code) % AVATAR_COLORS.length;
   return {
     providerName,
     name: getFriendlyName(code, language),
     code,
-    color: AVATAR_COLORS[colorIndex],
+    color: colorFromCode(code),
   };
 }

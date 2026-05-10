@@ -3,6 +3,8 @@ import { IdenticonAvatar } from "../IdenticonAvatar";
 
 interface OpenCodeInitialAvatarProps {
   size: number;
+  color?: string;
+  emptyColor?: string;
   className?: string;
   style?: CSSProperties;
 }
@@ -15,12 +17,12 @@ const OPENCODE_HOLLOW_SQUARE_GRID = [
   [false, false, false, false, false],
 ];
 
-export function OpenCodeInitialAvatar({ size, className, style }: OpenCodeInitialAvatarProps) {
+export function OpenCodeInitialAvatar({ size, color = "#f7f7f7", emptyColor = "#151515", className, style }: OpenCodeInitialAvatarProps) {
   return (
     <IdenticonAvatar
       alias="opencode"
-      color="#f7f7f7"
-      emptyColor="#151515"
+      color={color}
+      emptyColor={emptyColor}
       grid={OPENCODE_HOLLOW_SQUARE_GRID}
       size={size}
       className={className}

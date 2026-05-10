@@ -108,7 +108,7 @@ function HistorySessionAvatar({ identity, sessionId, status }: { identity: Agent
       {identity.code ? (
         <IdenticonAvatar alias={identity.code} color={identity.color} size={16} />
       ) : (
-        <OpenCodeInitialAvatar size={16} />
+        <OpenCodeInitialAvatar size={16} color={identity.color} emptyColor={`${identity.color}26`} />
       )}
       {status ? <span className={`agent-session-history-status-dot ${sessionStatusTone(status)}`} /> : null}
     </span>

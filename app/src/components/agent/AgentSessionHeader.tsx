@@ -68,7 +68,7 @@ export function AgentSessionHeader({ session, previewMode = false }: AgentSessio
             </button>
           ) : (
             <span className="agent-console-session-avatar agent-console-session-avatar-static" title={identity.providerName}>
-              <OpenCodeInitialAvatar size={18} />
+              <OpenCodeInitialAvatar size={18} color={identity.color} emptyColor={`${identity.color}26`} />
             </span>
           )}
           <span className="agent-console-topbar-caller-name" style={{ color: identity.color }} title={identityTitle}>{identity.name}</span>

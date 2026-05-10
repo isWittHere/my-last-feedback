@@ -290,7 +290,7 @@ export function AgentMessageItem({ session, message, projectDirectory }: { sessi
               <div className="agent-message-main">
                 {showMessageSpeakerLine && (
                   <header className="agent-message-speaker">
-                    {avatarKind === "opencode" ? <OpenCodeInitialAvatar size={22} /> : <IdenticonAvatar alias={alias} color={color} size={22} />}
+                    {avatarKind === "opencode" ? <OpenCodeInitialAvatar size={22} color={color} emptyColor={`${color}26`} /> : <IdenticonAvatar alias={alias} color={color} size={22} />}
                     <span>{says}</span>
                   </header>
                 )}
@@ -322,7 +322,7 @@ export function AgentMessageItem({ session, message, projectDirectory }: { sessi
       <div className="agent-message-main" style={{ "--agent-actor-color": color } as CSSProperties}>
         {showMessageSpeakerLine && (
           <header className="agent-message-speaker">
-            {avatarKind === "opencode" ? <OpenCodeInitialAvatar size={22} /> : <IdenticonAvatar alias={alias} color={color} size={22} />}
+            {avatarKind === "opencode" ? <OpenCodeInitialAvatar size={22} color={color} emptyColor={`${color}26`} /> : <IdenticonAvatar alias={alias} color={color} size={22} />}
             <span>{says}</span>
           </header>
         )}
