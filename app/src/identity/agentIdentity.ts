@@ -3,14 +3,6 @@ import { getFriendlyName } from "./friendlyName";
 export type AgentIdentityLanguage = "en" | "zh";
 export type AgentIdentitySource = "mlfb" | "opencode" | "mlra" | "unknown";
 
-export interface AgentIdentityInput {
-  alias?: string | null;
-  fallbackName?: string | null;
-  clientName?: string | null;
-  source?: AgentIdentitySource;
-  id?: string | null;
-}
-
 export interface AgentGlyphIdentityInput {
   agentName?: string | null;
   id?: string | null;
@@ -21,15 +13,6 @@ export interface AgentGlyphIdentity {
   agentName: string;
   nickname: string;
   avatarSeed: string;
-}
-
-export interface AgentIdentity {
-  alias: string;
-  nickname: string;
-  displayLabel: string;
-  avatarSeed: string;
-  clientName?: string;
-  source: AgentIdentitySource;
 }
 
 export function agentIdentityLanguage(language?: string | null): AgentIdentityLanguage {
@@ -86,23 +69,4 @@ export function agentNickname(alias?: string | null, language: AgentIdentityLang
   const cleanAlias = normalizeAgentName(alias);
   if (cleanAlias) return getFriendlyName(cleanAlias, language);
   return fallbackName?.trim() || "";
-}
-
-export function agentAvatarSeed(input: Pick<AgentIdentityInput, "alias" | "id" | "fallbackName" | "clientName">): string {
-  return resolveAgentName({ agentName: input.alias, id: input.id, fallbackId: input.fallbackName || input.clientName });
-}
-
-export function resolveAgentIdentity(input: AgentIdentityInput, language: AgentIdentityLanguage = "en"): AgentIdentity {
-  const alias = normalizeAgentName(input.alias);
-  const fallbackName = input.fallbackName?.trim() || "";
-  const nickname = agentNickname(alias, language, fallbackName);
-  const avatarSeed = agentAvatarSeed(input);
-  return {
-    alias,
-    nickname,
-    displayLabel: alias && nickname ? `${nickname} (${alias})` : nickname || alias || avatarSeed,
-    avatarSeed,
-    ...(input.clientName?.trim() ? { clientName: input.clientName.trim() } : {}),
-    source: input.source || "unknown",
-  };
 }

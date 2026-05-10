@@ -164,7 +164,6 @@ export interface FocusedComposer {
   sessionId?: string;
   projectDirectory: string;
   workspaceKey?: string;
-  ownerAlias?: string;
   kind: ComposerFocusKind;
   focusedAt: string;
 }

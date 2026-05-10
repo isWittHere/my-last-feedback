@@ -1,7 +1,7 @@
 import { useCallback, useEffect, useMemo, useRef, useState, type ReactNode } from "react";
 import { useTranslation } from "react-i18next";
 import { useFeedbackStore } from "../store/feedbackStore";
-import { agentAvatarSeed } from "../identity/agentIdentity";
+import { agentIdentityLanguage, resolveAgentGlyphIdentity } from "../identity/agentIdentity";
 import { Icon } from "./Icons";
 import { useActiveCallerSession } from "./useActiveCallerSession";
 import { IdenticonAvatar } from "./IdenticonAvatar";
@@ -129,9 +129,11 @@ function QuestionsForm({
 }
 
 export function SummaryPanel({ topbarSlot }: { topbarSlot?: ReactNode }) {
-  const { t } = useTranslation();
-  const friendlyName = useFriendlyName();
+  const { t, i18n } = useTranslation();
   const { session: activeSession, caller } = useActiveCallerSession();
+  const callerGlyph = useMemo(() => caller
+    ? resolveAgentGlyphIdentity({ agentName: caller.alias, id: caller.id }, agentIdentityLanguage(i18n.language))
+    : null, [caller, i18n.language]);
   const updateSessionAnswer = useFeedbackStore((s) => s.updateSessionAnswer);
   const toggleSessionOption = useFeedbackStore((s) => s.toggleSessionOption);
   const updateSessionField = useFeedbackStore((s) => s.updateSessionField);
@@ -205,9 +207,9 @@ export function SummaryPanel({ topbarSlot }: { topbarSlot?: ReactNode }) {
               {/* Agent identity header */}
               {caller && (
                 <div className="summary-caller-header" style={{ display: "flex", alignItems: "center", gap: 6, padding: "6px 0 4px" }}>
-                  <IdenticonAvatar alias={agentAvatarSeed({ alias: caller.alias, id: caller.id, fallbackName: caller.name })} color={caller.color} size={22} />
+                  <IdenticonAvatar alias={callerGlyph?.avatarSeed || "agent"} color={caller.color} size={22} />
                   <span style={{ fontSize: 14, lineHeight: "22px", color: "var(--color-text-muted)" }}>
-                    <span style={{ fontWeight: 600, color: caller.color }}>{caller.alias ? friendlyName(caller.alias) : caller.name.charAt(0).toUpperCase()}</span>
+                    <span style={{ fontWeight: 600, color: caller.color }}>{callerGlyph?.nickname || callerGlyph?.agentName || ""}</span>
                     {" "}{t("summary.says", "says:")}
                   </span>
                 </div>

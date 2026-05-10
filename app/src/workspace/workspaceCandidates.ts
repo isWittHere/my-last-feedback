@@ -21,7 +21,7 @@ export function workspaceTargetSourceForComposerKind(kind?: string | null): Work
   return kind === "agent" ? "opencode" : "mlfb";
 }
 
-export function formatWorkspaceTargetLabel(args: { source: WorkspaceTargetSource; ownerName?: string | null; path?: string | null }): string {
+export function formatWorkspaceTargetLabel(args: { source: WorkspaceTargetSource; ownerName?: string | null }): string {
   const targetName = args.ownerName?.trim() || "";
   return formatAgentTargetLabel({ source: args.source, targetName });
 }

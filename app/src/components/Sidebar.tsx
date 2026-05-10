@@ -3,7 +3,7 @@ import { createPortal } from "react-dom";
 import { invoke } from "@tauri-apps/api/core";
 import { useFeedbackStore } from "../store/feedbackStore";
 import type { Session } from "../store/feedbackStore";
-import { agentAvatarSeed } from "../identity/agentIdentity";
+import { agentIdentityLanguage, resolveAgentGlyphIdentity } from "../identity/agentIdentity";
 import { useTranslation } from "react-i18next";
 import { useActiveCallerSession } from "./useActiveCallerSession";
 import { useCallerOverride } from "./CallerContext";
@@ -11,7 +11,6 @@ import { IdenticonAvatar } from "./IdenticonAvatar";
 import { Icon } from "./Icons";
 import { collectSubmittedResourceLinks } from "../composer/submittedFeedback";
 import { useCopyToClipboard } from "./useCopyToClipboard";
-import { useFriendlyName } from "./useFriendlyName";
 import { useIsLightTheme } from "./useIsLightTheme";
 import { timeAgo, getTimeGroup } from "./timeUtils";
 import type { TimeGroup } from "./timeUtils";
@@ -254,10 +253,12 @@ function SessionGroup({
 }
 
 export function Sidebar({ mode, onModeChange }: { mode: SessionListMode; onModeChange: (mode: SessionListMode) => void }) {
-  const { t } = useTranslation();
-  const friendlyName = useFriendlyName();
+  const { t, i18n } = useTranslation();
   const override = useCallerOverride();
   const { callerId: activeCallerId, sessionId: activeSessionId, caller } = useActiveCallerSession();
+  const callerGlyph = useMemo(() => caller
+    ? resolveAgentGlyphIdentity({ agentName: caller.alias, id: caller.id }, agentIdentityLanguage(i18n.language))
+    : null, [caller, i18n.language]);
   const allSessions = useFeedbackStore((s) => s.sessions);
   const setActiveSession = useFeedbackStore((s) => s.setActiveSession);
   const removeSession = useFeedbackStore((s) => s.removeSession);
@@ -336,10 +337,10 @@ export function Sidebar({ mode, onModeChange }: { mode: SessionListMode; onModeC
   // Copy agent_name on avatar click
   const { copied: avatarCopied, copy: copyAvatar } = useCopyToClipboard();
   const handleAvatarClick = useCallback(() => {
-    if (!caller) return;
-    const text = `agent_name="${caller.alias || caller.name}".`;
+    if (!callerGlyph) return;
+    const text = `agent_name="${callerGlyph.agentName}".`;
     copyAvatar(text);
-  }, [caller, copyAvatar]);
+  }, [callerGlyph, copyAvatar]);
 
   const handleSelectSession = (id: string) => {
     if (override) {
@@ -531,17 +532,17 @@ export function Sidebar({ mode, onModeChange }: { mode: SessionListMode; onModeC
             <>
               <div
                 onClick={handleAvatarClick}
-                data-tooltip={avatarCopied ? t("sidebar.copied", "Copied!") : t("sidebar.clickToCopy", { alias: caller.alias || caller.name, defaultValue: 'Click to copy: agent_name="{{alias}}".' })}
-                aria-label={avatarCopied ? t("sidebar.copied", "Copied!") : t("sidebar.clickToCopy", { alias: caller.alias || caller.name, defaultValue: 'Click to copy: agent_name="{{alias}}".' })}
+                data-tooltip={avatarCopied ? t("sidebar.copied", "Copied!") : t("sidebar.clickToCopy", { alias: callerGlyph?.agentName || "", defaultValue: 'Click to copy: agent_name="{{alias}}".' })}
+                aria-label={avatarCopied ? t("sidebar.copied", "Copied!") : t("sidebar.clickToCopy", { alias: callerGlyph?.agentName || "", defaultValue: 'Click to copy: agent_name="{{alias}}".' })}
                 className="session-topbar-avatar"
               >
-                <IdenticonAvatar alias={agentAvatarSeed({ alias: caller.alias, id: caller.id, fallbackName: caller.name })} color={caller.color} size={18} style={{ opacity: avatarCopied ? 0.5 : 1, transition: "opacity 0.15s" }} />
+                <IdenticonAvatar alias={callerGlyph?.avatarSeed || "agent"} color={caller.color} size={18} style={{ opacity: avatarCopied ? 0.5 : 1, transition: "opacity 0.15s" }} />
                 {avatarCopied && (
                   <Icon name="check" size={10} color={caller.color} strokeWidth={3} style={{ position: "absolute", top: "50%", left: "50%", transform: "translate(-50%, -50%)" }} />
                 )}
               </div>
               <span className="session-topbar-caller-name" style={{ color: caller.color }}>
-                {caller.alias ? friendlyName(caller.alias) : caller.name.charAt(0).toUpperCase()}
+                {callerGlyph?.nickname || callerGlyph?.agentName || ""}
               </span>
               {caller.pendingCount > 0 && (
                 <span className={`session-topbar-pending${isBlinking ? " caller-tab-badge-new" : ""}`}>{caller.pendingCount}</span>
@@ -624,11 +625,11 @@ export function Sidebar({ mode, onModeChange }: { mode: SessionListMode; onModeC
           <div style={{ display: "flex", alignItems: "center", gap: 8, minWidth: 0, width: "100%" }}>
             <div
               onClick={handleAvatarClick}
-              data-tooltip={avatarCopied ? t("sidebar.copied", "Copied!") : t("sidebar.clickToCopy", { alias: caller.alias || caller.name, defaultValue: 'Click to copy: agent_name="{{alias}}".' })}
-              aria-label={avatarCopied ? t("sidebar.copied", "Copied!") : t("sidebar.clickToCopy", { alias: caller.alias || caller.name, defaultValue: 'Click to copy: agent_name="{{alias}}".' })}
+              data-tooltip={avatarCopied ? t("sidebar.copied", "Copied!") : t("sidebar.clickToCopy", { alias: callerGlyph?.agentName || "", defaultValue: 'Click to copy: agent_name="{{alias}}".' })}
+              aria-label={avatarCopied ? t("sidebar.copied", "Copied!") : t("sidebar.clickToCopy", { alias: callerGlyph?.agentName || "", defaultValue: 'Click to copy: agent_name="{{alias}}".' })}
               style={{ cursor: "pointer", position: "relative", flexShrink: 0 }}
             >
-              <IdenticonAvatar alias={agentAvatarSeed({ alias: caller.alias, id: caller.id, fallbackName: caller.name })} color={caller.color} size={28} style={{ opacity: avatarCopied ? 0.5 : 1, transition: "opacity 0.15s" }} />
+              <IdenticonAvatar alias={callerGlyph?.avatarSeed || "agent"} color={caller.color} size={28} style={{ opacity: avatarCopied ? 0.5 : 1, transition: "opacity 0.15s" }} />
               {avatarCopied && (
                 <Icon name="check" size={14} color={caller.color} strokeWidth={3} style={{ position: "absolute", top: "50%", left: "50%", transform: "translate(-50%, -50%)" }} />
               )}
@@ -636,10 +637,10 @@ export function Sidebar({ mode, onModeChange }: { mode: SessionListMode; onModeC
             <div style={{ display: "flex", flexDirection: "column", minWidth: 0, flex: 1 }}>
               <div style={{ display: "flex", alignItems: "center", gap: 4 }}>
                 <span style={{ fontSize: 13, fontWeight: 600, color: caller.color, whiteSpace: "nowrap" }}>
-                  {caller.alias ? friendlyName(caller.alias) : caller.name.charAt(0).toUpperCase()}
+                  {callerGlyph?.nickname || callerGlyph?.agentName || ""}
                 </span>
-                {caller.alias && (
-                  <span style={{ fontSize: 11, color: "var(--color-text-muted)", whiteSpace: "nowrap" }}>({caller.alias})</span>
+                {callerGlyph?.agentName && (
+                  <span style={{ fontSize: 11, color: "var(--color-text-muted)", whiteSpace: "nowrap" }}>({callerGlyph.agentName})</span>
                 )}
                 {caller.pendingCount > 0 && (
                   caller.pendingCount > 4 ? (

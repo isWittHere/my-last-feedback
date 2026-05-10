@@ -4,7 +4,6 @@ export interface WorkspaceColorCandidate {
   workspaceKey?: string | null;
   workspacePath?: string | null;
   color?: string | null;
-  ownerAlias?: string | null;
 }
 
 export interface WorkspaceIdentityInput {

@@ -2,9 +2,8 @@ import { useCallback, useMemo, useRef, useState } from "react";
 import { useTranslation } from "react-i18next";
 import { useFeedbackStore } from "../store/feedbackStore";
 import { useShallow } from "zustand/react/shallow";
-import { agentAvatarSeed } from "../identity/agentIdentity";
+import { agentIdentityLanguage, resolveAgentGlyphIdentity } from "../identity/agentIdentity";
 import { IdenticonAvatar } from "./IdenticonAvatar";
-import { useFriendlyName } from "./useFriendlyName";
 import { Icon } from "./Icons";
 import { SettingsSegmentedControl } from "./SettingsSegmentedControl";
 
@@ -29,8 +28,7 @@ function renderCallerColumnModeIcon(mode: CallerColumnModeOption) {
 }
 
 export function CallerManager() {
-  const { t } = useTranslation();
-  const friendlyName = useFriendlyName();
+  const { t, i18n } = useTranslation();
   const {
     callers, sessions, renameCaller, mergeCallers, hiddenCallerIds, toggleCallerHidden,
     removeCaller, removeEmptyCallers,
@@ -394,6 +392,7 @@ export function CallerManager() {
               const isMergeSource = mergeSource === cid;
               const isMergeSelectable = mergeSource && mergeSource !== cid && !mergeConfirm;
               const isDragging = dragCallerId === cid;
+              const callerGlyph = resolveAgentGlyphIdentity({ agentName: caller.alias, id: caller.id }, agentIdentityLanguage(i18n.language));
 
               return (
                 <div
@@ -423,18 +422,16 @@ export function CallerManager() {
 
                   {/* Avatar */}
                   <div className="cm-col-avatar">
-                    <IdenticonAvatar alias={agentAvatarSeed({ alias: caller.alias, id: caller.id, fallbackName: caller.name })} color={caller.color} size={20} />
+                    <IdenticonAvatar alias={callerGlyph.avatarSeed} color={caller.color} size={20} />
                   </div>
 
                   {/* Alias + Sessions + Client stacked */}
                   <div className="cm-col-info">
                     <div className="cm-row-alias-line">
                       <span className="cm-row-alias" style={{ color: caller.color }}>
-                        {caller.alias
-                          ? friendlyName(caller.alias)
-                          : "—"}
+                        {callerGlyph.nickname}
                       </span>
-                      {caller.alias && <span style={{ fontSize: 11, color: "var(--color-text-muted)" }}>({caller.alias})</span>}
+                      <span style={{ fontSize: 11, color: "var(--color-text-muted)" }}>({callerGlyph.agentName})</span>
                       {counts.pending > 0 && <span className="cm-badge-pending" style={{ background: caller.color }}>
                         <Icon name="message" size={9} strokeWidth={2.5} />
                         {counts.pending}

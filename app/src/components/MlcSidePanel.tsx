@@ -158,7 +158,7 @@ export function MlcSidePanel() {
   const targetOwnerName = targetCallerName
     || targetSessionName
     || "";
-  const targetLabel = formatWorkspaceTargetLabel({ source: workspaceTargetSourceForComposerKind(focusedComposer?.kind), ownerName: targetOwnerName, path: targetWorkspacePath });
+  const targetLabel = formatWorkspaceTargetLabel({ source: workspaceTargetSourceForComposerKind(focusedComposer?.kind), ownerName: targetOwnerName });
 
   const workspaceOptions = useMemo(() => {
     return buildWorkspaceOptions({

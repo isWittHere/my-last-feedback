@@ -8,7 +8,7 @@ import { useAgentStore } from "../../store/agentStore";
 import { useFeedbackStore } from "../../store/feedbackStore";
 import { useTerminalStore, type TerminalPathSource } from "../../store/terminalStore";
 import { pushWorkspacePathCandidate, type WorkspacePathCandidate } from "../../workspace/workspaceCandidates";
-import { normalizeWorkspacePath, sameWorkspacePath, workspacePathKey } from "../../workspace/workspacePaths";
+import { normalizeWorkspacePath, workspacePathKey } from "../../workspace/workspacePaths";
 import { Icon } from "../Icons";
 import { IdenticonAvatar } from "../IdenticonAvatar";
 import { OpenCodeInitialAvatar } from "./OpenCodeInitialAvatar";
@@ -258,26 +258,14 @@ export function AgentSessionManagerPanel() {
     openDockTab("agentConsole", "rightPage");
   }, [openDockTab]);
 
-  const ownerAliasForPath = useCallback((path: string | null): string => {
-    const cleanPath = path?.trim();
-    if (!cleanPath) return activeSession?.ownerAlias || "";
-    if (focusedComposer?.projectDirectory && sameWorkspacePath(focusedComposer.projectDirectory, cleanPath)) {
-      return focusedComposer.ownerAlias || callerData.get(focusedComposer.callerId)?.alias || "";
-    }
-    const recentMatch = [...recentRequestPaths]
-      .sort((left, right) => right.createdAt.localeCompare(left.createdAt))
-      .find((requestSession) => sameWorkspacePath(requestSession.projectDirectory, cleanPath));
-    return callerData.get(recentMatch?.callerId || "")?.alias || activeSession?.ownerAlias || "";
-  }, [activeSession?.ownerAlias, callerData, focusedComposer, recentRequestPaths]);
-
   const createFromPath = useCallback((cwd: string | null, source: AgentWorkspacePathSource = "recent") => {
     const cleanPath = cwd?.trim() || null;
-    const sessionId = createNewSession({ cwd: cleanPath, ownerAlias: ownerAliasForPath(cleanPath), workspaceKey: workspacePathKey(cleanPath || "") });
+    const sessionId = createNewSession({ cwd: cleanPath, workspaceKey: workspacePathKey(cleanPath || "") });
     if (cleanPath) recordRecentPath(cleanPath, toTerminalPathSource(source));
     setPathMenuOpen(false);
     showAgentPanel();
     return sessionId;
-  }, [createNewSession, ownerAliasForPath, recordRecentPath, showAgentPanel]);
+  }, [createNewSession, recordRecentPath, showAgentPanel]);
 
   const chooseWorkspaceFolder = useCallback(async () => {
     setActionError(null);

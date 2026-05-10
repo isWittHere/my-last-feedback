@@ -275,7 +275,6 @@ export interface AgentSession {
   title: string;
   cwd: string;
   workspaceKey?: string;
-  ownerAlias?: string;
   modelId?: string;
   modeId?: string;
   availableModels?: AgentChoiceOption[];

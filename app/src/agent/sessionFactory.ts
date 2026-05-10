@@ -14,7 +14,6 @@ export function createAgentSession(): AgentSession {
     title: "OpenCode Agent Console",
     cwd: "",
     workspaceKey: "",
-    ownerAlias: "",
     modelId: undefined,
     modeId: undefined,
     availableModels: [],

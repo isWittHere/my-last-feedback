@@ -111,12 +111,11 @@ export function AgentComposer({ session }: { session: AgentSession }) {
       sessionId: session.id,
       projectDirectory: session.cwd,
       workspaceKey: session.workspaceKey || workspacePathKey(session.cwd),
-      ownerAlias: session.ownerAlias || "",
       kind: "agent",
       focusedAt: new Date().toISOString(),
     });
     void ensureAgentCommands(session.id);
-  }, [ensureAgentCommands, session.cwd, session.id, session.ownerAlias, session.workspaceKey, setFocusedComposer]);
+  }, [ensureAgentCommands, session.cwd, session.id, session.workspaceKey, setFocusedComposer]);
 
   useEffect(() => {
     if (!session.draft.trimStart().startsWith("/")) return;
