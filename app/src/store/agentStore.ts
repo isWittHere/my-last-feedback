@@ -1088,8 +1088,9 @@ function removeDeletedProviderSessions(state: AgentStoreState, providerId: Agent
   const sessions = state.sessions.map((session) => session.providerId === providerId && session.providerSessionId && deletedSessionIds.has(session.providerSessionId)
     ? {
       ...session,
+      agentName: undefined,
       providerSessionId: undefined,
-      providerSessionState: undefined,
+      providerSessionState: "provisional" as const,
       updatedAt: nowIso(),
     }
     : session);
@@ -1771,6 +1772,10 @@ function updateSession(sessions: AgentSession[], sessionId: string, updater: (se
   return sessions.map((session) => session.id === sessionId ? updater(session) : session);
 }
 
+function agentNameFromProviderSessionId(providerSessionId: string): string {
+  return resolveAgentName({ id: providerSessionId });
+}
+
 export const useAgentStore = create<AgentStoreState>((set, get) => ({
   sessions: [{ ...createAgentSession(), openCodePermissionRules: openCodeConfiguredPermissionRules() }],
   activeSessionId: "agent-session-opencode",
@@ -1792,7 +1797,6 @@ export const useAgentStore = create<AgentStoreState>((set, get) => ({
     const session: AgentSession = {
       ...createAgentSession(),
       id: sessionId,
-      agentName: resolveAgentName({ id: sessionId }),
       title: "New Agent Session",
       cwd: requestedCwd || activeSession?.cwd || "",
       workspaceKey,
@@ -1805,6 +1809,7 @@ export const useAgentStore = create<AgentStoreState>((set, get) => ({
       availableCommandsError: inheritOpenCodeCommands ? activeSession?.availableCommandsError : undefined,
       availableCommandsLoadedAt: inheritOpenCodeCommands ? activeSession?.availableCommandsLoadedAt : undefined,
       configOptions: activeSession?.configOptions || [],
+      providerSessionState: "provisional",
       openCodePermissionRules: openCodeConfiguredPermissionRules(),
       status: "idle",
       createdAt,
@@ -2181,6 +2186,7 @@ export const useAgentStore = create<AgentStoreState>((set, get) => ({
           if (!providerSessionId) {
             const created = await httpRuntime.runtime.client.createSession();
             providerSessionId = created.id;
+            const agentName = agentNameFromProviderSessionId(providerSessionId);
             const permissionRules = openCodeSessionPermissionRulesForCreate(session);
             await httpRuntime.runtime.client.updateSession(providerSessionId, { permission: permissionRules }).catch((error) => {
               get().appendAgentDiagnostic(sessionId, "warn", `Failed to apply OpenCode permissions: ${error instanceof Error ? error.message : String(error)}`);
@@ -2188,6 +2194,9 @@ export const useAgentStore = create<AgentStoreState>((set, get) => ({
             set((state) => ({
               sessions: updateSession(state.sessions, sessionId, (item) => ({
                 ...item,
+                agentName,
+                providerSessionId,
+                providerSessionState: "active",
                 openCodePermissionRules: permissionRules,
                 openCodePermissionError: undefined,
                 updatedAt: nowIso(),
@@ -2258,6 +2267,45 @@ export const useAgentStore = create<AgentStoreState>((set, get) => ({
       get().appendAgentDiagnostic(sessionId, "warn", "Images were removed because the selected model does not support image input.");
     }
 
+    if (promptSession.providerId === "opencode" && !promptSession.providerSessionId) {
+      try {
+        if (!openCodeHttpRuntimeForSession(promptSession, get().sessions)) await get().startOpenCodeProvider(sessionId);
+        session = get().sessions.find((item) => item.id === sessionId);
+        if (!session) throw new Error("Agent session is not ready");
+        const httpRuntime = openCodeHttpRuntimeForSession(session, get().sessions);
+        if (!httpRuntime) throw new Error("Agent session is not available");
+        const created = await httpRuntime.runtime.client.createSession();
+        const providerSessionId = created.id;
+        const agentName = agentNameFromProviderSessionId(providerSessionId);
+        const permissionRules = openCodeSessionPermissionRulesForCreate(session);
+        await httpRuntime.runtime.client.updateSession(providerSessionId, { permission: permissionRules }).catch((error) => {
+          get().appendAgentDiagnostic(sessionId, "warn", `Failed to apply OpenCode permissions: ${error instanceof Error ? error.message : String(error)}`);
+        });
+        set((state) => ({
+          sessions: updateSession(state.sessions, sessionId, (item) => appendDiagnosticToSession({
+            ...item,
+            agentName,
+            providerSessionId,
+            providerSessionState: "active",
+            openCodePermissionRules: permissionRules,
+            openCodePermissionError: undefined,
+            title: item.title || created.title || item.title,
+            updatedAt: nowIso(),
+          }, "info", `Session created: ${providerSessionId}`)),
+        }));
+      } catch (error) {
+        const message = error instanceof Error ? error.message : String(error);
+        set((state) => ({
+          sessions: updateSession(state.sessions, sessionId, (item) => appendDiagnosticToSession({
+            ...item,
+            status: "error",
+            updatedAt: nowIso(),
+          }, "error", `Agent prompt failed: ${message}`)),
+        }));
+        return;
+      }
+    }
+
     set((state) => ({
       sessions: updateSession(state.sessions, sessionId, (item) => ({
           ...item,
@@ -2300,6 +2348,7 @@ export const useAgentStore = create<AgentStoreState>((set, get) => ({
         if (!providerSessionId) {
           const created = await httpRuntime.runtime.client.createSession();
           providerSessionId = created.id;
+          const agentName = agentNameFromProviderSessionId(providerSessionId);
           const permissionRules = openCodeSessionPermissionRulesForCreate(session);
           await httpRuntime.runtime.client.updateSession(providerSessionId, { permission: permissionRules }).catch((error) => {
             get().appendAgentDiagnostic(sessionId, "warn", `Failed to apply OpenCode permissions: ${error instanceof Error ? error.message : String(error)}`);
@@ -2307,6 +2356,7 @@ export const useAgentStore = create<AgentStoreState>((set, get) => ({
           set((state) => ({
             sessions: updateSession(state.sessions, sessionId, (item) => appendDiagnosticToSession({
               ...item,
+              agentName,
               providerSessionId,
               providerSessionState: "active",
               openCodePermissionRules: permissionRules,
@@ -2401,6 +2451,7 @@ export const useAgentStore = create<AgentStoreState>((set, get) => ({
         sessions: updateSession(state.sessions, newSessionId, (item) => ({
           ...item,
           title: forked.title || `${session.title} fork`,
+          agentName: agentNameFromProviderSessionId(forked.id),
           providerSessionId: forked.id,
           providerSessionState: "active",
           providerRuntime: session.providerRuntime,
@@ -2518,11 +2569,12 @@ export const useAgentStore = create<AgentStoreState>((set, get) => ({
       const providerRuntime = runtimeOwner?.providerRuntime;
       set((state) => ({
         activeSessionId: existingSession.id,
-        sessions: providerRuntime ? updateSession(state.sessions, existingSession.id, (item) => ({
+        sessions: updateSession(state.sessions, existingSession.id, (item) => ({
           ...item,
-          providerRuntime,
+          agentName: agentNameFromProviderSessionId(providerSessionId),
+          providerRuntime: providerRuntime || item.providerRuntime,
           updatedAt: nowIso(),
-        })) : state.sessions,
+        })),
       }));
       return;
     }
@@ -2564,7 +2616,7 @@ export const useAgentStore = create<AgentStoreState>((set, get) => ({
         sessions: reusableSession
           ? updateSession(state.sessions, reusableSession.id, (item) => appendDiagnosticToSession({
             ...item,
-            agentName: item.agentName || resolveAgentName({ id: item.id }),
+            agentName: agentNameFromProviderSessionId(providerSessionId),
             title: providerSession?.title || listItem?.title || item.title,
             cwd: restoredCwd || item.cwd,
             workspaceKey: restoredWorkspaceKey || item.workspaceKey,
@@ -2593,7 +2645,7 @@ export const useAgentStore = create<AgentStoreState>((set, get) => ({
           : [...state.sessions, appendDiagnosticToSession({
             ...createAgentSession(),
             id: targetSessionId,
-            agentName: resolveAgentName({ id: targetSessionId }),
+            agentName: agentNameFromProviderSessionId(providerSessionId),
             providerId,
             title: providerSession?.title || listItem?.title || session.title,
             cwd: restoredCwd,
@@ -2683,8 +2735,8 @@ export const useAgentStore = create<AgentStoreState>((set, get) => ({
         return appendDiagnosticToSession({
           ...createAgentSession(),
           id: item.id,
-          agentName: item.agentName || resolveAgentName({ id: item.id }),
           providerId: item.providerId,
+          providerSessionState: "provisional",
           providerRuntime: item.providerRuntime,
           title: "New Agent Session",
           cwd: item.cwd,

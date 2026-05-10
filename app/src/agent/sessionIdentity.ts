@@ -46,7 +46,16 @@ function colorFromCode(code: string, options?: AgentSessionIdentityOptions): str
 
 export function getAgentSessionIdentity(session: AgentSession, language: "en" | "zh" = "en", options?: AgentSessionIdentityOptions): AgentSessionIdentity {
   const providerName = formatProviderName(session.providerRuntime?.agentInfo?.name || session.providerId);
-  const glyph = resolveAgentGlyphIdentity({ agentName: session.agentName, id: session.id, fallbackId: session.providerSessionId }, language);
+  if (!session.providerSessionId || session.providerSessionState === "provisional") {
+    return {
+      providerName,
+      name: language === "zh" ? "新会话" : "New Session",
+      code: null,
+      avatarSeed: providerName,
+      color: options?.color?.trim() || AVATAR_COLORS[0],
+    };
+  }
+  const glyph = resolveAgentGlyphIdentity({ id: session.providerSessionId }, language);
   return {
     providerName,
     name: glyph.nickname,
@@ -57,7 +66,7 @@ export function getAgentSessionIdentity(session: AgentSession, language: "en" | 
 }
 
 export function getAgentProviderSessionIdentity(providerId: AgentProviderId, providerSessionId: string, language: "en" | "zh" = "en", providerName = formatProviderName(providerId), options?: AgentSessionIdentityOptions): AgentSessionIdentity {
-  const glyph = resolveAgentGlyphIdentity({ id: `${providerId}:${providerSessionId}`, fallbackId: providerSessionId }, language);
+  const glyph = resolveAgentGlyphIdentity({ id: providerSessionId }, language);
   return {
     providerName,
     name: glyph.nickname,

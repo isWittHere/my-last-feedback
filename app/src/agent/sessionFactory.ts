@@ -1,6 +1,4 @@
 import type { AgentSession } from "./types";
-import { resolveAgentName } from "../identity/agentIdentity";
-
 function nowIso(): string {
   return new Date().toISOString();
 }
@@ -10,7 +8,6 @@ export function createAgentSession(): AgentSession {
   return {
     id: "agent-session-opencode",
     providerId: "opencode",
-    agentName: resolveAgentName({ id: "agent-session-opencode" }),
     title: "OpenCode Agent Console",
     cwd: "",
     workspaceKey: "",

@@ -101,9 +101,9 @@ function sessionStatusTone(status: AgentSession["status"]): string {
   return "ready";
 }
 
-function HistorySessionAvatar({ identity, sessionId, status }: { identity: AgentSessionIdentity; sessionId: string; status?: AgentSession["status"] }) {
+function HistorySessionAvatar({ identity, sessionId, status }: { identity: AgentSessionIdentity; sessionId?: string; status?: AgentSession["status"] }) {
   const sourceCode = identity.code || identity.providerName;
-  const title = `${identity.name} ${sourceCode}\n${sessionId}`;
+  const title = sessionId ? `${identity.name} ${sourceCode}\n${sessionId}` : `${identity.name} ${sourceCode}`;
   return (
     <span className="agent-session-history-avatar" title={title}>
       {identity.code ? (
@@ -433,8 +433,8 @@ export function AgentSessionManagerPanel() {
                                   }}
                                 >
                                   <div className="session-item-row1">
-                                    <HistorySessionAvatar identity={identity} sessionId={session.id} status={session.status} />
-                                    <span className="session-item-name">{session.title}</span>
+                                    <HistorySessionAvatar identity={identity} sessionId={session.providerSessionId} status={session.status} />
+                                    <span className="session-item-name">{identity.code ? session.title : identity.name}</span>
                                   </div>
                                   <div className="session-item-row2">
                                     <span className="session-item-time" title={metaTitle}>{timeAgo(session.updatedAt || session.createdAt, t)}</span>
@@ -493,7 +493,7 @@ export function AgentSessionManagerPanel() {
                                 }}
                               >
                                 <div className="session-item-row1">
-                                  <HistorySessionAvatar identity={identity} sessionId={boundSession?.id || item.sessionId} />
+                                  <HistorySessionAvatar identity={identity} sessionId={item.sessionId} />
                                   <span className="session-item-name">{item.title || shortId(item.sessionId)}</span>
                                 </div>
                                 <div className="session-item-row2">
