@@ -6,6 +6,7 @@ import type { AgentProviderId, AgentSession } from "../../agent/types";
 import { useAgentStore } from "../../store/agentStore";
 import { useFeedbackStore } from "../../store/feedbackStore";
 import { useTerminalStore, type TerminalPathSource } from "../../store/terminalStore";
+import { normalizeWorkspacePath, workspaceBasename, workspacePathKey } from "../../workspace/workspacePaths";
 import { Icon } from "../Icons";
 import { IdenticonAvatar } from "../IdenticonAvatar";
 import { OpenCodeInitialAvatar } from "./OpenCodeInitialAvatar";
@@ -41,11 +42,6 @@ function shortId(value: string): string {
   return `${value.slice(0, 6)}...${value.slice(-6)}`;
 }
 
-function normalizeWorkspacePath(value?: string | null): string | null {
-  if (!value) return null;
-  return value.replace(/\\/g, "/");
-}
-
 function folderNameFromPath(value?: string | null): string | null {
   const workspacePath = normalizeWorkspacePath(value);
   if (!workspacePath) return null;
@@ -54,7 +50,7 @@ function folderNameFromPath(value?: string | null): string | null {
 }
 
 function normalizePathKey(value?: string | null): string {
-  return normalizeWorkspacePath(value)?.trim().replace(/\/+$/, "").toLowerCase() || "";
+  return workspacePathKey(value);
 }
 
 function pushWorkspacePathCandidate(candidates: AgentWorkspacePathCandidate[], seen: Set<string>, candidate: Omit<AgentWorkspacePathCandidate, "label"> & { label?: string }) {
@@ -66,7 +62,7 @@ function pushWorkspacePathCandidate(candidates: AgentWorkspacePathCandidate[], s
   candidates.push({
     ...candidate,
     path: cleanPath,
-    label: candidate.label || folderNameFromPath(cleanPath) || cleanPath,
+    label: candidate.label || workspaceBasename(cleanPath) || cleanPath,
   });
 }
 

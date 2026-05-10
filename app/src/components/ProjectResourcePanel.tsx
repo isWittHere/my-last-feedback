@@ -2,6 +2,7 @@ import { useCallback, useEffect, useMemo, useState, type CSSProperties, type Rea
 import { useTranslation } from "react-i18next";
 import { invoke } from "@tauri-apps/api/core";
 import { useFeedbackStore } from "../store/feedbackStore";
+import { cleanDisplayPath, sameWorkspacePath, workspaceBasename, workspacePathKey } from "../workspace/workspacePaths";
 import { CatppuccinResourceIcon } from "./CatppuccinResourceIcon";
 import { Icon } from "./Icons";
 
@@ -10,10 +11,6 @@ interface ProjectResourceEntry {
   absolutePath: string;
   relativePath: string;
   kind: "file" | "folder";
-}
-
-function basename(path: string): string {
-  return path.replace(/\\/g, "/").split("/").filter(Boolean).pop() || path;
 }
 
 function ensureTrailingSlash(value: string): string {
@@ -41,22 +38,6 @@ function formatMarkdownLink(entry: ProjectResourceEntry): string {
   const sourcePath = entry.relativePath || entry.absolutePath;
   const href = encodeMarkdownPath(sourcePath, entry.kind);
   return `[${label}](${href})`;
-}
-
-function normalizePath(path: string): string {
-  return path.replace(/\\/g, "/").replace(/\/+$/g, "").toLowerCase();
-}
-
-function normalizePathForCompare(path: string): string {
-  return path.replace(/^\\\\\?\\/, "").replace(/\\/g, "/").replace(/\/+$/g, "").toLowerCase();
-}
-
-function cleanDisplayPath(path: string): string {
-  return path.replace(/^\\\\\?\\UNC\\/i, "\\\\").replace(/^\\\\\?\\/i, "");
-}
-
-function samePath(left: string, right: string): boolean {
-  return normalizePathForCompare(left) === normalizePathForCompare(right);
 }
 
 function insertResourceLink(text: string) {
@@ -100,7 +81,7 @@ export function ProjectResourcePanel() {
       .map((session) => session.projectDirectory)
       .filter((path) => {
         if (!path) return false;
-        const key = normalizePathForCompare(path);
+        const key = workspacePathKey(path);
         if (seen.has(key)) return false;
         seen.add(key);
         return true;
@@ -122,11 +103,11 @@ export function ProjectResourcePanel() {
     const map = new Map<string, { path: string; name: string; ownerName?: string }>();
     const addPath = (path: string, name?: string, ownerName?: string) => {
       if (!path) return;
-      const key = normalizePathForCompare(path);
-      if (!map.has(key)) map.set(key, { path, name: name || basename(path), ownerName });
+      const key = workspacePathKey(path);
+      if (!map.has(key)) map.set(key, { path, name: name || workspaceBasename(path), ownerName });
     };
-    addPath(targetWorkspacePath, basename(targetWorkspacePath), targetCaller?.alias || targetCaller?.name);
-    for (const path of sessionWorkspacePathsKey.split("\n")) addPath(path, basename(path));
+    addPath(targetWorkspacePath, workspaceBasename(targetWorkspacePath), targetCaller?.alias || targetCaller?.name);
+    for (const path of sessionWorkspacePathsKey.split("\n")) addPath(path, workspaceBasename(path));
     return Array.from(map.values());
   }, [sessionWorkspacePathsKey, targetCaller?.alias, targetCaller?.name, targetWorkspacePath]);
 
@@ -149,7 +130,7 @@ export function ProjectResourcePanel() {
       const entries = await invoke<ProjectResourceEntry[]>("project_list_directory", {
         request: { workspacePath, directoryPath },
       });
-      setChildrenByPath((current) => ({ ...current, [normalizePath(directoryPath)]: entries }));
+      setChildrenByPath((current) => ({ ...current, [workspacePathKey(directoryPath)]: entries }));
     } catch (err) {
       setError(err instanceof Error ? err.message : String(err));
     } finally {
@@ -163,11 +144,11 @@ export function ProjectResourcePanel() {
 
   const loadedDirectoryPaths = useMemo(() => {
     const paths = new Map<string, string>();
-    if (workspacePath) paths.set(normalizePath(workspacePath), workspacePath);
+    if (workspacePath) paths.set(workspacePathKey(workspacePath), workspacePath);
     for (const entries of Object.values(childrenByPath)) {
       for (const entry of entries) {
-        if (entry.kind === "folder" && childrenByPath[normalizePath(entry.absolutePath)]) {
-          paths.set(normalizePath(entry.absolutePath), entry.absolutePath);
+        if (entry.kind === "folder" && childrenByPath[workspacePathKey(entry.absolutePath)]) {
+          paths.set(workspacePathKey(entry.absolutePath), entry.absolutePath);
         }
       }
     }
@@ -203,7 +184,7 @@ export function ProjectResourcePanel() {
   }, [refreshLoadedDirectories]);
 
   const toggleFolder = useCallback((entry: ProjectResourceEntry) => {
-    const key = normalizePath(entry.absolutePath);
+    const key = workspacePathKey(entry.absolutePath);
     setExpanded((current) => {
       const next = new Set(current);
       if (next.has(key)) next.delete(key);
@@ -214,7 +195,7 @@ export function ProjectResourcePanel() {
   }, [childrenByPath, loadDirectory]);
 
   const renderRows = (entries: ProjectResourceEntry[], depth = 0): ReactNode => entries.map((entry) => {
-    const key = normalizePath(entry.absolutePath);
+    const key = workspacePathKey(entry.absolutePath);
     const isFolder = entry.kind === "folder";
     const isExpanded = expanded.has(key);
     const children = childrenByPath[key] || [];
@@ -256,7 +237,7 @@ export function ProjectResourcePanel() {
     );
   });
 
-  const rootEntries = childrenByPath[normalizePath(workspacePath)] || [];
+  const rootEntries = childrenByPath[workspacePathKey(workspacePath)] || [];
   const rootLoading = workspacePath && loadingByPath.has(workspacePath);
   const isRefreshing = loadingByPath.size > 0;
 
@@ -266,11 +247,11 @@ export function ProjectResourcePanel() {
         {targetWorkspacePath ? (
           <button className={`mlc-target-tab${workspaceFilterMode === "target" ? " active" : ""}`} onClick={() => { setWorkspaceFilterMode("target"); setActiveWorkspacePath(targetWorkspacePath); }} data-tooltip={`${t("mlc.target", "Target")}: ${cleanDisplayPath(targetWorkspacePath)}`}>
             <Icon name="aim" size={11} />
-            <span>{targetCaller?.alias || targetCaller?.name || basename(targetWorkspacePath)}</span>
+            <span>{targetCaller?.alias || targetCaller?.name || workspaceBasename(targetWorkspacePath)}</span>
           </button>
         ) : null}
         {workspaceOptions.map((workspace) => (
-          <button key={normalizePathForCompare(workspace.path)} className={workspaceFilterMode === "workspace" && samePath(workspacePath, workspace.path) ? "active" : ""} onClick={() => { setWorkspaceFilterMode("workspace"); setActiveWorkspacePath(workspace.path); }} data-tooltip={workspace.ownerName ? `${cleanDisplayPath(workspace.path)} · ${workspace.ownerName}` : cleanDisplayPath(workspace.path)}>
+          <button key={workspacePathKey(workspace.path)} className={workspaceFilterMode === "workspace" && sameWorkspacePath(workspacePath, workspace.path) ? "active" : ""} onClick={() => { setWorkspaceFilterMode("workspace"); setActiveWorkspacePath(workspace.path); }} data-tooltip={workspace.ownerName ? `${cleanDisplayPath(workspace.path)} · ${workspace.ownerName}` : cleanDisplayPath(workspace.path)}>
             <Icon name="folder" size={11} />
             <span>{workspace.name}</span>
           </button>

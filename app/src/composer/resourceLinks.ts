@@ -1,3 +1,5 @@
+import { isAbsoluteWorkspacePath, joinWorkspacePath, normalizeResourcePath as normalizeWorkspaceResourcePath } from "../workspace/workspacePaths";
+
 export type ResourceKind = "file" | "folder";
 
 export interface ResourceLinkInfo {
@@ -12,7 +14,7 @@ export function decodeResourceHref(value: string): string {
 }
 
 export function normalizeResourcePath(value: string): string {
-  return decodeResourceHref(value).replace(/^file:\/\/\/?/i, "").replace(/\\/g, "/");
+  return normalizeWorkspaceResourcePath(value);
 }
 
 function hasNonFileScheme(value: string): boolean {
@@ -29,10 +31,10 @@ export function isLocalResourceHref(value: string, projectDirectory?: string): b
 
 export function resolveResourceHref(value: string, projectDirectory?: string): string {
   const normalized = normalizeResourcePath(value);
-  if (/^[A-Za-z]:\//.test(normalized) || normalized.startsWith("/") || normalized.startsWith("//") || !projectDirectory) {
+  if (isAbsoluteWorkspacePath(normalized) || !projectDirectory) {
     return normalized;
   }
-  return `${projectDirectory.replace(/\\/g, "/").replace(/\/+$/g, "")}/${normalized.replace(/^\/+/, "")}`;
+  return joinWorkspacePath(projectDirectory, normalized);
 }
 
 export function resourceKind(label: string, href: string): ResourceKind {

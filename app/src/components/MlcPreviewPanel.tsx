@@ -8,6 +8,7 @@ import { MarkdownHeadingNav, parseMarkdownHeadings } from "./MarkdownHeadingNav"
 import { MarkdownContent } from "./MarkdownContent";
 import { getMlcTypeColor, getMlcTypeConfig, getMlcTypeLabel } from "./mlcTypeConfig";
 import { useIsLightTheme } from "./useIsLightTheme";
+import { cleanDisplayPath } from "../workspace/workspacePaths";
 
 interface MlcDocumentContent {
   filePath: string;
@@ -21,10 +22,6 @@ function formatTime(value: string): string {
   const date = new Date(value);
   if (Number.isNaN(date.getTime())) return "";
   return date.toLocaleString();
-}
-
-function cleanDisplayPath(path: string): string {
-  return path.replace(/^\\\\\?\\UNC\\/i, "\\\\").replace(/^\\\\\?\\/i, "");
 }
 
 export function MlcPreviewPanel() {

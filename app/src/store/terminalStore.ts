@@ -1,5 +1,6 @@
 import { invoke } from "@tauri-apps/api/core";
 import { create } from "zustand";
+import { workspaceBasename, workspacePathKey } from "../workspace/workspacePaths";
 
 export type TerminalTabStatus = "starting" | "running" | "exited" | "failed";
 export type TerminalPathSource = "recent" | "caller" | "activeSession" | "workspace" | "fallback";
@@ -74,14 +75,6 @@ const CSI_FRAGMENT_SCAN_LIMIT = 128;
 interface TrimmedOutput {
   output: string;
   trimmedLength: number;
-}
-
-function basename(value: string): string {
-  return value.replace(/\\/g, "/").split("/").filter(Boolean).pop() || value;
-}
-
-function normalizePath(value: string): string {
-  return value.trim().replace(/\\/g, "/").replace(/\/+$/, "").toLowerCase();
 }
 
 function trimOutput(value: string): TrimmedOutput {
@@ -164,15 +157,15 @@ function persistRecentPaths(paths: TerminalPathCandidate[], lastCwd: string | nu
 function upsertRecentPath(paths: TerminalPathCandidate[], path: string, source: TerminalPathSource = "recent", callerName?: string): TerminalPathCandidate[] {
   const cleanPath = path.trim();
   if (!cleanPath) return paths;
-  const key = normalizePath(cleanPath);
+  const key = workspacePathKey(cleanPath);
   const next: TerminalPathCandidate = {
     path: cleanPath,
-    label: basename(cleanPath),
+    label: workspaceBasename(cleanPath),
     source,
     callerName,
     lastUsedAt: new Date().toISOString(),
   };
-  return [next, ...paths.filter((item) => normalizePath(item.path) !== key)].slice(0, RECENT_PATH_LIMIT);
+  return [next, ...paths.filter((item) => workspacePathKey(item.path) !== key)].slice(0, RECENT_PATH_LIMIT);
 }
 
 function updateTab(tabs: TerminalTabState[], tabId: string, updater: (tab: TerminalTabState) => TerminalTabState): TerminalTabState[] {
@@ -206,7 +199,7 @@ export const useTerminalStore = create<TerminalWorkspaceState>((set, get) => ({
           return {
             id: newTabId(),
             terminalId: snapshot.terminalId,
-            title: basename(snapshot.cwd),
+            title: workspaceBasename(snapshot.cwd),
             cwd: snapshot.cwd,
             shell: snapshot.shell,
             status: "running",
@@ -236,7 +229,7 @@ export const useTerminalStore = create<TerminalWorkspaceState>((set, get) => ({
     const pendingTab: TerminalTabState = {
       id: tabId,
       terminalId: null,
-      title: requestedCwd ? basename(requestedCwd) : "Terminal",
+      title: requestedCwd ? workspaceBasename(requestedCwd) : "Terminal",
       cwd: requestedCwd,
       shell: null,
       status: "starting",
@@ -267,7 +260,7 @@ export const useTerminalStore = create<TerminalWorkspaceState>((set, get) => ({
             terminalId: info.terminalId,
             cwd: info.cwd,
             shell: info.shell,
-            title: basename(info.cwd),
+            title: workspaceBasename(info.cwd),
             status: "running",
             error: null,
           })),
@@ -312,7 +305,7 @@ export const useTerminalStore = create<TerminalWorkspaceState>((set, get) => ({
             terminalId: info.terminalId,
             cwd: info.cwd,
             shell: info.shell,
-            title: basename(info.cwd),
+            title: workspaceBasename(info.cwd),
             status: "running",
             error: null,
           })),

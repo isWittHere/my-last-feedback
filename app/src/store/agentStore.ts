@@ -9,6 +9,7 @@ import { getOpenCodeDefaultPermissionRules, getOpenCodePermissionPresetRules, op
 import type { AgentChoiceOption, AgentCompactionBlock, AgentContentBlock, AgentContextCompactionConfig, AgentContextUsage, AgentDiagnosticEntry, AgentMessage, AgentModelCapabilities, AgentProviderMessagePart, AgentSession, AgentSessionFileDiff, AgentSubmittedAttachmentTag, AgentThinkingBlock, AgentTokenUsage } from "../agent/types";
 import type { AgentProviderId } from "../agent/types";
 import type { GitAction, ImageAttachment, MlcAttachment, WebAttachment } from "./feedbackStore";
+import { workspacePathKey } from "../workspace/workspacePaths";
 
 export interface AgentProviderSessionListState {
   providerId: AgentProviderId;
@@ -132,7 +133,7 @@ function openCodePromptPartsWithIds(parts: OpenCodePromptPart[]): OpenCodePrompt
 }
 
 function normalizeOpenCodeDirectory(value: string | null | undefined): string | undefined {
-  const normalized = value?.trim().replace(/\\/g, "/").replace(/\/+$/, "").toLowerCase();
+  const normalized = workspacePathKey(value);
   return normalized || undefined;
 }
 

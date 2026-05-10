@@ -7,6 +7,7 @@ import { AppSelect, type AppSelectOption } from "./AppSelect";
 import { Icon, MlcLogoIcon } from "./Icons";
 import { MLC_TYPE_TABS, getMlcTypeColor, getMlcTypeConfig, getMlcTypeLabel } from "./mlcTypeConfig";
 import { useIsLightTheme } from "./useIsLightTheme";
+import { cleanDisplayPath, sameWorkspacePath, workspaceBasename, workspacePathKey } from "../workspace/workspacePaths";
 
 type SortBy = "updated-desc" | "created-desc" | "created-asc" | "title-asc" | "title-desc";
 type ViewMode = "detail" | "compact";
@@ -32,23 +33,6 @@ interface MlcDocument {
 type MlcTooltipContent =
   | { kind: "text"; text: string }
   | { kind: "document"; document: MlcDocument };
-
-function basename(path: string): string {
-  const normalized = path.replace(/\\/g, "/");
-  return normalized.split("/").filter(Boolean).pop() || path;
-}
-
-function normalizePathForCompare(path: string): string {
-  return path.replace(/^\\\\\?\\/, "").replace(/\\/g, "/").replace(/\/+$/g, "").toLowerCase();
-}
-
-function cleanDisplayPath(path: string): string {
-  return path.replace(/^\\\\\?\\UNC\\/i, "\\\\").replace(/^\\\\\?\\/i, "");
-}
-
-function samePath(left: string, right: string): boolean {
-  return normalizePathForCompare(left) === normalizePathForCompare(right);
-}
 
 function dateValue(value: string): number {
   const time = new Date(value).getTime();
@@ -123,7 +107,7 @@ export function MlcSidePanel() {
       .map((session) => session.projectDirectory)
       .filter((path) => {
         if (!path) return false;
-        const key = normalizePathForCompare(path);
+        const key = workspacePathKey(path);
         if (seen.has(key)) return false;
         seen.add(key);
         return true;
@@ -167,11 +151,11 @@ export function MlcSidePanel() {
     const map = new Map<string, { path: string; name: string; ownerName?: string }>();
     const addPath = (path: string, name?: string, ownerName?: string) => {
       if (!path) return;
-      const key = normalizePathForCompare(path);
-      if (!map.has(key)) map.set(key, { path, name: name || basename(path), ownerName });
+      const key = workspacePathKey(path);
+      if (!map.has(key)) map.set(key, { path, name: name || workspaceBasename(path), ownerName });
     };
-    addPath(targetWorkspacePath, basename(targetWorkspacePath), targetCaller?.alias || targetCaller?.name);
-    for (const path of sessionWorkspacePathsKey.split("\n")) addPath(path, basename(path));
+    addPath(targetWorkspacePath, workspaceBasename(targetWorkspacePath), targetCaller?.alias || targetCaller?.name);
+    for (const path of sessionWorkspacePathsKey.split("\n")) addPath(path, workspaceBasename(path));
     return Array.from(map.values());
   }, [sessionWorkspacePathsKey, targetCaller?.alias, targetCaller?.name, targetWorkspacePath]);
 
@@ -231,7 +215,7 @@ export function MlcSidePanel() {
     return documents
       .filter((document) => selectedType === "all" || document.type === selectedType)
       .filter((document) => !favoritesOnly || document.favorite)
-      .filter((document) => !activeWorkspace || samePath(document.workspacePath, activeWorkspace))
+      .filter((document) => !activeWorkspace || sameWorkspacePath(document.workspacePath, activeWorkspace))
       .filter((document) => {
         if (!trimmedQuery) return true;
         const haystack = [document.title, document.description, document.project, document.type, document.fileName, ...document.tags].join(" ").toLowerCase();
@@ -423,11 +407,11 @@ export function MlcSidePanel() {
         {targetWorkspacePath ? (
           <button className={`mlc-target-tab${workspaceFilterMode === "target" ? " active" : ""}`} onClick={() => { setWorkspaceFilterMode("target"); setActiveWorkspacePath(targetWorkspacePath); }} {...tooltipProps(`${t("mlc.target", "Target")}: ${cleanDisplayPath(targetWorkspacePath)}`)}>
             <Icon name="aim" size={11} />
-            <span>{targetCaller?.alias || targetCaller?.name || basename(targetWorkspacePath)}</span>
+            <span>{targetCaller?.alias || targetCaller?.name || workspaceBasename(targetWorkspacePath)}</span>
           </button>
         ) : null}
         {workspaceOptions.map((workspace) => (
-          <button key={normalizePathForCompare(workspace.path)} className={workspaceFilterMode === "workspace" && samePath(activeWorkspace, workspace.path) ? "active" : ""} onClick={() => { setWorkspaceFilterMode("workspace"); setActiveWorkspacePath(workspace.path); }} {...tooltipProps(workspace.ownerName ? `${cleanDisplayPath(workspace.path)} · ${workspace.ownerName}` : cleanDisplayPath(workspace.path))}>
+          <button key={workspacePathKey(workspace.path)} className={workspaceFilterMode === "workspace" && sameWorkspacePath(activeWorkspace, workspace.path) ? "active" : ""} onClick={() => { setWorkspaceFilterMode("workspace"); setActiveWorkspacePath(workspace.path); }} {...tooltipProps(workspace.ownerName ? `${cleanDisplayPath(workspace.path)} · ${workspace.ownerName}` : cleanDisplayPath(workspace.path))}>
             <Icon name="folder" size={11} />
             <span>{workspace.name}</span>
           </button>

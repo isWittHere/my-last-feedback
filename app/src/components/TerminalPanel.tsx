@@ -7,6 +7,7 @@ import { useTranslation } from "react-i18next";
 import { useFeedbackStore } from "../store/feedbackStore";
 import { useTerminalStore, type TerminalPathCandidate, type TerminalPathSource } from "../store/terminalStore";
 import { getTerminalSettings, terminalShellToCommand, TERMINAL_SETTINGS_EVENT, type TerminalSettings } from "../terminalSettings";
+import { workspaceBasename, workspacePathKey } from "../workspace/workspacePaths";
 import { Icon } from "./Icons";
 import { useIsLightTheme } from "./useIsLightTheme";
 
@@ -65,14 +66,6 @@ const XTERM_THEMES: Record<AppTheme, ITheme> = {
   },
 };
 
-function basename(value: string): string {
-  return value.replace(/\\/g, "/").split("/").filter(Boolean).pop() || value;
-}
-
-function normalizePath(value: string): string {
-  return value.trim().replace(/\\/g, "/").replace(/\/+$/, "").toLowerCase();
-}
-
 function getTerminalTheme(theme: AppTheme): ITheme {
   return { ...XTERM_THEMES[theme] };
 }
@@ -88,10 +81,10 @@ function sourceLabel(source: TerminalPathSource, translate: (key: string, defaul
 function pushCandidate(candidates: TerminalPathCandidate[], seen: Set<string>, candidate: TerminalPathCandidate) {
   const cleanPath = candidate.path.trim();
   if (!cleanPath) return;
-  const key = normalizePath(cleanPath);
+  const key = workspacePathKey(cleanPath);
   if (seen.has(key)) return;
   seen.add(key);
-  candidates.push({ ...candidate, path: cleanPath, label: candidate.label || basename(cleanPath) });
+  candidates.push({ ...candidate, path: cleanPath, label: candidate.label || workspaceBasename(cleanPath) });
 }
 
 export function TerminalPanel() {
@@ -144,12 +137,12 @@ export function TerminalPanel() {
     const candidates: TerminalPathCandidate[] = [];
     const seen = new Set<string>();
     for (const path of recentPaths) pushCandidate(candidates, seen, path);
-    if (activeTab?.cwd) pushCandidate(candidates, seen, { path: activeTab.cwd, label: basename(activeTab.cwd), source: "recent" });
-    if (lastUsedCwd) pushCandidate(candidates, seen, { path: lastUsedCwd, label: basename(lastUsedCwd), source: "recent" });
+    if (activeTab?.cwd) pushCandidate(candidates, seen, { path: activeTab.cwd, label: workspaceBasename(activeTab.cwd), source: "recent" });
+    if (lastUsedCwd) pushCandidate(candidates, seen, { path: lastUsedCwd, label: workspaceBasename(lastUsedCwd), source: "recent" });
     if (activeSessionProjectDirectory) {
       pushCandidate(candidates, seen, {
         path: activeSessionProjectDirectory,
-        label: basename(activeSessionProjectDirectory),
+        label: workspaceBasename(activeSessionProjectDirectory),
         source: "activeSession",
         callerName: callerNames.get(activeSessionCallerId),
         lastUsedAt: activeSessionCreatedAt,
@@ -158,17 +151,17 @@ export function TerminalPanel() {
     if (focusedComposer?.projectDirectory) {
       pushCandidate(candidates, seen, {
         path: focusedComposer.projectDirectory,
-        label: basename(focusedComposer.projectDirectory),
+        label: workspaceBasename(focusedComposer.projectDirectory),
         source: "caller",
         callerName: callerNames.get(focusedComposer.callerId),
         lastUsedAt: focusedComposer.focusedAt,
       });
     }
-    if (activeWorkspacePath) pushCandidate(candidates, seen, { path: activeWorkspacePath, label: basename(activeWorkspacePath), source: "workspace" });
+    if (activeWorkspacePath) pushCandidate(candidates, seen, { path: activeWorkspacePath, label: workspaceBasename(activeWorkspacePath), source: "workspace" });
     for (const session of [...recentSessionCandidates].sort((left, right) => right.createdAt.localeCompare(left.createdAt)).slice(0, 10)) {
       pushCandidate(candidates, seen, {
         path: session.projectDirectory,
-        label: basename(session.projectDirectory),
+        label: workspaceBasename(session.projectDirectory),
         source: "caller",
         callerName: callerNames.get(session.callerId),
         lastUsedAt: session.createdAt,
@@ -397,7 +390,7 @@ export function TerminalPanel() {
     <button key={`${candidate.source}-${candidate.path}`} type="button" className={compact ? "terminal-path-menu-item" : "terminal-home-path-item"} onClick={() => void createFromPath(candidate.path, candidate.source)} title={candidate.path}>
       <Icon name={candidate.source === "workspace" ? "folder-open" : candidate.source === "activeSession" ? "message" : "folder"} size={compact ? 12 : 14} />
       <span className="terminal-path-main">
-        <span>{candidate.label || basename(candidate.path)}</span>
+        <span>{candidate.label || workspaceBasename(candidate.path)}</span>
         <small>{candidate.path}</small>
       </span>
       <em>{sourceLabel(candidate.source, t, candidate.callerName)}</em>
@@ -443,9 +436,9 @@ export function TerminalPanel() {
           <div className="terminal-toolbar" data-preview-overlay>
             <div className="terminal-status-pill" data-status={activeTab.status} title={activeTab.cwd || undefined}>
               <Icon name="terminal" size={12} />
-              <span>{activeTab.shell ? basename(activeTab.shell) : t("terminal.title", "Terminal")}</span>
+              <span>{activeTab.shell ? workspaceBasename(activeTab.shell) : t("terminal.title", "Terminal")}</span>
             </div>
-            <div className="terminal-cwd" title={activeTab.cwd || ""}>{basename(activeTab.cwd || t("terminal.noCwd", "No workspace"))}</div>
+            <div className="terminal-cwd" title={activeTab.cwd || ""}>{workspaceBasename(activeTab.cwd || t("terminal.noCwd", "No workspace"))}</div>
             {activeTab.error ? <div className="terminal-error-text" title={activeTab.error}>{activeTab.error}</div> : null}
             <button type="button" className="terminal-tool-button" onClick={restartActiveTab} title={t("terminal.restart", "Restart")}>
               <Icon name="refresh" size={13} />
@@ -469,7 +462,7 @@ export function TerminalPanel() {
               <Icon name="plus" size={14} />
               <span>{t("terminal.newTab", "New terminal")}</span>
             </button>
-            {defaultCwd ? <small title={defaultCwd}>{basename(defaultCwd)}</small> : null}
+            {defaultCwd ? <small title={defaultCwd}>{workspaceBasename(defaultCwd)}</small> : null}
           </div>
           <div className="terminal-home-list">
             {pathCandidates.length > 0 ? pathCandidates.slice(0, 10).map((candidate) => renderPathButton(candidate)) : (

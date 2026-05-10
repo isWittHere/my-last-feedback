@@ -25,6 +25,7 @@ import { useCopyToClipboard } from "./useCopyToClipboard";
 import { useIsLightTheme } from "./useIsLightTheme";
 import { parseComposerInlineTokens } from "../composer/composerTokens";
 import { resourceLinkInfo } from "../composer/resourceLinks";
+import { joinWorkspacePath } from "../workspace/workspacePaths";
 import { ColorToken } from "./composer/ColorToken";
 import { ResourceLinkToken } from "./composer/ResourceLinkToken";
 import { SlashCommandToken } from "./composer/SlashCommandToken";
@@ -205,7 +206,7 @@ function LinkRenderer({
           .catch(() => window.open(href, "_blank", "noopener,noreferrer"));
       } else {
         const base = projectDirectory || "";
-        const resolved = base ? `${base}/${href}`.replace(/\\/g, "/") : href;
+        const resolved = base ? joinWorkspacePath(base, href) : href;
         import("@tauri-apps/plugin-opener")
           .then(({ openPath }) => openPath(resolved))
           .catch(() => window.open(href, "_blank", "noopener,noreferrer"));
