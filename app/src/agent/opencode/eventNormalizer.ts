@@ -9,13 +9,14 @@ import type {
   AgentThinkingBlock,
   AgentToolCallBlock,
 } from "../types";
-import type { OpenCodeBusEvent, OpenCodeErrorInfo, OpenCodeMessageInfo, OpenCodeMessagePart, OpenCodeTodoItem } from "./httpTypes";
+import type { OpenCodeBusEvent, OpenCodeErrorInfo, OpenCodeMessageInfo, OpenCodeMessagePart, OpenCodeSessionInfo, OpenCodeTodoItem } from "./httpTypes";
 
 export type OpenCodeNormalizedEvent =
   | OpenCodeNormalizedBlockEvent
   | OpenCodeNormalizedTextDeltaEvent
   | OpenCodeNormalizedPermissionEvent
   | OpenCodeNormalizedPermissionReplyEvent
+  | OpenCodeNormalizedSessionLifecycleEvent
   | OpenCodeNormalizedSessionDiffEvent
   | OpenCodeNormalizedSessionCompactedEvent
   | OpenCodeNormalizedSessionStatusEvent
@@ -57,6 +58,17 @@ export interface OpenCodeNormalizedPermissionReplyEvent {
   sessionId?: string;
   requestId: string;
   reply?: string;
+  raw: OpenCodeBusEvent;
+}
+
+export interface OpenCodeNormalizedSessionLifecycleEvent {
+  type: "session.lifecycle";
+  action: "created" | "updated" | "deleted";
+  sessionId?: string;
+  info?: OpenCodeSessionInfo;
+  title?: string;
+  cwd?: string;
+  updatedAt?: string;
   raw: OpenCodeBusEvent;
 }
 
@@ -152,6 +164,11 @@ function timestampFromMs(value: unknown): string {
   return new Date(time).toISOString();
 }
 
+function timestampFromOptionalMs(value: unknown): string | undefined {
+  const time = asNumber(value);
+  return time ? new Date(time).toISOString() : undefined;
+}
+
 function blockOrigin(groupId?: string) {
   return {
     phase: "process" as const,
@@ -204,6 +221,34 @@ function normalizeMessageStatus(info: Record<string, unknown>): "streaming" | "c
 }
 
 export function normalizeOpenCodeEvent(event: OpenCodeBusEvent): OpenCodeNormalizedEvent[] {
+  if (event.type === "session.created" || event.type === "session.updated") {
+    const info = asRecord(event.properties.info) as OpenCodeSessionInfo;
+    const time = asRecord(info.time);
+    return [
+      {
+        type: "session.lifecycle",
+        action: event.type === "session.created" ? "created" : "updated",
+        sessionId: asString(event.properties.sessionID) || asString(info.id),
+        info,
+        title: asString(info.title),
+        cwd: asString(info.directory),
+        updatedAt: timestampFromOptionalMs(time.updated),
+        raw: event,
+      },
+    ];
+  }
+
+  if (event.type === "session.deleted") {
+    return [
+      {
+        type: "session.lifecycle",
+        action: "deleted",
+        sessionId: asString(event.properties.sessionID),
+        raw: event,
+      },
+    ];
+  }
+
   if (event.type === "message.part.updated") {
     const part = asRecord(event.properties.part) as OpenCodeMessagePart;
     const block = normalizeOpenCodePart(part);

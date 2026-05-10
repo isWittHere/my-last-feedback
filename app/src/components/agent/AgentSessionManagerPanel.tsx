@@ -137,9 +137,11 @@ export function AgentSessionManagerPanel() {
   const recentRequestPathsKey = useFeedbackStore((state) => state.sessions.map((session) => `${session.id}\t${session.projectDirectory}\t${session.callerId}\t${session.createdAt}`).join("\n"));
   const pathMenuRef = useRef<HTMLDivElement>(null);
   const [busyAction, setBusyAction] = useState<string | null>(null);
+  const [refreshing, setRefreshing] = useState(false);
   const [actionError, setActionError] = useState<string | null>(null);
   const [pathMenuOpen, setPathMenuOpen] = useState(false);
   const autoLoadedProvidersRef = useRef(new Set<AgentProviderId>());
+  const refreshRunIdRef = useRef(0);
 
   const activeSession = sessions.find((session) => session.id === activeSessionId) || null;
 
@@ -292,6 +294,21 @@ export function AgentSessionManagerPanel() {
     }
   };
 
+  const forceRefreshSessions = useCallback(async () => {
+    const runId = refreshRunIdRef.current + 1;
+    refreshRunIdRef.current = runId;
+    autoLoadedProvidersRef.current.clear();
+    setRefreshing(true);
+    setActionError(null);
+    try {
+      await Promise.all(providers.map((providerId) => refreshProviderSessions(providerId)));
+    } catch (error) {
+      setActionError(error instanceof Error ? error.message : String(error));
+    } finally {
+      if (refreshRunIdRef.current === runId) setRefreshing(false);
+    }
+  }, [providers, refreshProviderSessions]);
+
   const errorLabel = (message: string | undefined) => {
     if (!message) return "";
     return message;
@@ -345,15 +362,12 @@ export function AgentSessionManagerPanel() {
         <button
           type="button"
           className="agent-session-manager-refresh-button"
-          onClick={() => void runAction("refresh", async () => {
-            autoLoadedProvidersRef.current.clear();
-            await Promise.all(providers.map((providerId) => refreshProviderSessions(providerId)));
-          })}
-          disabled={busyAction !== null}
+          onClick={() => void forceRefreshSessions()}
+          aria-busy={refreshing}
           title={t("agentSessions.refresh", "Refresh sessions")}
           aria-label={t("agentSessions.refresh", "Refresh sessions")}
         >
-          <Icon name="refresh" size={12} />
+          <Icon name={refreshing ? "spinner" : "refresh"} size={12} />
         </button>
       </div>
 

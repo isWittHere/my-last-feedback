@@ -1,7 +1,7 @@
 import { create } from "zustand";
 import { hasAgentComposerContent } from "../agent/composer";
 import { normalizeOpenCodeEvent, normalizeOpenCodePart, normalizeOpenCodeTodos, startOpenCodeServerRuntime } from "../agent/opencode";
-import type { OpenCodeAgentInfo, OpenCodeBusEvent, OpenCodeCommandFilePart, OpenCodeCommandInfo, OpenCodeMessage, OpenCodeMessageInfo, OpenCodeMessagePart, OpenCodePermissionReply, OpenCodePermissionRule, OpenCodePromptPart, OpenCodeProviderResponse, OpenCodeServerRuntime, OpenCodeSseConnection } from "../agent/opencode";
+import type { OpenCodeAgentInfo, OpenCodeBusEvent, OpenCodeCommandFilePart, OpenCodeCommandInfo, OpenCodeMessage, OpenCodeMessageInfo, OpenCodeMessagePart, OpenCodePermissionReply, OpenCodePermissionRule, OpenCodePromptPart, OpenCodeProviderResponse, OpenCodeServerRuntime, OpenCodeSessionInfo, OpenCodeSseConnection } from "../agent/opencode";
 import { createAgentSession } from "../agent/sessionFactory";
 import { buildSubmittedComposerPayload, collectSubmittedResourceLinks } from "../composer/submittedFeedback";
 import { getAgentConsoleSettings } from "../agentConsoleSettings";
@@ -46,9 +46,11 @@ interface AgentOpenCodeHttpRuntimeEntry {
 
 const openCodeHttpRuntimes = new Map<string, AgentOpenCodeHttpRuntimeEntry>();
 const OPEN_CODE_RECONNECT_BACKFILL_MIN_INTERVAL_MS = 30_000;
+const OPEN_CODE_SESSION_LIST_IDLE_REFRESH_DELAY_MS = 700;
 
 let openCodeIdLastTimestamp = 0;
 let openCodeIdCounter = 0;
+const openCodeSessionListRefreshTimers = new Map<string, number>();
 
 interface CompactionSummaryRoute {
   sessionId: string;
@@ -1112,6 +1114,109 @@ function removeDeletedProviderSessions(state: AgentStoreState, providerId: Agent
   };
 }
 
+function openCodeProviderSessionUpdatedAt(info?: OpenCodeSessionInfo): string | null {
+  return info?.time?.updated ? new Date(info.time.updated).toISOString() : null;
+}
+
+function openCodeProviderSessionItemFromInfo(sessionId: string, info?: OpenCodeSessionInfo, existing?: AgentProviderSessionItem): AgentProviderSessionItem {
+  const updatedAt = openCodeProviderSessionUpdatedAt(info) || existing?.updatedAt || nowIso();
+  return {
+    ...existing,
+    sessionId,
+    cwd: info?.directory !== undefined ? info.directory || null : existing?.cwd || null,
+    title: info?.title !== undefined ? info.title || null : existing?.title || null,
+    updatedAt,
+    _meta: {
+      ...(existing?._meta || {}),
+      ...(info?.slug !== undefined ? { slug: info.slug } : {}),
+      ...(info?.path !== undefined ? { path: info.path } : {}),
+    },
+  };
+}
+
+function applyOpenCodeProviderSessionLifecycle(providerId: AgentProviderId, event: OpenCodeBusEvent) {
+  const lifecycleEvents = normalizeOpenCodeEvent(event).filter((normalized) => normalized.type === "session.lifecycle");
+  if (lifecycleEvents.length === 0) return;
+  useAgentStore.setState((state) => {
+    let sessions = state.sessions;
+    let providerSessionLists = state.providerSessionLists;
+    for (const lifecycle of lifecycleEvents) {
+      if (!lifecycle.sessionId) continue;
+      if (lifecycle.action === "deleted") {
+        sessions = sessions.map((session) => session.providerId === providerId && session.providerSessionId === lifecycle.sessionId
+          ? {
+            ...session,
+            agentName: undefined,
+            providerSessionId: undefined,
+            providerSessionState: "provisional" as const,
+            updatedAt: nowIso(),
+          }
+          : session);
+        const existingList = providerSessionLists[providerId];
+        if (existingList) {
+          providerSessionLists = {
+            ...providerSessionLists,
+            [providerId]: {
+              ...existingList,
+              sessions: existingList.sessions.filter((item) => item.sessionId !== lifecycle.sessionId),
+              updatedAt: nowIso(),
+            },
+          };
+        }
+        continue;
+      }
+
+      const lifecycleTitle = lifecycle.title?.trim();
+      const lifecycleCwd = lifecycle.cwd;
+      sessions = sessions.map((session) => {
+        if (session.providerId !== providerId || session.providerSessionId !== lifecycle.sessionId) return session;
+        const nextCwd = lifecycleCwd !== undefined ? lifecycleCwd || session.cwd : session.cwd;
+        return {
+          ...session,
+          ...(lifecycleTitle ? { title: lifecycleTitle } : {}),
+          cwd: nextCwd,
+          workspaceKey: workspacePathKey(nextCwd),
+          providerSessionState: session.providerSessionState === "provisional" ? "active" : session.providerSessionState,
+          updatedAt: lifecycle.updatedAt || nowIso(),
+        };
+      });
+
+      const existingList = providerSessionLists[providerId];
+      const existingItems = existingList?.sessions || [];
+      const existingItem = existingItems.find((item) => item.sessionId === lifecycle.sessionId);
+      const nextItem = openCodeProviderSessionItemFromInfo(lifecycle.sessionId, lifecycle.info, existingItem);
+      const nextItems = existingItem
+        ? existingItems.map((item) => item.sessionId === lifecycle.sessionId ? nextItem : item)
+        : [nextItem, ...existingItems];
+      providerSessionLists = {
+        ...providerSessionLists,
+        [providerId]: {
+          providerId,
+          status: existingList?.status === "loading" ? "loading" : "ready",
+          preparationStatus: existingList?.preparationStatus,
+          capability: "supported",
+          sessions: nextItems.sort((left, right) => Date.parse(right.updatedAt || "") - Date.parse(left.updatedAt || "")),
+          nextCursor: existingList?.nextCursor || null,
+          error: existingList?.error,
+          updatedAt: nowIso(),
+        },
+      };
+    }
+    return { sessions, providerSessionLists };
+  });
+}
+
+function scheduleOpenCodeProviderSessionListRefresh(providerId: AgentProviderId, providerSessionId: string) {
+  const key = `${providerId}:${providerSessionId}`;
+  const existingTimer = openCodeSessionListRefreshTimers.get(key);
+  if (existingTimer) window.clearTimeout(existingTimer);
+  const timer = window.setTimeout(() => {
+    openCodeSessionListRefreshTimers.delete(key);
+    void useAgentStore.getState().refreshProviderSessions(providerId);
+  }, OPEN_CODE_SESSION_LIST_IDLE_REFRESH_DELAY_MS);
+  openCodeSessionListRefreshTimers.set(key, timer);
+}
+
 function insertProcessBlock(blocks: AgentContentBlock[], block: AgentContentBlock): AgentContentBlock[] {
   const firstResultIndex = blocks.findIndex((item) => item.origin.phase === "result");
   if (firstResultIndex < 0) return [...blocks, block];
@@ -1681,6 +1786,7 @@ function handleOpenCodeBusEvent(runtimeOwnerSessionId: string, event: OpenCodeBu
   const providerSessionId = openCodeEventProviderSessionId(event);
   const shouldRefreshSessionDiff = openCodeEventShouldRefreshSessionDiff(event);
   const sessionDiffRefreshIds = new Set<string>();
+  applyOpenCodeProviderSessionLifecycle("opencode", event);
   useAgentStore.setState((state) => {
     let routed = false;
     const sessions = state.sessions.map((session) => {
@@ -1698,6 +1804,7 @@ function handleOpenCodeBusEvent(runtimeOwnerSessionId: string, event: OpenCodeBu
       void useAgentStore.getState().refreshAgentSessionDiff(sessionId, { silent: true, preserveExistingOnEmpty: true });
     }, 150);
   }
+  if (providerSessionId && shouldRefreshSessionDiff) scheduleOpenCodeProviderSessionListRefresh("opencode", providerSessionId);
 }
 
 async function backfillOpenCodeSession(runtimeEntry: AgentOpenCodeHttpRuntimeEntry, sessionId: string, providerSessionId: string, options: { assumeBusyUntilAssistant?: boolean } = {}): Promise<boolean> {
