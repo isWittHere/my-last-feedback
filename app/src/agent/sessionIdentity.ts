@@ -26,6 +26,8 @@ const AVATAR_COLORS = [
   "#15803d",
 ];
 
+const APP_THEME_COLOR = "var(--color-primary)";
+
 function hashString(value: string): number {
   let hash = 0x811c9dc5;
   for (let index = 0; index < value.length; index += 1) {
@@ -52,7 +54,7 @@ export function getAgentSessionIdentity(session: AgentSession, language: "en" | 
       name: language === "zh" ? "新会话" : "New Session",
       code: null,
       avatarSeed: providerName,
-      color: options?.color?.trim() || AVATAR_COLORS[0],
+      color: APP_THEME_COLOR,
     };
   }
   const glyph = resolveAgentGlyphIdentity({ id: session.providerSessionId }, language);
