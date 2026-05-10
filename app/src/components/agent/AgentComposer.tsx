@@ -3,7 +3,7 @@ import { useTranslation } from "react-i18next";
 import { readText as readClipboardText } from "@tauri-apps/plugin-clipboard-manager";
 import { useAgentStore } from "../../store/agentStore";
 import { useFeedbackStore, type DockColumnId, type DockTabId, type GitActionType } from "../../store/feedbackStore";
-import { workspacePathKey } from "../../workspace/workspacePaths";
+import { sameWorkspacePath, workspacePathKey } from "../../workspace/workspacePaths";
 import { hasAgentComposerContent } from "../../agent/composer";
 import { getEnabledOpenCodeModels, useOpenCodeSettings } from "../../openCodeSettings";
 import type { AgentChoiceOption, AgentSession } from "../../agent/types";
@@ -84,6 +84,7 @@ export function AgentComposer({ session }: { session: AgentSession }) {
   const ensureAgentCommands = useAgentStore((state) => state.ensureAgentCommands);
   const dockLayout = useFeedbackStore((state) => state.dockLayout);
   const setFocusedComposer = useFeedbackStore((state) => state.setFocusedComposer);
+  const mlcActiveWorkspacePath = useFeedbackStore((state) => state.mlcActiveWorkspacePath);
   const setMlcActiveWorkspacePath = useFeedbackStore((state) => state.setMlcActiveWorkspacePath);
   const setDockActiveTab = useFeedbackStore((state) => state.setDockActiveTab);
   const setDockColumnCollapsed = useFeedbackStore((state) => state.setDockColumnCollapsed);
@@ -105,9 +106,23 @@ export function AgentComposer({ session }: { session: AgentSession }) {
     DOCK_COLUMN_IDS.find((columnId) => dockLayout.columns[columnId].tabIds.includes(tabId)) || null
   ), [dockLayout.columns]);
 
-  const isDockTabActive = useCallback((tabId: DockTabId): boolean => (
-    DOCK_COLUMN_IDS.some((columnId) => dockLayout.columns[columnId].activeTabId === tabId)
-  ), [dockLayout.columns]);
+  const mlcDockColumnId = findDockColumnForTab("mlc");
+  const resourcesDockColumnId = findDockColumnForTab("resources");
+  const previewDockColumnId = findDockColumnForTab("previewBrowser");
+  const previewInfoDockColumnId = findDockColumnForTab("previewInfo");
+  const isMlcButtonActive = !!mlcDockColumnId
+    && !dockLayout.columns[mlcDockColumnId].collapsed
+    && dockLayout.columns[mlcDockColumnId].activeTabId === "mlc"
+    && !!session.cwd
+    && sameWorkspacePath(mlcActiveWorkspacePath, session.cwd);
+  const isResourceButtonActive = !!resourcesDockColumnId
+    && !dockLayout.columns[resourcesDockColumnId].collapsed
+    && dockLayout.columns[resourcesDockColumnId].activeTabId === "resources"
+    && !!session.cwd
+    && sameWorkspacePath(mlcActiveWorkspacePath, session.cwd);
+  const isPreviewButtonActive = !!previewDockColumnId
+    && !dockLayout.columns[previewDockColumnId].collapsed
+    && dockLayout.columns[previewDockColumnId].activeTabId === "previewBrowser";
 
   const focusAgentComposer = useCallback(() => {
     setFocusedComposer({
@@ -129,38 +144,49 @@ export function AgentComposer({ session }: { session: AgentSession }) {
   }, [ensureAgentCommands, session.availableCommands?.length, session.availableCommandsLoading, session.draft, session.id]);
 
   const openResourcesPanel = useCallback(() => {
+    if (isResourceButtonActive) {
+      if (resourcesDockColumnId) setDockColumnCollapsed(resourcesDockColumnId, true);
+      return;
+    }
+    if (!session.cwd) return;
     focusAgentComposer();
     setMlcActiveWorkspacePath(session.cwd);
-    const resourcesColumnId = findDockColumnForTab("resources");
-    const targetColumnId = resourcesColumnId || "rightSidebar";
-    if (!resourcesColumnId) moveDockTabToColumn("resources", targetColumnId);
+    const targetColumnId = resourcesDockColumnId || "rightSidebar";
+    if (!resourcesDockColumnId) moveDockTabToColumn("resources", targetColumnId);
     setDockColumnCollapsed(targetColumnId, false);
     setDockActiveTab(targetColumnId, "resources");
-  }, [findDockColumnForTab, focusAgentComposer, moveDockTabToColumn, session.cwd, setDockActiveTab, setDockColumnCollapsed, setMlcActiveWorkspacePath]);
+  }, [focusAgentComposer, isResourceButtonActive, moveDockTabToColumn, resourcesDockColumnId, session.cwd, setDockActiveTab, setDockColumnCollapsed, setMlcActiveWorkspacePath]);
 
   const openMlcPanel = useCallback(() => {
+    if (isMlcButtonActive) {
+      if (mlcDockColumnId) setDockColumnCollapsed(mlcDockColumnId, true);
+      return;
+    }
+    if (!session.cwd) return;
     focusAgentComposer();
     setMlcActiveWorkspacePath(session.cwd);
-    const mlcColumnId = findDockColumnForTab("mlc");
-    const targetColumnId = mlcColumnId || "rightSidebar";
-    if (!mlcColumnId) moveDockTabToColumn("mlc", targetColumnId);
+    const targetColumnId = mlcDockColumnId || "rightSidebar";
+    if (!mlcDockColumnId) moveDockTabToColumn("mlc", targetColumnId);
     setDockColumnCollapsed(targetColumnId, false);
     setDockActiveTab(targetColumnId, "mlc");
-  }, [findDockColumnForTab, focusAgentComposer, moveDockTabToColumn, session.cwd, setDockActiveTab, setDockColumnCollapsed, setMlcActiveWorkspacePath]);
+  }, [focusAgentComposer, isMlcButtonActive, mlcDockColumnId, moveDockTabToColumn, session.cwd, setDockActiveTab, setDockColumnCollapsed, setMlcActiveWorkspacePath]);
 
   const openPreviewPanel = useCallback(() => {
+    if (isPreviewButtonActive) {
+      if (previewDockColumnId) setDockColumnCollapsed(previewDockColumnId, true);
+      if (previewInfoDockColumnId && previewInfoDockColumnId !== previewDockColumnId) setDockColumnCollapsed(previewInfoDockColumnId, true);
+      return;
+    }
     focusAgentComposer();
-    const previewColumnId = findDockColumnForTab("previewBrowser");
-    const previewInfoColumnId = findDockColumnForTab("previewInfo");
-    const targetColumnId = previewColumnId && previewColumnId !== previewInfoColumnId ? previewColumnId : "leftPage";
-    if (previewColumnId !== targetColumnId) moveDockTabToColumn("previewBrowser", targetColumnId);
-    const infoTargetColumnId = previewInfoColumnId && previewInfoColumnId !== targetColumnId ? previewInfoColumnId : "rightSidebar";
-    if (previewInfoColumnId !== infoTargetColumnId) moveDockTabToColumn("previewInfo", infoTargetColumnId);
+    const targetColumnId = previewDockColumnId && previewDockColumnId !== previewInfoDockColumnId ? previewDockColumnId : "leftPage";
+    if (previewDockColumnId !== targetColumnId) moveDockTabToColumn("previewBrowser", targetColumnId);
+    const infoTargetColumnId = previewInfoDockColumnId && previewInfoDockColumnId !== targetColumnId ? previewInfoDockColumnId : "rightSidebar";
+    if (previewInfoDockColumnId !== infoTargetColumnId) moveDockTabToColumn("previewInfo", infoTargetColumnId);
     setDockColumnCollapsed(targetColumnId, false);
     setDockColumnCollapsed(infoTargetColumnId, false);
     setDockActiveTab(targetColumnId, "previewBrowser");
     if (infoTargetColumnId !== targetColumnId) setDockActiveTab(infoTargetColumnId, "previewInfo");
-  }, [findDockColumnForTab, focusAgentComposer, moveDockTabToColumn, setDockActiveTab, setDockColumnCollapsed]);
+  }, [focusAgentComposer, isPreviewButtonActive, moveDockTabToColumn, previewDockColumnId, previewInfoDockColumnId, setDockActiveTab, setDockColumnCollapsed]);
 
   const send = useCallback(() => {
     void sendAgentPrompt(session.id);
@@ -192,10 +218,6 @@ export function AgentComposer({ session }: { session: AgentSession }) {
     setGitAction(session.id, { type, branchName: type === "create-branch" ? "" : undefined });
     if (type === "create-branch") setTimeout(() => branchInputRef.current?.focus(), 50);
   }, [session.gitAction?.type, session.id, setGitAction]);
-
-  const isResourceButtonActive = isDockTabActive("resources");
-  const isPreviewButtonActive = isDockTabActive("previewBrowser") || isDockTabActive("previewInfo");
-  const isMlcButtonActive = isDockTabActive("mlc");
 
   const attachmentActionButtons = (
     <>
