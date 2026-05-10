@@ -311,7 +311,7 @@ impl SessionManager {
             };
             let workspace_path = self.latest_workspace_path_for_caller(caller_id).unwrap_or_default();
             let workspace_key = if !caller.workspace_key.trim().is_empty() {
-                caller.workspace_key.clone()
+                normalize_workspace_path_key(&caller.workspace_key)
             } else {
                 workspace_color_key(&workspace_path, &caller.name)
             };

@@ -42,7 +42,7 @@ export function resolveWorkspaceIdentity(input: WorkspaceIdentityInput): Workspa
     const candidateKey = workspacePathKey(candidate.workspaceKey) || workspacePathKey(candidate.workspacePath || "");
     return candidateKey && candidateKey === workspaceKey;
   });
-  const color = input.color?.trim() || matchingCandidate?.color?.trim() || fallbackWorkspaceColor(workspaceKey);
+  const color = matchingCandidate?.color?.trim() || input.color?.trim() || fallbackWorkspaceColor(workspaceKey);
   return {
     workspaceKey,
     workspacePath,

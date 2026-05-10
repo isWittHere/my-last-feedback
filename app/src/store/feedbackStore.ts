@@ -443,6 +443,45 @@ function normalizeFocusedComposer(focus: FocusedComposer): FocusedComposer {
   };
 }
 
+function latestWorkspaceKeyForCaller(callerId: string, sessions: Session[]): string {
+  for (let index = sessions.length - 1; index >= 0; index -= 1) {
+    const session = sessions[index];
+    if (session.callerId !== callerId) continue;
+    const key = workspacePathKey(session.projectDirectory);
+    if (key) return key;
+  }
+  return "";
+}
+
+function callerWorkspaceKey(caller: Caller, sessions: Session[]): string {
+  return workspacePathKey(caller.workspaceKey) || latestWorkspaceKeyForCaller(caller.id, sessions);
+}
+
+function syncCallerWorkspaceColors(
+  callers: Caller[],
+  sessions: Session[],
+  preferred?: { workspaceKey?: string | null; color?: string | null },
+): Caller[] {
+  const colorByWorkspace = new Map<string, string>();
+  const preferredKey = workspacePathKey(preferred?.workspaceKey);
+  const preferredColor = preferred?.color?.trim();
+  if (preferredKey && preferredColor) colorByWorkspace.set(preferredKey, preferredColor);
+  for (const caller of callers) {
+    const key = callerWorkspaceKey(caller, sessions);
+    const color = caller.color?.trim();
+    if (key && color && !colorByWorkspace.has(key)) colorByWorkspace.set(key, color);
+  }
+  return callers.map((caller) => {
+    const key = callerWorkspaceKey(caller, sessions);
+    const color = key ? colorByWorkspace.get(key) : undefined;
+    return {
+      ...caller,
+      workspaceKey: key || caller.workspaceKey,
+      color: color || caller.color,
+    };
+  });
+}
+
 const DOCK_COLUMN_IDS: DockColumnId[] = ["leftSidebar", "leftPage", "rightPage", "rightSidebar"];
 const KNOWN_DOCK_TABS: DockTabId[] = ["mlc", "resources", "mlcPreview", "previewBrowser", "previewInfo", "agentConsole", "agentSessions", "terminal"];
 const DEFAULT_DOCK_TABS: DockTabId[] = ["mlc", "mlcPreview", "resources", "previewBrowser", "previewInfo", "agentConsole", "agentSessions", "terminal"];
@@ -752,34 +791,40 @@ export const useFeedbackStore = create<FeedbackState>((set, get) => ({
 
   addCaller: (caller) => {
     const normalizedCaller = normalizeCallerInfo(caller);
-    const { callers, callerOrder } = get();
+    const { callers, callerOrder, sessions } = get();
     const existing = callers.find((c) => c.id === normalizedCaller.id);
     if (existing) {
       // Update caller metadata that may arrive after the initial registration.
       const needsUpdate = (!existing.clientName && normalizedCaller.clientName)
         || (!existing.alias && normalizedCaller.alias)
+        || (!!normalizedCaller.color && existing.color !== normalizedCaller.color)
         || (!!normalizedCaller.workspaceKey && existing.workspaceKey !== normalizedCaller.workspaceKey);
       if (needsUpdate) {
-        set({ callers: callers.map((c) => c.id === normalizedCaller.id ? {
+        const nextCallers = callers.map((c) => c.id === normalizedCaller.id ? {
           ...c,
           clientName: c.clientName || normalizedCaller.clientName,
           alias: c.alias || normalizedCaller.alias,
           workspaceKey: normalizedCaller.workspaceKey || c.workspaceKey,
-        } : c) });
+          color: normalizedCaller.color || c.color,
+        } : c);
+        set({ callers: syncCallerWorkspaceColors(nextCallers, sessions, { workspaceKey: normalizedCaller.workspaceKey || existing.workspaceKey, color: normalizedCaller.color || existing.color }) });
       }
       return;
     }
     const nextOrder = callerOrder.includes(normalizedCaller.id)
       ? callerOrder
       : [...callerOrder, normalizedCaller.id];
-    set({ callers: [...callers, normalizedCaller], callerOrder: nextOrder });
+    set({ callers: syncCallerWorkspaceColors([...callers, normalizedCaller], sessions, { workspaceKey: normalizedCaller.workspaceKey, color: normalizedCaller.color }), callerOrder: nextOrder });
   },
 
   updateCallerColor: (id, color) => {
     set((state) => ({
-      callers: state.callers.map((c) =>
-        c.id === id ? { ...c, color } : c
-      ),
+      callers: (() => {
+        const target = state.callers.find((caller) => caller.id === id);
+        const workspaceKey = target ? callerWorkspaceKey(target, state.sessions) : "";
+        const updated = state.callers.map((caller) => caller.id === id ? { ...caller, color } : caller);
+        return syncCallerWorkspaceColors(updated, state.sessions, { workspaceKey, color });
+      })(),
     }));
   },
 
@@ -927,10 +972,11 @@ export const useFeedbackStore = create<FeedbackState>((set, get) => ({
       if (idx >= 0) {
         const next = state.sessions.slice();
         next[idx] = normalizedSession;
-        return { sessions: next };
+        return { sessions: next, callers: syncCallerWorkspaceColors(state.callers, next) };
       }
       inserted = true;
-      return { sessions: [...state.sessions, normalizedSession] };
+      const next = [...state.sessions, normalizedSession];
+      return { sessions: next, callers: syncCallerWorkspaceColors(state.callers, next) };
     });
     if (inserted && normalizedSession.status === "pending" && options?.applyQueuedDraft !== false) {
       get().applyQueuedDraftToSession(normalizedSession.callerId, normalizedSession.id);
