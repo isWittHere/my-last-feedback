@@ -10,6 +10,7 @@ import type { AgentChoiceOption, AgentCompactionBlock, AgentContentBlock, AgentC
 import type { AgentProviderId } from "../agent/types";
 import type { GitAction, ImageAttachment, MlcAttachment, WebAttachment } from "./feedbackStore";
 import { workspacePathKey } from "../workspace/workspacePaths";
+import { resolveAgentName } from "../identity/agentIdentity";
 
 export interface AgentProviderSessionListState {
   providerId: AgentProviderId;
@@ -1792,6 +1793,7 @@ export const useAgentStore = create<AgentStoreState>((set, get) => ({
     const session: AgentSession = {
       ...createAgentSession(),
       id: sessionId,
+      agentName: resolveAgentName({ id: sessionId }),
       title: "New Agent Session",
       cwd: requestedCwd || activeSession?.cwd || "",
       workspaceKey,
@@ -2564,6 +2566,7 @@ export const useAgentStore = create<AgentStoreState>((set, get) => ({
         sessions: reusableSession
           ? updateSession(state.sessions, reusableSession.id, (item) => appendDiagnosticToSession({
             ...item,
+            agentName: item.agentName || resolveAgentName({ id: item.id }),
             title: providerSession?.title || listItem?.title || item.title,
             cwd: restoredCwd || item.cwd,
             workspaceKey: restoredWorkspaceKey || item.workspaceKey,
@@ -2593,6 +2596,7 @@ export const useAgentStore = create<AgentStoreState>((set, get) => ({
           : [...state.sessions, appendDiagnosticToSession({
             ...createAgentSession(),
             id: targetSessionId,
+            agentName: resolveAgentName({ id: targetSessionId }),
             providerId,
             title: providerSession?.title || listItem?.title || session.title,
             cwd: restoredCwd,
@@ -2683,6 +2687,7 @@ export const useAgentStore = create<AgentStoreState>((set, get) => ({
         return appendDiagnosticToSession({
           ...createAgentSession(),
           id: item.id,
+          agentName: item.agentName || resolveAgentName({ id: item.id }),
           providerId: item.providerId,
           providerRuntime: item.providerRuntime,
           title: "New Agent Session",

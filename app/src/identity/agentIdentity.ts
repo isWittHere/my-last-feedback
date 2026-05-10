@@ -11,6 +11,18 @@ export interface AgentIdentityInput {
   id?: string | null;
 }
 
+export interface AgentGlyphIdentityInput {
+  agentName?: string | null;
+  id?: string | null;
+  fallbackId?: string | null;
+}
+
+export interface AgentGlyphIdentity {
+  agentName: string;
+  nickname: string;
+  avatarSeed: string;
+}
+
 export interface AgentIdentity {
   alias: string;
   nickname: string;
@@ -37,18 +49,51 @@ export function formatAgentTargetLabel(args: { source?: AgentIdentitySource | nu
   return targetName ? `${sourceLabel} ${targetName}` : sourceLabel;
 }
 
+function hashString(value: string): number {
+  let hash = 0x811c9dc5;
+  for (let index = 0; index < value.length; index += 1) {
+    hash ^= value.charCodeAt(index);
+    hash = Math.imul(hash, 0x01000193) >>> 0;
+  }
+  return hash >>> 0;
+}
+
+export function deriveAgentNameFromId(id?: string | null): string {
+  const seed = id?.trim() || "agent";
+  return hashString(seed).toString(16).padStart(8, "0").slice(0, 4).toUpperCase();
+}
+
+export function normalizeAgentName(agentName?: string | null): string {
+  const cleanName = agentName?.trim().toUpperCase() || "";
+  if (!cleanName) return "";
+  return /^[A-Z0-9]{4}$/.test(cleanName) ? cleanName : deriveAgentNameFromId(cleanName);
+}
+
+export function resolveAgentName(input: AgentGlyphIdentityInput): string {
+  return normalizeAgentName(input.agentName) || deriveAgentNameFromId(input.id || input.fallbackId || "agent");
+}
+
+export function resolveAgentGlyphIdentity(input: AgentGlyphIdentityInput, language: AgentIdentityLanguage = "en"): AgentGlyphIdentity {
+  const agentName = resolveAgentName(input);
+  return {
+    agentName,
+    nickname: getFriendlyName(agentName, language),
+    avatarSeed: agentName,
+  };
+}
+
 export function agentNickname(alias?: string | null, language: AgentIdentityLanguage = "en", fallbackName?: string | null): string {
-  const cleanAlias = alias?.trim();
+  const cleanAlias = normalizeAgentName(alias);
   if (cleanAlias) return getFriendlyName(cleanAlias, language);
   return fallbackName?.trim() || "";
 }
 
 export function agentAvatarSeed(input: Pick<AgentIdentityInput, "alias" | "id" | "fallbackName" | "clientName">): string {
-  return input.alias?.trim() || input.id?.trim() || input.fallbackName?.trim() || input.clientName?.trim() || "agent";
+  return resolveAgentName({ agentName: input.alias, id: input.id, fallbackId: input.fallbackName || input.clientName });
 }
 
 export function resolveAgentIdentity(input: AgentIdentityInput, language: AgentIdentityLanguage = "en"): AgentIdentity {
-  const alias = input.alias?.trim() || "";
+  const alias = normalizeAgentName(input.alias);
   const fallbackName = input.fallbackName?.trim() || "";
   const nickname = agentNickname(alias, language, fallbackName);
   const avatarSeed = agentAvatarSeed(input);

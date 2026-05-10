@@ -207,14 +207,8 @@ export function AgentSessionManagerPanel() {
       workspaceKey: caller?.workspaceKey,
       workspacePath: requestSession.projectDirectory,
       color: caller?.color,
-        ownerAlias: caller?.alias,
     };
   }), [callerData, recentRequestPaths]);
-
-  const ownerAliasForWorkspace = useCallback((workspaceKey: string) => workspaceColorCandidates.find((candidate) => {
-    const candidateKey = candidate.workspaceKey?.trim() || workspacePathKey(candidate.workspacePath || "");
-    return candidateKey && candidateKey === workspaceKey;
-  })?.ownerAlias?.trim() || "", [workspaceColorCandidates]);
 
   const pathCandidates = useMemo(() => {
     const candidates: AgentWorkspacePathCandidate[] = [];
@@ -437,7 +431,7 @@ export function AgentSessionManagerPanel() {
                             if (row.type === "local") {
                               const session = row.session;
                               const workspaceIdentity = resolveWorkspaceIdentity({ workspacePath: session.cwd, workspaceKey: session.workspaceKey, candidates: workspaceColorCandidates });
-                              const identity = getAgentSessionIdentity(session, i18n.language.startsWith("zh") ? "zh" : "en", { color: workspaceIdentity.color, ownerAlias: session.ownerAlias || ownerAliasForWorkspace(workspaceIdentity.workspaceKey) });
+                              const identity = getAgentSessionIdentity(session, i18n.language.startsWith("zh") ? "zh" : "en", { color: workspaceIdentity.color });
                               const folderName = folderNameFromPath(session.cwd);
                               const metaTitle = sessionMetaTitle(session.updatedAt || session.createdAt, session.cwd);
                               return (
@@ -468,7 +462,7 @@ export function AgentSessionManagerPanel() {
                             const boundSession = providerSessions.find((session) => session.providerSessionId === item.sessionId && session.providerSessionState !== "provisional");
                             const workspacePath = item.cwd || boundSession?.cwd;
                             const workspaceIdentity = resolveWorkspaceIdentity({ workspacePath, workspaceKey: boundSession?.workspaceKey, candidates: workspaceColorCandidates });
-                            const identity = getAgentProviderSessionIdentity(providerId, item.sessionId, i18n.language.startsWith("zh") ? "zh" : "en", providerLabel(providerId), { color: workspaceIdentity.color, ownerAlias: boundSession?.ownerAlias || ownerAliasForWorkspace(workspaceIdentity.workspaceKey) });
+                            const identity = getAgentProviderSessionIdentity(providerId, item.sessionId, i18n.language.startsWith("zh") ? "zh" : "en", providerLabel(providerId), { color: workspaceIdentity.color });
                             const folderName = folderNameFromPath(workspacePath);
                             const metaTitle = sessionMetaTitle(item.updatedAt, workspacePath);
                             const isActiveRemoteSession = boundSession?.id === activeSessionId;

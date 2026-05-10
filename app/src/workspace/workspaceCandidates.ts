@@ -22,7 +22,7 @@ export function workspaceTargetSourceForComposerKind(kind?: string | null): Work
 }
 
 export function formatWorkspaceTargetLabel(args: { source: WorkspaceTargetSource; ownerName?: string | null; path?: string | null }): string {
-  const targetName = args.ownerName?.trim() || workspaceBasename(args.path) || "";
+  const targetName = args.ownerName?.trim() || "";
   return formatAgentTargetLabel({ source: args.source, targetName });
 }
 

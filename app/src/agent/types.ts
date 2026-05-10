@@ -271,6 +271,7 @@ export interface AgentSession {
   providerSessionId?: string;
   providerSessionState?: AgentProviderSessionState;
   providerRuntime?: AgentProviderRuntimeInfo;
+  agentName?: string;
   title: string;
   cwd: string;
   workspaceKey?: string;

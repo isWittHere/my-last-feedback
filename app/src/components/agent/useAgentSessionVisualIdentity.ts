@@ -5,7 +5,6 @@ import type { AgentSession } from "../../agent/types";
 import { agentIdentityLanguage } from "../../identity/agentIdentity";
 import { resolveWorkspaceIdentity, type WorkspaceColorCandidate } from "../../identity/workspaceIdentity";
 import { useFeedbackStore } from "../../store/feedbackStore";
-import { workspacePathKey } from "../../workspace/workspacePaths";
 
 function useWorkspaceColorCandidates(): WorkspaceColorCandidate[] {
   const callers = useFeedbackStore((state) => state.callers);
@@ -18,17 +17,9 @@ function useWorkspaceColorCandidates(): WorkspaceColorCandidate[] {
         workspaceKey: caller?.workspaceKey,
         workspacePath: session.projectDirectory,
         color: caller?.color,
-        ownerAlias: caller?.alias,
       };
     });
   }, [callers, sessions]);
-}
-
-function matchingOwnerAlias(workspaceKey: string, candidates: WorkspaceColorCandidate[]): string {
-  return candidates.find((candidate) => {
-    const candidateKey = candidate.workspaceKey?.trim() || workspacePathKey(candidate.workspacePath || "");
-    return candidateKey && candidateKey === workspaceKey;
-  })?.ownerAlias?.trim() || "";
 }
 
 export function useAgentSessionVisualIdentity(session: AgentSession): AgentSessionIdentity {
@@ -43,6 +34,6 @@ export function useAgentSessionVisualIdentity(session: AgentSession): AgentSessi
   return useMemo(() => getAgentSessionIdentity(
     session,
     agentIdentityLanguage(i18n.language),
-    { color: workspaceIdentity.color, ownerAlias: session.ownerAlias || matchingOwnerAlias(workspaceIdentity.workspaceKey, candidates) },
-  ), [candidates, i18n.language, session, workspaceIdentity.color, workspaceIdentity.workspaceKey]);
+    { color: workspaceIdentity.color },
+  ), [i18n.language, session, workspaceIdentity.color]);
 }

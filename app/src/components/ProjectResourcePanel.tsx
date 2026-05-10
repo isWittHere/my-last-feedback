@@ -2,7 +2,7 @@ import { useCallback, useEffect, useMemo, useState, type CSSProperties, type Rea
 import { useTranslation } from "react-i18next";
 import { invoke } from "@tauri-apps/api/core";
 import { useFeedbackStore } from "../store/feedbackStore";
-import { agentIdentityLanguage, agentNickname } from "../identity/agentIdentity";
+import { agentIdentityLanguage, resolveAgentGlyphIdentity } from "../identity/agentIdentity";
 import { buildWorkspaceOptions, formatWorkspaceTargetLabel, workspaceTargetSourceForComposerKind } from "../workspace/workspaceCandidates";
 import { cleanDisplayPath, sameWorkspacePath, workspacePathKey } from "../workspace/workspacePaths";
 import { CatppuccinResourceIcon } from "./CatppuccinResourceIcon";
@@ -91,16 +91,6 @@ export function ProjectResourcePanel() {
       })
       .join("\n");
   });
-  const sessionWorkspaceOwnerNamesKey = useFeedbackStore((state) => {
-    const callerNames = new Map(state.callers.map((caller) => [caller.id, agentNickname(caller.alias, friendlyNameLanguage, caller.name)] as const));
-    const owners = new Map<string, string>();
-    for (const session of state.sessions) {
-      const key = workspacePathKey(session.projectDirectory);
-      const ownerName = callerNames.get(session.callerId);
-      if (key && ownerName && !owners.has(key)) owners.set(key, ownerName);
-    }
-    return Array.from(owners.entries()).map(([key, ownerName]) => `${key}\t${ownerName}`).join("\n");
-  });
   const resourceIconTheme = useFeedbackStore((state) => state.resourceIconTheme);
   const activeWorkspacePath = useFeedbackStore((state) => state.mlcActiveWorkspacePath);
   const setActiveWorkspacePath = useFeedbackStore((state) => state.setMlcActiveWorkspacePath);
@@ -111,16 +101,14 @@ export function ProjectResourcePanel() {
   const [error, setError] = useState<string | null>(null);
 
   const targetWorkspacePath = focusedComposer?.projectDirectory || "";
-  const workspaceOwnerNames = useMemo(() => new Map(sessionWorkspaceOwnerNamesKey
-    .split("\n")
-    .filter(Boolean)
-    .map((line) => {
-      const [key, ownerName] = line.split("\t");
-      return [key, ownerName] as const;
-    })), [sessionWorkspaceOwnerNamesKey]);
-  const targetOwnerName = agentNickname(targetCaller?.alias, friendlyNameLanguage, targetCaller?.name)
-    || agentNickname(focusedComposer?.ownerAlias, friendlyNameLanguage)
-    || workspaceOwnerNames.get(workspacePathKey(targetWorkspacePath))
+  const targetSessionName = focusedComposer?.kind === "agent" && focusedComposer.sessionId
+    ? resolveAgentGlyphIdentity({ id: focusedComposer.sessionId }, friendlyNameLanguage).nickname
+    : "";
+  const targetCallerName = targetCaller
+    ? resolveAgentGlyphIdentity({ agentName: targetCaller.alias, id: targetCaller.id }, friendlyNameLanguage).nickname
+    : "";
+  const targetOwnerName = targetCallerName
+    || targetSessionName
     || "";
   const targetLabel = formatWorkspaceTargetLabel({ source: workspaceTargetSourceForComposerKind(focusedComposer?.kind), ownerName: targetOwnerName, path: targetWorkspacePath });
 
