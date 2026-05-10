@@ -212,14 +212,23 @@ function AgentSimpleStatusRow({ phase, statusKind, label, detail }: { phase: Age
   );
 }
 
-function AgentSettlingStatusRow({ onComplete }: { onComplete: () => void }) {
-  const { t } = useTranslation();
+function AgentCompletionStatusRow({ label, onComplete }: { label: string; onComplete: () => void }) {
+  const completionTimerRef = useRef<number | null>(null);
+
+  useEffect(() => () => {
+    if (completionTimerRef.current) window.clearTimeout(completionTimerRef.current);
+  }, []);
+
+  const handleComplete = () => {
+    if (completionTimerRef.current) window.clearTimeout(completionTimerRef.current);
+    completionTimerRef.current = window.setTimeout(onComplete, 750);
+  };
 
   return (
     <section className="agent-approval-row agent-current-status-row" data-status-kind="settle" data-preview-overlay>
       <div className="agent-approval-row-main agent-current-status-row-main">
-        <AgentActivityMatrix key="settle" phase="settle" onComplete={onComplete} />
-        <AnimatedStatusText className="agent-approval-row-label agent-silver-shimmer-text" textKey="settling">{t("agentConsole.currentStatusSettling", "Finishing")}</AnimatedStatusText>
+        <AgentActivityMatrix key="settle" phase="settle" onComplete={handleComplete} />
+        <AnimatedStatusText className="agent-approval-row-label agent-silver-shimmer-text" textKey={label}>{label}</AnimatedStatusText>
       </div>
     </section>
   );
@@ -228,6 +237,7 @@ function AgentSettlingStatusRow({ onComplete }: { onComplete: () => void }) {
 export function AgentCurrentStatusRow({ session }: { session: AgentSession }) {
   const { t } = useTranslation();
   const { approvalDisplayMode } = useAgentConsoleSettings();
+  const providerPreparationStatus = useAgentStore((state) => state.providerSessionLists[session.providerId]?.preparationStatus);
   const status = useMemo(() => getAgentCurrentStatus(session), [session]);
   const sessionActive = isSessionActivityActive(session);
   const previousSessionActiveRef = useRef(sessionActive);
@@ -266,13 +276,17 @@ export function AgentCurrentStatusRow({ session }: { session: AgentSession }) {
   let content: ReactNode | null = null;
 
   if (!status) {
-    if (sessionActive && heldPhase) {
+    if (providerPreparationStatus === "preparing") {
+      content = <AgentSimpleStatusRow phase="thinking" statusKind="provider-preparing" label={t("agentConsole.currentStatusPreparingMyLastCode", "Preparing My Last Code")} />;
+    } else if (providerPreparationStatus === "ready") {
+      content = <AgentCompletionStatusRow label={t("agentConsole.currentStatusProviderReady", "Ready")} onComplete={() => undefined} />;
+    } else if (sessionActive && heldPhase) {
       const processingLabel = heldPhase === "approval"
         ? t("agentConsole.currentStatusWaitingApproval", "Waiting approval")
         : t("agentConsole.currentStatusProcessing", "Processing");
       content = <AgentSimpleStatusRow phase={heldPhase} statusKind="processing" label={processingLabel} />;
     } else if (settling) {
-      content = <AgentSettlingStatusRow onComplete={() => setSettling(false)} />;
+      content = <AgentCompletionStatusRow label={t("agentConsole.currentStatusOutputComplete", "Output complete")} onComplete={() => setSettling(false)} />;
     }
     return <AgentStatusDrawer>{content}</AgentStatusDrawer>;
   }

@@ -15,6 +15,7 @@ import { resolveAgentName } from "../identity/agentIdentity";
 export interface AgentProviderSessionListState {
   providerId: AgentProviderId;
   status: "idle" | "loading" | "ready" | "error" | "unsupported";
+  preparationStatus?: "preparing" | "ready";
   capability: "supported" | "unsupported" | "unknown";
   sessions: AgentProviderSessionItem[];
   nextCursor?: string | null;
@@ -1776,6 +1777,8 @@ function agentNameFromProviderSessionId(providerSessionId: string): string {
   return resolveAgentName({ id: providerSessionId });
 }
 
+const providerPreparationClearTimers = new Map<AgentProviderId, number>();
+
 export const useAgentStore = create<AgentStoreState>((set, get) => ({
   sessions: [{ ...createAgentSession(), openCodePermissionRules: openCodeConfiguredPermissionRules() }],
   activeSessionId: "agent-session-opencode",
@@ -2491,9 +2494,63 @@ export const useAgentStore = create<AgentStoreState>((set, get) => ({
     let session = get().sessions.find((item) => item.providerId === providerId) || get().getActiveSession();
     let httpRuntime = openCodeHttpRuntimeForSession(session, get().sessions);
     if (!httpRuntime && session?.providerId === "opencode") {
+      const previousClearTimer = providerPreparationClearTimers.get(providerId);
+      if (previousClearTimer) window.clearTimeout(previousClearTimer);
+      providerPreparationClearTimers.delete(providerId);
+      set((state) => {
+        const existing = state.providerSessionLists[providerId];
+        return {
+          providerSessionLists: {
+            ...state.providerSessionLists,
+            [providerId]: {
+              providerId,
+              status: existing?.status || "idle",
+              preparationStatus: "preparing",
+              capability: existing?.capability || "unknown",
+              sessions: existing?.sessions || [],
+              nextCursor: existing?.nextCursor || null,
+              error: existing?.error,
+              updatedAt: existing?.updatedAt,
+            },
+          },
+        };
+      });
       await get().startOpenCodeProvider(session.id, { silent: true });
       session = get().sessions.find((item) => item.id === session?.id) || get().sessions.find((item) => item.providerId === providerId) || get().getActiveSession();
       httpRuntime = openCodeHttpRuntimeForSession(session, get().sessions);
+      if (httpRuntime) {
+        set((state) => {
+          const existing = state.providerSessionLists[providerId];
+          return {
+            providerSessionLists: {
+              ...state.providerSessionLists,
+              [providerId]: {
+                providerId,
+                status: existing?.status || "idle",
+                preparationStatus: "ready",
+                capability: existing?.capability || "supported",
+                sessions: existing?.sessions || [],
+                nextCursor: existing?.nextCursor || null,
+                error: existing?.error,
+                updatedAt: existing?.updatedAt,
+              },
+            },
+          };
+        });
+        providerPreparationClearTimers.set(providerId, window.setTimeout(() => {
+          providerPreparationClearTimers.delete(providerId);
+          useAgentStore.setState((state) => {
+            const existing = state.providerSessionLists[providerId];
+            if (!existing || existing.preparationStatus !== "ready") return {};
+            return {
+              providerSessionLists: {
+                ...state.providerSessionLists,
+                [providerId]: { ...existing, preparationStatus: undefined },
+              },
+            };
+          });
+        }, 3200));
+      }
     }
     if (httpRuntime) {
       const existing = get().providerSessionLists[providerId];
@@ -2503,6 +2560,7 @@ export const useAgentStore = create<AgentStoreState>((set, get) => ({
           [providerId]: {
             providerId,
             status: "loading",
+            preparationStatus: existing?.preparationStatus,
             capability: "supported",
             sessions: cursor ? existing?.sessions || [] : [],
             nextCursor: null,
@@ -2528,6 +2586,7 @@ export const useAgentStore = create<AgentStoreState>((set, get) => ({
             [providerId]: {
               providerId,
               status: "ready",
+              preparationStatus: existing?.preparationStatus,
               capability: "supported",
               sessions: normalized,
               nextCursor: null,
@@ -2542,6 +2601,7 @@ export const useAgentStore = create<AgentStoreState>((set, get) => ({
             [providerId]: {
               providerId,
               status: "error",
+              preparationStatus: undefined,
               capability: "supported",
               sessions: existing?.sessions || [],
               nextCursor: null,
@@ -2560,6 +2620,7 @@ export const useAgentStore = create<AgentStoreState>((set, get) => ({
         [providerId]: {
           providerId,
           status: "error",
+            preparationStatus: undefined,
           capability: "unknown",
           sessions: existing?.sessions || [],
           nextCursor: existing?.nextCursor,

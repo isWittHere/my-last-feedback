@@ -165,7 +165,7 @@ const toolMorphPreset: MatrixPreset = {
 
 const settleScanPreset: MatrixPreset = {
   id: "settle-scan",
-  interval: 55,
+  interval: 85,
   gen: function* () {
     for (let holdIndex = 0; holdIndex < 2; holdIndex += 1) yield emptyFrame();
     for (let rowIndex = 0; rowIndex < 7; rowIndex += 1) {
