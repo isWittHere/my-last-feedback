@@ -836,6 +836,24 @@ function initials(name){
   if(parts.length === 1) return parts[0].slice(0,2).toUpperCase();
   return (parts[0][0] + parts[1][0]).toUpperCase();
 }
+function normalizeWorkspacePath(value){
+  if(!value) return "";
+  const slashed = String(value).trim()
+    .replace(/^\\\\\?\\UNC\\/i, "//")
+    .replace(/^\\\\\?\\/i, "")
+    .replace(/^\/\/\?\/UNC\//i, "//")
+    .replace(/^\/\/\?\//i, "")
+    .replace(/\\/g, "/");
+  const withoutTrailing = slashed.replace(/\/+$/g, "");
+  const trimmed = /^[A-Za-z]:$/.test(withoutTrailing) && slashed.startsWith(`${withoutTrailing}/`) ? `${withoutTrailing}/` : withoutTrailing;
+  return trimmed.replace(/^([A-Za-z]):(?=\/|$)/, (_, drive)=>`${drive.toUpperCase()}:`);
+}
+function workspacePathKey(value){
+  return normalizeWorkspacePath(value).toLowerCase();
+}
+function sameWorkspacePath(left, right){
+  return workspacePathKey(left) === workspacePathKey(right);
+}
 
 /**
  * Identicon 生成（与 PC 端 IdenticonAvatar.tsx 算法保持一致）
@@ -1004,7 +1022,7 @@ const app = {
       const resp = await fetch("sessions.json", { cache:"no-cache" });
       if(!resp.ok) throw new Error("HTTP "+resp.status);
       const data = await resp.json();
-      State.sessions = data.sessions || [];
+      State.sessions = (data.sessions || []).map(s => ({ ...s, projectDirectory: normalizeWorkspacePath(s.projectDirectory) }));
       State.callers = data.callers || [];
       State.meta = data.meta || {};
       // 合并本地编辑（离线草稿）
@@ -1153,7 +1171,9 @@ const app = {
     // 目前 mock 数据里没有 remote（PC 宿主）字段，统一走 "本机"；
     // Phase 2 多设备时会从 sessions 里带回 remote 标识。
     const remotes = [{ id: 'local', label: '本机' }];
-    const workspaces = Array.from(new Set(State.sessions.map(s => s.projectDirectory).filter(Boolean)));
+    const workspaceMap = new Map();
+    State.sessions.map(s => normalizeWorkspacePath(s.projectDirectory)).filter(Boolean).forEach(path => workspaceMap.set(workspacePathKey(path), path));
+    const workspaces = Array.from(workspaceMap.values());
 
     // —— Chip 渲染 ——
     const chip = (active, label, count, onClick, color) => {
@@ -1171,7 +1191,7 @@ const app = {
     const wsChips = [
       chip(f.workspace === 'all', '全部', State.sessions.length, `app.setHomeFilter('workspace','all')`),
       ...workspaces.map(w => {
-        const cnt = State.sessions.filter(s => s.projectDirectory === w).length;
+        const cnt = State.sessions.filter(s => sameWorkspacePath(s.projectDirectory, w)).length;
         // 末级目录名作短标签
         const short = String(w).split(/[\\/]/).filter(Boolean).pop() || w;
         return chip(f.workspace === w, short, cnt, `app.setHomeFilter('workspace',${JSON.stringify(w).replace(/"/g,'&quot;')})`);
@@ -1209,7 +1229,7 @@ const app = {
 
     // —— 应用筛选 ——
     let list = State.sessions.slice();
-    if(f.workspace !== 'all') list = list.filter(s => s.projectDirectory === f.workspace);
+    if(f.workspace !== 'all') list = list.filter(s => sameWorkspacePath(s.projectDirectory, f.workspace));
     if(f.caller !== 'all') list = list.filter(s => s.callerId === f.caller);
     list.sort((a,b) => new Date(b.createdAt) - new Date(a.createdAt));
 

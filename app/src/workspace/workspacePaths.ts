@@ -2,14 +2,29 @@ export function cleanDisplayPath(value: string): string {
   return value.trim().replace(/^\\\\\?\\UNC\\/i, "\\\\").replace(/^\\\\\?\\/i, "");
 }
 
+function normalizeDriveLetter(value: string): string {
+  return value.replace(/^([A-Za-z]):(?=\/|$)/, (_, drive: string) => `${drive.toUpperCase()}:`);
+}
+
+function trimTrailingWorkspaceSlashes(value: string): string {
+  const trimmed = value.replace(/\/+$/g, "");
+  if (/^[A-Za-z]:$/.test(trimmed) && value.startsWith(`${trimmed}/`)) return `${trimmed}/`;
+  if (!trimmed && value.startsWith("/")) return "/";
+  return trimmed;
+}
+
 export function normalizeWorkspacePath(value?: string | null): string | null {
   if (!value) return null;
-  const normalized = cleanDisplayPath(value).replace(/\\/g, "/").replace(/\/+$/g, "");
+  const normalized = normalizeDriveLetter(trimTrailingWorkspaceSlashes(cleanDisplayPath(value).replace(/\\/g, "/")));
   return normalized || null;
 }
 
-export function workspacePathKey(value?: string | null): string {
+export function normalizeWorkspaceKey(value?: string | null): string {
   return normalizeWorkspacePath(value)?.toLowerCase() || "";
+}
+
+export function workspacePathKey(value?: string | null): string {
+  return normalizeWorkspaceKey(value);
 }
 
 export function sameWorkspacePath(left?: string | null, right?: string | null): boolean {
@@ -27,7 +42,7 @@ export function decodeWorkspaceHref(value: string): string {
 }
 
 export function normalizeResourcePath(value: string): string {
-  return decodeWorkspaceHref(value).replace(/^file:\/\/\/?/i, "").replace(/\\/g, "/");
+  return normalizeDriveLetter(decodeWorkspaceHref(value).replace(/^file:\/\/\/?/i, "").replace(/\\/g, "/"));
 }
 
 export function isAbsoluteWorkspacePath(value: string): boolean {

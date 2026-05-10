@@ -9,7 +9,7 @@ import { getOpenCodeDefaultPermissionRules, getOpenCodePermissionPresetRules, op
 import type { AgentChoiceOption, AgentCompactionBlock, AgentContentBlock, AgentContextCompactionConfig, AgentContextUsage, AgentDiagnosticEntry, AgentMessage, AgentModelCapabilities, AgentProviderMessagePart, AgentSession, AgentSessionFileDiff, AgentSubmittedAttachmentTag, AgentThinkingBlock, AgentTokenUsage } from "../agent/types";
 import type { AgentProviderId } from "../agent/types";
 import type { GitAction, ImageAttachment, MlcAttachment, WebAttachment } from "./feedbackStore";
-import { workspacePathKey } from "../workspace/workspacePaths";
+import { normalizeWorkspacePath, workspacePathKey } from "../workspace/workspacePaths";
 import { resolveAgentName } from "../identity/agentIdentity";
 
 export interface AgentProviderSessionListState {
@@ -139,6 +139,10 @@ function openCodePromptPartsWithIds(parts: OpenCodePromptPart[]): OpenCodePrompt
 function normalizeOpenCodeDirectory(value: string | null | undefined): string | undefined {
   const normalized = workspacePathKey(value);
   return normalized || undefined;
+}
+
+function normalizeAgentCwd(value?: string | null): string {
+  return normalizeWorkspacePath(value) || "";
 }
 
 function openCodeGlobalEventMatchesRuntime(event: OpenCodeBusEvent, runtime: OpenCodeServerRuntime, ownerSession: AgentSession): boolean {
@@ -1120,10 +1124,11 @@ function openCodeProviderSessionUpdatedAt(info?: OpenCodeSessionInfo): string | 
 
 function openCodeProviderSessionItemFromInfo(sessionId: string, info?: OpenCodeSessionInfo, existing?: AgentProviderSessionItem): AgentProviderSessionItem {
   const updatedAt = openCodeProviderSessionUpdatedAt(info) || existing?.updatedAt || nowIso();
+  const cwd = info?.directory !== undefined ? normalizeWorkspacePath(info.directory) : existing?.cwd || null;
   return {
     ...existing,
     sessionId,
-    cwd: info?.directory !== undefined ? info.directory || null : existing?.cwd || null,
+    cwd: cwd || null,
     title: info?.title !== undefined ? info.title || null : existing?.title || null,
     updatedAt,
     _meta: {
@@ -1167,7 +1172,7 @@ function applyOpenCodeProviderSessionLifecycle(providerId: AgentProviderId, even
       }
 
       const lifecycleTitle = lifecycle.title?.trim();
-      const lifecycleCwd = lifecycle.cwd;
+      const lifecycleCwd = lifecycle.cwd !== undefined ? normalizeWorkspacePath(lifecycle.cwd) || "" : undefined;
       sessions = sessions.map((session) => {
         if (session.providerId !== providerId || session.providerSessionId !== lifecycle.sessionId) return session;
         const nextCwd = lifecycleCwd !== undefined ? lifecycleCwd || session.cwd : session.cwd;
@@ -1899,16 +1904,17 @@ export const useAgentStore = create<AgentStoreState>((set, get) => ({
   createNewSession: (options = {}) => {
     const state = get();
     const activeSession = state.getActiveSession();
-    const requestedCwd = options.cwd?.trim();
-    const workspaceKey = options.workspaceKey?.trim() || workspacePathKey(requestedCwd || activeSession?.cwd || "");
-    const inheritOpenCodeCommands = !requestedCwd || requestedCwd === activeSession?.cwd;
+    const requestedCwd = normalizeAgentCwd(options.cwd);
+    const activeCwd = normalizeAgentCwd(activeSession?.cwd);
+    const workspaceKey = workspacePathKey(options.workspaceKey) || workspacePathKey(requestedCwd || activeCwd || "");
+    const inheritOpenCodeCommands = !requestedCwd || requestedCwd === activeCwd;
     const createdAt = nowIso();
     const sessionId = newId("agent_session");
     const session: AgentSession = {
       ...createAgentSession(),
       id: sessionId,
       title: "New Agent Session",
-      cwd: requestedCwd || activeSession?.cwd || "",
+      cwd: requestedCwd || activeCwd || "",
       workspaceKey,
       modelId: activeSession?.modelId,
       modeId: activeSession?.modeId,
@@ -2682,7 +2688,7 @@ export const useAgentStore = create<AgentStoreState>((set, get) => ({
         ]);
         const normalized: AgentProviderSessionItem[] = sessions.map((item) => ({
           sessionId: item.id,
-          cwd: item.directory || null,
+          cwd: normalizeWorkspacePath(item.directory) || null,
           title: item.title || null,
           updatedAt: item.time?.updated ? new Date(item.time.updated).toISOString() : null,
           _meta: { slug: item.slug, path: item.path, status: statuses[item.id] },
@@ -2786,7 +2792,7 @@ export const useAgentStore = create<AgentStoreState>((set, get) => ({
       const restoredModelId = restoredSelection.modelId || session.modelId;
       const restoredModeId = selectOpenCodeAgentMode(restoredSelection.modeId || session.modeId, session.availableModes || []);
       const restoredContextUsage = openCodeContextUsageFromMessages(messages, contextLimitForModel(session.availableModels, restoredModelId));
-      const restoredCwd = providerSession?.directory || listItem?.cwd || session.cwd;
+      const restoredCwd = normalizeAgentCwd(providerSession?.directory || listItem?.cwd || session.cwd);
       const restoredWorkspaceKey = workspacePathKey(restoredCwd);
       set((state) => ({
         activeSessionId: targetSessionId,
@@ -2916,8 +2922,8 @@ export const useAgentStore = create<AgentStoreState>((set, get) => ({
           providerSessionState: "provisional",
           providerRuntime: item.providerRuntime,
           title: "New Agent Session",
-          cwd: item.cwd,
-          workspaceKey: item.workspaceKey || workspacePathKey(item.cwd),
+          cwd: normalizeAgentCwd(item.cwd),
+          workspaceKey: workspacePathKey(item.workspaceKey) || workspacePathKey(item.cwd),
           modelId: item.modelId,
           modeId: item.modeId,
           availableModels: item.availableModels || [],

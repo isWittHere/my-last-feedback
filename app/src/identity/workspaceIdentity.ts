@@ -1,4 +1,4 @@
-import { workspaceBasename, workspacePathKey } from "../workspace/workspacePaths";
+import { normalizeWorkspacePath, workspaceBasename, workspacePathKey } from "../workspace/workspacePaths";
 
 export interface WorkspaceColorCandidate {
   workspaceKey?: string | null;
@@ -36,10 +36,10 @@ function fallbackWorkspaceColor(workspaceKey: string): string {
 }
 
 export function resolveWorkspaceIdentity(input: WorkspaceIdentityInput): WorkspaceIdentity {
-  const workspacePath = input.workspacePath?.trim() || "";
-  const workspaceKey = input.workspaceKey?.trim() || workspacePathKey(workspacePath);
+  const workspacePath = normalizeWorkspacePath(input.workspacePath) || "";
+  const workspaceKey = workspacePathKey(input.workspaceKey) || workspacePathKey(workspacePath);
   const matchingCandidate = input.candidates?.find((candidate) => {
-    const candidateKey = candidate.workspaceKey?.trim() || workspacePathKey(candidate.workspacePath || "");
+    const candidateKey = workspacePathKey(candidate.workspaceKey) || workspacePathKey(candidate.workspacePath || "");
     return candidateKey && candidateKey === workspaceKey;
   });
   const color = input.color?.trim() || matchingCandidate?.color?.trim() || fallbackWorkspaceColor(workspaceKey);

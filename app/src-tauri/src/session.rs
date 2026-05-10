@@ -40,19 +40,38 @@ fn hsl_to_hex(h: f64, s: f64, l: f64) -> String {
     )
 }
 
-fn normalize_workspace_path_key(value: &str) -> String {
+fn normalize_workspace_path(value: &str) -> String {
     let mut path = value.trim().to_string();
-    if let Some(rest) = path.strip_prefix(r"\\?\") {
+    if let Some(rest) = path.strip_prefix(r"\\?\UNC\") {
+        path = format!(r"\\{}", rest);
+    } else if let Some(rest) = path.strip_prefix(r"\\?\") {
         path = rest.to_string();
-    }
-    if let Some(rest) = path.strip_prefix("//?/") {
+    } else if let Some(rest) = path.strip_prefix("//?/UNC/") {
+        path = format!("//{}", rest);
+    } else if let Some(rest) = path.strip_prefix("//?/") {
         path = rest.to_string();
     }
     path = path.replace('\\', "/");
-    while path.len() > 1 && path.ends_with('/') {
+    while path.len() > 1 && path.ends_with('/') && !is_windows_drive_root(&path) {
         path.pop();
     }
-    path.to_lowercase()
+    if path.len() >= 2 {
+        let bytes = path.as_bytes();
+        if bytes[1] == b':' && bytes[0].is_ascii_alphabetic() {
+            let drive = (bytes[0] as char).to_ascii_uppercase().to_string();
+            path.replace_range(0..1, &drive);
+        }
+    }
+    path
+}
+
+fn is_windows_drive_root(path: &str) -> bool {
+    let bytes = path.as_bytes();
+    bytes.len() == 3 && bytes[1] == b':' && bytes[2] == b'/' && bytes[0].is_ascii_alphabetic()
+}
+
+fn normalize_workspace_path_key(value: &str) -> String {
+    normalize_workspace_path(value).to_lowercase()
 }
 
 fn workspace_color_key(project_directory: &str, fallback_name: &str) -> String {
@@ -241,7 +260,7 @@ impl SessionManager {
             .iter()
             .rev()
             .find(|entry| entry.detail.caller_id == caller_id && !entry.detail.project_directory.trim().is_empty())
-            .map(|entry| entry.detail.project_directory.clone())
+            .map(|entry| normalize_workspace_path(&entry.detail.project_directory))
     }
 
     fn workspace_key_for_caller_id(&self, caller_id: &str) -> Option<String> {
@@ -252,16 +271,17 @@ impl SessionManager {
 
     fn effective_workspace_key_for_caller(&self, caller_id: &str, caller: &CallerInfo) -> String {
         if !caller.workspace_key.trim().is_empty() {
-            return caller.workspace_key.clone();
+            return normalize_workspace_path_key(&caller.workspace_key);
         }
         self.workspace_key_for_caller_id(caller_id)
             .unwrap_or_else(|| workspace_color_key("", &caller.name))
     }
 
     fn ensure_workspace_color(&mut self, workspace_key: &str, workspace_path: &str, fallback_path: &str, legacy_color: Option<String>) -> String {
+        let normalized_workspace_path = normalize_workspace_path(workspace_path);
         if let Some(existing) = self.workspace_colors.get_mut(workspace_key) {
-            if !workspace_path.trim().is_empty() && existing.path != workspace_path {
-                existing.path = workspace_path.to_string();
+            if !normalized_workspace_path.trim().is_empty() && existing.path != normalized_workspace_path {
+                existing.path = normalized_workspace_path;
             }
             return existing.color.clone();
         }
@@ -274,7 +294,7 @@ impl SessionManager {
                 color
             });
         self.workspace_colors.insert(workspace_key.to_string(), WorkspaceColorInfo {
-            path: if workspace_path.trim().is_empty() { fallback_path.to_string() } else { workspace_path.to_string() },
+            path: if normalized_workspace_path.trim().is_empty() { fallback_path.to_string() } else { normalized_workspace_path },
             color: color.clone(),
         });
         color
@@ -351,12 +371,13 @@ impl SessionManager {
     /// The `alias` parameter is used to distinguish different agents within the same workspace.
     /// Color is assigned per workspace name, so agents in the same workspace share color.
     pub fn ensure_caller(&mut self, name: &str, version: &str, client_name: &str, alias: &str, project_directory: &str) -> CallerInfo {
+        let normalized_project_directory = normalize_workspace_path(project_directory);
         // Caller ID includes alias so different agents are separate callers
         let id_input = if alias.is_empty() { name.to_string() } else { format!("{}:{}", name, alias) };
         let id = format!("caller_{:x}", md5_simple(&id_input));
-        let workspace_key = workspace_color_key(project_directory, name);
+        let workspace_key = workspace_color_key(&normalized_project_directory, name);
         if let Some(existing) = self.callers.get(&id).cloned() {
-            let color = self.ensure_workspace_color(&workspace_key, project_directory, name, Some(existing.color.clone()));
+            let color = self.ensure_workspace_color(&workspace_key, &normalized_project_directory, name, Some(existing.color.clone()));
             let mut result = existing;
             let mut changed = false;
             if let Some(caller) = self.callers.get_mut(&id) {
@@ -390,7 +411,7 @@ impl SessionManager {
             }
             return result;
         }
-        let color = self.ensure_workspace_color(&workspace_key, project_directory, name, None);
+        let color = self.ensure_workspace_color(&workspace_key, &normalized_project_directory, name, None);
         let caller = CallerInfo {
             id: id.clone(),
             name: name.to_string(),
@@ -424,7 +445,7 @@ impl SessionManager {
             request_name,
             request_type,
             summary,
-            project_directory,
+            project_directory: normalize_workspace_path(&project_directory),
             status: SessionStatus::Pending,
             created_at: Utc::now(),
             feedback_text: None,
@@ -701,7 +722,7 @@ impl SessionManager {
                 workspace.path = workspace_path.clone();
             }
         } else {
-            self.workspace_colors.insert(workspace_key.clone(), WorkspaceColorInfo { path: workspace_path, color: color.clone() });
+            self.workspace_colors.insert(workspace_key.clone(), WorkspaceColorInfo { path: normalize_workspace_path(&workspace_path), color: color.clone() });
         }
 
         let caller_ids: Vec<String> = self
@@ -1027,7 +1048,7 @@ impl SessionManager {
                         request_name: ps.request_name,
                         request_type: ps.request_type,
                         summary: ps.summary,
-                        project_directory: ps.project_directory,
+                        project_directory: normalize_workspace_path(&ps.project_directory),
                         status: ps.status,
                         created_at: ps.created_at,
                         feedback_text: ps.feedback_text,
@@ -1042,13 +1063,32 @@ impl SessionManager {
             })
             .collect();
 
+        let callers: HashMap<String, CallerInfo> = history
+            .callers
+            .into_iter()
+            .map(|(id, mut caller)| {
+                caller.workspace_key = normalize_workspace_path_key(&caller.workspace_key);
+                (id, caller)
+            })
+            .collect();
+        let workspace_colors: HashMap<String, WorkspaceColorInfo> = history
+            .workspace_colors
+            .into_iter()
+            .map(|(key, mut workspace)| {
+                let normalized_key = normalize_workspace_path_key(&key);
+                workspace.path = normalize_workspace_path(&workspace.path);
+                (normalized_key, workspace)
+            })
+            .filter(|(key, _)| !key.is_empty())
+            .collect();
+
         eprintln!(
             "[Persist] Loaded {} callers, {} sessions",
-            history.callers.len(),
+            callers.len(),
             sessions.len()
         );
 
-        (history.callers, sessions, history.color_index, history.caller_order, history.workspace_colors)
+        (callers, sessions, history.color_index, history.caller_order, workspace_colors)
     }
 }
 

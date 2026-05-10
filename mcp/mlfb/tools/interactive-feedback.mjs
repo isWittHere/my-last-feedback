@@ -3,7 +3,7 @@
 
 import { z } from "zod";
 import { readFileSync, existsSync } from "node:fs";
-import { resolveCallerInfo } from "../../common/caller-info.mjs";
+import { normalizeWorkspacePath, resolveCallerInfo } from "../../common/caller-info.mjs";
 import {
   ensureAppRunning,
   requestFeedbackViaIpc,
@@ -82,7 +82,7 @@ export function registerInteractiveFeedback(server) {
     },
     async ({ project_directory, summary, request_name, request_type, agent_name, questions }) => {
       const checkedRequestType = normalizeRequestType(request_type);
-      const projectDir = project_directory.split("\n")[0].trim();
+      const projectDir = normalizeWorkspacePath(project_directory.split("\n")[0]) || "";
       const info = await resolveCallerInfo(server, { workspaceHint: projectDir });
 
       // agent_name is required and validated by zod — trust it directly.

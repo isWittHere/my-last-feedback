@@ -1,6 +1,7 @@
 import { create } from "zustand";
 import { invoke } from "@tauri-apps/api/core";
 import { readSessionListMode, readShowSessionNavigationAttachmentDots, readUseSessionNavigationColorCards, saveSessionListMode, saveShowSessionNavigationAttachmentDots, saveUseSessionNavigationColorCards, type SessionListMode } from "../sessionNavigationSettings";
+import { normalizeWorkspacePath, sameWorkspacePath, workspacePathKey } from "../workspace/workspacePaths";
 
 export interface ImageAttachment {
   path: string;
@@ -411,6 +412,37 @@ function loadResourceIconTheme(): ResourceIconTheme {
   } catch { return "default"; }
 }
 
+function normalizeProjectDirectory(value?: string | null): string {
+  return normalizeWorkspacePath(value) || "";
+}
+
+function normalizeCallerWorkspaceKey(value?: string | null): string {
+  return workspacePathKey(value);
+}
+
+function normalizeCallerInfo(caller: Caller): Caller {
+  return {
+    ...caller,
+    workspaceKey: normalizeCallerWorkspaceKey(caller.workspaceKey),
+  };
+}
+
+function normalizeSessionWorkspace(session: Session): Session {
+  return {
+    ...session,
+    projectDirectory: normalizeProjectDirectory(session.projectDirectory),
+  };
+}
+
+function normalizeFocusedComposer(focus: FocusedComposer): FocusedComposer {
+  const projectDirectory = normalizeProjectDirectory(focus.projectDirectory);
+  return {
+    ...focus,
+    projectDirectory,
+    workspaceKey: workspacePathKey(focus.workspaceKey) || workspacePathKey(projectDirectory),
+  };
+}
+
 const DOCK_COLUMN_IDS: DockColumnId[] = ["leftSidebar", "leftPage", "rightPage", "rightSidebar"];
 const KNOWN_DOCK_TABS: DockTabId[] = ["mlc", "resources", "mlcPreview", "previewBrowser", "previewInfo", "agentConsole", "agentSessions", "terminal"];
 const DEFAULT_DOCK_TABS: DockTabId[] = ["mlc", "mlcPreview", "resources", "previewBrowser", "previewInfo", "agentConsole", "agentSessions", "terminal"];
@@ -719,24 +751,28 @@ export const useFeedbackStore = create<FeedbackState>((set, get) => ({
   nativeWebViewBlockers: {},
 
   addCaller: (caller) => {
+    const normalizedCaller = normalizeCallerInfo(caller);
     const { callers, callerOrder } = get();
-    const existing = callers.find((c) => c.id === caller.id);
+    const existing = callers.find((c) => c.id === normalizedCaller.id);
     if (existing) {
-      // Update clientName or alias if previously missing
-      const needsUpdate = (!existing.clientName && caller.clientName) || (!existing.alias && caller.alias);
+      // Update caller metadata that may arrive after the initial registration.
+      const needsUpdate = (!existing.clientName && normalizedCaller.clientName)
+        || (!existing.alias && normalizedCaller.alias)
+        || (!!normalizedCaller.workspaceKey && existing.workspaceKey !== normalizedCaller.workspaceKey);
       if (needsUpdate) {
-        set({ callers: callers.map((c) => c.id === caller.id ? {
+        set({ callers: callers.map((c) => c.id === normalizedCaller.id ? {
           ...c,
-          clientName: c.clientName || caller.clientName,
-          alias: c.alias || caller.alias,
+          clientName: c.clientName || normalizedCaller.clientName,
+          alias: c.alias || normalizedCaller.alias,
+          workspaceKey: normalizedCaller.workspaceKey || c.workspaceKey,
         } : c) });
       }
       return;
     }
-    const nextOrder = callerOrder.includes(caller.id)
+    const nextOrder = callerOrder.includes(normalizedCaller.id)
       ? callerOrder
-      : [...callerOrder, caller.id];
-    set({ callers: [...callers, caller], callerOrder: nextOrder });
+      : [...callerOrder, normalizedCaller.id];
+    set({ callers: [...callers, normalizedCaller], callerOrder: nextOrder });
   },
 
   updateCallerColor: (id, color) => {
@@ -873,12 +909,12 @@ export const useFeedbackStore = create<FeedbackState>((set, get) => ({
   },
 
   addSession: (session, options) => {
-    const normalizedSession = {
+    const normalizedSession = normalizeSessionWorkspace({
       ...session,
       requestType: normalizeRequestType(session.requestType),
       mlcAttachments: session.mlcAttachments || [],
       webAttachments: session.webAttachments || [],
-    };
+    });
     const attentionMode = options?.attentionMode ?? "interrupt";
     const shouldInterrupt = attentionMode !== "passive";
     const wasHidden = get().hiddenCallerIds.includes(normalizedSession.callerId);
@@ -1617,15 +1653,16 @@ export const useFeedbackStore = create<FeedbackState>((set, get) => ({
   },
 
   setFocusedComposer: (focus) => {
+    const normalizedFocus = normalizeFocusedComposer(focus);
     const current = get().focusedComposer;
-    const nextWorkspacePath = focus.projectDirectory || null;
+    const nextWorkspacePath = normalizedFocus.projectDirectory || null;
     const sameTarget = current
-      && current.callerId === focus.callerId
-      && current.sessionId === focus.sessionId
-      && current.projectDirectory === focus.projectDirectory
-      && current.kind === focus.kind;
-    if (sameTarget && get().mlcActiveWorkspacePath === nextWorkspacePath) return;
-    set({ focusedComposer: focus, mlcActiveWorkspacePath: nextWorkspacePath });
+      && current.callerId === normalizedFocus.callerId
+      && current.sessionId === normalizedFocus.sessionId
+      && sameWorkspacePath(current.projectDirectory, normalizedFocus.projectDirectory)
+      && current.kind === normalizedFocus.kind;
+    if (sameTarget && sameWorkspacePath(get().mlcActiveWorkspacePath, nextWorkspacePath)) return;
+    set({ focusedComposer: normalizedFocus, mlcActiveWorkspacePath: nextWorkspacePath });
   },
 
   clearFocusedComposer: (sessionId) => {
@@ -1634,7 +1671,7 @@ export const useFeedbackStore = create<FeedbackState>((set, get) => ({
     }));
   },
 
-  setMlcActiveWorkspacePath: (path) => set({ mlcActiveWorkspacePath: path }),
+  setMlcActiveWorkspacePath: (path) => set({ mlcActiveWorkspacePath: normalizeWorkspacePath(path) }),
 
   setSelectedMlcDocument: (document) => set({ selectedMlcDocument: document }),
 

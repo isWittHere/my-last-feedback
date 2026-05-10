@@ -261,7 +261,7 @@ export function AgentSessionManagerPanel() {
   }, [openDockTab]);
 
   const createFromPath = useCallback((cwd: string | null, source: AgentWorkspacePathSource = "recent") => {
-    const cleanPath = cwd?.trim() || null;
+    const cleanPath = normalizeWorkspacePath(cwd);
     const sessionId = createNewSession({ cwd: cleanPath, workspaceKey: workspacePathKey(cleanPath || "") });
     if (cleanPath) recordRecentPath(cleanPath, toTerminalPathSource(source));
     setPathMenuOpen(false);

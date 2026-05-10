@@ -1,5 +1,5 @@
 import { formatAgentTargetLabel } from "../identity/agentIdentity";
-import { workspaceBasename, workspacePathKey } from "./workspacePaths";
+import { normalizeWorkspacePath, workspaceBasename, workspacePathKey } from "./workspacePaths";
 
 export type WorkspaceTargetSource = "mlfb" | "opencode";
 
@@ -31,7 +31,7 @@ export function pushWorkspacePathCandidate<Source extends string>(
   seen: Set<string>,
   candidate: Omit<WorkspacePathCandidate<Source>, "path" | "label"> & { path?: string | null; label?: string | null },
 ) {
-  const cleanPath = candidate.path?.trim();
+  const cleanPath = normalizeWorkspacePath(candidate.path);
   if (!cleanPath) return;
   const key = workspacePathKey(cleanPath);
   if (!key || seen.has(key)) return;
@@ -50,7 +50,7 @@ export function buildWorkspaceOptions(args: {
 }): WorkspaceOption[] {
   const map = new Map<string, WorkspaceOption>();
   const addPath = (path?: string | null, name?: string | null, ownerName?: string | null) => {
-    const cleanPath = path?.trim();
+    const cleanPath = normalizeWorkspacePath(path);
     if (!cleanPath) return;
     const key = workspacePathKey(cleanPath);
     if (!key || map.has(key)) return;

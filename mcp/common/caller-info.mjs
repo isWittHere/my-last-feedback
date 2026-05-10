@@ -62,7 +62,7 @@ export async function resolveCallerInfo(mcpServer, opts = {}) {
 
   // ── 3. Workspace path + folder name from listRoots ──
   const hintNorm = opts.workspaceHint
-    ? opts.workspaceHint.replace(/\\/g, "/").replace(/\/$/, "")
+    ? normalizeWorkspacePath(opts.workspaceHint)
     : null;
 
   let workspacePath = hintNorm;
@@ -131,8 +131,24 @@ function rootUriToPath(uri) {
   if (!uri) return null;
   try {
     const stripped = uri.replace(/^file:\/\/\//, "");
-    return decodeURIComponent(stripped).replace(/\\/g, "/").replace(/\/$/, "");
+    return normalizeWorkspacePath(decodeURIComponent(stripped));
   } catch {
     return null;
   }
+}
+
+export function normalizeWorkspacePath(value) {
+  if (!value) return null;
+  const slashed = value
+    .trim()
+    .replace(/^\\\\\?\\UNC\\/i, "//")
+    .replace(/^\\\\\?\\/i, "")
+    .replace(/^\/\/\?\/UNC\//i, "//")
+    .replace(/^\/\/\?\//i, "")
+    .replace(/\\/g, "/");
+  const withoutTrailing = slashed.replace(/\/+$/g, "");
+  const trimmed = /^[A-Za-z]:$/.test(withoutTrailing) && slashed.startsWith(`${withoutTrailing}/`) ? `${withoutTrailing}/` : withoutTrailing;
+  const normalized = trimmed
+    .replace(/^([A-Za-z]):(?=\/|$)/, (_, drive) => `${drive.toUpperCase()}:`);
+  return normalized || null;
 }

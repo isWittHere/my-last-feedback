@@ -10,7 +10,7 @@ import { readText as readClipboardText } from "@tauri-apps/plugin-clipboard-mana
 import { webAttachmentLabel } from "../browser/webAttachmentFormat";
 import { collectSubmittedResourceLinks, type SubmittedResourceLink } from "../composer/submittedFeedback";
 import { GIT_OPERATION_SETTINGS_EVENT, getGitOperationSettings, getTimedGitReminderProgress, shouldInjectTimedGitReminder } from "../gitOperationSettings";
-import { cleanDisplayPath } from "../workspace/workspacePaths";
+import { cleanDisplayPath, sameWorkspacePath } from "../workspace/workspacePaths";
 import { CatppuccinResourceIcon } from "./CatppuccinResourceIcon";
 
 const DOCK_COLUMN_IDS: DockColumnId[] = ["leftSidebar", "leftPage", "rightPage", "rightSidebar"];
@@ -132,8 +132,8 @@ export function AttachmentTagBar({
   const resourcesDockColumnId = findDockColumnForTab("resources");
   const previewDockColumnId = findDockColumnForTab("previewBrowser");
   const previewInfoDockColumnId = findDockColumnForTab("previewInfo");
-  const isMlcButtonActive = !!mlcDockColumnId && !dockLayout.columns[mlcDockColumnId].collapsed && dockLayout.columns[mlcDockColumnId].activeTabId === "mlc" && !!activeSession?.projectDirectory && mlcActiveWorkspacePath === activeSession.projectDirectory;
-  const isResourceButtonActive = !!resourcesDockColumnId && !dockLayout.columns[resourcesDockColumnId].collapsed && dockLayout.columns[resourcesDockColumnId].activeTabId === "resources" && !!activeSession?.projectDirectory && mlcActiveWorkspacePath === activeSession.projectDirectory;
+  const isMlcButtonActive = !!mlcDockColumnId && !dockLayout.columns[mlcDockColumnId].collapsed && dockLayout.columns[mlcDockColumnId].activeTabId === "mlc" && !!activeSession?.projectDirectory && sameWorkspacePath(mlcActiveWorkspacePath, activeSession.projectDirectory);
+  const isResourceButtonActive = !!resourcesDockColumnId && !dockLayout.columns[resourcesDockColumnId].collapsed && dockLayout.columns[resourcesDockColumnId].activeTabId === "resources" && !!activeSession?.projectDirectory && sameWorkspacePath(mlcActiveWorkspacePath, activeSession.projectDirectory);
   const isPreviewButtonActive = !!previewDockColumnId && !dockLayout.columns[previewDockColumnId].collapsed && dockLayout.columns[previewDockColumnId].activeTabId === "previewBrowser";
   const hasWebAttachments = targetWebAttachments.length > 0;
   const [gitReminderTick, setGitReminderTick] = useState(0);

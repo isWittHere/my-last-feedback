@@ -1,6 +1,6 @@
 import { invoke } from "@tauri-apps/api/core";
 import { create } from "zustand";
-import { workspaceBasename, workspacePathKey } from "../workspace/workspacePaths";
+import { normalizeWorkspacePath, workspaceBasename, workspacePathKey } from "../workspace/workspacePaths";
 
 export type TerminalTabStatus = "starting" | "running" | "exited" | "failed";
 export type TerminalPathSource = "recent" | "caller" | "activeSession" | "workspace" | "fallback";
@@ -131,7 +131,21 @@ function newTabId(): string {
 function loadRecentPaths(): TerminalPathCandidate[] {
   try {
     const parsed = JSON.parse(localStorage.getItem(RECENT_PATHS_STORAGE_KEY) || "[]") as TerminalPathCandidate[];
-    return Array.isArray(parsed) ? parsed.filter((item) => typeof item?.path === "string" && item.path.trim()) : [];
+    if (!Array.isArray(parsed)) return [];
+    const seen = new Set<string>();
+    const paths: TerminalPathCandidate[] = [];
+    for (const item of parsed) {
+      const path = normalizeWorkspacePath(item?.path);
+      const key = workspacePathKey(path);
+      if (!path || !key || seen.has(key)) continue;
+      seen.add(key);
+      paths.push({
+        ...item,
+        path,
+        label: item.label || workspaceBasename(path),
+      });
+    }
+    return paths;
   } catch {
     return [];
   }
@@ -140,7 +154,7 @@ function loadRecentPaths(): TerminalPathCandidate[] {
 function loadLastCwd(): string | null {
   try {
     const value = localStorage.getItem(LAST_CWD_STORAGE_KEY);
-    return value && value.trim() ? value : null;
+    return normalizeWorkspacePath(value);
   } catch {
     return null;
   }
@@ -149,13 +163,14 @@ function loadLastCwd(): string | null {
 function persistRecentPaths(paths: TerminalPathCandidate[], lastCwd: string | null) {
   try { localStorage.setItem(RECENT_PATHS_STORAGE_KEY, JSON.stringify(paths)); } catch {}
   try {
-    if (lastCwd) localStorage.setItem(LAST_CWD_STORAGE_KEY, lastCwd);
+    const normalizedLastCwd = normalizeWorkspacePath(lastCwd);
+    if (normalizedLastCwd) localStorage.setItem(LAST_CWD_STORAGE_KEY, normalizedLastCwd);
     else localStorage.removeItem(LAST_CWD_STORAGE_KEY);
   } catch {}
 }
 
 function upsertRecentPath(paths: TerminalPathCandidate[], path: string, source: TerminalPathSource = "recent", callerName?: string): TerminalPathCandidate[] {
-  const cleanPath = path.trim();
+  const cleanPath = normalizeWorkspacePath(path);
   if (!cleanPath) return paths;
   const key = workspacePathKey(cleanPath);
   const next: TerminalPathCandidate = {
@@ -193,14 +208,15 @@ export const useTerminalStore = create<TerminalWorkspaceState>((set, get) => ({
       const restoredTabs = snapshots
         .filter((snapshot) => snapshot.terminalId && !existingTerminalIds.has(snapshot.terminalId))
         .map<TerminalTabState>((snapshot) => {
-          recentPaths = upsertRecentPath(recentPaths, snapshot.cwd, "recent");
-          lastUsedCwd = snapshot.cwd || lastUsedCwd;
+          const snapshotCwd = normalizeWorkspacePath(snapshot.cwd) || snapshot.cwd;
+          recentPaths = upsertRecentPath(recentPaths, snapshotCwd, "recent");
+          lastUsedCwd = snapshotCwd || lastUsedCwd;
           const trimmedOutput = trimOutput(snapshot.output || "");
           return {
             id: newTabId(),
             terminalId: snapshot.terminalId,
-            title: workspaceBasename(snapshot.cwd),
-            cwd: snapshot.cwd,
+            title: workspaceBasename(snapshotCwd),
+            cwd: snapshotCwd,
             shell: snapshot.shell,
             status: "running",
             output: trimmedOutput.output,
@@ -223,7 +239,7 @@ export const useTerminalStore = create<TerminalWorkspaceState>((set, get) => ({
   },
 
   createTerminalTab: async (cwd, options = {}) => {
-    const requestedCwd = (cwd || get().lastUsedCwd || "").trim();
+    const requestedCwd = normalizeWorkspacePath(cwd || get().lastUsedCwd || "") || "";
     const tabId = newTabId();
     const now = new Date().toISOString();
     const pendingTab: TerminalTabState = {
@@ -250,17 +266,18 @@ export const useTerminalStore = create<TerminalWorkspaceState>((set, get) => ({
         rows: options.rows,
       });
       set((state) => {
-        const recentPaths = upsertRecentPath(state.recentPaths, info.cwd, options.source || "recent");
-        persistRecentPaths(recentPaths, info.cwd);
+        const infoCwd = normalizeWorkspacePath(info.cwd) || info.cwd;
+        const recentPaths = upsertRecentPath(state.recentPaths, infoCwd, options.source || "recent");
+        persistRecentPaths(recentPaths, infoCwd);
         return {
-          lastUsedCwd: info.cwd,
+          lastUsedCwd: infoCwd,
           recentPaths,
           tabs: updateTab(state.tabs, tabId, (tab) => ({
             ...tab,
             terminalId: info.terminalId,
-            cwd: info.cwd,
+            cwd: infoCwd,
             shell: info.shell,
-            title: workspaceBasename(info.cwd),
+            title: workspaceBasename(infoCwd),
             status: "running",
             error: null,
           })),
@@ -295,17 +312,18 @@ export const useTerminalStore = create<TerminalWorkspaceState>((set, get) => ({
         rows: options.rows,
       });
       set((state) => {
-        const recentPaths = upsertRecentPath(state.recentPaths, info.cwd, "recent");
-        persistRecentPaths(recentPaths, info.cwd);
+        const infoCwd = normalizeWorkspacePath(info.cwd) || info.cwd;
+        const recentPaths = upsertRecentPath(state.recentPaths, infoCwd, "recent");
+        persistRecentPaths(recentPaths, infoCwd);
         return {
-          lastUsedCwd: info.cwd,
+          lastUsedCwd: infoCwd,
           recentPaths,
           tabs: updateTab(state.tabs, tabId, (item) => ({
             ...item,
             terminalId: info.terminalId,
-            cwd: info.cwd,
+            cwd: infoCwd,
             shell: info.shell,
-            title: workspaceBasename(info.cwd),
+            title: workspaceBasename(infoCwd),
             status: "running",
             error: null,
           })),
@@ -387,9 +405,11 @@ export const useTerminalStore = create<TerminalWorkspaceState>((set, get) => ({
 
   recordRecentPath: (path, source = "recent", callerName) => {
     set((state) => {
-      const recentPaths = upsertRecentPath(state.recentPaths, path, source, callerName);
-      persistRecentPaths(recentPaths, path);
-      return { recentPaths, lastUsedCwd: path };
+      const cleanPath = normalizeWorkspacePath(path);
+      if (!cleanPath) return {};
+      const recentPaths = upsertRecentPath(state.recentPaths, cleanPath, source, callerName);
+      persistRecentPaths(recentPaths, cleanPath);
+      return { recentPaths, lastUsedCwd: cleanPath };
     });
   },
 }));
