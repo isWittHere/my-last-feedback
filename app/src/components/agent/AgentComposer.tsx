@@ -105,6 +105,10 @@ export function AgentComposer({ session }: { session: AgentSession }) {
     DOCK_COLUMN_IDS.find((columnId) => dockLayout.columns[columnId].tabIds.includes(tabId)) || null
   ), [dockLayout.columns]);
 
+  const isDockTabActive = useCallback((tabId: DockTabId): boolean => (
+    DOCK_COLUMN_IDS.some((columnId) => dockLayout.columns[columnId].activeTabId === tabId)
+  ), [dockLayout.columns]);
+
   const focusAgentComposer = useCallback(() => {
     setFocusedComposer({
       callerId: AGENT_COMPOSER_CALLER_ID,
@@ -189,14 +193,18 @@ export function AgentComposer({ session }: { session: AgentSession }) {
     if (type === "create-branch") setTimeout(() => branchInputRef.current?.focus(), 50);
   }, [session.gitAction?.type, session.id, setGitAction]);
 
+  const isResourceButtonActive = isDockTabActive("resources");
+  const isPreviewButtonActive = isDockTabActive("previewBrowser") || isDockTabActive("previewInfo");
+  const isMlcButtonActive = isDockTabActive("mlc");
+
   const attachmentActionButtons = (
     <>
       <button
         type="button"
         className="btn"
         style={{
-          background: showTestLog ? "var(--color-primary)" : undefined,
-          borderColor: showTestLog ? "var(--color-primary)" : undefined,
+          background: showTestLog ? sessionIdentity.color : undefined,
+          borderColor: showTestLog ? sessionIdentity.color : undefined,
           color: showTestLog ? "#fff" : undefined,
         }}
         onClick={handleAttachLogClick}
@@ -211,8 +219,8 @@ export function AgentComposer({ session }: { session: AgentSession }) {
         type="button"
         className="btn"
         style={{
-          background: showGitPanel ? "var(--color-primary)" : undefined,
-          borderColor: showGitPanel ? "var(--color-primary)" : undefined,
+          background: showGitPanel ? sessionIdentity.color : undefined,
+          borderColor: showGitPanel ? sessionIdentity.color : undefined,
           color: showGitPanel ? "#fff" : undefined,
         }}
         onClick={() => setShowGitPanel((current) => !current)}
@@ -221,22 +229,52 @@ export function AgentComposer({ session }: { session: AgentSession }) {
         <Icon name="git-commit" size={12} />
         <span className="attachment-action-label">{t("gitAction.button", "Git Action")}</span>
       </button>
-      <button type="button" className="btn" title={t("resources.openPanel", "Open project resources")} onClick={openResourcesPanel}>
+      <button
+        type="button"
+        className="btn"
+        style={{
+          background: isResourceButtonActive ? sessionIdentity.color : undefined,
+          borderColor: isResourceButtonActive ? sessionIdentity.color : undefined,
+          color: isResourceButtonActive ? "#fff" : undefined,
+        }}
+        title={t("resources.openPanel", "Open project resources")}
+        onClick={openResourcesPanel}
+      >
         <Icon name="folder" size={12} />
         <span className="attachment-action-label">{t("resources.button", "Resources")}</span>
       </button>
-      <button type="button" className="btn" title={t("previewBrowser.openPanel", "Open preview browser")} onClick={openPreviewPanel}>
+      <button
+        type="button"
+        className="btn"
+        style={{
+          background: isPreviewButtonActive ? sessionIdentity.color : undefined,
+          borderColor: isPreviewButtonActive ? sessionIdentity.color : undefined,
+          color: isPreviewButtonActive ? "#fff" : undefined,
+        }}
+        title={t("previewBrowser.openPanel", "Open preview browser")}
+        onClick={openPreviewPanel}
+      >
         <Icon name="globe" size={12} />
         <span className="attachment-action-label">{t("previewBrowser.button", "Preview")}</span>
         {session.webAttachments.length > 0 && (
-          <span className="attachment-action-meta" style={{ color: "var(--color-text-muted)" }}>{session.webAttachments.length}</span>
+          <span className="attachment-action-meta" style={{ color: isPreviewButtonActive ? "rgba(255,255,255,0.7)" : "var(--color-text-muted)" }}>{session.webAttachments.length}</span>
         )}
       </button>
-      <button type="button" className="btn" title={t("mlc.openPanel", "Open My Last Chat references")} onClick={openMlcPanel}>
+      <button
+        type="button"
+        className="btn"
+        style={{
+          background: isMlcButtonActive ? sessionIdentity.color : undefined,
+          borderColor: isMlcButtonActive ? sessionIdentity.color : undefined,
+          color: isMlcButtonActive ? "#fff" : undefined,
+        }}
+        title={t("mlc.openPanel", "Open My Last Chat references")}
+        onClick={openMlcPanel}
+      >
         <MlcLogoIcon size={12} />
         <span className="attachment-action-label">{t("mlc.button", "MLC")}</span>
         {session.mlcAttachments.length > 0 && (
-          <span className="attachment-action-meta" style={{ color: "var(--color-text-muted)" }}>{session.mlcAttachments.length}</span>
+          <span className="attachment-action-meta" style={{ color: isMlcButtonActive ? "rgba(255,255,255,0.7)" : "var(--color-text-muted)" }}>{session.mlcAttachments.length}</span>
         )}
       </button>
     </>
@@ -296,8 +334,8 @@ export function AgentComposer({ session }: { session: AgentSession }) {
                   style={{
                     fontSize: 11,
                     padding: "3px 10px",
-                    background: isSelected ? "var(--color-primary)" : undefined,
-                    borderColor: isSelected ? "var(--color-primary)" : undefined,
+                    background: isSelected ? sessionIdentity.color : undefined,
+                    borderColor: isSelected ? sessionIdentity.color : undefined,
                     color: isSelected ? "#fff" : undefined,
                   }}
                   onClick={() => handleGitActionClick(type)}
