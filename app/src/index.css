@@ -7823,33 +7823,41 @@ body,
   padding-bottom: 8px;
 }
 .mlc-tabs button.mlc-target-tab {
-  max-width: 54%;
+  --mlc-target-color: var(--color-primary);
+  max-width: 60%;
   color: var(--color-text-secondary);
 }
 .mlc-tabs button.mlc-target-tab.active {
-  background: color-mix(in srgb, var(--color-primary) 22%, var(--color-bg-elevated));
-  border-color: color-mix(in srgb, var(--color-primary) 24%, transparent);
+  background: color-mix(in srgb, var(--mlc-target-color) 22%, var(--color-bg-elevated));
+  border-color: color-mix(in srgb, var(--mlc-target-color) 28%, transparent);
   color: var(--color-text-primary);
 }
-.mlc-tabs button.mlc-target-tab svg {
-  color: var(--color-primary);
+.mlc-tabs button.mlc-target-tab .mlc-target-avatar {
+  flex: 0 0 auto;
 }
-[data-theme="light"] .mlc-tabs button.active,
-[data-theme="light"] .mlc-tabs button.mlc-target-tab.active {
+[data-theme="light"] .mlc-tabs button.active {
   background: #e3f5f1;
   border-color: #a8ddd6;
   color: #008577;
   box-shadow: none;
 }
-[data-theme="light"] .mlc-tabs button.active:hover,
-[data-theme="light"] .mlc-tabs button.mlc-target-tab.active:hover {
+[data-theme="light"] .mlc-tabs button.mlc-target-tab.active {
+  background: color-mix(in srgb, var(--mlc-target-color) 18%, #ffffff);
+  border-color: color-mix(in srgb, var(--mlc-target-color) 34%, #ffffff);
+  color: color-mix(in srgb, var(--mlc-target-color) 78%, #111827);
+  box-shadow: none;
+}
+[data-theme="light"] .mlc-tabs button.active:hover {
   background: #d9f0eb;
   border-color: #8fcfc6;
   color: #00786c;
   box-shadow: none;
 }
-[data-theme="light"] .mlc-tabs button.mlc-target-tab.active svg {
-  color: #008577;
+[data-theme="light"] .mlc-tabs button.mlc-target-tab.active:hover {
+  background: color-mix(in srgb, var(--mlc-target-color) 24%, #ffffff);
+  border-color: color-mix(in srgb, var(--mlc-target-color) 44%, #ffffff);
+  color: color-mix(in srgb, var(--mlc-target-color) 84%, #111827);
+  box-shadow: none;
 }
 .mlc-list-empty {
   flex: 1;

@@ -1,13 +1,15 @@
-import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState, type CSSProperties } from "react";
 import { useTranslation } from "react-i18next";
 import { invoke } from "@tauri-apps/api/core";
 import { useFeedbackStore, type MlcAttachment, type SelectedMlcDocument } from "../store/feedbackStore";
 import { useAgentStore } from "../store/agentStore";
 import { AppSelect, type AppSelectOption } from "./AppSelect";
 import { Icon, MlcLogoIcon } from "./Icons";
+import { IdenticonAvatar } from "./IdenticonAvatar";
 import { MLC_TYPE_TABS, getMlcTypeColor, getMlcTypeConfig, getMlcTypeLabel } from "./mlcTypeConfig";
 import { useIsLightTheme } from "./useIsLightTheme";
 import { agentIdentityLanguage, resolveAgentGlyphIdentity } from "../identity/agentIdentity";
+import { resolveWorkspaceIdentity, type WorkspaceColorCandidate } from "../identity/workspaceIdentity";
 import { buildWorkspaceOptions, formatWorkspaceTargetLabel, workspaceTargetSourceForComposerKind } from "../workspace/workspaceCandidates";
 import { cleanDisplayPath, sameWorkspacePath, workspacePathKey } from "../workspace/workspacePaths";
 
@@ -117,6 +119,14 @@ export function MlcSidePanel() {
       })
       .join("\n");
   });
+  const workspaceColorCandidatesKey = useFeedbackStore((state) => {
+    const callerColors = new Map(state.callers.map((caller) => [caller.id, caller.color || ""] as const));
+    return state.sessions.map((session) => [
+      workspacePathKey(session.projectDirectory),
+      session.projectDirectory,
+      callerColors.get(session.callerId) || "",
+    ].join("\t")).join("\n");
+  });
   const activeWorkspacePath = useFeedbackStore((state) => state.mlcActiveWorkspacePath);
   const setActiveWorkspacePath = useFeedbackStore((state) => state.setMlcActiveWorkspacePath);
   const selectedMlcDocument = useFeedbackStore((state) => state.selectedMlcDocument);
@@ -149,15 +159,28 @@ export function MlcSidePanel() {
   ], [t]);
 
   const targetWorkspacePath = focusedComposer?.projectDirectory || "";
-  const targetSessionName = focusedComposer?.kind === "agent" && focusedComposer.sessionId
-    ? resolveAgentGlyphIdentity({ id: focusedComposer.sessionId }, friendlyNameLanguage).nickname
-    : "";
-  const targetCallerName = targetCaller
-    ? resolveAgentGlyphIdentity({ agentName: targetCaller.alias, id: targetCaller.id }, friendlyNameLanguage).nickname
-    : "";
-  const targetOwnerName = targetCallerName
-    || targetSessionName
-    || "";
+  const workspaceColorCandidates = useMemo<WorkspaceColorCandidate[]>(() => workspaceColorCandidatesKey
+    .split("\n")
+    .filter(Boolean)
+    .map((line) => {
+      const [workspaceKey, workspacePath, color] = line.split("\t");
+      return { workspaceKey, workspacePath, color };
+    }), [workspaceColorCandidatesKey]);
+  const targetGlyph = useMemo(() => {
+    if (focusedComposer?.kind === "agent" && focusedComposer.sessionId) {
+      return resolveAgentGlyphIdentity({ id: focusedComposer.sessionId }, friendlyNameLanguage);
+    }
+    if (targetCaller) return resolveAgentGlyphIdentity({ agentName: targetCaller.alias, id: targetCaller.id }, friendlyNameLanguage);
+    if (focusedComposer?.callerId) return resolveAgentGlyphIdentity({ id: focusedComposer.callerId }, friendlyNameLanguage);
+    return null;
+  }, [focusedComposer?.callerId, focusedComposer?.kind, focusedComposer?.sessionId, friendlyNameLanguage, targetCaller]);
+  const targetOwnerName = targetGlyph?.nickname || "";
+  const targetWorkspaceIdentity = useMemo(() => resolveWorkspaceIdentity({
+    workspacePath: targetWorkspacePath,
+    color: targetCaller?.color,
+    candidates: workspaceColorCandidates,
+  }), [targetCaller?.color, targetWorkspacePath, workspaceColorCandidates]);
+  const targetTabStyle = useMemo(() => ({ "--mlc-target-color": targetWorkspaceIdentity.color } as CSSProperties), [targetWorkspaceIdentity.color]);
   const targetLabel = formatWorkspaceTargetLabel({ source: workspaceTargetSourceForComposerKind(focusedComposer?.kind), ownerName: targetOwnerName });
 
   const workspaceOptions = useMemo(() => {
@@ -414,8 +437,8 @@ export function MlcSidePanel() {
 
       <div className="mlc-tabs mlc-workspace-tabs">
         {targetWorkspacePath ? (
-          <button className={`mlc-target-tab${workspaceFilterMode === "target" ? " active" : ""}`} onClick={() => { setWorkspaceFilterMode("target"); setActiveWorkspacePath(targetWorkspacePath); }} {...tooltipProps(`${t("mlc.target", "Target")}: ${cleanDisplayPath(targetWorkspacePath)}`)}>
-            <Icon name="aim" size={11} />
+          <button className={`mlc-target-tab${workspaceFilterMode === "target" ? " active" : ""}`} style={targetTabStyle} onClick={() => { setWorkspaceFilterMode("target"); setActiveWorkspacePath(targetWorkspacePath); }} {...tooltipProps(`${t("mlc.target", "Target")}: ${cleanDisplayPath(targetWorkspacePath)}`)}>
+            <IdenticonAvatar className="mlc-target-avatar" alias={targetGlyph?.avatarSeed || "agent"} color={targetWorkspaceIdentity.color} size={13} />
             <span>{targetLabel}</span>
           </button>
         ) : null}
