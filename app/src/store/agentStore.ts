@@ -80,7 +80,7 @@ interface AgentStoreState {
   updateGitBranchName: (sessionId: string, branchName: string) => void;
   updateDraft: (sessionId: string, draft: string) => void;
   appendAgentDiagnostic: (sessionId: string, level: AgentDiagnosticEntry["level"], message: string) => void;
-  startOpenCodeProvider: (sessionId: string) => Promise<void>;
+  startOpenCodeProvider: (sessionId: string, options?: { silent?: boolean }) => Promise<void>;
   stopOpenCodeProvider: (sessionId: string) => Promise<void>;
   ensureAgentCommands: (sessionId: string, options?: { force?: boolean }) => Promise<void>;
   receiveAgentProcessOutput: (processId: string, data: string) => void;
@@ -1928,7 +1928,7 @@ export const useAgentStore = create<AgentStoreState>((set, get) => ({
     sessions: updateSession(state.sessions, sessionId, (session) => appendDiagnosticToSession(session, level, message)),
   })),
 
-  startOpenCodeProvider: async (sessionId) => {
+  startOpenCodeProvider: async (sessionId, options = {}) => {
     const session = get().sessions.find((item) => item.id === sessionId);
     if (!session) return;
     if (session.providerRuntime?.processId) {
@@ -1937,11 +1937,14 @@ export const useAgentStore = create<AgentStoreState>((set, get) => ({
 
     if (session.providerId === "opencode") {
       set((state) => ({
-        sessions: updateSession(state.sessions, sessionId, (item) => appendDiagnosticToSession({
-          ...item,
-          status: "starting",
-          providerRuntime: { transport: "http", initialized: false },
-        }, "info", "Preparing Agent session...")),
+        sessions: updateSession(state.sessions, sessionId, (item) => {
+          const nextSession = {
+            ...item,
+            status: options.silent ? item.status : "starting" as const,
+            providerRuntime: { transport: "http" as const, initialized: false },
+          };
+          return options.silent ? nextSession : appendDiagnosticToSession(nextSession, "info", "Preparing Agent session...");
+        }),
       }));
 
       try {
@@ -1981,43 +1984,49 @@ export const useAgentStore = create<AgentStoreState>((set, get) => ({
         const modelId = openCodeSettings?.preferredModelId || serverModelId;
         const modeId = selectOpenCodeAgentMode(session.modeId, modeOptions);
         set((state) => ({
-          sessions: updateSession(state.sessions, sessionId, (item) => appendDiagnosticToSession({
-            ...item,
-            status: "idle",
-            providerRuntime: {
-              ...runtime.runtimeInfo,
-              transport: "http",
-              initialized: true,
-              agentCapabilities: {
-                sessionCapabilities: { list: {}, load: {}, delete: {}, update: {} },
-                loadSession: true,
-                promptAsync: true,
-                abort: true,
-                events: true,
-                tools: true,
+          sessions: updateSession(state.sessions, sessionId, (item) => {
+            const nextSession = {
+              ...item,
+              status: options.silent ? item.status : "idle" as const,
+              providerRuntime: {
+                ...runtime.runtimeInfo,
+                transport: "http" as const,
+                initialized: true,
+                agentCapabilities: {
+                  sessionCapabilities: { list: {}, load: {}, delete: {}, update: {} },
+                  loadSession: true,
+                  promptAsync: true,
+                  abort: true,
+                  events: true,
+                  tools: true,
+                },
               },
-            },
-            availableModels: availableModels.length > 0 ? availableModels : item.availableModels,
-            availableModes: modeOptions,
-            availableCommands,
-            availableCommandsLoading: false,
-            availableCommandsError: commandLoadError,
-            availableCommandsLoadedAt: commandLoadError ? item.availableCommandsLoadedAt : nowIso(),
-            contextCompaction,
-            modelId,
-            modeId,
-            updatedAt: nowIso(),
-          }, commandLoadError ? "warn" : "info", commandLoadError ? `Agent session ready, but OpenCode commands failed to load: ${commandLoadError}` : "Agent session ready.")),
+              availableModels: availableModels.length > 0 ? availableModels : item.availableModels,
+              availableModes: modeOptions,
+              availableCommands,
+              availableCommandsLoading: false,
+              availableCommandsError: commandLoadError,
+              availableCommandsLoadedAt: commandLoadError ? item.availableCommandsLoadedAt : nowIso(),
+              contextCompaction,
+              modelId,
+              modeId,
+              updatedAt: nowIso(),
+            };
+            return options.silent ? nextSession : appendDiagnosticToSession(nextSession, commandLoadError ? "warn" : "info", commandLoadError ? `Agent session ready, but OpenCode commands failed to load: ${commandLoadError}` : "Agent session ready.");
+          }),
         }));
         for (const request of pendingPermissions) handleOpenCodePermissionRequest(sessionId, request as Record<string, unknown>);
       } catch (error) {
         const message = error instanceof Error ? error.message : String(error);
         set((state) => ({
-          sessions: updateSession(state.sessions, sessionId, (item) => appendDiagnosticToSession({
-            ...item,
-            status: "error",
-            providerRuntime: { ...item.providerRuntime, transport: "http", processId: undefined, initialized: false },
-          }, "error", `Failed to prepare Agent session: ${message}`)),
+          sessions: updateSession(state.sessions, sessionId, (item) => {
+            const nextSession = {
+              ...item,
+              status: options.silent ? item.status : "error" as const,
+              providerRuntime: { ...item.providerRuntime, transport: "http" as const, processId: undefined, initialized: false },
+            };
+            return options.silent ? nextSession : appendDiagnosticToSession(nextSession, "error", `Failed to prepare Agent session: ${message}`);
+          }),
         }));
       }
       return;
@@ -2482,7 +2491,7 @@ export const useAgentStore = create<AgentStoreState>((set, get) => ({
     let session = get().sessions.find((item) => item.providerId === providerId) || get().getActiveSession();
     let httpRuntime = openCodeHttpRuntimeForSession(session, get().sessions);
     if (!httpRuntime && session?.providerId === "opencode") {
-      await get().startOpenCodeProvider(session.id);
+      await get().startOpenCodeProvider(session.id, { silent: true });
       session = get().sessions.find((item) => item.id === session?.id) || get().sessions.find((item) => item.providerId === providerId) || get().getActiveSession();
       httpRuntime = openCodeHttpRuntimeForSession(session, get().sessions);
     }
