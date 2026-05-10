@@ -10,6 +10,7 @@ import { readText as readClipboardText } from "@tauri-apps/plugin-clipboard-mana
 import { webAttachmentLabel } from "../browser/webAttachmentFormat";
 import { collectSubmittedResourceLinks, type SubmittedResourceLink } from "../composer/submittedFeedback";
 import { GIT_OPERATION_SETTINGS_EVENT, getGitOperationSettings, getTimedGitReminderProgress, shouldInjectTimedGitReminder } from "../gitOperationSettings";
+import { cleanDisplayPath } from "../workspace/workspacePaths";
 import { CatppuccinResourceIcon } from "./CatppuccinResourceIcon";
 
 const DOCK_COLUMN_IDS: DockColumnId[] = ["leftSidebar", "leftPage", "rightPage", "rightSidebar"];
@@ -136,28 +137,34 @@ export function AttachmentTagBar({
   const isPreviewButtonActive = !!previewDockColumnId && !dockLayout.columns[previewDockColumnId].collapsed && dockLayout.columns[previewDockColumnId].activeTabId === "previewBrowser";
   const hasWebAttachments = targetWebAttachments.length > 0;
   const [gitReminderTick, setGitReminderTick] = useState(0);
+  const gitOperationSettings = useMemo(() => getGitOperationSettings(), [gitReminderTick]);
   const timedGitReady = useMemo(() => {
     if (queuedCallerId || hasGitAction || !activeSession || activeSession.status !== "pending") return false;
-    return shouldInjectTimedGitReminder(activeSession.projectDirectory, Date.now(), getGitOperationSettings());
-  }, [activeSession, gitReminderTick, hasGitAction, queuedCallerId]);
+    return shouldInjectTimedGitReminder(activeSession.projectDirectory, Date.now(), gitOperationSettings);
+  }, [activeSession, gitOperationSettings, hasGitAction, queuedCallerId]);
   const gitReminderProgress = useMemo(() => {
     const projectDirectory = activeSession?.projectDirectory;
     if (!projectDirectory) return null;
-    return getTimedGitReminderProgress(projectDirectory, Date.now(), getGitOperationSettings());
-  }, [activeSession?.projectDirectory, gitReminderTick]);
+    return getTimedGitReminderProgress(projectDirectory, Date.now(), gitOperationSettings);
+  }, [activeSession?.projectDirectory, gitOperationSettings]);
   const refreshGitReminderCountdown = useCallback(() => setGitReminderTick((value) => value + 1), []);
+  const activeWorkspaceDisplayPath = activeSession?.projectDirectory ? cleanDisplayPath(activeSession.projectDirectory) : "";
   const gitActionButtonTitle = useMemo(() => {
-    if (!gitReminderProgress?.enabled) return t("gitAction.buttonTooltipNoTimer", "Git Action");
-    if (gitReminderProgress.ready) return t("gitAction.buttonTooltipTimedReady", "Timed Git reminder ready now");
-    return t("gitAction.buttonTooltipNextTimed", "Next timed Git reminder in {{count}} min", { count: gitReminderProgress.minutesUntil ?? 0 });
-  }, [gitReminderProgress, t]);
+    const baseTitle = !gitReminderProgress?.enabled
+      ? t("gitAction.buttonTooltipNoTimer", "Git Action")
+      : gitReminderProgress.ready
+        ? t("gitAction.buttonTooltipTimedReady", "Timed Git reminder ready now")
+        : t("gitAction.buttonTooltipNextTimed", "Next timed Git reminder in {{count}} min", { count: gitReminderProgress.minutesUntil ?? 0 });
+    if (!activeWorkspaceDisplayPath) return baseTitle;
+    return `${baseTitle}\n${t("gitAction.buttonTooltipWorkspace", "Workspace: {{path}}", { path: activeWorkspaceDisplayPath })}`;
+  }, [activeWorkspaceDisplayPath, gitReminderProgress, t]);
   const isGitReminderReady = gitReminderProgress?.ready === true;
-  const useGitReadyActiveTheme = showGitPanel && isGitReminderReady;
   const showGitCountdownBorder = gitReminderProgress?.enabled === true && !showGitPanel;
-  const gitActiveBackground = useGitReadyActiveTheme ? "var(--color-git-countdown)" : callerColor;
+  const gitReminderThemeColor = gitOperationSettings.timedReminderTheme === "caller" ? callerColor : "var(--color-git-countdown)";
+  const gitActiveBackground = isGitReminderReady ? gitReminderThemeColor : callerColor;
   const gitActionCountdownStyle = showGitCountdownBorder ? {
     "--git-countdown-angle": `${Math.round(gitReminderProgress.progress * 360)}deg`,
-    "--git-countdown-color": "var(--color-git-countdown)",
+    "--git-countdown-color": gitReminderThemeColor,
     "--git-countdown-fill": "var(--color-bg-elevated)",
     "--git-countdown-track": "var(--color-border)",
   } as CSSProperties : undefined;
@@ -428,7 +435,7 @@ export function AttachmentTagBar({
             />
           )}
           {timedGitReady && (
-            <div className="attachment-tag attachment-tag-git-ready" title={t("gitAction.timedReadyDesc", "A timed Git backup reminder is ready and will be injected when you submit, unless you choose a manual Git Action.")}>
+            <div className="attachment-tag attachment-tag-git-ready" style={{ "--git-ready-color": gitReminderThemeColor } as CSSProperties} title={t("gitAction.timedReadyDesc", "A timed Git backup reminder is ready and will be injected when you submit, unless you choose a manual Git Action.")}>
               <Icon name="clock" size={10} />
               <Icon name="git-commit" size={10} />
               <span>{t("gitAction.timedReady", "Timed Git ready")}</span>

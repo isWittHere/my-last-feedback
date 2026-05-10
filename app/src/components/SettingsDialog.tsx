@@ -556,6 +556,10 @@ export function SettingsDialog({ open, onClose }: { open: boolean; onClose: () =
     updateGitOperationSettings((current) => ({ ...current, timedReminderIntervalMinutes: value }));
   }, [updateGitOperationSettings]);
 
+  const handleGitReminderThemeToggle = useCallback(() => {
+    updateGitOperationSettings((current) => ({ ...current, timedReminderTheme: current.timedReminderTheme === "caller" ? "amber" : "caller" }));
+  }, [updateGitOperationSettings]);
+
   const handleGitFolderBlacklistChange = useCallback((value: string) => {
     updateGitOperationSettings((current) => ({ ...current, folderBlacklist: parseGitFolderBlacklistText(value) }));
   }, [updateGitOperationSettings]);
@@ -1359,6 +1363,18 @@ export function SettingsDialog({ open, onClose }: { open: boolean; onClose: () =
                       {gitReminderIntervalLabel}
                     </span>
                   </div>
+                </div>
+                <div className="settings-row">
+                  <div className="settings-row-info">
+                    <span className="settings-label">{t("settings.gitTimedReminderCallerTheme", "Use caller color for timed Git")}</span>
+                    <span className="settings-sublabel">{t("settings.gitTimedReminderCallerThemeDesc", "Color the timed Git countdown and ready state with the caller workspace theme. Turn off to keep the amber style.")}</span>
+                  </div>
+                  <button
+                    className={`settings-toggle${gitOperationSettings.timedReminderTheme === "caller" ? " settings-toggle-on" : ""}`}
+                    onClick={handleGitReminderThemeToggle}
+                  >
+                    <span className="settings-toggle-knob" />
+                  </button>
                 </div>
                 <div className="settings-row settings-row-stacked">
                   <div className="settings-row-info">

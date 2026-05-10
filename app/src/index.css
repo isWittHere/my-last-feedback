@@ -1954,15 +1954,15 @@ body,
 }
 
 .attachment-tag-git-ready {
-  background: color-mix(in srgb, #f59e0b 16%, transparent);
-  border-color: color-mix(in srgb, #f59e0b 42%, transparent);
-  color: #fbbf24;
+  --git-ready-color: var(--color-git-countdown);
+  background: color-mix(in srgb, var(--git-ready-color) 16%, transparent);
+  border-color: color-mix(in srgb, var(--git-ready-color) 42%, transparent);
+  color: var(--git-ready-color);
 }
 
 [data-theme="light"] .attachment-tag-git-ready {
-  background: color-mix(in srgb, #f59e0b 14%, transparent);
-  border-color: color-mix(in srgb, #d97706 34%, transparent);
-  color: #92400e;
+  background: color-mix(in srgb, var(--git-ready-color) 14%, transparent);
+  border-color: color-mix(in srgb, var(--git-ready-color) 34%, transparent);
 }
 
 /* ── Caller Panel (multi-column layout) ── */

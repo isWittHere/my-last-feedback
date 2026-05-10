@@ -1,6 +1,11 @@
+import { workspacePathKey } from "./workspace/workspacePaths";
+
+export type GitTimedReminderTheme = "caller" | "amber";
+
 export interface GitOperationSettings {
   timedReminderEnabled: boolean;
   timedReminderIntervalMinutes: number;
+  timedReminderTheme: GitTimedReminderTheme;
   folderBlacklist: string[];
 }
 
@@ -16,6 +21,7 @@ export const GIT_TIMED_REMINDER_STEP_MINUTES = 15;
 export const DEFAULT_GIT_OPERATION_SETTINGS: GitOperationSettings = {
   timedReminderEnabled: true,
   timedReminderIntervalMinutes: 30,
+  timedReminderTheme: "caller",
   folderBlacklist: ["ref-repos"],
 };
 
@@ -29,6 +35,10 @@ function normalizeIntervalMinutes(value: unknown): number {
 function normalizeFolderEntry(value: string): string | null {
   const normalized = value.trim().replace(/\\/g, "/").replace(/^\.\//, "").replace(/\/+$/, "");
   return normalized ? normalized : null;
+}
+
+function normalizeTimedReminderTheme(value: unknown): GitTimedReminderTheme {
+  return value === "amber" ? "amber" : DEFAULT_GIT_OPERATION_SETTINGS.timedReminderTheme;
 }
 
 export function parseGitFolderBlacklistText(value: string): string[] {
@@ -56,6 +66,7 @@ export function normalizeGitOperationSettings(value: Partial<GitOperationSetting
   return {
     timedReminderEnabled: value?.timedReminderEnabled ?? DEFAULT_GIT_OPERATION_SETTINGS.timedReminderEnabled,
     timedReminderIntervalMinutes: normalizeIntervalMinutes(value?.timedReminderIntervalMinutes),
+    timedReminderTheme: normalizeTimedReminderTheme(value?.timedReminderTheme),
     folderBlacklist: parsedBlacklist,
   };
 }
@@ -78,14 +89,31 @@ export function saveGitOperationSettings(settings: GitOperationSettings): GitOpe
 }
 
 function reminderWorkspaceKey(projectDirectory?: string): string {
+  const key = workspacePathKey(projectDirectory);
+  const identity = key ? `workspace:${key}` : "global";
+  return `${LAST_INJECTED_STORAGE_PREFIX}${encodeURIComponent(identity)}`;
+}
+
+function legacyReminderWorkspaceKey(projectDirectory?: string): string {
   return `${LAST_INJECTED_STORAGE_PREFIX}${encodeURIComponent(projectDirectory?.trim() || "global")}`;
+}
+
+function readStoredTimestamp(key: string): number | null {
+  const stored = localStorage.getItem(key);
+  const value = stored ? Number(stored) : NaN;
+  return Number.isFinite(value) && value > 0 ? value : null;
 }
 
 export function readTimedGitReminderLastInjectedAt(projectDirectory?: string): number | null {
   try {
-    const stored = localStorage.getItem(reminderWorkspaceKey(projectDirectory));
-    const value = stored ? Number(stored) : NaN;
-    return Number.isFinite(value) && value > 0 ? value : null;
+    const currentKey = reminderWorkspaceKey(projectDirectory);
+    const current = readStoredTimestamp(currentKey);
+    const legacyKey = legacyReminderWorkspaceKey(projectDirectory);
+    const legacy = legacyKey === currentKey ? null : readStoredTimestamp(legacyKey);
+    const latest = Math.max(current || 0, legacy || 0);
+    if (latest <= 0) return null;
+    if (legacy && (!current || legacy > current)) localStorage.setItem(currentKey, String(latest));
+    return latest;
   } catch {
     return null;
   }
