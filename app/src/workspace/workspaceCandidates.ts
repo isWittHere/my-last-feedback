@@ -1,3 +1,4 @@
+import { formatAgentTargetLabel } from "../identity/agentIdentity";
 import { workspaceBasename, workspacePathKey } from "./workspacePaths";
 
 export type WorkspaceTargetSource = "mlfb" | "opencode";
@@ -21,9 +22,8 @@ export function workspaceTargetSourceForComposerKind(kind?: string | null): Work
 }
 
 export function formatWorkspaceTargetLabel(args: { source: WorkspaceTargetSource; ownerName?: string | null; path?: string | null }): string {
-  const sourceLabel = args.source === "opencode" ? "Opencode" : "MLFB";
   const targetName = args.ownerName?.trim() || workspaceBasename(args.path) || "";
-  return targetName ? `${sourceLabel} ${targetName}` : sourceLabel;
+  return formatAgentTargetLabel({ source: args.source, targetName });
 }
 
 export function pushWorkspacePathCandidate<Source extends string>(

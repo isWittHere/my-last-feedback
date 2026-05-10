@@ -3,6 +3,7 @@ import { createPortal } from "react-dom";
 import { invoke } from "@tauri-apps/api/core";
 import { useFeedbackStore } from "../store/feedbackStore";
 import type { Session } from "../store/feedbackStore";
+import { agentAvatarSeed } from "../identity/agentIdentity";
 import { useTranslation } from "react-i18next";
 import { useActiveCallerSession } from "./useActiveCallerSession";
 import { useCallerOverride } from "./CallerContext";
@@ -534,7 +535,7 @@ export function Sidebar({ mode, onModeChange }: { mode: SessionListMode; onModeC
                 aria-label={avatarCopied ? t("sidebar.copied", "Copied!") : t("sidebar.clickToCopy", { alias: caller.alias || caller.name, defaultValue: 'Click to copy: agent_name="{{alias}}".' })}
                 className="session-topbar-avatar"
               >
-                <IdenticonAvatar alias={caller.alias || caller.name} color={caller.color} size={18} style={{ opacity: avatarCopied ? 0.5 : 1, transition: "opacity 0.15s" }} />
+                <IdenticonAvatar alias={agentAvatarSeed({ alias: caller.alias, id: caller.id, fallbackName: caller.name })} color={caller.color} size={18} style={{ opacity: avatarCopied ? 0.5 : 1, transition: "opacity 0.15s" }} />
                 {avatarCopied && (
                   <Icon name="check" size={10} color={caller.color} strokeWidth={3} style={{ position: "absolute", top: "50%", left: "50%", transform: "translate(-50%, -50%)" }} />
                 )}
@@ -627,7 +628,7 @@ export function Sidebar({ mode, onModeChange }: { mode: SessionListMode; onModeC
               aria-label={avatarCopied ? t("sidebar.copied", "Copied!") : t("sidebar.clickToCopy", { alias: caller.alias || caller.name, defaultValue: 'Click to copy: agent_name="{{alias}}".' })}
               style={{ cursor: "pointer", position: "relative", flexShrink: 0 }}
             >
-              <IdenticonAvatar alias={caller.alias || caller.name} color={caller.color} size={28} style={{ opacity: avatarCopied ? 0.5 : 1, transition: "opacity 0.15s" }} />
+              <IdenticonAvatar alias={agentAvatarSeed({ alias: caller.alias, id: caller.id, fallbackName: caller.name })} color={caller.color} size={28} style={{ opacity: avatarCopied ? 0.5 : 1, transition: "opacity 0.15s" }} />
               {avatarCopied && (
                 <Icon name="check" size={14} color={caller.color} strokeWidth={3} style={{ position: "absolute", top: "50%", left: "50%", transform: "translate(-50%, -50%)" }} />
               )}

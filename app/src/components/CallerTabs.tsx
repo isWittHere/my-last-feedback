@@ -2,6 +2,7 @@ import { useRef, useState, useCallback } from "react";
 import { useFeedbackStore } from "../store/feedbackStore";
 import { useShallow } from "zustand/react/shallow";
 import { useTranslation } from "react-i18next";
+import { agentAvatarSeed } from "../identity/agentIdentity";
 import { IdenticonAvatar } from "./IdenticonAvatar";
 import { useFriendlyName } from "./useFriendlyName";
 
@@ -158,7 +159,7 @@ export function CallerTabs({ columnCount }: CallerTabsProps = {}) {
     }
 
         const isColumn = columnCount ? index < columnCount : caller.id === activeCallerId;
-    const aliasKey = caller.alias || caller.name;
+    const aliasKey = agentAvatarSeed({ alias: caller.alias, id: caller.id, fallbackName: caller.name });
     const isDragging = draggingId === caller.id;
     const tx = getTranslateX(index);
     const isHovered = hoveredCallerId === caller.id;

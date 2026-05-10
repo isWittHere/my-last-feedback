@@ -2,6 +2,7 @@ import { useCallback, useMemo, useRef, useState } from "react";
 import { useTranslation } from "react-i18next";
 import { useFeedbackStore } from "../store/feedbackStore";
 import { useShallow } from "zustand/react/shallow";
+import { agentAvatarSeed } from "../identity/agentIdentity";
 import { IdenticonAvatar } from "./IdenticonAvatar";
 import { useFriendlyName } from "./useFriendlyName";
 import { Icon } from "./Icons";
@@ -422,7 +423,7 @@ export function CallerManager() {
 
                   {/* Avatar */}
                   <div className="cm-col-avatar">
-                    <IdenticonAvatar alias={caller.alias || caller.id} color={caller.color} size={20} />
+                    <IdenticonAvatar alias={agentAvatarSeed({ alias: caller.alias, id: caller.id, fallbackName: caller.name })} color={caller.color} size={20} />
                   </div>
 
                   {/* Alias + Sessions + Client stacked */}

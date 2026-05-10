@@ -1,4 +1,4 @@
-import { getFriendlyName } from "../components/friendlyName";
+import { getFriendlyName } from "../identity/friendlyName";
 import type { AgentProviderId, AgentSession } from "./types";
 
 export interface AgentSessionIdentity {

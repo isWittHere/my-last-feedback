@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useMemo, useRef, useState, type ReactNode } from "react";
 import { useTranslation } from "react-i18next";
 import { useFeedbackStore } from "../store/feedbackStore";
+import { agentAvatarSeed } from "../identity/agentIdentity";
 import { Icon } from "./Icons";
 import { useActiveCallerSession } from "./useActiveCallerSession";
 import { IdenticonAvatar } from "./IdenticonAvatar";
@@ -204,7 +205,7 @@ export function SummaryPanel({ topbarSlot }: { topbarSlot?: ReactNode }) {
               {/* Agent identity header */}
               {caller && (
                 <div className="summary-caller-header" style={{ display: "flex", alignItems: "center", gap: 6, padding: "6px 0 4px" }}>
-                  <IdenticonAvatar alias={caller.alias || caller.name} color={caller.color} size={22} />
+                  <IdenticonAvatar alias={agentAvatarSeed({ alias: caller.alias, id: caller.id, fallbackName: caller.name })} color={caller.color} size={22} />
                   <span style={{ fontSize: 14, lineHeight: "22px", color: "var(--color-text-muted)" }}>
                     <span style={{ fontWeight: 600, color: caller.color }}>{caller.alias ? friendlyName(caller.alias) : caller.name.charAt(0).toUpperCase()}</span>
                     {" "}{t("summary.says", "says:")}
