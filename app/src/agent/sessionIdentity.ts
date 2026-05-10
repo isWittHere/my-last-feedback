@@ -6,10 +6,12 @@ export interface AgentSessionIdentity {
   name: string;
   code: string | null;
   color: string;
+  ownerAlias?: string;
 }
 
 interface AgentSessionIdentityOptions {
   color?: string | null;
+  ownerAlias?: string | null;
 }
 
 const AVATAR_COLORS = [
@@ -47,8 +49,21 @@ function colorFromCode(code: string, options?: AgentSessionIdentityOptions): str
   return options?.color?.trim() || AVATAR_COLORS[hashString(code) % AVATAR_COLORS.length];
 }
 
+function identityFromOwnerAlias(providerName: string, ownerAlias: string, language: "en" | "zh", options?: AgentSessionIdentityOptions): AgentSessionIdentity {
+  return {
+    providerName,
+    name: getFriendlyName(ownerAlias, language),
+    code: ownerAlias,
+    color: colorFromCode(ownerAlias, options),
+    ownerAlias,
+  };
+}
+
 export function getAgentSessionIdentity(session: AgentSession, language: "en" | "zh" = "en", options?: AgentSessionIdentityOptions): AgentSessionIdentity {
   const providerName = formatProviderName(session.providerRuntime?.agentInfo?.name || session.providerId);
+  const ownerAlias = options?.ownerAlias?.trim() || session.ownerAlias?.trim() || "";
+  if (ownerAlias) return identityFromOwnerAlias(providerName, ownerAlias, language, options);
+
   if (!session.providerSessionId || session.providerSessionState === "provisional") {
     const code = codeFromSeed(`local:${session.id}:${session.workspaceKey || session.cwd || session.ownerAlias || "agent"}`);
     return {
@@ -63,6 +78,9 @@ export function getAgentSessionIdentity(session: AgentSession, language: "en" | 
 }
 
 export function getAgentProviderSessionIdentity(providerId: AgentProviderId, providerSessionId: string, language: "en" | "zh" = "en", providerName = formatProviderName(providerId), options?: AgentSessionIdentityOptions): AgentSessionIdentity {
+  const ownerAlias = options?.ownerAlias?.trim() || "";
+  if (ownerAlias) return identityFromOwnerAlias(providerName, ownerAlias, language, options);
+
   const code = codeFromSeed(`${providerId}:${providerSessionId}`);
   return {
     providerName,
