@@ -58,10 +58,11 @@
 :root {
   --color-bg-input-raised: color-mix(in srgb, var(--color-bg-input) 35%, var(--color-bg-surface));
   --color-bg-readonly: color-mix(in srgb, var(--color-bg-input) 70%, var(--color-bg-surface));
+  --color-primary-subtle: color-mix(in srgb, var(--color-primary) 20%, transparent);
   --stats-nav-neutral: #6b7280;
   --stats-nav-primary: #0d9488;
   --stats-nav-secondary: #ec4899;
-  --stats-nav-tertiary: #6d55c8;
+  --stats-nav-tertiary: #472ab2;
   --stats-nav-warning: #facc15;
   --stats-nav-error: #991b1ba0;
   --stats-nav-document: #9ca3af;
@@ -88,6 +89,7 @@
 [data-theme="light"] {
   --color-bg-input-raised: #fafbfc;
   --color-bg-readonly: #f3f4f6;
+  --color-primary-subtle: color-mix(in srgb, var(--color-primary) 35%, transparent);
   --stats-nav-neutral: #7f90a8;
   --stats-nav-primary: #14a196;
   --stats-nav-secondary: #e23a86;
@@ -826,7 +828,7 @@ body,
 }
 .app-view-toggle-btn.app-view-toggle-active {
   color: var(--color-text-primary);
-  background: color-mix(in srgb, var(--color-primary) 16%, transparent);
+  background: var(--color-primary-subtle);
 }
 
 /* MLRA mode title bar stripes */
@@ -3252,7 +3254,7 @@ body,
 
 .settings-segmented-option.active {
   color: var(--color-text-primary);
-  background: color-mix(in srgb, var(--color-primary) 16%, transparent);
+  background: var(--color-primary-subtle);
 }
 
 .settings-segmented-option-allow.active {
@@ -10665,7 +10667,7 @@ body,
   transition: background 0.2s;
 }
 .settings-toggle-on {
-  background: var(--color-primary);
+  background: var(--color-primary-subtle);
 }
 .settings-toggle-knob {
   position: absolute;
