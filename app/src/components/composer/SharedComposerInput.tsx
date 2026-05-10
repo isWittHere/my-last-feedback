@@ -56,6 +56,7 @@ export interface SharedComposerInputProps {
   expandedAttachmentPanels?: ReactNode;
   bottomLeftSlot?: ReactNode;
   submitControl?: ReactNode;
+  rootStyle?: CSSProperties;
   editorContainerClassName?: string;
   editorClassName?: string;
   editorStyle?: CSSProperties;
@@ -118,6 +119,7 @@ export function SharedComposerInput({
   expandedAttachmentPanels,
   bottomLeftSlot,
   submitControl,
+  rootStyle,
   editorContainerClassName,
   editorClassName,
   editorStyle,
@@ -207,7 +209,7 @@ export function SharedComposerInput({
   }, [onEditorKeyDown, onSubmit]);
 
   return (
-    <div className="agent-composer-frame">
+    <div className="agent-composer-frame" style={rootStyle}>
       <div
         className="agent-composer-attachment-area"
         onDragOver={(event) => {
@@ -219,7 +221,7 @@ export function SharedComposerInput({
         }}
         onDragLeave={() => setDragOver(false)}
         onDrop={handleDrop}
-        style={dragOver ? { outline: "2px dashed var(--color-primary)", outlineOffset: -2 } : undefined}
+        style={dragOver ? { outline: "2px dashed var(--agent-session-color, var(--color-primary))", outlineOffset: -2 } : undefined}
       >
         <div className="attachment-action-row px-3 pt-1.5 pb-0.5">
           {!imageAttachmentsDisabled && (

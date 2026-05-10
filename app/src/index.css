@@ -3201,7 +3201,7 @@ body,
   border-radius: 4px;
   background: transparent;
   color: var(--color-text-muted);
-  font-size: 11px;
+  font-size: 12px;
   font-weight: 450;
   cursor: pointer;
   white-space: nowrap;
@@ -6096,6 +6096,10 @@ body,
 }
 
 .agent-composer-frame {
+  --agent-session-color: var(--color-primary);
+  --agent-session-soft: color-mix(in srgb, var(--agent-session-color) 14%, transparent);
+  --agent-session-hover: color-mix(in srgb, var(--agent-session-color) 18%, var(--color-bg-elevated));
+  --agent-session-border: color-mix(in srgb, var(--agent-session-color) 34%, var(--color-border));
   flex: 1;
   display: flex;
   flex-direction: column;
@@ -6112,12 +6116,32 @@ body,
 .agent-composer-editor-host {
   flex: 1;
   min-height: 0;
+  transition: box-shadow 0.15s ease;
+}
+
+.agent-composer-frame:focus-within .agent-composer-editor-host {
+  box-shadow: inset 0 0 0 1px var(--agent-session-border);
 }
 
 .agent-composer-input {
   border: none;
   border-radius: 0;
   background: transparent;
+}
+
+.agent-composer-frame .attachment-action-row .btn:hover {
+  background: var(--agent-session-hover);
+  border-color: var(--agent-session-border);
+}
+
+.agent-composer-frame .attachment-tag:hover {
+  background: var(--agent-session-soft);
+  border-color: var(--agent-session-border);
+}
+
+.agent-composer-frame .attachment-tag-copy:hover {
+  color: var(--agent-session-color);
+  background: var(--agent-session-soft);
 }
 
 .agent-composer-actions {
@@ -6150,6 +6174,17 @@ body,
   font-size: 12px;
 }
 
+.agent-composer-select:hover,
+.agent-composer-select[aria-expanded="true"] {
+  background: var(--agent-session-hover);
+  border-color: var(--agent-session-border);
+}
+
+.agent-composer-select[aria-expanded="true"] .agent-composer-select-value,
+.agent-composer-select[aria-expanded="true"] svg {
+  color: var(--agent-session-color);
+}
+
 .agent-composer-select-label {
   color: var(--color-text-muted);
   font-size: 11px;
@@ -6171,7 +6206,7 @@ body,
   z-index: 20;
   min-width: 148px;
   padding: 4px;
-  border: 1px solid var(--color-border);
+  border: 1px solid var(--agent-session-border);
   border-radius: var(--radius-md);
   background: var(--color-bg-elevated);
   box-shadow: 0 4px 12px rgba(0, 0, 0, 0.18);
@@ -6197,7 +6232,11 @@ body,
 .agent-composer-select-menu button:hover,
 .agent-composer-select-menu button.active {
   color: var(--color-text-primary);
-  background: rgba(255, 255, 255, 0.06);
+  background: var(--agent-session-soft);
+}
+
+.agent-composer-select-menu button.active svg {
+  color: var(--agent-session-color);
 }
 
 .agent-composer-actions > span {
@@ -6214,11 +6253,16 @@ body,
   align-items: center;
   justify-content: center;
   padding: 0;
-  border: 1px solid var(--color-primary);
+  border: 1px solid var(--agent-session-color);
   border-radius: var(--radius-md);
-  background: var(--color-primary);
+  background: var(--agent-session-color);
   color: #fff;
   cursor: pointer;
+}
+
+.agent-send-button:hover:not(:disabled) {
+  background: color-mix(in srgb, var(--agent-session-color) 86%, #ffffff);
+  border-color: color-mix(in srgb, var(--agent-session-color) 86%, #ffffff);
 }
 
 .agent-send-button-abort {
@@ -7790,12 +7834,12 @@ body,
   padding: 0 8px 6px;
 }
 .mlc-tabs button {
-  height: 21px;
+  height: 20px;
   display: inline-flex;
   align-items: center;
-  gap: 3px;
-  padding: 1px 7px;
-  border-radius: 3px;
+  gap: 4px;
+  padding: 3px 6px;
+  border-radius: var(--radius-md);
   border: 1px solid rgba(128,128,128,0.2);
   background: transparent;
   color: var(--color-text-muted);
@@ -10733,7 +10777,7 @@ body,
   display: flex;
   flex-direction: column;
   background: var(--color-bg-surface);
-  border-radius: 8px;
+  border-radius: var(--radius-lg);
   border: 1px solid rgba(255, 255, 255, 0.06);
   overflow: hidden;
 }
@@ -10741,7 +10785,7 @@ body,
   display: flex;
   flex-direction: column;
   gap: 4px;
-  padding: 6px 10px;
+  padding: 6px 8px 6px 6px;
 }
 .questions-item-header {
   display: flex;
@@ -10781,7 +10825,7 @@ body,
   padding: 1px 6px;
   font-size: 10px;
   border: 1px solid var(--color-border);
-  border-radius: 3px;
+  border-radius: var(--radius-md);
   background: transparent;
   color: var(--color-text-secondary);
   cursor: pointer;
