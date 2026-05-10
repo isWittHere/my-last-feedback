@@ -8,6 +8,10 @@ export interface AgentSessionIdentity {
   color: string;
 }
 
+interface AgentSessionIdentityOptions {
+  color?: string | null;
+}
+
 const AVATAR_COLORS = [
   "#0d9488",
   "#2563eb",
@@ -39,11 +43,11 @@ function codeFromSeed(seed: string): string {
   return hashString(seed).toString(16).padStart(8, "0").slice(0, 4).toUpperCase();
 }
 
-function colorFromCode(code: string): string {
-  return AVATAR_COLORS[hashString(code) % AVATAR_COLORS.length];
+function colorFromCode(code: string, options?: AgentSessionIdentityOptions): string {
+  return options?.color?.trim() || AVATAR_COLORS[hashString(code) % AVATAR_COLORS.length];
 }
 
-export function getAgentSessionIdentity(session: AgentSession, language: "en" | "zh" = "en"): AgentSessionIdentity {
+export function getAgentSessionIdentity(session: AgentSession, language: "en" | "zh" = "en", options?: AgentSessionIdentityOptions): AgentSessionIdentity {
   const providerName = formatProviderName(session.providerRuntime?.agentInfo?.name || session.providerId);
   if (!session.providerSessionId || session.providerSessionState === "provisional") {
     const code = codeFromSeed(`local:${session.id}:${session.workspaceKey || session.cwd || session.ownerAlias || "agent"}`);
@@ -51,19 +55,19 @@ export function getAgentSessionIdentity(session: AgentSession, language: "en" | 
       providerName,
       name: "My Last Code",
       code,
-      color: colorFromCode(code),
+      color: colorFromCode(code, options),
     };
   }
 
-  return getAgentProviderSessionIdentity(session.providerId, session.providerSessionId, language, providerName);
+  return getAgentProviderSessionIdentity(session.providerId, session.providerSessionId, language, providerName, options);
 }
 
-export function getAgentProviderSessionIdentity(providerId: AgentProviderId, providerSessionId: string, language: "en" | "zh" = "en", providerName = formatProviderName(providerId)): AgentSessionIdentity {
+export function getAgentProviderSessionIdentity(providerId: AgentProviderId, providerSessionId: string, language: "en" | "zh" = "en", providerName = formatProviderName(providerId), options?: AgentSessionIdentityOptions): AgentSessionIdentity {
   const code = codeFromSeed(`${providerId}:${providerSessionId}`);
   return {
     providerName,
     name: getFriendlyName(code, language),
     code,
-    color: colorFromCode(code),
+    color: colorFromCode(code, options),
   };
 }

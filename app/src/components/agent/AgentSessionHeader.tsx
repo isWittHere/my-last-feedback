@@ -1,7 +1,6 @@
 import { useEffect, useState, type TransitionEvent } from "react";
 import { useTranslation } from "react-i18next";
 import { useAgentConsoleSettings } from "../../agentConsoleSettings";
-import { getAgentSessionIdentity } from "../../agent/sessionIdentity";
 import type { AgentSession } from "../../agent/types";
 import { Icon } from "../Icons";
 import { IdenticonAvatar } from "../IdenticonAvatar";
@@ -11,6 +10,7 @@ import { AgentHeaderDetailsRow } from "./AgentHeaderDetailsRow";
 import { AgentPermissionIndicator } from "./AgentPermissionIndicator";
 import { OpenCodeInitialAvatar } from "./OpenCodeInitialAvatar";
 import { AgentTokenStatsTopbar } from "./AgentTokenStatsTopbar";
+import { useAgentSessionVisualIdentity } from "./useAgentSessionVisualIdentity";
 
 interface AgentSessionHeaderProps {
   session: AgentSession;
@@ -18,12 +18,12 @@ interface AgentSessionHeaderProps {
 }
 
 export function AgentSessionHeader({ session, previewMode = false }: AgentSessionHeaderProps) {
-  const { t, i18n } = useTranslation();
+  const { t } = useTranslation();
   const { defaultExpandHeaderDetails } = useAgentConsoleSettings();
   const [expanded, setExpanded] = useState(defaultExpandHeaderDetails);
   const [detailsOverflowVisible, setDetailsOverflowVisible] = useState(defaultExpandHeaderDetails && !previewMode);
   const [codeCopied, setCodeCopied] = useState(false);
-  const identity = getAgentSessionIdentity(session, i18n.language.startsWith("zh") ? "zh" : "en");
+  const identity = useAgentSessionVisualIdentity(session);
   const identityTitle = identity.code ? `${identity.name} (${identity.code}) · ${identity.providerName}` : identity.providerName;
 
   const handleAvatarClick = () => {
@@ -68,7 +68,7 @@ export function AgentSessionHeader({ session, previewMode = false }: AgentSessio
             </button>
           ) : (
             <span className="agent-console-session-avatar agent-console-session-avatar-static" title={identity.providerName}>
-              <OpenCodeInitialAvatar size={18} color={identity.color} emptyColor={`${identity.color}26`} />
+              <OpenCodeInitialAvatar size={18} color={identity.color} />
             </span>
           )}
           <span className="agent-console-topbar-caller-name" style={{ color: identity.color }} title={identityTitle}>{identity.name}</span>

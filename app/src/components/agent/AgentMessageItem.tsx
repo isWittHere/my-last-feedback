@@ -2,7 +2,7 @@ import type { CSSProperties } from "react";
 import { useEffect, useMemo, useState } from "react";
 import { useTranslation } from "react-i18next";
 import { useAgentConsoleSettings } from "../../agentConsoleSettings";
-import { getAgentSessionIdentity } from "../../agent/sessionIdentity";
+import type { AgentSessionIdentity } from "../../agent/sessionIdentity";
 import type { AgentContentBlock, AgentMessage, AgentProviderMessagePart, AgentSession, AgentSubmittedAttachmentTag } from "../../agent/types";
 import { splitAgentMessageBlocks } from "../../agent/steps";
 import { useAgentStore } from "../../store/agentStore";
@@ -11,6 +11,7 @@ import { Icon } from "../Icons";
 import { IdenticonAvatar } from "../IdenticonAvatar";
 import { AgentProcessGroup } from "./AgentProcessGroup";
 import { OpenCodeInitialAvatar } from "./OpenCodeInitialAvatar";
+import { useAgentSessionVisualIdentity } from "./useAgentSessionVisualIdentity";
 
 function blockText(block: AgentContentBlock): string {
   if (block.type === "text") return block.content;
@@ -163,10 +164,9 @@ function ResultBlocks({ blocks, projectDirectory, collapseOutputBlankLines }: { 
   );
 }
 
-function actorInfo(session: AgentSession, message: AgentMessage, language: "en" | "zh"): { alias: string; color: string; says: string; avatarKind: "opencode" | "identicon" } {
+function actorInfo(message: AgentMessage, identity: AgentSessionIdentity): { alias: string; color: string; says: string; avatarKind: "opencode" | "identicon" } {
   if (message.role === "user") return { alias: "You", color: "#7c8cff", says: "你说:", avatarKind: "identicon" };
   if (message.role === "system") return { alias: "System", color: "#f59e0b", says: "系统:", avatarKind: "identicon" };
-  const identity = getAgentSessionIdentity(session, language);
   return { alias: identity.code || identity.name, color: identity.color, says: `${identity.name} 说:`, avatarKind: identity.code ? "identicon" : "opencode" };
 }
 
@@ -259,11 +259,12 @@ function AgentUserAttachmentTags({ tags }: { tags?: AgentSubmittedAttachmentTag[
 }
 
 export function AgentMessageItem({ session, message, projectDirectory }: { session: AgentSession; message: AgentMessage; projectDirectory: string }) {
-  const { i18n, t } = useTranslation();
+  const { t } = useTranslation();
   const [fullInfoOpen, setFullInfoOpen] = useState(false);
   const { collapseConsecutiveOutputBlankLines, showMessageSpeakerLine, smoothStreamingOutput } = useAgentConsoleSettings();
+  const sessionIdentity = useAgentSessionVisualIdentity(session);
   const { processBlocks, resultBlocks } = splitAgentMessageBlocks(message);
-  const { alias, color, says, avatarKind } = actorInfo(session, message, i18n.language.startsWith("zh") ? "zh" : "en");
+  const { alias, color, says, avatarKind } = actorInfo(message, sessionIdentity);
   const userText = message.role === "user" ? userDisplayText(message, resultBlocks) : "";
   const submittedText = message.role === "user" ? userSubmittedText(message, resultBlocks) : "";
   const hasFullInfo = Boolean(submittedText.trim()) && submittedText.trim() !== userText.trim();
@@ -290,7 +291,7 @@ export function AgentMessageItem({ session, message, projectDirectory }: { sessi
               <div className="agent-message-main">
                 {showMessageSpeakerLine && (
                   <header className="agent-message-speaker">
-                    {avatarKind === "opencode" ? <OpenCodeInitialAvatar size={22} color={color} emptyColor={`${color}26`} /> : <IdenticonAvatar alias={alias} color={color} size={22} />}
+                    {avatarKind === "opencode" ? <OpenCodeInitialAvatar size={22} color={color} /> : <IdenticonAvatar alias={alias} color={color} size={22} />}
                     <span>{says}</span>
                   </header>
                 )}
@@ -322,7 +323,7 @@ export function AgentMessageItem({ session, message, projectDirectory }: { sessi
       <div className="agent-message-main" style={{ "--agent-actor-color": color } as CSSProperties}>
         {showMessageSpeakerLine && (
           <header className="agent-message-speaker">
-            {avatarKind === "opencode" ? <OpenCodeInitialAvatar size={22} color={color} emptyColor={`${color}26`} /> : <IdenticonAvatar alias={alias} color={color} size={22} />}
+            {avatarKind === "opencode" ? <OpenCodeInitialAvatar size={22} color={color} /> : <IdenticonAvatar alias={alias} color={color} size={22} />}
             <span>{says}</span>
           </header>
         )}

@@ -3,16 +3,15 @@ import { useTranslation } from "react-i18next";
 import { readText as readClipboardText } from "@tauri-apps/plugin-clipboard-manager";
 import { useAgentStore } from "../../store/agentStore";
 import { useFeedbackStore, type DockColumnId, type DockTabId, type GitActionType } from "../../store/feedbackStore";
-import { agentIdentityLanguage } from "../../identity/agentIdentity";
 import { workspacePathKey } from "../../workspace/workspacePaths";
 import { hasAgentComposerContent } from "../../agent/composer";
-import { getAgentSessionIdentity } from "../../agent/sessionIdentity";
 import { getEnabledOpenCodeModels, useOpenCodeSettings } from "../../openCodeSettings";
 import type { AgentChoiceOption, AgentSession } from "../../agent/types";
 import { Icon, MlcLogoIcon } from "../Icons";
 import type { PromptCommandOption } from "../../composer/promptCommands";
 import { SharedComposerInput } from "../composer/SharedComposerInput";
 import { GIT_ACTION_TYPES, GitActionOptionIcon, GitActionTag, TestLogTag, gitActionLabelKey } from "../CallerPanelParts";
+import { useAgentSessionVisualIdentity } from "./useAgentSessionVisualIdentity";
 
 const AGENT_COMPOSER_CALLER_ID = "agent-console";
 const DOCK_COLUMN_IDS: DockColumnId[] = ["leftSidebar", "leftPage", "rightPage", "rightSidebar"];
@@ -62,7 +61,7 @@ function AgentSelectButton({ label, value, options, onSelect }: { label: string;
 }
 
 export function AgentComposer({ session }: { session: AgentSession }) {
-  const { t, i18n } = useTranslation();
+  const { t } = useTranslation();
   const testLogRef = useRef<HTMLTextAreaElement>(null);
   const branchInputRef = useRef<HTMLInputElement>(null);
   const [showTestLog, setShowTestLog] = useState(false);
@@ -90,7 +89,7 @@ export function AgentComposer({ session }: { session: AgentSession }) {
   const setDockColumnCollapsed = useFeedbackStore((state) => state.setDockColumnCollapsed);
   const moveDockTabToColumn = useFeedbackStore((state) => state.moveDockTabToColumn);
   useOpenCodeSettings();
-  const sessionIdentity = useMemo(() => getAgentSessionIdentity(session, agentIdentityLanguage(i18n.language)), [i18n.language, session]);
+  const sessionIdentity = useAgentSessionVisualIdentity(session);
   const commandOptions = useMemo(() => {
     return (session.availableCommands || []).map((command): PromptCommandOption => ({
       id: command.id,

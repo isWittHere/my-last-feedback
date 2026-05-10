@@ -3,6 +3,7 @@ import { useCallback, useEffect, useMemo, useRef, useState, type ReactNode } fro
 import { useTranslation } from "react-i18next";
 import { getAgentProviderSessionIdentity, getAgentSessionIdentity, type AgentSessionIdentity } from "../../agent/sessionIdentity";
 import type { AgentProviderId, AgentSession } from "../../agent/types";
+import { resolveWorkspaceIdentity, type WorkspaceColorCandidate } from "../../identity/workspaceIdentity";
 import { useAgentStore } from "../../store/agentStore";
 import { useFeedbackStore } from "../../store/feedbackStore";
 import { useTerminalStore, type TerminalPathSource } from "../../store/terminalStore";
@@ -108,7 +109,7 @@ function HistorySessionAvatar({ identity, sessionId, status }: { identity: Agent
       {identity.code ? (
         <IdenticonAvatar alias={identity.code} color={identity.color} size={16} />
       ) : (
-        <OpenCodeInitialAvatar size={16} color={identity.color} emptyColor={`${identity.color}26`} />
+        <OpenCodeInitialAvatar size={16} color={identity.color} />
       )}
       {status ? <span className={`agent-session-history-status-dot ${sessionStatusTone(status)}`} /> : null}
     </span>
@@ -132,7 +133,7 @@ export function AgentSessionManagerPanel() {
   const focusedComposer = useFeedbackStore((state) => state.focusedComposer);
   const openDockTab = useFeedbackStore((state) => state.openDockTab);
   const activeWorkspacePath = useFeedbackStore((state) => state.mlcActiveWorkspacePath || "");
-  const callerDataKey = useFeedbackStore((state) => state.callers.map((caller) => `${caller.id}\t${caller.name}\t${caller.alias || ""}\t${caller.workspaceKey || ""}`).join("\n"));
+  const callerDataKey = useFeedbackStore((state) => state.callers.map((caller) => `${caller.id}\t${caller.name}\t${caller.alias || ""}\t${caller.workspaceKey || ""}\t${caller.color || ""}`).join("\n"));
   const recentRequestPathsKey = useFeedbackStore((state) => state.sessions.map((session) => `${session.id}\t${session.projectDirectory}\t${session.callerId}\t${session.createdAt}`).join("\n"));
   const pathMenuRef = useRef<HTMLDivElement>(null);
   const [busyAction, setBusyAction] = useState<string | null>(null);
@@ -188,8 +189,8 @@ export function AgentSessionManagerPanel() {
     .split("\n")
     .filter(Boolean)
     .map((line) => {
-      const [id, name, alias, workspaceKey] = line.split("\t");
-      return [id, { name: name || id, alias: alias || "", workspaceKey: workspaceKey || "" }] as const;
+      const [id, name, alias, workspaceKey, color] = line.split("\t");
+      return [id, { name: name || id, alias: alias || "", workspaceKey: workspaceKey || "", color: color || "" }] as const;
     })), [callerDataKey]);
 
   const recentRequestPaths = useMemo(() => recentRequestPathsKey
@@ -199,6 +200,15 @@ export function AgentSessionManagerPanel() {
       const [id, projectDirectory, callerId, createdAt] = line.split("\t");
       return { id, projectDirectory, callerId, createdAt };
     }), [recentRequestPathsKey]);
+
+  const workspaceColorCandidates = useMemo<WorkspaceColorCandidate[]>(() => recentRequestPaths.map((requestSession) => {
+    const caller = callerData.get(requestSession.callerId);
+    return {
+      workspaceKey: caller?.workspaceKey,
+      workspacePath: requestSession.projectDirectory,
+      color: caller?.color,
+    };
+  }), [callerData, recentRequestPaths]);
 
   const pathCandidates = useMemo(() => {
     const candidates: AgentWorkspacePathCandidate[] = [];
@@ -420,7 +430,8 @@ export function AgentSessionManagerPanel() {
                           {groups.get(g)!.map((row) => {
                             if (row.type === "local") {
                               const session = row.session;
-                              const identity = getAgentSessionIdentity(session, i18n.language.startsWith("zh") ? "zh" : "en");
+                              const workspaceIdentity = resolveWorkspaceIdentity({ workspacePath: session.cwd, workspaceKey: session.workspaceKey, candidates: workspaceColorCandidates });
+                              const identity = getAgentSessionIdentity(session, i18n.language.startsWith("zh") ? "zh" : "en", { color: workspaceIdentity.color });
                               const folderName = folderNameFromPath(session.cwd);
                               const metaTitle = sessionMetaTitle(session.updatedAt || session.createdAt, session.cwd);
                               return (
@@ -448,9 +459,10 @@ export function AgentSessionManagerPanel() {
                             const restoreKey = `${providerId}:restore:${item.sessionId}`;
                             const renameKey = `${providerId}:rename:${item.sessionId}`;
                             const deleteKey = `${providerId}:delete:${item.sessionId}`;
-                            const identity = getAgentProviderSessionIdentity(providerId, item.sessionId, i18n.language.startsWith("zh") ? "zh" : "en", providerLabel(providerId));
                             const boundSession = providerSessions.find((session) => session.providerSessionId === item.sessionId && session.providerSessionState !== "provisional");
                             const workspacePath = item.cwd || boundSession?.cwd;
+                            const workspaceIdentity = resolveWorkspaceIdentity({ workspacePath, workspaceKey: boundSession?.workspaceKey, candidates: workspaceColorCandidates });
+                            const identity = getAgentProviderSessionIdentity(providerId, item.sessionId, i18n.language.startsWith("zh") ? "zh" : "en", providerLabel(providerId), { color: workspaceIdentity.color });
                             const folderName = folderNameFromPath(workspacePath);
                             const metaTitle = sessionMetaTitle(item.updatedAt, workspacePath);
                             const isActiveRemoteSession = boundSession?.id === activeSessionId;

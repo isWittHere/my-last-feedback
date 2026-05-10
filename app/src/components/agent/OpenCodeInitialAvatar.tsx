@@ -17,7 +17,7 @@ const OPENCODE_HOLLOW_SQUARE_GRID = [
   [false, false, false, false, false],
 ];
 
-export function OpenCodeInitialAvatar({ size, color = "#f7f7f7", emptyColor = "#151515", className, style }: OpenCodeInitialAvatarProps) {
+export function OpenCodeInitialAvatar({ size, color = "#f7f7f7", emptyColor, className, style }: OpenCodeInitialAvatarProps) {
   return (
     <IdenticonAvatar
       alias="opencode"

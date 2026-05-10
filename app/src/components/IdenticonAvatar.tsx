@@ -96,7 +96,11 @@ function PixelAvatar({ grid, color, size, emptyColor, className, style }: PixelA
   );
 }
 
+function defaultEmptyColor(color: string): string {
+  return /^#[0-9a-f]{6}$/i.test(color) ? `${color}26` : `color-mix(in srgb, ${color} 15%, transparent)`;
+}
+
 export function IdenticonAvatar({ alias, color, size, className, style, emptyColor, grid }: IdenticonAvatarProps) {
   const generatedGrid = useMemo(() => generateGrid(alias), [alias]);
-  return <PixelAvatar grid={grid || generatedGrid} color={color} size={size} emptyColor={emptyColor || `${color}26`} className={className} style={style} />;
+  return <PixelAvatar grid={grid || generatedGrid} color={color} size={size} emptyColor={emptyColor || defaultEmptyColor(color)} className={className} style={style} />;
 }
