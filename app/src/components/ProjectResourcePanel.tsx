@@ -118,7 +118,10 @@ export function ProjectResourcePanel() {
       const [key, ownerName] = line.split("\t");
       return [key, ownerName] as const;
     })), [sessionWorkspaceOwnerNamesKey]);
-  const targetOwnerName = agentNickname(targetCaller?.alias, friendlyNameLanguage, targetCaller?.name) || workspaceOwnerNames.get(workspacePathKey(targetWorkspacePath)) || "";
+  const targetOwnerName = agentNickname(targetCaller?.alias, friendlyNameLanguage, targetCaller?.name)
+    || agentNickname(focusedComposer?.ownerAlias, friendlyNameLanguage)
+    || workspaceOwnerNames.get(workspacePathKey(targetWorkspacePath))
+    || "";
   const targetLabel = formatWorkspaceTargetLabel({ source: workspaceTargetSourceForComposerKind(focusedComposer?.kind), ownerName: targetOwnerName, path: targetWorkspacePath });
 
   const workspaceOptions = useMemo(() => {

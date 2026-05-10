@@ -273,6 +273,8 @@ export interface AgentSession {
   providerRuntime?: AgentProviderRuntimeInfo;
   title: string;
   cwd: string;
+  workspaceKey?: string;
+  ownerAlias?: string;
   modelId?: string;
   modeId?: string;
   availableModels?: AgentChoiceOption[];

@@ -105,6 +105,7 @@ pub struct NewSessionEvent {
     pub caller_id: String,
     pub caller_name: String,
     pub caller_color: String,
+    pub caller_workspace_key: String,
     pub caller_client_name: String,
     pub caller_alias: String,
     pub request_name: String,
@@ -252,7 +253,7 @@ async fn handle_connection(
                 // Register caller and session
                 let event = {
                     let mut mgr = session_mgr.lock().await;
-                    let caller = mgr.ensure_caller(&caller_field.name, &caller_field.version, &caller_field.client_name, &caller_field.alias);
+                    let caller = mgr.ensure_caller(&caller_field.name, &caller_field.version, &caller_field.client_name, &caller_field.alias, &payload_field.project_directory);
                     let questions_json: Vec<serde_json::Value> = payload_field.questions.iter().map(|q| {
                         serde_json::json!({
                             "label": q.label,
@@ -274,6 +275,7 @@ async fn handle_connection(
                         caller_id: caller.id.clone(),
                         caller_name: caller.name.clone(),
                         caller_color: caller.color.clone(),
+                        caller_workspace_key: caller.workspace_key.clone(),
                         caller_client_name: caller.client_name.clone(),
                         caller_alias: caller.alias.clone(),
                         request_name: payload_field.request_name,

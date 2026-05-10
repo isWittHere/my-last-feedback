@@ -3,6 +3,8 @@ import { useTranslation } from "react-i18next";
 import { readText as readClipboardText } from "@tauri-apps/plugin-clipboard-manager";
 import { useAgentStore } from "../../store/agentStore";
 import { useFeedbackStore, type DockColumnId, type DockTabId, type GitActionType } from "../../store/feedbackStore";
+import { resolveWorkspaceIdentity, type WorkspaceColorCandidate } from "../../identity/workspaceIdentity";
+import { workspacePathKey } from "../../workspace/workspacePaths";
 import { hasAgentComposerContent } from "../../agent/composer";
 import { getEnabledOpenCodeModels, useOpenCodeSettings } from "../../openCodeSettings";
 import type { AgentChoiceOption, AgentSession } from "../../agent/types";
@@ -86,7 +88,21 @@ export function AgentComposer({ session }: { session: AgentSession }) {
   const setDockActiveTab = useFeedbackStore((state) => state.setDockActiveTab);
   const setDockColumnCollapsed = useFeedbackStore((state) => state.setDockColumnCollapsed);
   const moveDockTabToColumn = useFeedbackStore((state) => state.moveDockTabToColumn);
+  const feedbackCallers = useFeedbackStore((state) => state.callers);
+  const feedbackSessions = useFeedbackStore((state) => state.sessions);
   useOpenCodeSettings();
+  const workspaceColorCandidates = useMemo<WorkspaceColorCandidate[]>(() => {
+    const callerById = new Map(feedbackCallers.map((caller) => [caller.id, caller] as const));
+    return feedbackSessions.map((feedbackSession) => {
+      const caller = callerById.get(feedbackSession.callerId);
+      return {
+        workspaceKey: caller?.workspaceKey,
+        workspacePath: feedbackSession.projectDirectory,
+        color: caller?.color,
+      };
+    });
+  }, [feedbackCallers, feedbackSessions]);
+  const workspaceIdentity = useMemo(() => resolveWorkspaceIdentity({ workspacePath: session.cwd, workspaceKey: session.workspaceKey, candidates: workspaceColorCandidates }), [session.cwd, session.workspaceKey, workspaceColorCandidates]);
   const commandOptions = useMemo(() => {
     return (session.availableCommands || []).map((command): PromptCommandOption => ({
       id: command.id,
@@ -107,6 +123,8 @@ export function AgentComposer({ session }: { session: AgentSession }) {
       callerId: AGENT_COMPOSER_CALLER_ID,
       sessionId: session.id,
       projectDirectory: session.cwd,
+      workspaceKey: session.workspaceKey || workspacePathKey(session.cwd),
+      ownerAlias: session.ownerAlias || "",
       kind: "agent",
       focusedAt: new Date().toISOString(),
     });
@@ -241,10 +259,10 @@ export function AgentComposer({ session }: { session: AgentSession }) {
   const attachmentMiddleTags = (
     <>
       {(session.testLogText.trim() || showTestLog) && (
-        <TestLogTag showTestLog={showTestLog} setShowTestLog={setShowTestLog} testLogRef={testLogRef} testLogText={session.testLogText} callerColor="var(--color-primary)" />
+        <TestLogTag showTestLog={showTestLog} setShowTestLog={setShowTestLog} testLogRef={testLogRef} testLogText={session.testLogText} callerColor={workspaceIdentity.color} />
       )}
       {session.gitAction && (
-        <GitActionTag gitAction={session.gitAction} showGitPanel={showGitPanel} setShowGitPanel={setShowGitPanel} callerColor="var(--color-primary)" onRemove={() => setGitAction(session.id, null)} />
+        <GitActionTag gitAction={session.gitAction} showGitPanel={showGitPanel} setShowGitPanel={setShowGitPanel} callerColor={workspaceIdentity.color} onRemove={() => setGitAction(session.id, null)} />
       )}
     </>
   );

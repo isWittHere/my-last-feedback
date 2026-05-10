@@ -49,6 +49,7 @@ export interface Caller {
   name: string;
   version: string;
   color: string;
+  workspaceKey?: string;
   pendingCount: number;
   clientName?: string;
   alias?: string;
@@ -162,6 +163,8 @@ export interface FocusedComposer {
   callerId: string;
   sessionId?: string;
   projectDirectory: string;
+  workspaceKey?: string;
+  ownerAlias?: string;
   kind: ComposerFocusKind;
   focusedAt: string;
 }

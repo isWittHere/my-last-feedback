@@ -61,7 +61,7 @@ interface AgentStoreState {
   activeSessionId: string | null;
   providerSessionLists: Partial<Record<AgentProviderId, AgentProviderSessionListState>>;
   getActiveSession: () => AgentSession | null;
-  createNewSession: (options?: { cwd?: string | null }) => string;
+  createNewSession: (options?: { cwd?: string | null; ownerAlias?: string | null; workspaceKey?: string | null }) => string;
   setActiveSession: (sessionId: string) => void;
   setSessionMode: (sessionId: string, modeId: string) => void;
   setSessionModel: (sessionId: string, modelId: string) => void;
@@ -1784,6 +1784,8 @@ export const useAgentStore = create<AgentStoreState>((set, get) => ({
     const state = get();
     const activeSession = state.getActiveSession();
     const requestedCwd = options.cwd?.trim();
+    const workspaceKey = options.workspaceKey?.trim() || workspacePathKey(requestedCwd || activeSession?.cwd || "");
+    const ownerAlias = options.ownerAlias?.trim() || activeSession?.ownerAlias || "";
     const inheritOpenCodeCommands = !requestedCwd || requestedCwd === activeSession?.cwd;
     const createdAt = nowIso();
     const sessionId = newId("agent_session");
@@ -1792,6 +1794,8 @@ export const useAgentStore = create<AgentStoreState>((set, get) => ({
       id: sessionId,
       title: "New Agent Session",
       cwd: requestedCwd || activeSession?.cwd || "",
+      workspaceKey,
+      ownerAlias,
       modelId: activeSession?.modelId,
       modeId: activeSession?.modeId,
       availableModels: activeSession?.availableModels || [],
@@ -2391,7 +2395,7 @@ export const useAgentStore = create<AgentStoreState>((set, get) => ({
       const forked = await httpRuntime.runtime.client.forkSession(session.providerSessionId, { messageID: providerMessageId });
       const messages = await httpRuntime.runtime.client.messages(forked.id).catch(() => [] as OpenCodeMessage[]);
       const todos = await httpRuntime.runtime.client.todos(forked.id).catch(() => []);
-      const newSessionId = get().createNewSession({ cwd: session.cwd });
+      const newSessionId = get().createNewSession({ cwd: session.cwd, ownerAlias: session.ownerAlias, workspaceKey: session.workspaceKey });
       const replayedMessages = appendRestoredTaskList(agentMessagesFromOpenCodeMessages(messages), todos, forked.id);
       set((state) => ({
         sessions: updateSession(state.sessions, newSessionId, (item) => ({
@@ -2553,13 +2557,17 @@ export const useAgentStore = create<AgentStoreState>((set, get) => ({
       const restoredModelId = restoredSelection.modelId || session.modelId;
       const restoredModeId = selectOpenCodeAgentMode(restoredSelection.modeId || session.modeId, session.availableModes || []);
       const restoredContextUsage = openCodeContextUsageFromMessages(messages, contextLimitForModel(session.availableModels, restoredModelId));
+      const restoredCwd = providerSession?.directory || listItem?.cwd || session.cwd;
+      const restoredWorkspaceKey = workspacePathKey(restoredCwd);
       set((state) => ({
         activeSessionId: targetSessionId,
         sessions: reusableSession
           ? updateSession(state.sessions, reusableSession.id, (item) => appendDiagnosticToSession({
             ...item,
             title: providerSession?.title || listItem?.title || item.title,
-            cwd: providerSession?.directory || listItem?.cwd || item.cwd || session.cwd,
+            cwd: restoredCwd || item.cwd,
+            workspaceKey: restoredWorkspaceKey || item.workspaceKey,
+            ownerAlias: item.ownerAlias || session.ownerAlias || "",
             providerRuntime: runtimeOwner?.providerRuntime || session.providerRuntime,
             providerSessionId,
             providerSessionState: "restored",
@@ -2587,7 +2595,9 @@ export const useAgentStore = create<AgentStoreState>((set, get) => ({
             id: targetSessionId,
             providerId,
             title: providerSession?.title || listItem?.title || session.title,
-            cwd: providerSession?.directory || listItem?.cwd || session.cwd,
+            cwd: restoredCwd,
+            workspaceKey: restoredWorkspaceKey,
+            ownerAlias: session.ownerAlias || "",
             providerRuntime: runtimeOwner?.providerRuntime || session.providerRuntime,
             providerSessionId,
             providerSessionState: "restored",
@@ -2677,6 +2687,8 @@ export const useAgentStore = create<AgentStoreState>((set, get) => ({
           providerRuntime: item.providerRuntime,
           title: "New Agent Session",
           cwd: item.cwd,
+          workspaceKey: item.workspaceKey || workspacePathKey(item.cwd),
+          ownerAlias: item.ownerAlias || "",
           modelId: item.modelId,
           modeId: item.modeId,
           availableModels: item.availableModels || [],

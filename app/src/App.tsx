@@ -67,6 +67,7 @@ interface NewSessionEvent {
   caller_id: string;
   caller_name: string;
   caller_color: string;
+  caller_workspace_key?: string;
   caller_client_name: string;
   caller_alias: string;
   request_name: string;
@@ -90,7 +91,7 @@ function App() {
       .catch(() => {});
 
     invoke<{
-      callers: Array<{ id: string; name: string; version: string; color: string; client_name?: string; alias?: string }>;
+      callers: Array<{ id: string; name: string; version: string; color: string; workspace_key?: string; client_name?: string; alias?: string }>;
       sessions: Array<{
         id: string;
         caller_id: string;
@@ -111,7 +112,7 @@ function App() {
       .then((history) => {
         const s = useFeedbackStore.getState();
         for (const c of history.callers) {
-          s.addCaller({ ...c, pendingCount: 0, clientName: c.client_name || "", alias: c.alias || "" });
+          s.addCaller({ ...c, pendingCount: 0, workspaceKey: c.workspace_key || "", clientName: c.client_name || "", alias: c.alias || "" });
         }
         for (const sess of history.sessions) {
           s.addSession({
@@ -172,6 +173,7 @@ function App() {
         name: data.caller_name,
         version: "",
         color: data.caller_color,
+        workspaceKey: data.caller_workspace_key || "",
         pendingCount: 0,
         clientName: data.caller_client_name || "",
         alias: data.caller_alias || "",

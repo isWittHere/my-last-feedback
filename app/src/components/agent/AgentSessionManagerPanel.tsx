@@ -7,7 +7,7 @@ import { useAgentStore } from "../../store/agentStore";
 import { useFeedbackStore } from "../../store/feedbackStore";
 import { useTerminalStore, type TerminalPathSource } from "../../store/terminalStore";
 import { pushWorkspacePathCandidate, type WorkspacePathCandidate } from "../../workspace/workspaceCandidates";
-import { normalizeWorkspacePath } from "../../workspace/workspacePaths";
+import { normalizeWorkspacePath, sameWorkspacePath, workspacePathKey } from "../../workspace/workspacePaths";
 import { Icon } from "../Icons";
 import { IdenticonAvatar } from "../IdenticonAvatar";
 import { OpenCodeInitialAvatar } from "./OpenCodeInitialAvatar";
@@ -132,7 +132,7 @@ export function AgentSessionManagerPanel() {
   const focusedComposer = useFeedbackStore((state) => state.focusedComposer);
   const openDockTab = useFeedbackStore((state) => state.openDockTab);
   const activeWorkspacePath = useFeedbackStore((state) => state.mlcActiveWorkspacePath || "");
-  const callerNamesKey = useFeedbackStore((state) => state.callers.map((caller) => `${caller.id}\t${caller.name}`).join("\n"));
+  const callerDataKey = useFeedbackStore((state) => state.callers.map((caller) => `${caller.id}\t${caller.name}\t${caller.alias || ""}\t${caller.workspaceKey || ""}`).join("\n"));
   const recentRequestPathsKey = useFeedbackStore((state) => state.sessions.map((session) => `${session.id}\t${session.projectDirectory}\t${session.callerId}\t${session.createdAt}`).join("\n"));
   const pathMenuRef = useRef<HTMLDivElement>(null);
   const [busyAction, setBusyAction] = useState<string | null>(null);
@@ -184,13 +184,13 @@ export function AgentSessionManagerPanel() {
     };
   }, [pathMenuOpen]);
 
-  const callerNames = useMemo(() => new Map(callerNamesKey
+  const callerData = useMemo(() => new Map(callerDataKey
     .split("\n")
     .filter(Boolean)
     .map((line) => {
-      const [id, name] = line.split("\t");
-      return [id, name || id] as const;
-    })), [callerNamesKey]);
+      const [id, name, alias, workspaceKey] = line.split("\t");
+      return [id, { name: name || id, alias: alias || "", workspaceKey: workspaceKey || "" }] as const;
+    })), [callerDataKey]);
 
   const recentRequestPaths = useMemo(() => recentRequestPathsKey
     .split("\n")
@@ -218,7 +218,7 @@ export function AgentSessionManagerPanel() {
       pushWorkspacePathCandidate(candidates, seen, {
         path: focusedComposer.projectDirectory,
         source: "caller",
-        callerName: callerNames.get(focusedComposer.callerId),
+        callerName: callerData.get(focusedComposer.callerId)?.name,
         lastUsedAt: focusedComposer.focusedAt,
       });
     }
@@ -235,12 +235,12 @@ export function AgentSessionManagerPanel() {
       pushWorkspacePathCandidate(candidates, seen, {
         path: requestSession.projectDirectory,
         source: "caller",
-        callerName: callerNames.get(requestSession.callerId),
+        callerName: callerData.get(requestSession.callerId)?.name,
         lastUsedAt: requestSession.createdAt,
       });
     }
     return candidates;
-  }, [activeSession?.cwd, activeWorkspacePath, callerNames, focusedComposer, lastUsedCwd, providerSessionLists, recentPaths, recentRequestPaths, sessions]);
+  }, [activeSession?.cwd, activeWorkspacePath, callerData, focusedComposer, lastUsedCwd, providerSessionLists, recentPaths, recentRequestPaths, sessions]);
 
   const defaultCwd = activeSession?.cwd || lastUsedCwd || pathCandidates[0]?.path || null;
 
@@ -248,14 +248,26 @@ export function AgentSessionManagerPanel() {
     openDockTab("agentConsole", "rightPage");
   }, [openDockTab]);
 
+  const ownerAliasForPath = useCallback((path: string | null): string => {
+    const cleanPath = path?.trim();
+    if (!cleanPath) return activeSession?.ownerAlias || "";
+    if (focusedComposer?.projectDirectory && sameWorkspacePath(focusedComposer.projectDirectory, cleanPath)) {
+      return focusedComposer.ownerAlias || callerData.get(focusedComposer.callerId)?.alias || "";
+    }
+    const recentMatch = [...recentRequestPaths]
+      .sort((left, right) => right.createdAt.localeCompare(left.createdAt))
+      .find((requestSession) => sameWorkspacePath(requestSession.projectDirectory, cleanPath));
+    return callerData.get(recentMatch?.callerId || "")?.alias || activeSession?.ownerAlias || "";
+  }, [activeSession?.ownerAlias, callerData, focusedComposer, recentRequestPaths]);
+
   const createFromPath = useCallback((cwd: string | null, source: AgentWorkspacePathSource = "recent") => {
     const cleanPath = cwd?.trim() || null;
-    const sessionId = createNewSession({ cwd: cleanPath });
+    const sessionId = createNewSession({ cwd: cleanPath, ownerAlias: ownerAliasForPath(cleanPath), workspaceKey: workspacePathKey(cleanPath || "") });
     if (cleanPath) recordRecentPath(cleanPath, toTerminalPathSource(source));
     setPathMenuOpen(false);
     showAgentPanel();
     return sessionId;
-  }, [createNewSession, recordRecentPath, showAgentPanel]);
+  }, [createNewSession, ownerAliasForPath, recordRecentPath, showAgentPanel]);
 
   const chooseWorkspaceFolder = useCallback(async () => {
     setActionError(null);
