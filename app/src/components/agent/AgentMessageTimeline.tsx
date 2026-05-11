@@ -1,8 +1,9 @@
 import { Fragment, useCallback, useEffect, useRef, useState, type CSSProperties } from "react";
 import { useAgentConsoleSettings } from "../../agentConsoleSettings";
 import type { AgentContentBlock, AgentProviderMessagePart, AgentSession } from "../../agent/types";
-import { MlcLogoIcon } from "../Icons";
+import { Icon, MlcLogoIcon } from "../Icons";
 import { AgentMessageItem } from "./AgentMessageItem";
+import { AgentNewSessionWorkspacePicker } from "./AgentNewSessionWorkspacePicker";
 import { AgentPermissionPanel } from "./AgentPermissionIndicator";
 import { AgentSessionHeader } from "./AgentSessionHeader";
 
@@ -272,27 +273,41 @@ export function AgentMessageTimeline({ session }: { session: AgentSession }) {
     };
   }, [checkNearBottom, isStreaming, scrollToEnd]);
 
+  const isNewOpenCodeSessionPage = session.providerId === "opencode" && !session.providerSessionId && session.messages.length === 0;
+  const latestDiagnostic = session.diagnostics[session.diagnostics.length - 1];
+
   return (
     <div className="agent-message-timeline" ref={scrollRef} onScroll={handleTimelineScroll}>
-      <div className="agent-timeline-top-overlay" ref={topOverlayRef}>
-        <AgentSessionHeader session={session} />
-        {showStickyUserMessageBar && (
-          <div className="agent-sticky-user-slot" data-visible={hasRenderedStickyUserContent} data-resize={stickyUserResizeDirection} style={{ "--agent-sticky-user-height": `${stickyUserHeight}px` } as CSSProperties}>
-            <button
-              ref={stickyUserBarRef}
-              type="button"
-              className={`agent-sticky-user-bar${hasRenderedStickyUserContent ? "" : " agent-sticky-user-bar-hidden"}${isStickyUserExiting ? " agent-sticky-user-bar-exiting" : ""}`}
-              onClick={scrollToStickyMessage}
-              tabIndex={hasStickyUserContent ? 0 : -1}
-              aria-hidden={!hasStickyUserContent}
-            >
-              <span ref={stickyUserTextRef} className="agent-sticky-user-letter-text"><StickyUserText text={renderedStickyUserContent || ""} mergeLines={mergeStickyUserMessageLines} /></span>
-            </button>
-          </div>
-        )}
-      </div>
-      {session.providerId === "opencode" && session.messages.length === 0 && (
+      {(!isNewOpenCodeSessionPage || showStickyUserMessageBar) ? (
+        <div className="agent-timeline-top-overlay" ref={topOverlayRef}>
+          {!isNewOpenCodeSessionPage ? <AgentSessionHeader session={session} /> : null}
+          {showStickyUserMessageBar && (
+            <div className="agent-sticky-user-slot" data-visible={hasRenderedStickyUserContent} data-resize={stickyUserResizeDirection} style={{ "--agent-sticky-user-height": `${stickyUserHeight}px` } as CSSProperties}>
+              <button
+                ref={stickyUserBarRef}
+                type="button"
+                className={`agent-sticky-user-bar${hasRenderedStickyUserContent ? "" : " agent-sticky-user-bar-hidden"}${isStickyUserExiting ? " agent-sticky-user-bar-exiting" : ""}`}
+                onClick={scrollToStickyMessage}
+                tabIndex={hasStickyUserContent ? 0 : -1}
+                aria-hidden={!hasStickyUserContent}
+              >
+                <span ref={stickyUserTextRef} className="agent-sticky-user-letter-text"><StickyUserText text={renderedStickyUserContent || ""} mergeLines={mergeStickyUserMessageLines} /></span>
+              </button>
+            </div>
+          )}
+        </div>
+      ) : null}
+      {isNewOpenCodeSessionPage && (
         <div className="agent-new-session-permission-shell">
+          <div className="agent-new-session-top-row">
+            <AgentNewSessionWorkspacePicker session={session} />
+            {latestDiagnostic ? (
+              <div className={`agent-new-session-diagnostic agent-header-diagnostic agent-header-diagnostic-${latestDiagnostic.level}`}>
+                <Icon name={latestDiagnostic.level === "error" ? "circle-x" : latestDiagnostic.level === "warn" ? "warning" : "info"} size={12} />
+                <span>{latestDiagnostic.message}</span>
+              </div>
+            ) : null}
+          </div>
           <div className="agent-new-session-brand" aria-label="My Last Code">
             <MlcLogoIcon size={34} />
             <span>My Last Code</span>

@@ -1,11 +1,12 @@
-import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState, type CSSProperties } from "react";
+import { createPortal } from "react-dom";
 import { useTranslation } from "react-i18next";
 import { resolveNewSessionWorkspacePath, useAgentSessionSettings } from "../../agentSessionSettings";
 import type { AgentSession } from "../../agent/types";
 import { useAgentStore } from "../../store/agentStore";
 import { useFeedbackStore } from "../../store/feedbackStore";
 import { useTerminalStore } from "../../store/terminalStore";
-import { normalizeWorkspacePath, workspacePathKey } from "../../workspace/workspacePaths";
+import { normalizeWorkspacePath, sameWorkspacePath, workspacePathKey } from "../../workspace/workspacePaths";
 import { Icon } from "../Icons";
 
 interface WorkspacePathOption {
@@ -23,7 +24,9 @@ const RECENT_SESSION_WORKSPACE_LIMIT = 20;
 export function AgentNewSessionWorkspacePicker({ session }: { session: AgentSession }) {
   const { t } = useTranslation();
   const [open, setOpen] = useState(false);
+  const [panelStyle, setPanelStyle] = useState<CSSProperties>({});
   const containerRef = useRef<HTMLDivElement>(null);
+  const panelRef = useRef<HTMLDivElement>(null);
   const agentSessionSettings = useAgentSessionSettings();
   const setSessionWorkspace = useAgentStore((state) => state.setSessionWorkspace);
   const refreshProviderSessions = useAgentStore((state) => state.refreshProviderSessions);
@@ -83,6 +86,21 @@ export function AgentNewSessionWorkspacePicker({ session }: { session: AgentSess
     }
   }, [recordRecentPath, session.id, setMlcActiveWorkspacePath, setSessionWorkspace]);
 
+  const updatePanelPosition = useCallback(() => {
+    const rect = containerRef.current?.getBoundingClientRect();
+    if (!rect) return;
+    const margin = 8;
+    const maxWidth = Math.max(220, window.innerWidth - margin * 2);
+    const width = Math.min(420, maxWidth);
+    const left = Math.min(Math.max(margin, rect.left), Math.max(margin, window.innerWidth - width - margin));
+    const maxHeight = Math.min(320, Math.max(160, window.innerHeight - margin * 2));
+    const belowTop = rect.bottom + 5;
+    const top = belowTop + maxHeight <= window.innerHeight - margin
+      ? belowTop
+      : Math.max(margin, rect.top - 5 - maxHeight);
+    setPanelStyle({ left, top, width, maxHeight });
+  }, []);
+
   useEffect(() => {
     if (agentSessionSettings.newSessionWorkspacePathMode !== "recentSession") return;
     if (recentSessionWorkspaces.length > 0) return;
@@ -99,58 +117,71 @@ export function AgentNewSessionWorkspacePicker({ session }: { session: AgentSess
 
   useEffect(() => {
     if (!open) return;
+    updatePanelPosition();
     const handlePointerDown = (event: MouseEvent) => {
-      if (containerRef.current && !containerRef.current.contains(event.target as Node)) setOpen(false);
+      const target = event.target as Node;
+      if (containerRef.current?.contains(target) || panelRef.current?.contains(target)) return;
+      setOpen(false);
     };
     const handleKeyDown = (event: KeyboardEvent) => {
       if (event.key === "Escape") setOpen(false);
     };
+    const handleLayoutChange = () => updatePanelPosition();
     document.addEventListener("mousedown", handlePointerDown);
     document.addEventListener("keydown", handleKeyDown);
+    window.addEventListener("resize", handleLayoutChange);
+    window.addEventListener("scroll", handleLayoutChange, true);
     return () => {
       document.removeEventListener("mousedown", handlePointerDown);
       document.removeEventListener("keydown", handleKeyDown);
+      window.removeEventListener("resize", handleLayoutChange);
+      window.removeEventListener("scroll", handleLayoutChange, true);
     };
-  }, [open]);
+  }, [open, updatePanelPosition]);
+
+  useLayoutEffect(() => {
+    if (open) updatePanelPosition();
+  }, [open, updatePanelPosition, workspacePathOptions.length]);
 
   const value = normalizeWorkspacePath(session.cwd) || "";
   const displayPath = value || t("agentConsole.workspaceNotSelectedPrompt", "No workspace selected, please choose");
-  const actionLabel = value ? t("agentConsole.workspaceSwitch", "Switch") : t("agentConsole.workspaceChoose", "Choose");
+  const workspaceKind = value && recentSessionWorkspacePath && sameWorkspacePath(value, recentSessionWorkspacePath)
+    ? t("agentConsole.workspaceRecentTag", "Recent workspace")
+    : "";
+  const panel = open ? (
+    <div ref={panelRef} className="agent-new-session-workspace-panel" style={panelStyle} role="listbox" aria-label={t("agentConsole.workspace", "Workspace")}>
+      {workspacePathOptions.map((option) => (
+        <button
+          key={option.value}
+          type="button"
+          className={`agent-new-session-workspace-option${option.value === value ? " selected" : ""}`}
+          role="option"
+          aria-selected={option.value === value}
+          onClick={() => {
+            handleWorkspacePathSelect(option.value);
+            setOpen(false);
+          }}
+        >
+          <span className="agent-new-session-workspace-option-label">{option.label}</span>
+        </button>
+      ))}
+    </div>
+  ) : null;
   return (
     <div className={`agent-header-path agent-new-session-workspace-row${open ? " open" : ""}`} ref={containerRef}>
       <Icon name="folder" size={12} />
-      <span className="agent-new-session-workspace-text" title={displayPath}>
-        <span className="agent-new-session-workspace-path">{displayPath}</span>
-      </span>
       <button
         type="button"
-        className={`agent-new-session-workspace-button${open ? " open" : ""}`}
+        className={`agent-new-session-workspace-trigger${open ? " open" : ""}`}
         onClick={() => setOpen((current) => !current)}
         aria-label={t("agentConsole.workspace", "Workspace")}
         aria-haspopup="listbox"
         aria-expanded={open}
       >
-        {actionLabel}
+        <span className="agent-new-session-workspace-path">{displayPath}</span>
+        {workspaceKind ? <span className="agent-new-session-workspace-kind">{workspaceKind}</span> : null}
       </button>
-      {open ? (
-        <div className="agent-new-session-workspace-panel" role="listbox" aria-label={t("agentConsole.workspace", "Workspace")}>
-          {workspacePathOptions.map((option) => (
-            <button
-              key={option.value}
-              type="button"
-              className={`agent-new-session-workspace-option${option.value === value ? " selected" : ""}`}
-              role="option"
-              aria-selected={option.value === value}
-              onClick={() => {
-                handleWorkspacePathSelect(option.value);
-                setOpen(false);
-              }}
-            >
-              <span className="agent-new-session-workspace-option-label">{option.label}</span>
-            </button>
-          ))}
-        </div>
-      ) : null}
+      {panel ? createPortal(panel, document.body) : null}
     </div>
   );
 }
