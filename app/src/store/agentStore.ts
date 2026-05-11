@@ -2639,6 +2639,7 @@ export const useAgentStore = create<AgentStoreState>((set, get) => ({
   },
 
   refreshProviderSessions: async (providerId, cursor = null) => {
+    void cursor;
     let session = get().sessions.find((item) => item.providerId === providerId) || get().getActiveSession();
     let httpRuntime = openCodeHttpRuntimeForSession(session, get().sessions);
     if (!httpRuntime && session?.providerId === "opencode") {

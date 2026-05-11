@@ -191,11 +191,11 @@ export class OpenCodeHttpClient {
   }
 
   listSessions(query?: OpenCodeSessionListQuery): Promise<OpenCodeSessionInfo[]> {
-    return this.request<OpenCodeSessionInfo[]>("/session", { query });
+    return this.request<OpenCodeSessionInfo[]>("/session", { query: query ? { ...query } : undefined });
   }
 
   listGlobalSessions(query?: OpenCodeGlobalSessionListQuery): Promise<OpenCodeSessionInfo[]> {
-    return this.request<OpenCodeSessionInfo[]>("/experimental/session", { query });
+    return this.request<OpenCodeSessionInfo[]>("/experimental/session", { query: query ? { ...query } : undefined });
   }
 
   sessionStatuses(): Promise<OpenCodeSessionStatusMap> {
