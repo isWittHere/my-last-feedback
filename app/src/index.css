@@ -2081,37 +2081,119 @@ body,
   flex-direction: column;
 }
 
-.agent-new-session-workspace-row {
+.agent-new-session-workspace-card {
+  position: relative;
   width: min(460px, calc(100% - 28px));
   flex: 0 0 auto;
   display: flex;
   align-items: center;
-  gap: 8px;
-  min-height: 34px;
-  padding: 5px 7px 5px 10px;
+  gap: 10px;
+  min-height: 38px;
+  padding: 6px 6px 6px 12px;
   border: 1px solid var(--color-border-subtle);
   border-radius: var(--radius-md);
   background: color-mix(in srgb, var(--color-bg-input-raised) 62%, transparent);
 }
 
-.agent-new-session-workspace-label {
-  flex: 0 0 auto;
-  color: var(--color-text-muted);
-  font-size: 12px;
-  font-weight: 600;
+.agent-new-session-workspace-card:hover,
+.agent-new-session-workspace-card:focus-within {
+  border-color: var(--color-border);
+  background: color-mix(in srgb, var(--color-bg-input-raised) 78%, transparent);
 }
 
-.agent-new-session-workspace-select {
+.agent-new-session-workspace-path {
   flex: 1 1 auto;
   min-width: 0;
-  max-width: 100%;
-  height: 28px;
+  color: var(--color-text-secondary);
+  font-size: 12px;
+  line-height: 1.35;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
 }
 
-.agent-new-session-workspace-select .app-select-panel {
+.agent-new-session-workspace-button {
+  flex: 0 0 auto;
+  width: 26px;
+  height: 26px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  border: 1px solid var(--color-border-subtle);
+  border-radius: var(--mlra-blueprint-action-radius, 6px);
+  background: var(--color-bg-base);
+  color: var(--color-text-muted);
+  cursor: pointer;
+  transition: background 0.12s ease, border-color 0.12s ease, color 0.12s ease;
+}
+
+.agent-new-session-workspace-button:hover,
+.agent-new-session-workspace-button.open {
+  border-color: var(--color-border);
+  background: var(--color-bg-surface);
+  color: var(--color-text-primary);
+}
+
+.agent-new-session-workspace-button.open svg {
+  transform: rotate(180deg);
+}
+
+.agent-new-session-workspace-panel {
+  position: absolute;
   left: 0;
-  right: auto;
+  top: calc(100% + 6px);
+  z-index: 130;
+  width: 100%;
   max-width: min(420px, calc(100vw - 72px));
+  padding: 5px;
+  border: 1px solid var(--color-border);
+  border-radius: var(--mlra-blueprint-action-radius, 6px);
+  background: var(--color-bg-surface);
+  box-shadow: 0 12px 28px rgba(0, 0, 0, 0.34);
+}
+
+.agent-new-session-workspace-option {
+  width: 100%;
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  border: none;
+  border-radius: 4px;
+  background: transparent;
+  color: var(--color-text-secondary);
+  cursor: pointer;
+  text-align: left;
+  padding: 7px 8px;
+}
+
+.agent-new-session-workspace-option:hover,
+.agent-new-session-workspace-option.selected {
+  background: rgba(255, 255, 255, 0.06);
+  color: var(--color-text-primary);
+}
+
+[data-theme="light"] .agent-new-session-workspace-option:hover,
+[data-theme="light"] .agent-new-session-workspace-option.selected {
+  background: rgba(0, 0, 0, 0.06);
+}
+
+.agent-new-session-workspace-option-label {
+  min-width: 0;
+  font-size: 12px;
+  font-weight: 600;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.agent-new-session-workspace-option-desc {
+  min-width: 0;
+  color: var(--color-text-muted);
+  font-size: 10px;
+  line-height: 1.35;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
 }
 
 .agent-console-input-region {

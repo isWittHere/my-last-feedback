@@ -1,4 +1,4 @@
-import { useCallback, useMemo } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { useTranslation } from "react-i18next";
 import { useAgentSessionSettings } from "../../agentSessionSettings";
 import type { AgentSession } from "../../agent/types";
@@ -7,12 +7,20 @@ import { useFeedbackStore } from "../../store/feedbackStore";
 import { useTerminalStore } from "../../store/terminalStore";
 import { pushWorkspacePathCandidate, type WorkspacePathCandidate } from "../../workspace/workspaceCandidates";
 import { normalizeWorkspacePath, workspaceBasename } from "../../workspace/workspacePaths";
-import { AppSelect, type AppSelectOption } from "../AppSelect";
+import { Icon } from "../Icons";
+
+interface WorkspacePathOption {
+  value: string;
+  label: string;
+  description?: string;
+}
 
 type AgentPageWorkspacePathSource = "current" | "default" | "recentSession" | "workspace" | "recent" | "caller";
 
 export function AgentNewSessionWorkspacePicker({ session }: { session: AgentSession }) {
   const { t } = useTranslation();
+  const [open, setOpen] = useState(false);
+  const containerRef = useRef<HTMLDivElement>(null);
   const agentSessionSettings = useAgentSessionSettings();
   const setSessionWorkspace = useAgentStore((state) => state.setSessionWorkspace);
   const activeWorkspacePath = useFeedbackStore((state) => state.mlcActiveWorkspacePath || "");
@@ -34,7 +42,7 @@ export function AgentNewSessionWorkspacePicker({ session }: { session: AgentSess
     .filter((item) => item.projectDirectory)
     .sort((left, right) => right.createdAt.localeCompare(left.createdAt))[0]?.projectDirectory || "", [recentRequestPaths]);
 
-  const workspacePathOptions = useMemo<AppSelectOption<string>[]>(() => {
+  const workspacePathOptions = useMemo<WorkspacePathOption[]>(() => {
     const candidates: WorkspacePathCandidate<AgentPageWorkspacePathSource>[] = [];
     const seen = new Set<string>();
     const sourceLabel = (source: AgentPageWorkspacePathSource) => {
@@ -75,17 +83,58 @@ export function AgentNewSessionWorkspacePicker({ session }: { session: AgentSess
     }
   }, [recordRecentPath, session.id, setMlcActiveWorkspacePath, setSessionWorkspace]);
 
+  useEffect(() => {
+    if (!open) return;
+    const handlePointerDown = (event: MouseEvent) => {
+      if (containerRef.current && !containerRef.current.contains(event.target as Node)) setOpen(false);
+    };
+    const handleKeyDown = (event: KeyboardEvent) => {
+      if (event.key === "Escape") setOpen(false);
+    };
+    document.addEventListener("mousedown", handlePointerDown);
+    document.addEventListener("keydown", handleKeyDown);
+    return () => {
+      document.removeEventListener("mousedown", handlePointerDown);
+      document.removeEventListener("keydown", handleKeyDown);
+    };
+  }, [open]);
+
   const value = workspacePathOptions.some((option) => option.value === session.cwd) ? session.cwd : "";
+  const selectedOption = workspacePathOptions.find((option) => option.value === value) || workspacePathOptions[0];
+  const displayPath = selectedOption?.description || selectedOption?.value || selectedOption?.label || t("agentConsole.workspaceEmpty", "No workspace");
   return (
-    <div className="agent-new-session-workspace-row">
-      <span className="agent-new-session-workspace-label">{t("agentConsole.workspace", "Workspace")}</span>
-      <AppSelect
-        value={value}
-        options={workspacePathOptions}
-        onChange={handleWorkspacePathSelect}
-        ariaLabel={t("agentConsole.workspace", "Workspace")}
-        className="agent-new-session-workspace-select"
-      />
+    <div className="agent-new-session-workspace-card" ref={containerRef}>
+      <span className="agent-new-session-workspace-path" title={displayPath}>{displayPath}</span>
+      <button
+        type="button"
+        className={`agent-new-session-workspace-button${open ? " open" : ""}`}
+        onClick={() => setOpen((current) => !current)}
+        aria-label={t("agentConsole.workspace", "Workspace")}
+        aria-haspopup="listbox"
+        aria-expanded={open}
+      >
+        <Icon name="chevron-down" size={13} />
+      </button>
+      {open ? (
+        <div className="agent-new-session-workspace-panel" role="listbox" aria-label={t("agentConsole.workspace", "Workspace")}>
+          {workspacePathOptions.map((option) => (
+            <button
+              key={option.value}
+              type="button"
+              className={`agent-new-session-workspace-option${option.value === value ? " selected" : ""}`}
+              role="option"
+              aria-selected={option.value === value}
+              onClick={() => {
+                handleWorkspacePathSelect(option.value);
+                setOpen(false);
+              }}
+            >
+              <span className="agent-new-session-workspace-option-label">{option.label}</span>
+              {option.description ? <span className="agent-new-session-workspace-option-desc">{option.description}</span> : null}
+            </button>
+          ))}
+        </div>
+      ) : null}
     </div>
   );
 }
