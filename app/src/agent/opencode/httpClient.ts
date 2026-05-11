@@ -55,6 +55,25 @@ function unwrapEvent(raw: unknown): OpenCodeBusEvent {
   };
 }
 
+interface OpenCodeSessionListQuery {
+  directory?: string;
+  path?: string;
+  roots?: boolean;
+  start?: number;
+  search?: string;
+  limit?: number;
+}
+
+interface OpenCodeGlobalSessionListQuery {
+  directory?: string;
+  roots?: boolean;
+  start?: number;
+  cursor?: number;
+  search?: string;
+  limit?: number;
+  archived?: boolean;
+}
+
 const SSE_FLUSH_FRAME_MS = 16;
 const SSE_RECONNECT_DELAY_MS = 250;
 const SSE_HEARTBEAT_TIMEOUT_MS = 45_000;
@@ -171,8 +190,12 @@ export class OpenCodeHttpClient {
     return this.request<OpenCodePermissionRequest[]>("/permission");
   }
 
-  listSessions(): Promise<OpenCodeSessionInfo[]> {
-    return this.request<OpenCodeSessionInfo[]>("/session");
+  listSessions(query?: OpenCodeSessionListQuery): Promise<OpenCodeSessionInfo[]> {
+    return this.request<OpenCodeSessionInfo[]>("/session", { query });
+  }
+
+  listGlobalSessions(query?: OpenCodeGlobalSessionListQuery): Promise<OpenCodeSessionInfo[]> {
+    return this.request<OpenCodeSessionInfo[]>("/experimental/session", { query });
   }
 
   sessionStatuses(): Promise<OpenCodeSessionStatusMap> {

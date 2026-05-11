@@ -2710,15 +2710,18 @@ export const useAgentStore = create<AgentStoreState>((set, get) => ({
             status: "loading",
             preparationStatus: existing?.preparationStatus,
             capability: "supported",
-            sessions: cursor ? existing?.sessions || [] : [],
+            sessions: existing?.sessions || [],
             nextCursor: null,
             updatedAt: existing?.updatedAt,
           },
         },
       }));
       try {
+        const listAllSessionsQuery = { directory: undefined, roots: true, limit: 10000 };
         const [sessions, statuses] = await Promise.all([
-          httpRuntime.runtime.client.listSessions(),
+          httpRuntime.runtime.client
+            .listGlobalSessions(listAllSessionsQuery)
+            .catch(() => httpRuntime.runtime.client.listSessions(listAllSessionsQuery)),
           httpRuntime.runtime.client.sessionStatuses().catch((): Record<string, string> => ({})),
         ]);
         const normalized: AgentProviderSessionItem[] = sessions.map((item) => ({

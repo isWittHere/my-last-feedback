@@ -173,11 +173,13 @@ export function AgentSessionManagerPanel() {
     for (const session of sessions) {
       if (session.cwd) candidates.push({ path: session.cwd, updatedAt: session.updatedAt || session.createdAt });
     }
-    for (const requestSession of recentRequestPaths) {
-      if (requestSession.projectDirectory) candidates.push({ path: requestSession.projectDirectory, updatedAt: requestSession.createdAt });
+    for (const list of Object.values(providerSessionLists)) {
+      for (const session of list.sessions) {
+        if (session.cwd) candidates.push({ path: session.cwd, updatedAt: session.updatedAt || "" });
+      }
     }
     return candidates.sort((left, right) => right.updatedAt.localeCompare(left.updatedAt))[0]?.path || "";
-  }, [recentRequestPaths, sessions]);
+  }, [providerSessionLists, sessions]);
 
   const showAgentPanel = useCallback(() => {
     openDockTab("agentConsole", "rightPage");

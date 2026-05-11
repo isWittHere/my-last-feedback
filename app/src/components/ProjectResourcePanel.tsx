@@ -2,10 +2,11 @@ import { useCallback, useEffect, useMemo, useState, type CSSProperties, type Rea
 import { useTranslation } from "react-i18next";
 import { invoke } from "@tauri-apps/api/core";
 import { useFeedbackStore } from "../store/feedbackStore";
+import { useAgentStore } from "../store/agentStore";
 import { agentIdentityLanguage, resolveAgentGlyphIdentity } from "../identity/agentIdentity";
 import { resolveWorkspaceIdentity, type WorkspaceColorCandidate } from "../identity/workspaceIdentity";
 import { buildWorkspaceOptions, formatWorkspaceTargetLabel, workspaceTargetSourceForComposerKind } from "../workspace/workspaceCandidates";
-import { cleanDisplayPath, sameWorkspacePath, workspacePathKey } from "../workspace/workspacePaths";
+import { cleanDisplayPath, sameWorkspacePath, workspaceBasename, workspacePathKey } from "../workspace/workspacePaths";
 import { CatppuccinResourceIcon } from "./CatppuccinResourceIcon";
 import { Icon } from "./Icons";
 import { IdenticonAvatar } from "./IdenticonAvatar";
@@ -80,6 +81,9 @@ export function ProjectResourcePanel() {
   const friendlyNameLanguage = agentIdentityLanguage(i18n.language);
   const focusedComposer = useFeedbackStore((state) => state.focusedComposer);
   const targetCaller = useFeedbackStore((state) => focusedComposer?.callerId ? state.callers.find((caller) => caller.id === focusedComposer.callerId) || null : null);
+  const targetAgentSession = useAgentStore((state) => focusedComposer?.kind === "agent" && focusedComposer.sessionId
+    ? state.sessions.find((session) => session.id === focusedComposer.sessionId) || null
+    : null);
   const sessionWorkspacePathsKey = useFeedbackStore((state) => {
     const seen = new Set<string>();
     return state.sessions
@@ -119,13 +123,15 @@ export function ProjectResourcePanel() {
       return { workspaceKey, workspacePath, color };
     }), [workspaceColorCandidatesKey]);
   const targetGlyph = useMemo(() => {
-    if (focusedComposer?.kind === "agent" && focusedComposer.sessionId) {
-      return resolveAgentGlyphIdentity({ id: focusedComposer.sessionId }, friendlyNameLanguage);
+    if (focusedComposer?.kind === "agent") {
+      return targetAgentSession?.providerSessionId
+        ? resolveAgentGlyphIdentity({ id: targetAgentSession.providerSessionId }, friendlyNameLanguage)
+        : null;
     }
     if (targetCaller) return resolveAgentGlyphIdentity({ agentName: targetCaller.alias, id: targetCaller.id }, friendlyNameLanguage);
     if (focusedComposer?.callerId) return resolveAgentGlyphIdentity({ id: focusedComposer.callerId }, friendlyNameLanguage);
     return null;
-  }, [focusedComposer?.callerId, focusedComposer?.kind, focusedComposer?.sessionId, friendlyNameLanguage, targetCaller]);
+  }, [focusedComposer?.callerId, focusedComposer?.kind, focusedComposer?.sessionId, friendlyNameLanguage, targetAgentSession?.providerSessionId, targetCaller]);
   const targetOwnerName = targetGlyph?.nickname || "";
   const targetWorkspaceIdentity = useMemo(() => resolveWorkspaceIdentity({
     workspacePath: targetWorkspacePath,
@@ -133,7 +139,9 @@ export function ProjectResourcePanel() {
     candidates: workspaceColorCandidates,
   }), [targetCaller?.color, targetWorkspacePath, workspaceColorCandidates]);
   const targetTabStyle = useMemo(() => ({ "--mlc-target-color": targetWorkspaceIdentity.color } as CSSProperties), [targetWorkspaceIdentity.color]);
-  const targetLabel = formatWorkspaceTargetLabel({ source: workspaceTargetSourceForComposerKind(focusedComposer?.kind), ownerName: targetOwnerName });
+  const targetLabel = targetGlyph
+    ? formatWorkspaceTargetLabel({ source: workspaceTargetSourceForComposerKind(focusedComposer?.kind), ownerName: targetOwnerName })
+    : workspaceBasename(targetWorkspacePath) || cleanDisplayPath(targetWorkspacePath);
 
   const workspaceOptions = useMemo(() => {
     return buildWorkspaceOptions({
@@ -278,7 +286,7 @@ export function ProjectResourcePanel() {
       <div className="mlc-tabs mlc-workspace-tabs resource-workspace-tabs">
         {targetWorkspacePath ? (
           <button className={`mlc-target-tab${workspaceFilterMode === "target" ? " active" : ""}`} style={targetTabStyle} onClick={() => { setWorkspaceFilterMode("target"); setActiveWorkspacePath(targetWorkspacePath); }} data-tooltip={`${t("mlc.target", "Target")}: ${cleanDisplayPath(targetWorkspacePath)}`}>
-            <IdenticonAvatar className="mlc-target-avatar" alias={targetGlyph?.avatarSeed || "agent"} color={targetWorkspaceIdentity.color} size={13} />
+            {targetGlyph ? <IdenticonAvatar className="mlc-target-avatar" alias={targetGlyph.avatarSeed} color={targetWorkspaceIdentity.color} size={13} /> : <Icon name="folder" size={11} />}
             <span>{targetLabel}</span>
           </button>
         ) : null}

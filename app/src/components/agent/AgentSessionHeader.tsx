@@ -20,8 +20,9 @@ interface AgentSessionHeaderProps {
 export function AgentSessionHeader({ session, previewMode = false }: AgentSessionHeaderProps) {
   const { t } = useTranslation();
   const { defaultExpandHeaderDetails } = useAgentConsoleSettings();
-  const [expanded, setExpanded] = useState(defaultExpandHeaderDetails);
-  const [detailsOverflowVisible, setDetailsOverflowVisible] = useState(defaultExpandHeaderDetails && !previewMode);
+  const shouldDefaultExpandDetails = defaultExpandHeaderDetails || (session.providerId === "opencode" && !session.providerSessionId && session.messages.length === 0);
+  const [expanded, setExpanded] = useState(shouldDefaultExpandDetails);
+  const [detailsOverflowVisible, setDetailsOverflowVisible] = useState(shouldDefaultExpandDetails && !previewMode);
   const [codeCopied, setCodeCopied] = useState(false);
   const identity = useAgentSessionVisualIdentity(session);
   const identityTitle = identity.code ? `${identity.name} (${identity.code}) · ${identity.providerName}` : identity.providerName;
@@ -36,10 +37,10 @@ export function AgentSessionHeader({ session, previewMode = false }: AgentSessio
 
   useEffect(() => {
     if (!previewMode) {
-      setExpanded(defaultExpandHeaderDetails);
-      setDetailsOverflowVisible(defaultExpandHeaderDetails);
+      setExpanded(shouldDefaultExpandDetails);
+      setDetailsOverflowVisible(shouldDefaultExpandDetails);
     }
-  }, [defaultExpandHeaderDetails, previewMode, session.id]);
+  }, [previewMode, session.id, shouldDefaultExpandDetails]);
 
   const handleDetailsToggle = () => {
     setDetailsOverflowVisible(false);

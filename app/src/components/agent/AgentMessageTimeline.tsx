@@ -3,7 +3,6 @@ import { useAgentConsoleSettings } from "../../agentConsoleSettings";
 import type { AgentContentBlock, AgentProviderMessagePart, AgentSession } from "../../agent/types";
 import { MlcLogoIcon } from "../Icons";
 import { AgentMessageItem } from "./AgentMessageItem";
-import { AgentNewSessionWorkspacePicker } from "./AgentNewSessionWorkspacePicker";
 import { AgentPermissionPanel } from "./AgentPermissionIndicator";
 import { AgentSessionHeader } from "./AgentSessionHeader";
 
@@ -298,7 +297,6 @@ export function AgentMessageTimeline({ session }: { session: AgentSession }) {
             <MlcLogoIcon size={34} />
             <span>My Last Code</span>
           </div>
-          <AgentNewSessionWorkspacePicker session={session} />
           <AgentPermissionPanel session={session} variant="standalone" />
         </div>
       )}
