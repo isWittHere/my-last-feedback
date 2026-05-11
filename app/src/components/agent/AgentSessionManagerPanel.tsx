@@ -3,6 +3,7 @@ import { useTranslation } from "react-i18next";
 import { getAgentSessionSettings, resolveNewSessionWorkspacePath } from "../../agentSessionSettings";
 import { getAgentProviderSessionIdentity, getAgentSessionIdentity, type AgentSessionIdentity } from "../../agent/sessionIdentity";
 import type { AgentProviderId, AgentSession } from "../../agent/types";
+import { collectRecentAgentWorkspaces } from "../../agent/workspaceHistory";
 import { resolveWorkspaceIdentity, type WorkspaceColorCandidate } from "../../identity/workspaceIdentity";
 import { useAgentStore } from "../../store/agentStore";
 import { useFeedbackStore } from "../../store/feedbackStore";
@@ -19,9 +20,9 @@ function AgentSessionGroup({ label, count, children, className = "" }: { label: 
   const [collapsed, setCollapsed] = useState(false);
   return (
     <div className={`session-group${className ? ` ${className}` : ""}`}>
-      <button className="session-group-header" onClick={() => setCollapsed((value) => !value)}>
-        <Icon name="chevron-down" size={8} className="app-disclosure-icon" style={{ transform: collapsed ? "rotate(-90deg)" : "rotate(0deg)" }} />
+      <button className="session-group-header" aria-expanded={!collapsed} onClick={() => setCollapsed((value) => !value)}>
         <span>{label}</span>
+        <Icon name="chevron-down" size={8} className="app-disclosure-icon" style={{ transform: collapsed ? "rotate(-90deg)" : "rotate(0deg)" }} />
         <span className="session-group-count">{count}</span>
       </button>
       {!collapsed && children}
@@ -177,16 +178,7 @@ export function AgentSessionManagerPanel() {
   }), [callerData, recentRequestPaths]);
 
   const recentSessionWorkspacePath = useMemo(() => {
-    const candidates: Array<{ path: string; updatedAt: string }> = [];
-    for (const session of sessions) {
-      if (session.cwd) candidates.push({ path: session.cwd, updatedAt: session.updatedAt || session.createdAt });
-    }
-    for (const list of Object.values(providerSessionLists)) {
-      for (const session of list.sessions) {
-        if (session.cwd) candidates.push({ path: session.cwd, updatedAt: session.updatedAt || "" });
-      }
-    }
-    return candidates.sort((left, right) => right.updatedAt.localeCompare(left.updatedAt))[0]?.path || "";
+    return collectRecentAgentWorkspaces(sessions, Object.values(providerSessionLists), 1)[0]?.path || "";
   }, [providerSessionLists, sessions]);
 
   const showAgentPanel = useCallback(() => {

@@ -3,6 +3,7 @@ import { createPortal } from "react-dom";
 import { useTranslation } from "react-i18next";
 import { resolveNewSessionWorkspacePath, useAgentSessionSettings } from "../../agentSessionSettings";
 import type { AgentSession } from "../../agent/types";
+import { collectRecentAgentWorkspaces, type AgentWorkspaceHistoryItem } from "../../agent/workspaceHistory";
 import { useAgentStore } from "../../store/agentStore";
 import { useFeedbackStore } from "../../store/feedbackStore";
 import { useTerminalStore } from "../../store/terminalStore";
@@ -13,11 +14,6 @@ import { timeAgo } from "../timeUtils";
 interface WorkspacePathOption {
   value: string;
   label: string;
-  updatedAt: string;
-}
-
-interface WorkspaceHistoryItem {
-  path: string;
   updatedAt: string;
 }
 
@@ -33,31 +29,14 @@ export function AgentNewSessionWorkspacePicker({ session }: { session: AgentSess
   const setSessionWorkspace = useAgentStore((state) => state.setSessionWorkspace);
   const refreshProviderSessions = useAgentStore((state) => state.refreshProviderSessions);
   const providerSessionListStatus = useAgentStore((state) => state.providerSessionLists.opencode?.status || "idle");
-  const agentSessionWorkspaceKey = useAgentStore((state) => state.sessions.map((item) => `local\t${item.id}\t${item.cwd || ""}\t${item.updatedAt || item.createdAt}`).join("\n"));
-  const providerSessionWorkspaceKey = useAgentStore((state) => Object.values(state.providerSessionLists)
-    .flatMap((list) => list.sessions.map((item) => `${list.providerId}\t${item.sessionId}\t${item.cwd || ""}\t${item.updatedAt || ""}`))
-    .join("\n"));
+  const agentSessions = useAgentStore((state) => state.sessions);
+  const providerSessionLists = useAgentStore((state) => state.providerSessionLists);
   const setMlcActiveWorkspacePath = useFeedbackStore((state) => state.setMlcActiveWorkspacePath);
   const recordRecentPath = useTerminalStore((state) => state.recordRecentPath);
 
-  const recentSessionWorkspaces = useMemo<WorkspaceHistoryItem[]>(() => {
-    const byPathKey = new Map<string, WorkspaceHistoryItem>();
-    const add = (path: string, updatedAt: string) => {
-      const cleanPath = normalizeWorkspacePath(path);
-      const key = workspacePathKey(cleanPath);
-      if (!cleanPath || !key) return;
-      const existing = byPathKey.get(key);
-      if (!existing || updatedAt.localeCompare(existing.updatedAt) > 0) byPathKey.set(key, { path: cleanPath, updatedAt });
-    };
-    for (const line of `${agentSessionWorkspaceKey}\n${providerSessionWorkspaceKey}`.split("\n")) {
-      if (!line) continue;
-      const parts = line.split("\t");
-      add(parts[2] || "", parts[3] || "");
-    }
-    return [...byPathKey.values()]
-      .sort((left, right) => right.updatedAt.localeCompare(left.updatedAt))
-      .slice(0, RECENT_SESSION_WORKSPACE_LIMIT);
-  }, [agentSessionWorkspaceKey, providerSessionWorkspaceKey]);
+  const recentSessionWorkspaces = useMemo<AgentWorkspaceHistoryItem[]>(() => {
+    return collectRecentAgentWorkspaces(agentSessions, Object.values(providerSessionLists), RECENT_SESSION_WORKSPACE_LIMIT);
+  }, [agentSessions, providerSessionLists]);
 
   const recentSessionWorkspacePath = recentSessionWorkspaces[0]?.path || "";
   const resolvedConfiguredWorkspacePath = useMemo(
