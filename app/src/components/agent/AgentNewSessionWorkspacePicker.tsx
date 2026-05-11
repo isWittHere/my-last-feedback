@@ -6,8 +6,7 @@ import { useAgentStore } from "../../store/agentStore";
 import { useFeedbackStore } from "../../store/feedbackStore";
 import { useTerminalStore } from "../../store/terminalStore";
 import { pushWorkspacePathCandidate, type WorkspacePathCandidate } from "../../workspace/workspaceCandidates";
-import { normalizeWorkspacePath, workspaceBasename } from "../../workspace/workspacePaths";
-import { Icon } from "../Icons";
+import { normalizeWorkspacePath, sameWorkspacePath, workspaceBasename } from "../../workspace/workspacePaths";
 
 interface WorkspacePathOption {
   value: string;
@@ -100,11 +99,21 @@ export function AgentNewSessionWorkspacePicker({ session }: { session: AgentSess
   }, [open]);
 
   const value = workspacePathOptions.some((option) => option.value === session.cwd) ? session.cwd : "";
-  const selectedOption = workspacePathOptions.find((option) => option.value === value) || workspacePathOptions[0];
-  const displayPath = selectedOption?.description || selectedOption?.value || selectedOption?.label || t("agentConsole.workspaceEmpty", "No workspace");
+  const displayPath = value || t("agentConsole.workspaceNotSelectedPrompt", "No workspace selected, please choose");
+  const workspaceKind = value && agentSessionSettings.defaultWorkspacePath && sameWorkspacePath(value, agentSessionSettings.defaultWorkspacePath)
+    ? t("agentConsole.workspaceDefaultTag", "Default workspace")
+    : value && recentSessionWorkspacePath && sameWorkspacePath(value, recentSessionWorkspacePath)
+      ? t("agentConsole.workspaceRecentTag", "Recent workspace")
+      : value
+        ? t("agentConsole.workspaceManualTag", "Workspace")
+        : "";
+  const actionLabel = value ? t("agentConsole.workspaceSwitch", "Switch") : t("agentConsole.workspaceChoose", "Choose");
   return (
-    <div className="agent-new-session-workspace-card" ref={containerRef}>
-      <span className="agent-new-session-workspace-path" title={displayPath}>{displayPath}</span>
+    <div className={`agent-new-session-workspace-row${open ? " open" : ""}`} ref={containerRef}>
+      <span className="agent-new-session-workspace-text" title={displayPath}>
+        <span className="agent-new-session-workspace-path">{displayPath}</span>
+        {workspaceKind ? <span className="agent-new-session-workspace-kind">{workspaceKind}</span> : null}
+      </span>
       <button
         type="button"
         className={`agent-new-session-workspace-button${open ? " open" : ""}`}
@@ -113,7 +122,7 @@ export function AgentNewSessionWorkspacePicker({ session }: { session: AgentSess
         aria-haspopup="listbox"
         aria-expanded={open}
       >
-        <Icon name="chevron-down" size={13} />
+        {actionLabel}
       </button>
       {open ? (
         <div className="agent-new-session-workspace-panel" role="listbox" aria-label={t("agentConsole.workspace", "Workspace")}>
