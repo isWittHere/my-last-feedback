@@ -544,6 +544,11 @@ fn get_autostart(app: tauri::AppHandle) -> bool {
 /// Set autostart enabled state
 #[tauri::command]
 fn set_autostart(app: tauri::AppHandle, enabled: bool) -> Result<(), String> {
+    #[cfg(all(target_os = "windows", debug_assertions))]
+    if enabled {
+        return Err("AUTOSTART_DEV_DISABLED".to_string());
+    }
+
     let autolaunch = app.autolaunch();
     if enabled {
         autolaunch.enable().map_err(|e: tauri_plugin_autostart::Error| e.to_string())

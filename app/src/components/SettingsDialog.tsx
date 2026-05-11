@@ -11,6 +11,7 @@ import { Icon, MlcLogoIcon } from "./Icons";
 import { createMockAgentSession } from "../agent/mockData";
 import { AgentSessionHeader } from "./agent/AgentSessionHeader";
 import { invoke } from "@tauri-apps/api/core";
+import { formatAutostartError, getAutostart, setAutostartEnabled } from "../autostartSettings";
 import { applyTheme, getStoredTheme, type Theme } from "../theme";
 import { getNotificationSettings, saveNotificationSettings, syncAutoFocusNewRequest, type NotificationSettings } from "../notificationSettings";
 import { getSubmittedViewSettings, saveSubmittedViewSettings, SUBMITTED_VIEW_SECTION_CONFIGS, type SubmittedViewSectionId, type SubmittedViewSettings } from "../submittedViewSettings";
@@ -184,6 +185,7 @@ export function SettingsDialog({ open, onClose }: { open: boolean; onClose: () =
   const [draggedDockTab, setDraggedDockTab] = useState<DockTabId | null>(null);
   const [theme, setTheme] = useState<Theme>(getStoredTheme);
   const [autostart, setAutostart] = useState(false);
+  const [autostartMessage, setAutostartMessage] = useState<string | null>(null);
   const [confirmClear, setConfirmClear] = useState(false);
   const [diffOffsetCollapsed, setDiffOffsetCollapsed] = useState(true);
   const [notifSettings, setNotifSettings] = useState<NotificationSettings>(getNotificationSettings);
@@ -248,9 +250,10 @@ export function SettingsDialog({ open, onClose }: { open: boolean; onClose: () =
     setAgentConsoleSettings(getAgentConsoleSettings());
     setAgentSessionSettings(getAgentSessionSettings());
     setAgentCleanupMessage(null);
+    setAutostartMessage(null);
     setOpenCodeSettings(getOpenCodeSettings());
     setSubmittedViewSettings(getSubmittedViewSettings());
-    invoke<boolean>("get_autostart").then(setAutostart).catch(() => {});
+    getAutostart().then(setAutostart).catch(() => {});
   }, [open]);
 
   // Close on Escape
@@ -275,10 +278,11 @@ export function SettingsDialog({ open, onClose }: { open: boolean; onClose: () =
 
   const handleAutostartToggle = useCallback(() => {
     const newVal = !autostart;
-    invoke("set_autostart", { enabled: newVal })
+    setAutostartMessage(null);
+    setAutostartEnabled(newVal)
       .then(() => setAutostart(newVal))
-      .catch(() => {});
-  }, [autostart]);
+      .catch((error) => setAutostartMessage(formatAutostartError(t, error)));
+  }, [autostart, t]);
 
   const handleNotifToggle = useCallback((key: keyof NotificationSettings) => {
     setNotifSettings((prev) => {
@@ -1134,7 +1138,9 @@ export function SettingsDialog({ open, onClose }: { open: boolean; onClose: () =
                 <div className="settings-row">
                   <div className="settings-row-info">
                     <span className="settings-label">{t("settings.autostart")}</span>
-                    <span className="settings-sublabel">{t("settings.autostartDesc")}</span>
+                    <span className={`settings-sublabel${autostartMessage ? " settings-sublabel-warning" : ""}`}>
+                      {autostartMessage || t("settings.autostartDesc")}
+                    </span>
                   </div>
                   <button
                     className={`settings-toggle${autostart ? " settings-toggle-on" : ""}`}

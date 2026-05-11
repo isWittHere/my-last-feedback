@@ -57,7 +57,7 @@
 
 | 文件 | 大小 |
 |------|------|
-| `app.exe` | ~11 MB |
+| `My Last Feedback.exe` | ~11 MB |
 | `node_modules/` | ~21 MB |
 | 其他（server.mjs, SETUP.md 等） | < 1 MB |
 | **总计** | ~32 MB |

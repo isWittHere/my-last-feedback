@@ -28,13 +28,15 @@ export const PORT_CONFIG = {
  */
 export function findAppBinary() {
   const candidates = [
+    process.env.MLF_APP_PATH || "",
+    join(PROJECT_ROOT, "My Last Feedback.exe"),
+    join(PROJECT_ROOT, "My Last Feedback"),
     join(PROJECT_ROOT, "app", "src-tauri", "target", "release", "app.exe"),
     join(PROJECT_ROOT, "app", "src-tauri", "target", "release", "app"),
     join(PROJECT_ROOT, "app", "src-tauri", "target", "debug", "app.exe"),
     join(PROJECT_ROOT, "app", "src-tauri", "target", "debug", "app"),
     join(PROJECT_ROOT, "app.exe"),
     join(PROJECT_ROOT, "app"),
-    process.env.MLF_APP_PATH || "",
   ];
 
   for (const p of candidates) {

@@ -42,7 +42,7 @@ export async function ensureAppRunning() {
   const socket = await launchAndWaitReady({
     command: appPath,
     args: [],
-    windowsHide: false,
+    windowsHide: true,
     readyCheck: connectToApp,
     maxAttempts: 30,
     intervalMs: 500,

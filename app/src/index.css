@@ -9271,6 +9271,9 @@ body,
   font-size: 11px;
   color: var(--color-text-secondary);
 }
+.settings-sublabel-warning {
+  color: var(--color-warning);
+}
 .settings-zoom-control {
   display: flex;
   align-items: center;
@@ -10662,6 +10665,11 @@ body,
   font-size: 12px;
   color: var(--color-text-secondary);
   white-space: nowrap;
+}
+.welcome-settings-message {
+  font-size: 11px;
+  line-height: 1.35;
+  color: var(--color-warning);
 }
 .welcome-prompts {
   display: flex;

@@ -91,7 +91,8 @@ The agent will now open a feedback window whenever it needs your confirmation.
 
 ```
 my-last-feedback/
-├── app.exe / app          # GUI application (Windows / macOS)
+├── My Last Feedback.exe   # GUI application (Windows)
+├── app                    # GUI application (macOS/Linux package)
 ├── server.mjs             # MCP server (Node.js)
 ├── package.json           # Node dependencies
 ├── node_modules/          # (created after npm install)
@@ -156,7 +157,7 @@ Limits: 5 images max, 5 MB each, 20 MB total. Formats: PNG, JPG, GIF, WEBP, BMP.
 
 | Issue | Solution |
 |-------|----------|
-| Window doesn't appear | Check that `app.exe` (or `app`) is in the same directory as `server.mjs` |
+| Window doesn't appear | Check that `My Last Feedback.exe` (or `app`) is in the same directory as `server.mjs` |
 | "Cannot find module" error | Run `npm install` in this directory |
 | Agent doesn't call the tool | Ensure `prompt.instructions.md` is added to your agent instructions |
 | Port conflict | The app uses ports 19850–19860 for IPC |

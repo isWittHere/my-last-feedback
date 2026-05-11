@@ -22,6 +22,7 @@ echo "[1/6] Building Tauri app (release)..."
 cd "$APP_DIR"
 npx tauri build --no-bundle
 
+PRODUCT_EXE="My Last Feedback.exe"
 BINARY="$APP_DIR/src-tauri/target/release/app.exe"
 if [ ! -f "$BINARY" ]; then
   echo "ERROR: app.exe not found at $BINARY"
@@ -36,7 +37,7 @@ mkdir -p "$DIST_DIR/mcp_prompts"
 
 # 3. Copy files
 echo "[3/6] Copying files..."
-cp "$BINARY"                         "$DIST_DIR/app.exe"
+cp "$BINARY"                         "$DIST_DIR/$PRODUCT_EXE"
 cp -R "$PROJ_ROOT/mcp"               "$DIST_DIR/mcp"
 cp "$PROJ_ROOT/package.json"         "$DIST_DIR/package.json"
 cp "$PROJ_ROOT/mcp.json.template"    "$DIST_DIR/mcp.json.template"
