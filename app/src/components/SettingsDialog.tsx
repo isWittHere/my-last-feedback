@@ -849,7 +849,7 @@ export function SettingsDialog({ open, onClose }: { open: boolean; onClose: () =
 
   const openCodePermissionActionIcon = (action: OpenCodePermissionSettingAction) => {
     if (action === "allow") return "check";
-    if (action === "override") return "shield";
+    if (action === "override") return "rocket";
     if (action === "deny") return "circle-x";
     return "warning";
   };

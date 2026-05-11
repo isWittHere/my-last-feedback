@@ -15,6 +15,15 @@ function presetVariant(presetId: OpenCodePermissionPresetId): OpenCodePermission
   if (presetId === "overrideAuto") return "override";
 }
 
+function permissionPresetIcon(presetId: OpenCodePermissionPresetId | undefined, fallback: OpenCodePermissionSettingAction | undefined): string {
+  const presetIcon = OPEN_CODE_PERMISSION_PRESETS.find((preset) => preset.id === presetId)?.icon;
+  if (presetIcon) return presetIcon;
+  if (fallback === "allow") return "zap";
+  if (fallback === "override") return "rocket";
+  if (fallback === "deny") return "circle-x";
+  return "shield";
+}
+
 function isPromptPermissionLocked(session: AgentSession): boolean {
   return session.status === "starting" || session.status === "running" || session.status === "cancelling";
 }
@@ -52,7 +61,7 @@ export function AgentPermissionPanel({ session, variant = "popover" }: { session
 
   const actionIcon = (action: OpenCodePermissionSettingAction) => {
     if (action === "allow") return "check";
-    if (action === "override") return "shield";
+    if (action === "override") return "rocket";
     if (action === "deny") return "circle-x";
     return "warning";
   };
@@ -159,6 +168,11 @@ export function AgentPermissionIndicator({ session }: { session: AgentSession })
 
   const activePresetId = getOpenCodePermissionPresetId(currentRules);
   const permissionTone = activePresetId ? presetVariant(activePresetId) : getOpenCodePermissionPresetAction(currentRules, "bash");
+  const permissionIcon = permissionPresetIcon(activePresetId, permissionTone);
+  const activePreset = OPEN_CODE_PERMISSION_PRESETS.find((preset) => preset.id === activePresetId);
+  const permissionTitle = t("agentConsole.sessionPermissionsWithMode", "Session permissions {{mode}}", {
+    mode: activePreset ? t(activePreset.labelKey, activePreset.defaultLabel) : t("agentConsole.permissionCustom", "Custom"),
+  });
   const promptPermissionLocked = isPromptPermissionLocked(session);
 
   return (
@@ -169,11 +183,11 @@ export function AgentPermissionIndicator({ session }: { session: AgentSession })
         data-permission-tone={permissionTone}
         data-permission-locked={promptPermissionLocked ? "true" : undefined}
         onClick={() => setOpen((value) => !value)}
-        title={t("agentConsole.sessionPermissions", "Session permissions")}
+        title={permissionTitle}
         aria-expanded={open}
-        aria-label={t("agentConsole.sessionPermissions", "Session permissions")}
+        aria-label={permissionTitle}
       >
-        <Icon name="shield" size={13} />
+        <Icon name={permissionIcon} size={13} />
       </button>
       {open && (
         <AgentPermissionPanel session={session} />

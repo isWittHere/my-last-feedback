@@ -252,8 +252,12 @@ export function AgentCurrentStatusRow({ session }: { session: AgentSession }) {
 
   useEffect(() => {
     const previousSessionActive = previousSessionActiveRef.current;
+    const providerPreparationActive = providerPreparationStatus === "preparing" || providerPreparationStatus === "ready";
 
-    if (status && status.kind !== "approval") {
+    if (!status && providerPreparationActive) {
+      setHeldPhase(null);
+      setSettling(false);
+    } else if (status && status.kind !== "approval") {
       setHeldPhase(activityPhaseForStatus(status));
       setSettling(false);
     } else if (status?.kind === "approval") {
@@ -271,7 +275,7 @@ export function AgentCurrentStatusRow({ session }: { session: AgentSession }) {
     }
 
     previousSessionActiveRef.current = sessionActive;
-  }, [sessionActive, status]);
+  }, [providerPreparationStatus, sessionActive, status]);
 
   let content: ReactNode | null = null;
 

@@ -23,6 +23,7 @@ export function AgentNewSessionWorkspacePicker({ session }: { session: AgentSess
   const { t } = useTranslation();
   const [open, setOpen] = useState(false);
   const [panelStyle, setPanelStyle] = useState<CSSProperties>({});
+  const [manualWorkspacePath, setManualWorkspacePath] = useState("");
   const containerRef = useRef<HTMLDivElement>(null);
   const panelRef = useRef<HTMLDivElement>(null);
   const agentSessionSettings = useAgentSessionSettings();
@@ -66,6 +67,14 @@ export function AgentNewSessionWorkspacePicker({ session }: { session: AgentSess
       setMlcActiveWorkspacePath(cleanPath);
     }
   }, [recordRecentPath, session.id, setMlcActiveWorkspacePath, setSessionWorkspace]);
+
+  const submitManualWorkspacePath = useCallback(() => {
+    const cleanPath = normalizeWorkspacePath(manualWorkspacePath) || "";
+    if (!cleanPath) return;
+    handleWorkspacePathSelect(cleanPath);
+    setManualWorkspacePath("");
+    setOpen(false);
+  }, [handleWorkspacePathSelect, manualWorkspacePath]);
 
   const updatePanelPosition = useCallback(() => {
     const rect = containerRef.current?.getBoundingClientRect();
@@ -129,8 +138,33 @@ export function AgentNewSessionWorkspacePicker({ session }: { session: AgentSess
   const workspaceKind = value && recentSessionWorkspacePath && sameWorkspacePath(value, recentSessionWorkspacePath)
     ? t("agentConsole.workspaceRecentTag", "Recent workspace")
     : "";
+  const canSubmitManualWorkspacePath = Boolean(normalizeWorkspacePath(manualWorkspacePath));
   const panel = open ? (
     <div ref={panelRef} className="agent-new-session-workspace-panel" style={panelStyle} role="listbox" aria-label={t("agentConsole.workspace", "Workspace")}>
+      <form
+        className="agent-new-session-workspace-manual-row"
+        onSubmit={(event) => {
+          event.preventDefault();
+          submitManualWorkspacePath();
+        }}
+      >
+        <input
+          className="agent-new-session-workspace-manual-input"
+          value={manualWorkspacePath}
+          onChange={(event) => setManualWorkspacePath(event.target.value)}
+          placeholder={t("agentConsole.workspacePathInputPlaceholder", "Enter workspace path")}
+          aria-label={t("agentConsole.workspacePathInputPlaceholder", "Enter workspace path")}
+        />
+        <button
+          type="submit"
+          className="agent-new-session-workspace-manual-submit"
+          disabled={!canSubmitManualWorkspacePath}
+          aria-label={t("agentConsole.workspacePathInputSubmit", "Use workspace path")}
+          title={t("agentConsole.workspacePathInputSubmit", "Use workspace path")}
+        >
+          <Icon name="arrow-bend-down-right" size={13} />
+        </button>
+      </form>
       {workspacePathOptions.map((option) => (
         <button
           key={option.value}

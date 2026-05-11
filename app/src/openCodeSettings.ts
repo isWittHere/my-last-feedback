@@ -127,7 +127,7 @@ export const OPEN_CODE_PERMISSION_PRESETS: OpenCodePermissionPresetDefinition[] 
     defaultLabel: "Controlled auto",
     descriptionKey: "settings.openCodePermissionPresetControlledAutoDesc",
     defaultDescription: "Allow routine work while asking before destructive shell commands.",
-    icon: "play",
+    icon: "zap",
     rules: [
       rule("glob", "allow"),
       rule("grep", "allow"),
@@ -148,7 +148,7 @@ export const OPEN_CODE_PERMISSION_PRESETS: OpenCodePermissionPresetDefinition[] 
     defaultLabel: "Override auto",
     descriptionKey: "settings.openCodePermissionPresetOverrideAutoDesc",
     defaultDescription: "Allow routine destructive file operations while still asking before extreme-risk commands.",
-    icon: "shield",
+    icon: "rocket",
     rules: [
       rule("glob", "allow"),
       rule("grep", "allow"),
