@@ -1,4 +1,4 @@
-import type { AgentContentBlock, AgentMessage, AgentPermissionBlock, AgentSession, AgentTaskItem } from "./types";
+import type { AgentContentBlock, AgentMessage, AgentPermissionBlock, AgentSession, AgentTaskItem, AgentTaskListState } from "./types";
 
 export type AgentStepKind = "thinking" | "compaction" | "tool" | "task_list" | "artifacts" | "permission" | "error";
 export type AgentStepStatus = "pending" | "running" | "completed" | "failed";
@@ -19,6 +19,7 @@ export interface AgentStepItem {
   metadata?: Record<string, unknown>;
   permissions?: AgentPermissionBlock[];
   tasks?: AgentTaskItem[];
+  taskListState?: AgentTaskListState;
   blocks?: AgentContentBlock[];
   staleRunningState?: boolean;
   tone?: AgentStepTone;
@@ -280,17 +281,19 @@ export function buildAgentProcessSteps(blocks: AgentContentBlock[], messageId?: 
     if (block.type === "task_list") {
       const completedCount = block.tasks.filter((task) => task.status === "completed").length;
       const hasRunningTask = block.tasks.some((task) => task.status === "in-progress");
+      const taskListState = block.taskListState || (block.tasks.length > 0 ? "updated" : "cleared");
       const status = completeIfSuperseded(messageStatus === "streaming"
-        ? hasRunningTask ? "running" : completedCount < block.tasks.length ? "pending" : "completed"
+        ? taskListState === "pending" ? "running" : hasRunningTask ? "running" : completedCount < block.tasks.length ? "pending" : "completed"
         : "completed", block.id, currentActiveBlockId, messageIsStreaming);
       steps.push({
         id: block.id,
         messageId,
         blockIds: [block.id],
         kind: "task_list",
-        label: block.tasks.length > 0 ? `待办更新 (${completedCount}/${block.tasks.length})` : block.title || "待办已清空",
+        label: taskListState === "pending" ? block.title || "正在更新待办" : block.tasks.length > 0 ? `待办更新 (${completedCount}/${block.tasks.length})` : block.title || "待办已清空",
         status,
         tasks: block.tasks,
+        taskListState,
       });
       continue;
     }

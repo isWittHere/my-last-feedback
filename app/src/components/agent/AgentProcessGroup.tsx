@@ -130,7 +130,7 @@ function stepHasContent(step: AgentStepItem, options?: { todoUpdateDisplayMode?:
   if (step.kind === "thinking") return Boolean(step.detail);
   if (step.kind === "compaction") return true;
   if (step.kind === "tool") return Boolean(step.args || step.result || (options?.approvalDisplayMode !== "statusPanel" && step.permissions?.length));
-  if (step.kind === "task_list") return options?.todoUpdateDisplayMode === "countOnly" ? false : Boolean(step.tasks);
+  if (step.kind === "task_list") return options?.todoUpdateDisplayMode === "countOnly" ? false : step.taskListState === "cleared" || Boolean(step.tasks?.length);
   if (step.kind === "artifacts") return Boolean(step.blocks?.length);
   return Boolean(step.detail);
 }
@@ -253,7 +253,8 @@ function StepDetail({ step, projectDirectory, sessionId, approvalDisplayMode = "
   }
   if (step.kind === "task_list" && step.tasks) {
     if (todoUpdateDisplayMode === "countOnly") return null;
-    if (step.tasks.length === 0) return <p className="agent-process-detail-note">待办列表已清空</p>;
+    if (step.taskListState === "pending") return null;
+    if (step.tasks.length === 0) return step.taskListState === "cleared" ? <p className="agent-process-detail-note">待办列表已清空</p> : null;
     return (
       <div className="agent-process-task-list">
         {step.tasks.map((task) => (

@@ -40,6 +40,7 @@ export interface SharedComposerInputProps {
   onChange: (value: string) => void;
   onFocus?: () => void;
   onEditorKeyDown?: (event: KeyboardEvent<HTMLDivElement>, selection: TextRange) => void;
+  historyItems?: string[];
   onAddImage: (image: ImageAttachment) => void;
   onRemoveImage: (path: string) => void;
   onClearImages: () => void;
@@ -102,6 +103,7 @@ export function SharedComposerInput({
   onChange,
   onFocus,
   onEditorKeyDown,
+  historyItems,
   onAddImage,
   onRemoveImage,
   onClearImages,
@@ -126,12 +128,19 @@ export function SharedComposerInput({
   const { t } = useTranslation();
   const editorRef = useRef<ComposerEditorHandle>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
+  const historyIndexRef = useRef<number | null>(null);
+  const historyScratchRef = useRef("");
   const [dragOver, setDragOver] = useState(false);
   const hasAttachmentTags = images.length > 0 || Boolean(hasAttachmentMiddleTags) || mlcAttachments.length > 0 || webAttachments.length > 0;
   const imageRejectReason = imageAttachmentsDisabledReason || t("agentConsole.modelDoesNotSupportImages", "The selected model does not support image input");
 
   useEffect(() => {
     editorRef.current?.focus();
+  }, [id]);
+
+  useEffect(() => {
+    historyIndexRef.current = null;
+    historyScratchRef.current = "";
   }, [id]);
 
   useEffect(() => {
@@ -170,6 +179,62 @@ export function SharedComposerInput({
     requestAnimationFrame(() => fileInputRef.current?.click());
   }, [imageAttachmentsDisabled, imageRejectReason, onImageAttachmentRejected, readOnly]);
 
+  const setCurrentValue = useCallback((nextValue: string) => {
+    onChange(nextValue);
+    const position = nextValue.length;
+    editorRef.current?.syncValue(nextValue, { start: position, end: position });
+  }, [onChange]);
+
+  const handleEditorChange = useCallback((nextValue: string) => {
+    historyIndexRef.current = null;
+    onChange(nextValue);
+  }, [onChange]);
+
+  const handleHistoryKeyDown = useCallback((event: KeyboardEvent<HTMLDivElement>, selection: TextRange) => {
+    if (readOnly || (event.key !== "ArrowUp" && event.key !== "ArrowDown" && event.key !== "Escape")) return false;
+    const history = (historyItems || []).map((item) => item.trim()).filter(Boolean);
+
+    if (event.key === "Escape" && historyIndexRef.current !== null) {
+      event.preventDefault();
+      setCurrentValue(historyScratchRef.current);
+      historyIndexRef.current = null;
+      return true;
+    }
+
+    if (history.length === 0 || selection.start !== selection.end) return false;
+    const before = value.slice(0, selection.start);
+    const after = value.slice(selection.end);
+    const atFirstLine = !before.includes("\n");
+    const atLastLine = !after.includes("\n");
+
+    if (event.key === "ArrowUp" && atFirstLine) {
+      event.preventDefault();
+      if (historyIndexRef.current === null) {
+        historyScratchRef.current = value;
+        historyIndexRef.current = history.length - 1;
+      } else {
+        historyIndexRef.current = Math.max(0, historyIndexRef.current - 1);
+      }
+      setCurrentValue(history[historyIndexRef.current] || "");
+      return true;
+    }
+
+    if (event.key === "ArrowDown" && historyIndexRef.current !== null && atLastLine) {
+      event.preventDefault();
+      const nextIndex = historyIndexRef.current + 1;
+      if (nextIndex >= history.length) {
+        setCurrentValue(historyScratchRef.current);
+        historyIndexRef.current = null;
+      } else {
+        historyIndexRef.current = nextIndex;
+        setCurrentValue(history[nextIndex] || "");
+      }
+      return true;
+    }
+
+    return false;
+  }, [historyItems, readOnly, setCurrentValue, value]);
+
   const handlePaste = useCallback((event: ClipboardEvent<HTMLDivElement>) => {
     const items = event.clipboardData?.items;
     if (!items) return;
@@ -200,11 +265,12 @@ export function SharedComposerInput({
   const handleKeyDown = useCallback((event: KeyboardEvent<HTMLDivElement>, _selection: TextRange) => {
     onEditorKeyDown?.(event, _selection);
     if (event.defaultPrevented) return;
+    if (handleHistoryKeyDown(event, _selection)) return;
     if (event.ctrlKey && event.key === "Enter") {
       event.preventDefault();
       onSubmit();
     }
-  }, [onEditorKeyDown, onSubmit]);
+  }, [handleHistoryKeyDown, onEditorKeyDown, onSubmit]);
 
   return (
     <div className="agent-composer-frame">
@@ -270,7 +336,7 @@ export function SharedComposerInput({
       <ComposerEditor
         ref={editorRef}
         value={value}
-        onChange={onChange}
+        onChange={handleEditorChange}
         onKeyDown={handleKeyDown}
         onPaste={handlePaste}
         onFocus={onFocus}

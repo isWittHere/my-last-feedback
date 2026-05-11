@@ -16,6 +16,22 @@ import { useAgentSessionVisualIdentity } from "./useAgentSessionVisualIdentity";
 const AGENT_COMPOSER_CALLER_ID = "agent-console";
 const DOCK_COLUMN_IDS: DockColumnId[] = ["leftSidebar", "leftPage", "rightPage", "rightSidebar"];
 
+function collectSessionUserPromptHistory(session: AgentSession): string[] {
+  const history: string[] = [];
+  for (const message of session.messages) {
+    if (message.role !== "user") continue;
+    const text = (message.composerDraft || message.blocks
+      .filter((block) => block.type === "text")
+      .map((block) => block.content)
+      .join("\n\n")).trim();
+    if (!text) continue;
+    const existingIndex = history.indexOf(text);
+    if (existingIndex >= 0) history.splice(existingIndex, 1);
+    history.push(text);
+  }
+  return history;
+}
+
 function AgentSelectButton({ label, value, options, onSelect }: { label: string; value: string; options: AgentChoiceOption[]; onSelect: (value: string) => void }) {
   const [open, setOpen] = useState(false);
   const selected = options.find((option) => option.id === value);
@@ -100,6 +116,7 @@ export function AgentComposer({ session }: { session: AgentSession }) {
       icon: "terminal",
     }));
   }, [session.availableCommands]);
+  const userPromptHistory = useMemo(() => collectSessionUserPromptHistory(session), [session.messages]);
   const hasContent = hasAgentComposerContent(session);
 
   const findDockColumnForTab = useCallback((tabId: DockTabId): DockColumnId | null => (
@@ -439,6 +456,7 @@ export function AgentComposer({ session }: { session: AgentSession }) {
         webAttachments={session.webAttachments}
         onChange={(value) => updateDraft(session.id, value)}
         onFocus={focusAgentComposer}
+        historyItems={userPromptHistory}
         onAddImage={(image) => addImage(session.id, image)}
         onRemoveImage={(path) => removeImage(session.id, path)}
         onClearImages={() => clearImages(session.id)}

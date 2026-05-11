@@ -212,7 +212,7 @@ function AgentSimpleStatusRow({ phase, statusKind, label, detail }: { phase: Age
   );
 }
 
-function AgentCompletionStatusRow({ label, onComplete }: { label: string; onComplete: () => void }) {
+function AgentCompletionStatusRow({ label, onComplete, shimmer = false }: { label: string; onComplete: () => void; shimmer?: boolean }) {
   const completionTimerRef = useRef<number | null>(null);
 
   useEffect(() => () => {
@@ -228,7 +228,7 @@ function AgentCompletionStatusRow({ label, onComplete }: { label: string; onComp
     <section className="agent-approval-row agent-current-status-row" data-status-kind="settle" data-preview-overlay>
       <div className="agent-approval-row-main agent-current-status-row-main">
         <AgentActivityMatrix key="settle" phase="settle" onComplete={handleComplete} />
-        <AnimatedStatusText className="agent-approval-row-label agent-silver-shimmer-text" textKey={label}>{label}</AnimatedStatusText>
+        <AnimatedStatusText className={`agent-approval-row-label${shimmer ? " agent-silver-shimmer-text" : ""}`} textKey={label}>{label}</AnimatedStatusText>
       </div>
     </section>
   );
@@ -290,7 +290,7 @@ export function AgentCurrentStatusRow({ session }: { session: AgentSession }) {
         : t("agentConsole.currentStatusProcessing", "Processing");
       content = <AgentSimpleStatusRow phase={heldPhase} statusKind="processing" label={processingLabel} />;
     } else if (settling) {
-      content = <AgentCompletionStatusRow label={t("agentConsole.currentStatusOutputComplete", "Output complete")} onComplete={() => setSettling(false)} />;
+      content = <AgentCompletionStatusRow label={t("agentConsole.currentStatusOutputComplete", "Output complete")} onComplete={() => setSettling(false)} shimmer={false} />;
     }
     return <AgentStatusDrawer>{content}</AgentStatusDrawer>;
   }

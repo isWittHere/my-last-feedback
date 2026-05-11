@@ -187,15 +187,24 @@ function stringifyOutput(value: unknown): string | undefined {
   }
 }
 
-function parseJsonArray(value: unknown): unknown[] {
+function parseJsonArray(value: unknown): unknown[] | null {
   if (Array.isArray(value)) return value;
-  if (typeof value !== "string") return [];
+  if (typeof value !== "string") return null;
   try {
     const parsed = JSON.parse(value) as unknown;
-    return Array.isArray(parsed) ? parsed : [];
+    return Array.isArray(parsed) ? parsed : null;
   } catch {
-    return [];
+    return null;
   }
+}
+
+function todoArrayFromToolState(input: Record<string, unknown>, metadata: Record<string, unknown>, outputValue: unknown, toolCompleted: boolean): { known: boolean; todos: unknown[] } {
+  const outputTodos = parseJsonArray(outputValue);
+  if (outputTodos) return { known: true, todos: outputTodos };
+  if (!toolCompleted) return { known: false, todos: [] };
+  if (Array.isArray(metadata.todos)) return { known: true, todos: metadata.todos };
+  if (Array.isArray(input.todos)) return { known: true, todos: input.todos };
+  return { known: false, todos: [] };
 }
 
 function normalizeToolStatus(status: string | undefined, error?: string, output?: unknown, time?: Record<string, unknown>): AgentToolCallBlock["status"] {
@@ -441,14 +450,12 @@ function normalizeToolPart(part: OpenCodeMessagePart): AgentToolCallBlock | Agen
   const error = asString(state.error) || asString(part.error);
   const metadata = asRecord(state.metadata || part.metadata);
   const staleRunningState = !error && (status === "running" || status === "pending") && Boolean(time?.end || time?.completed || outputValue !== undefined);
+  const toolStatus = normalizeToolStatus(status, error, outputValue, time);
   if (normalizedToolName === "todowrite") {
     const metadata = asRecord(state.metadata || part.metadata);
-    const todos = Array.isArray(input.todos)
-      ? input.todos
-      : Array.isArray(metadata.todos)
-        ? metadata.todos
-        : parseJsonArray(outputValue);
-    const block = normalizeOpenCodeTodos(todos, asString(part.sessionID));
+    const todoSource = todoArrayFromToolState(input, metadata, outputValue, toolStatus === "completed");
+    const taskListState = todoSource.known ? todoSource.todos.length > 0 ? "updated" : "cleared" : "pending";
+    const block = normalizeOpenCodeTodos(todoSource.todos, asString(part.sessionID), taskListState);
     return {
       ...block,
       id: asString(part.callID) || asString(part.id) || block.id,
@@ -467,7 +474,7 @@ function normalizeToolPart(part: OpenCodeMessagePart): AgentToolCallBlock | Agen
     name: toolName,
     title: asString(state.title) || asString(part.title) || toolName,
     label: asString(state.title) || asString(part.title) || toolName,
-    status: normalizeToolStatus(status, error, outputValue, time),
+    status: toolStatus,
     args: input,
     result: error || output,
     metadata,
@@ -543,14 +550,16 @@ function normalizeTodo(event: OpenCodeBusEvent): AgentTaskListBlock {
   return normalizeOpenCodeTodos(todos, asString(event.properties.sessionID));
 }
 
-export function normalizeOpenCodeTodos(todos: unknown[], sessionId?: string): AgentTaskListBlock {
+export function normalizeOpenCodeTodos(todos: unknown[], sessionId?: string, taskListState?: AgentTaskListBlock["taskListState"]): AgentTaskListBlock {
   const tasks = todos.map(normalizeTodoItem).filter((task) => task.title.trim());
+  const state = taskListState || (tasks.length > 0 ? "updated" : "cleared");
   return {
     id: `todo-${sessionId || "session"}`,
     type: "task_list",
     origin: { phase: "process", placement: "standalone" },
     createdAt: new Date().toISOString(),
-    title: tasks.length > 0 ? `${tasks.length} todos` : "待办已清空",
+    title: state === "pending" ? "正在更新待办" : tasks.length > 0 ? `${tasks.length} todos` : "待办已清空",
+    taskListState: state,
     tasks,
   };
 }

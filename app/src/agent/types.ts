@@ -83,9 +83,12 @@ export interface AgentTaskItem {
   priority?: "high" | "medium" | "low";
 }
 
+export type AgentTaskListState = "pending" | "updated" | "cleared";
+
 export interface AgentTaskListBlock extends AgentBlockBase {
   type: "task_list";
   title?: string;
+  taskListState?: AgentTaskListState;
   tasks: AgentTaskItem[];
 }
 
