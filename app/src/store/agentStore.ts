@@ -146,6 +146,14 @@ function normalizeAgentCwd(value?: string | null): string {
   return normalizeWorkspacePath(value) || "";
 }
 
+function openCodeRuntimeMatchesSessionCwd(runtime: AgentOpenCodeHttpRuntimeEntry | null | undefined, session: AgentSession): boolean {
+  if (!runtime) return false;
+  const sessionDirectory = normalizeOpenCodeDirectory(session.cwd);
+  if (!sessionDirectory) return true;
+  const runtimeDirectory = normalizeOpenCodeDirectory(runtime.runtime.processInfo.cwd);
+  return runtimeDirectory === sessionDirectory;
+}
+
 function openCodeGlobalEventMatchesRuntime(event: OpenCodeBusEvent, runtime: OpenCodeServerRuntime, ownerSession: AgentSession): boolean {
   const eventDirectory = normalizeOpenCodeDirectory(event.directory);
   if (!eventDirectory) return true;
@@ -411,11 +419,17 @@ function toChoiceOption(id: unknown, label: unknown, description: unknown, sourc
 
 function openCodeHttpRuntimeForSession(session: AgentSession | null | undefined, sessions: AgentSession[] = []): AgentOpenCodeHttpRuntimeEntry | null {
   const processId = session?.providerRuntime?.transport === "http" ? session.providerRuntime.processId : undefined;
-  if (processId) return openCodeHttpRuntimes.get(processId) || null;
   if (!session) return null;
-  const providerRuntimeSession = sessions.find((item) => item.providerId === session.providerId && item.providerRuntime?.transport === "http" && item.providerRuntime.processId && item.providerRuntime.initialized);
-  const providerProcessId = providerRuntimeSession?.providerRuntime?.processId;
-  return providerProcessId ? openCodeHttpRuntimes.get(providerProcessId) || null : null;
+  if (processId) {
+    const runtime = openCodeHttpRuntimes.get(processId) || null;
+    return openCodeRuntimeMatchesSessionCwd(runtime, session) ? runtime : null;
+  }
+  for (const item of sessions) {
+    if (item.providerId !== session.providerId || item.providerRuntime?.transport !== "http" || !item.providerRuntime.processId || !item.providerRuntime.initialized) continue;
+    const runtime = openCodeHttpRuntimes.get(item.providerRuntime.processId) || null;
+    if (openCodeRuntimeMatchesSessionCwd(runtime, session)) return runtime;
+  }
+  return null;
 }
 
 function createOpenCodeHttpPort(): number {
