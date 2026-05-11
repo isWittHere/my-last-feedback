@@ -1,12 +1,9 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { useTranslation } from "react-i18next";
 import { readText as readClipboardText } from "@tauri-apps/plugin-clipboard-manager";
-import { useAgentSessionSettings } from "../../agentSessionSettings";
 import { useAgentStore } from "../../store/agentStore";
 import { useFeedbackStore, type DockColumnId, type DockTabId, type GitActionType } from "../../store/feedbackStore";
-import { useTerminalStore } from "../../store/terminalStore";
-import { pushWorkspacePathCandidate, type WorkspacePathCandidate } from "../../workspace/workspaceCandidates";
-import { normalizeWorkspacePath, sameWorkspacePath, workspaceBasename, workspacePathKey } from "../../workspace/workspacePaths";
+import { sameWorkspacePath, workspacePathKey } from "../../workspace/workspacePaths";
 import { hasAgentComposerContent } from "../../agent/composer";
 import { getEnabledOpenCodeModels, useOpenCodeSettings } from "../../openCodeSettings";
 import type { AgentChoiceOption, AgentSession } from "../../agent/types";
@@ -18,7 +15,6 @@ import { useAgentSessionVisualIdentity } from "./useAgentSessionVisualIdentity";
 
 const AGENT_COMPOSER_CALLER_ID = "agent-console";
 const DOCK_COLUMN_IDS: DockColumnId[] = ["leftSidebar", "leftPage", "rightPage", "rightSidebar"];
-type AgentComposerWorkspacePathSource = "current" | "default" | "recentSession" | "workspace" | "recent" | "caller";
 
 function AgentSelectButton({ label, value, options, onSelect }: { label: string; value: string; options: AgentChoiceOption[]; onSelect: (value: string) => void }) {
   const [open, setOpen] = useState(false);
@@ -71,7 +67,6 @@ export function AgentComposer({ session }: { session: AgentSession }) {
   const [showTestLog, setShowTestLog] = useState(false);
   const [showGitPanel, setShowGitPanel] = useState(false);
   const updateDraft = useAgentStore((state) => state.updateDraft);
-  const setSessionWorkspace = useAgentStore((state) => state.setSessionWorkspace);
   const setSessionMode = useAgentStore((state) => state.setSessionMode);
   const setSessionModel = useAgentStore((state) => state.setSessionModel);
   const addImage = useAgentStore((state) => state.addImage);
@@ -94,12 +89,6 @@ export function AgentComposer({ session }: { session: AgentSession }) {
   const setDockActiveTab = useFeedbackStore((state) => state.setDockActiveTab);
   const setDockColumnCollapsed = useFeedbackStore((state) => state.setDockColumnCollapsed);
   const moveDockTabToColumn = useFeedbackStore((state) => state.moveDockTabToColumn);
-  const activeWorkspacePath = useFeedbackStore((state) => state.mlcActiveWorkspacePath || "");
-  const focusedComposer = useFeedbackStore((state) => state.focusedComposer);
-  const recentRequestPathsKey = useFeedbackStore((state) => state.sessions.map((item) => `${item.id}\t${item.projectDirectory}\t${item.createdAt}`).join("\n"));
-  const recentPaths = useTerminalStore((state) => state.recentPaths);
-  const recordRecentPath = useTerminalStore((state) => state.recordRecentPath);
-  const agentSessionSettings = useAgentSessionSettings();
   useOpenCodeSettings();
   const sessionIdentity = useAgentSessionVisualIdentity(session);
   const commandOptions = useMemo(() => {
@@ -112,16 +101,6 @@ export function AgentComposer({ session }: { session: AgentSession }) {
     }));
   }, [session.availableCommands]);
   const hasContent = hasAgentComposerContent(session);
-  const recentRequestPaths = useMemo(() => recentRequestPathsKey
-    .split("\n")
-    .filter(Boolean)
-    .map((line) => {
-      const [, projectDirectory, createdAt] = line.split("\t");
-      return { projectDirectory, createdAt };
-    }), [recentRequestPathsKey]);
-  const recentSessionWorkspacePath = useMemo(() => [...recentRequestPaths]
-    .filter((item) => item.projectDirectory)
-    .sort((left, right) => right.createdAt.localeCompare(left.createdAt))[0]?.projectDirectory || "", [recentRequestPaths]);
 
   const findDockColumnForTab = useCallback((tabId: DockTabId): DockColumnId | null => (
     DOCK_COLUMN_IDS.find((columnId) => dockLayout.columns[columnId].tabIds.includes(tabId)) || null
@@ -239,46 +218,6 @@ export function AgentComposer({ session }: { session: AgentSession }) {
     setGitAction(session.id, { type, branchName: type === "create-branch" ? "" : undefined });
     if (type === "create-branch") setTimeout(() => branchInputRef.current?.focus(), 50);
   }, [session.gitAction?.type, session.id, setGitAction]);
-
-  const workspacePathOptions = useMemo<AgentChoiceOption[]>(() => {
-    const candidates: WorkspacePathCandidate<AgentComposerWorkspacePathSource>[] = [];
-    const seen = new Set<string>();
-    const sourceLabel = (source: AgentComposerWorkspacePathSource) => {
-      if (source === "current") return t("agentConsole.workspaceCurrent", "Current");
-      if (source === "default") return t("agentConsole.workspaceDefault", "Default");
-      if (source === "recentSession") return t("agentConsole.workspaceRecentSession", "Recent session");
-      if (source === "workspace") return t("agentConsole.workspaceActive", "Workspace");
-      if (source === "caller") return t("agentConsole.workspaceCaller", "Caller");
-      return t("agentConsole.workspaceRecent", "Recent");
-    };
-    if (session.cwd) pushWorkspacePathCandidate(candidates, seen, { path: session.cwd, label: workspaceBasename(session.cwd), source: "current" });
-    if (agentSessionSettings.defaultWorkspacePath) pushWorkspacePathCandidate(candidates, seen, { path: agentSessionSettings.defaultWorkspacePath, label: workspaceBasename(agentSessionSettings.defaultWorkspacePath), source: "default" });
-    if (recentSessionWorkspacePath) pushWorkspacePathCandidate(candidates, seen, { path: recentSessionWorkspacePath, label: workspaceBasename(recentSessionWorkspacePath), source: "recentSession" });
-    if (activeWorkspacePath) pushWorkspacePathCandidate(candidates, seen, { path: activeWorkspacePath, label: workspaceBasename(activeWorkspacePath), source: "workspace" });
-    if (focusedComposer?.projectDirectory) pushWorkspacePathCandidate(candidates, seen, { path: focusedComposer.projectDirectory, label: workspaceBasename(focusedComposer.projectDirectory), source: "caller" });
-    for (const recentPath of recentPaths.slice(0, 8)) {
-      pushWorkspacePathCandidate(candidates, seen, { path: recentPath.path, label: recentPath.label || workspaceBasename(recentPath.path), source: "recent" });
-    }
-    for (const requestPath of [...recentRequestPaths].sort((left, right) => right.createdAt.localeCompare(left.createdAt)).slice(0, 8)) {
-      pushWorkspacePathCandidate(candidates, seen, { path: requestPath.projectDirectory, label: workspaceBasename(requestPath.projectDirectory), source: "recentSession" });
-    }
-    return [
-      { id: "", label: t("agentConsole.workspaceEmpty", "No workspace") },
-      ...candidates.map((candidate) => ({
-        id: candidate.path,
-        label: `${sourceLabel(candidate.source)}: ${candidate.label || workspaceBasename(candidate.path) || candidate.path}`,
-      })),
-    ];
-  }, [activeWorkspacePath, agentSessionSettings.defaultWorkspacePath, focusedComposer?.projectDirectory, recentPaths, recentRequestPaths, recentSessionWorkspacePath, session.cwd, t]);
-
-  const handleWorkspacePathSelect = useCallback((path: string) => {
-    const cleanPath = normalizeWorkspacePath(path) || "";
-    setSessionWorkspace(session.id, cleanPath);
-    if (cleanPath) {
-      recordRecentPath(cleanPath, "workspace");
-      setMlcActiveWorkspacePath(cleanPath);
-    }
-  }, [recordRecentPath, session.id, setMlcActiveWorkspacePath, setSessionWorkspace]);
 
   const attachmentActionButtons = (
     <>
@@ -478,17 +417,9 @@ export function AgentComposer({ session }: { session: AgentSession }) {
       <Icon name={isRunning ? "circle-x" : "send"} size={15} />
     </button>
   );
-  const workspaceSelectValue = workspacePathOptions.some((option) => option.id === session.cwd) ? session.cwd : "";
-  const showWorkspacePathSelector = !session.providerSessionId && session.providerSessionState === "provisional" && (session.status === "idle" || session.status === "error");
-
   return (
     <>
       {session.draftSource && <div className="agent-draft-source-note">{t("agentConsole.forkDraftSource", "Draft from forked message")}</div>}
-      {showWorkspacePathSelector ? (
-        <div className="agent-composer-workspace-row">
-          <AgentSelectButton label={t("agentConsole.workspace", "Workspace")} value={workspaceSelectValue} options={workspacePathOptions} onSelect={handleWorkspacePathSelect} />
-        </div>
-      ) : null}
       <SharedComposerInput
         id={session.id}
         value={session.draft}

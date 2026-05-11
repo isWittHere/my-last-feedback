@@ -2081,6 +2081,36 @@ body,
   flex-direction: column;
 }
 
+.agent-new-session-workspace-row {
+  flex: 0 0 auto;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  min-height: 38px;
+  padding: 7px 10px;
+  border-bottom: 1px solid var(--color-border-subtle);
+  background: color-mix(in srgb, var(--color-bg-surface) 72%, transparent);
+}
+
+.agent-new-session-workspace-label {
+  flex: 0 0 auto;
+  color: var(--color-text-muted);
+  font-size: 12px;
+  font-weight: 600;
+}
+
+.agent-new-session-workspace-select {
+  flex: 1 1 min(360px, 100%);
+  max-width: 480px;
+  height: 28px;
+}
+
+.agent-new-session-workspace-select .app-select-panel {
+  left: 0;
+  right: auto;
+  max-width: min(420px, calc(100vw - 72px));
+}
+
 .agent-console-input-region {
   min-width: 0;
   overflow: hidden;
@@ -6026,19 +6056,6 @@ body,
   align-items: center;
   gap: 6px;
   flex-wrap: wrap;
-}
-
-.agent-composer-workspace-row {
-  display: flex;
-  align-items: center;
-  gap: 6px;
-  min-height: 36px;
-  padding: 0 12px 6px;
-  background: var(--color-bg-input-raised);
-}
-
-.agent-composer-workspace-row .agent-composer-select {
-  max-width: min(420px, calc(100vw - 72px));
 }
 
 .agent-composer-select-wrap {
