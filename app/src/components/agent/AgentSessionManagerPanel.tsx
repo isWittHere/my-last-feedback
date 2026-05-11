@@ -15,10 +15,10 @@ import { getTimeGroup, timeAgo, type TimeGroup } from "../timeUtils";
 
 const GROUP_ORDER: TimeGroup[] = ["today", "yesterday", "lastWeek", "earlier"];
 
-function AgentSessionGroup({ label, count, children }: { label: string; count: number; children: ReactNode }) {
+function AgentSessionGroup({ label, count, children, className = "" }: { label: string; count: number; children: ReactNode; className?: string }) {
   const [collapsed, setCollapsed] = useState(false);
   return (
-    <div className="session-group">
+    <div className={`session-group${className ? ` ${className}` : ""}`}>
       <button className="session-group-header" onClick={() => setCollapsed((value) => !value)}>
         <Icon name="chevron-down" size={8} className="app-disclosure-icon" style={{ transform: collapsed ? "rotate(-90deg)" : "rotate(0deg)" }} />
         <span>{label}</span>
@@ -39,6 +39,14 @@ function folderNameFromPath(value?: string | null): string | null {
   if (!workspacePath) return null;
   const normalized = workspacePath.replace(/\/+$/, "");
   return normalized.split("/").filter(Boolean).pop() || normalized || null;
+}
+
+function workspaceGroupKey(value?: string | null): string {
+  return workspacePathKey(value) || "__no_workspace__";
+}
+
+function workspaceGroupLabel(value: string | null | undefined, fallback: string): string {
+  return folderNameFromPath(value) || fallback;
 }
 
 function formatFullTimestamp(value?: string | null): string | null {
@@ -292,22 +300,43 @@ export function AgentSessionManagerPanel() {
                       lastWeek: t("sidebar.groupLastWeek", "Past week"),
                       earlier: t("sidebar.groupEarlier", "Earlier"),
                     };
-                    const groups = new Map<TimeGroup, typeof sessionRows>();
+                    const workspaceGroups = new Map<string, { label: string; updatedAt: string; rows: typeof sessionRows }>();
                     for (const row of sessionRows) {
-                      const g = getTimeGroup(row.updatedAt || "");
-                      if (!groups.has(g)) groups.set(g, []);
-                      groups.get(g)!.push(row);
+                      const workspacePath = row.type === "local" ? row.session.cwd : row.item.cwd;
+                      const key = workspaceGroupKey(workspacePath);
+                      const existing = workspaceGroups.get(key);
+                      if (existing) {
+                        existing.rows.push(row);
+                        if ((row.updatedAt || "").localeCompare(existing.updatedAt) > 0) existing.updatedAt = row.updatedAt || "";
+                      } else {
+                        workspaceGroups.set(key, {
+                          label: workspaceGroupLabel(workspacePath, t("agentSessions.noWorkspace", "No workspace")),
+                          updatedAt: row.updatedAt || "",
+                          rows: [row],
+                        });
+                      }
                     }
-                    return GROUP_ORDER
-                      .filter(g => groups.has(g))
-                      .map(g => (
-                        <AgentSessionGroup key={g} label={groupLabels[g]} count={groups.get(g)!.length}>
-                          {groups.get(g)!.map((row) => {
+                    return [...workspaceGroups.entries()]
+                      .sort((left, right) => right[1].updatedAt.localeCompare(left[1].updatedAt))
+                      .map(([workspaceKey, workspaceGroup]) => {
+                        const timeGroups = new Map<TimeGroup, typeof sessionRows>();
+                        for (const row of workspaceGroup.rows) {
+                          const g = getTimeGroup(row.updatedAt || "");
+                          if (!timeGroups.has(g)) timeGroups.set(g, []);
+                          timeGroups.get(g)!.push(row);
+                        }
+                        return (
+                          <AgentSessionGroup key={workspaceKey} label={workspaceGroup.label} count={workspaceGroup.rows.length} className="session-workspace-group">
+                            <div className="session-workspace-group-body">
+                              {GROUP_ORDER
+                                .filter(g => timeGroups.has(g))
+                                .map(g => (
+                                  <AgentSessionGroup key={`${workspaceKey}:${g}`} label={groupLabels[g]} count={timeGroups.get(g)!.length} className="session-time-group">
+                                    {timeGroups.get(g)!.map((row) => {
                             if (row.type === "local") {
                               const session = row.session;
                               const workspaceIdentity = resolveWorkspaceIdentity({ workspacePath: session.cwd, workspaceKey: session.workspaceKey, candidates: workspaceColorCandidates });
                               const identity = getAgentSessionIdentity(session, i18n.language.startsWith("zh") ? "zh" : "en", { color: workspaceIdentity.color });
-                              const folderName = folderNameFromPath(session.cwd);
                               const metaTitle = sessionMetaTitle(session.updatedAt || session.createdAt, session.cwd);
                               return (
                                 <button
@@ -319,14 +348,9 @@ export function AgentSessionManagerPanel() {
                                     showAgentPanel();
                                   }}
                                 >
-                                  <div className="session-item-row1">
-                                    <HistorySessionAvatar identity={identity} sessionId={session.providerSessionId} status={session.status} />
-                                    <span className="session-item-name">{identity.code ? session.title : identity.name}</span>
-                                  </div>
-                                  <div className="session-item-row2">
-                                    <span className="session-item-time" title={metaTitle}>{timeAgo(session.updatedAt || session.createdAt, t)}</span>
-                                    {folderName ? <span className="session-item-folder" title={metaTitle}>{folderName}</span> : null}
-                                  </div>
+                                  <HistorySessionAvatar identity={identity} sessionId={session.providerSessionId} status={session.status} />
+                                  <span className="session-item-name">{identity.code ? session.title : identity.name}</span>
+                                  <span className="session-item-time" title={metaTitle}>{timeAgo(session.updatedAt || session.createdAt, t)}</span>
                                 </button>
                               );
                             }
@@ -341,7 +365,6 @@ export function AgentSessionManagerPanel() {
                             const identity = boundSession
                               ? getAgentSessionIdentity(boundSession, identityLanguage, { color: workspaceIdentity.color })
                               : getAgentProviderSessionIdentity(providerId, item.sessionId, identityLanguage, providerLabel(providerId), { color: workspaceIdentity.color });
-                            const folderName = folderNameFromPath(workspacePath);
                             const metaTitle = sessionMetaTitle(item.updatedAt, workspacePath);
                             const isActiveRemoteSession = boundSession?.id === activeSessionId;
                             const restoreTitle = boundSession
@@ -367,7 +390,7 @@ export function AgentSessionManagerPanel() {
                             return (
                               <div
                                 key={item.sessionId}
-                                className={`session-item${isActiveRemoteSession ? " session-item-active" : ""}`}
+                                className={`session-item session-item-with-actions${isActiveRemoteSession ? " session-item-active" : ""}`}
                                 role="button"
                                 tabIndex={0}
                                 aria-label={restoreTitle}
@@ -379,39 +402,38 @@ export function AgentSessionManagerPanel() {
                                   }
                                 }}
                               >
-                                <div className="session-item-row1">
-                                  <HistorySessionAvatar identity={identity} sessionId={item.sessionId} />
-                                  <span className="session-item-name">{item.title || shortId(item.sessionId)}</span>
-                                </div>
-                                <div className="session-item-row2">
-                                  <span className="session-item-time" title={metaTitle}>{timeAgo(item.updatedAt || "", t)}</span>
-                                  {folderName ? <span className="session-item-folder" title={metaTitle}>{folderName}</span> : null}
-                                  <span className="session-item-actions">
-                                    <button
-                                      type="button"
-                                      className="session-item-cancel"
-                                      onClick={(event) => { event.stopPropagation(); handleRename(); }}
-                                      disabled={busyAction !== null}
-                                      title={t("agentSessions.rename", "Rename session")}
-                                    >
-                                      <Icon name={busyAction === renameKey ? "spinner" : "edit"} size={11} />
-                                    </button>
-                                    <button
-                                      type="button"
-                                      className="session-item-delete"
-                                      onClick={(event) => { event.stopPropagation(); handleDelete(); }}
-                                      disabled={busyAction !== null}
-                                      title={t("agentSessions.delete", "Delete session")}
-                                    >
-                                      <Icon name={busyAction === deleteKey ? "spinner" : "trash"} size={11} />
-                                    </button>
-                                  </span>
-                                </div>
+                                <HistorySessionAvatar identity={identity} sessionId={item.sessionId} />
+                                <span className="session-item-name">{item.title || shortId(item.sessionId)}</span>
+                                <span className="session-item-time" title={metaTitle}>{timeAgo(item.updatedAt || "", t)}</span>
+                                <span className="session-item-actions">
+                                  <button
+                                    type="button"
+                                    className="session-item-cancel"
+                                    onClick={(event) => { event.stopPropagation(); handleRename(); }}
+                                    disabled={busyAction !== null}
+                                    title={t("agentSessions.rename", "Rename session")}
+                                  >
+                                    <Icon name={busyAction === renameKey ? "spinner" : "edit"} size={11} />
+                                  </button>
+                                  <button
+                                    type="button"
+                                    className="session-item-delete"
+                                    onClick={(event) => { event.stopPropagation(); handleDelete(); }}
+                                    disabled={busyAction !== null}
+                                    title={t("agentSessions.delete", "Delete session")}
+                                  >
+                                    <Icon name={busyAction === deleteKey ? "spinner" : "trash"} size={11} />
+                                  </button>
+                                </span>
                               </div>
                             );
-                          })}
-                        </AgentSessionGroup>
-                      ));
+                                    })}
+                                  </AgentSessionGroup>
+                                ))}
+                            </div>
+                          </AgentSessionGroup>
+                        );
+                      });
                   })()}
                   {listState?.nextCursor ? (
                     <button

@@ -1705,12 +1705,69 @@ body,
 .session-group {
   margin-bottom: 2px;
 }
+.session-workspace-group-body {
+  padding-left: 8px;
+}
+
+.agent-session-manager-panel .session-item {
+  position: relative;
+  flex-direction: row;
+  align-items: center;
+  gap: 6px;
+  min-height: 24px;
+  padding: 0px 4px 0px 4px;
+}
+
+.agent-session-manager-panel .session-item-time {
+  flex: 0 0 auto;
+  white-space: nowrap;
+}
+
+.agent-session-manager-panel .session-item-with-actions:hover .session-item-time,
+.agent-session-manager-panel .session-item-with-actions:focus-within .session-item-time {
+  display: none;
+}
+
+.agent-session-manager-panel .session-item-actions {
+  position: static;
+  margin-left: 0;
+  padding-left: 0;
+  display: none;
+  visibility: visible;
+  opacity: 1;
+  pointer-events: auto;
+  transform: none;
+  background: transparent;
+}
+
+.agent-session-manager-panel .session-item:hover .session-item-actions,
+.agent-session-manager-panel .session-item:focus-within .session-item-actions {
+  display: flex;
+}
+
+.agent-session-manager-panel .session-workspace-group > .session-group-header {
+  position: sticky;
+  top: var(--session-group-sticky-top, 0px);
+  z-index: 8;
+  font-size: 11px;
+  text-transform: none;
+  letter-spacing: 0;
+  color: var(--color-text-secondary);
+}
+
+.agent-session-manager-panel .session-time-group > .session-group-header {
+  position: sticky;
+  top: calc(var(--session-group-sticky-top, 0px) + 20px);
+  z-index: 7;
+  padding-left: 4px;
+  font-size: 9px;
+}
 .session-group-header {
   display: flex;
   align-items: center;
   gap: 4px;
   width: 100%;
-  padding: 4px 8px;
+  padding: 2px 6px 2px 2px;
   border: none;
   background: var(--session-sidebar-bg, var(--color-bg-input-raised));
   color: var(--color-text-muted);
@@ -2174,12 +2231,23 @@ body,
 }
 
 .agent-new-session-workspace-option-label {
+  flex: 1 1 auto;
   min-width: 0;
   font-size: 12px;
   font-weight: 600;
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
+}
+
+.agent-new-session-workspace-option-time {
+  flex: 0 0 auto;
+  margin-left: 10px;
+  color: var(--color-text-muted);
+  font-size: 11px;
+  font-variant-numeric: tabular-nums;
+  white-space: nowrap;
+  text-align: right;
 }
 
 .agent-console-input-region {
@@ -2340,7 +2408,7 @@ body,
 .agent-session-manager-toolbar {
   position: sticky;
   top: 0;
-  z-index: 4;
+  z-index: 10;
   display: flex;
   align-items: center;
   gap: 0;

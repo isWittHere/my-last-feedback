@@ -8,10 +8,12 @@ import { useFeedbackStore } from "../../store/feedbackStore";
 import { useTerminalStore } from "../../store/terminalStore";
 import { normalizeWorkspacePath, sameWorkspacePath, workspacePathKey } from "../../workspace/workspacePaths";
 import { Icon } from "../Icons";
+import { timeAgo } from "../timeUtils";
 
 interface WorkspacePathOption {
   value: string;
   label: string;
+  updatedAt: string;
 }
 
 interface WorkspaceHistoryItem {
@@ -66,14 +68,14 @@ export function AgentNewSessionWorkspacePicker({ session }: { session: AgentSess
   const workspacePathOptions = useMemo<WorkspacePathOption[]>(() => {
     const seen = new Set<string>();
     const options: WorkspacePathOption[] = [];
-    const add = (path: string) => {
+    const add = (path: string, updatedAt: string) => {
       const cleanPath = normalizeWorkspacePath(path);
       const key = workspacePathKey(cleanPath);
       if (!cleanPath || !key || seen.has(key)) return;
       seen.add(key);
-      options.push({ value: cleanPath, label: cleanPath });
+      options.push({ value: cleanPath, label: cleanPath, updatedAt });
     };
-    for (const item of recentSessionWorkspaces) add(item.path);
+    for (const item of recentSessionWorkspaces) add(item.path, item.updatedAt);
     return options;
   }, [recentSessionWorkspaces]);
 
@@ -163,6 +165,7 @@ export function AgentNewSessionWorkspacePicker({ session }: { session: AgentSess
           }}
         >
           <span className="agent-new-session-workspace-option-label">{option.label}</span>
+          <span className="agent-new-session-workspace-option-time">{timeAgo(option.updatedAt, t)}</span>
         </button>
       ))}
     </div>
