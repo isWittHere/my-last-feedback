@@ -1,6 +1,7 @@
 import { Fragment, useState, useEffect, useCallback, useMemo, type DragEvent as ReactDragEvent, type ReactNode } from "react";
 import { useTranslation } from "react-i18next";
 import i18n from "../i18n";
+import { getAgentSessionSettings, saveAgentSessionSettings, type AgentSessionSettings, type NewSessionWorkspacePathMode } from "../agentSessionSettings";
 import { useFeedbackStore, type DockColumnId, type DockTabId } from "../store/feedbackStore";
 import { useAgentStore } from "../store/agentStore";
 import { PromptIcon } from "./PromptIcons";
@@ -19,6 +20,7 @@ import { formatGitFolderBlacklistText, getGitOperationSettings, GIT_TIMED_REMIND
 import { AGENT_DIFF_COLOR_PRESETS, getAgentConsoleSettings, saveAgentConsoleSettings, type AgentApprovalDisplayMode, type AgentConsoleSettings, type AgentDiffColorPresetId, type AgentNavigationGroupBackgroundMode, type AgentNavigationIndicatorOrder, type AgentNavigationVisualizationMode, type AgentProcessStepDefaultMode, type AgentTaskPanelTemplateStyle, type AgentTimelineStreamingStepMode, type AgentTodoUpdateDisplayMode, type AgentTopbarIndicatorMode } from "../agentConsoleSettings";
 import { getOpenCodePermissionPresetAction, getOpenCodePermissionPresetId, getOpenCodeSettings, OPEN_CODE_PERMISSION_DEFINITIONS, OPEN_CODE_PERMISSION_PRESETS, setOpenCodeDefaultPermissionAction, setOpenCodeDefaultPermissionPreset, setOpenCodeModelEnabled, setOpenCodePreferredModel, type OpenCodePermissionPresetId, type OpenCodePermissionSettingAction, type OpenCodeSettings } from "../openCodeSettings";
 import { SESSION_LIST_MODE_OPTIONS } from "../sessionNavigationSettings";
+import { normalizeWorkspacePath } from "../workspace/workspacePaths";
 import { SessionNavigationModeIcon } from "./SessionNavigationModeIcon";
 import { AppSelect, type AppSelectOption } from "./AppSelect";
 import { SettingsSegmentedControl } from "./SettingsSegmentedControl";
@@ -189,6 +191,7 @@ export function SettingsDialog({ open, onClose }: { open: boolean; onClose: () =
   const [composerSettings, setComposerSettings] = useState<ComposerSettings>(getComposerSettings);
   const [gitOperationSettings, setGitOperationSettings] = useState<GitOperationSettings>(getGitOperationSettings);
   const [agentConsoleSettings, setAgentConsoleSettings] = useState<AgentConsoleSettings>(getAgentConsoleSettings);
+  const [agentSessionSettings, setAgentSessionSettings] = useState<AgentSessionSettings>(getAgentSessionSettings);
   const [openCodeSettings, setOpenCodeSettings] = useState<OpenCodeSettings>(getOpenCodeSettings);
   const [openCodeModelQuery, setOpenCodeModelQuery] = useState("");
   const [agentCleanupMessage, setAgentCleanupMessage] = useState<string | null>(null);
@@ -243,6 +246,7 @@ export function SettingsDialog({ open, onClose }: { open: boolean; onClose: () =
     setComposerSettings(getComposerSettings());
     setGitOperationSettings(getGitOperationSettings());
     setAgentConsoleSettings(getAgentConsoleSettings());
+    setAgentSessionSettings(getAgentSessionSettings());
     setAgentCleanupMessage(null);
     setOpenCodeSettings(getOpenCodeSettings());
     setSubmittedViewSettings(getSubmittedViewSettings());
@@ -366,6 +370,28 @@ export function SettingsDialog({ open, onClose }: { open: boolean; onClose: () =
         .catch((error) => setAgentCleanupMessage(error instanceof Error ? error.message : String(error)));
     }
   }, [cleanupEmptyAgentSessions, t]);
+
+  const updateAgentSessionSettings = useCallback((updater: (current: AgentSessionSettings) => AgentSessionSettings) => {
+    setAgentSessionSettings((current) => saveAgentSessionSettings(updater(current)));
+  }, []);
+
+  const handleNewSessionWorkspacePathModeChange = useCallback((newSessionWorkspacePathMode: NewSessionWorkspacePathMode) => {
+    updateAgentSessionSettings((current) => ({ ...current, newSessionWorkspacePathMode }));
+  }, [updateAgentSessionSettings]);
+
+  const handleDefaultWorkspacePathChange = useCallback((defaultWorkspacePath: string) => {
+    updateAgentSessionSettings((current) => ({ ...current, defaultWorkspacePath }));
+  }, [updateAgentSessionSettings]);
+
+  const handleChooseDefaultWorkspacePath = useCallback(async () => {
+    try {
+      const selectedPath = await invoke<string | null>("select_directory", {
+        title: t("settings.agentDefaultWorkspacePathChoose", "Choose default workspace folder"),
+        initialDirectory: normalizeWorkspacePath(agentSessionSettings.defaultWorkspacePath) || null,
+      });
+      if (typeof selectedPath === "string" && selectedPath.trim()) handleDefaultWorkspacePathChange(selectedPath);
+    } catch {}
+  }, [agentSessionSettings.defaultWorkspacePath, handleDefaultWorkspacePathChange, t]);
 
   const handleAgentCleanupNow = useCallback(() => {
     setAgentCleanupMessage(t("settings.agentSessionCleanupRunning", "Cleaning empty sessions..."));
@@ -1465,6 +1491,39 @@ export function SettingsDialog({ open, onClose }: { open: boolean; onClose: () =
             {tab === "agentSessionManager" && (
               <div className="settings-section settings-agent-section">
                 <div className="settings-row settings-row-stacked">
+                  <div className="settings-row settings-agent-toggle-row">
+                    <div className="settings-row-info">
+                      <span className="settings-label">{t("settings.agentNewSessionWorkspacePath", "New session workspace path")}</span>
+                      <span className="settings-sublabel">{t("settings.agentNewSessionWorkspacePathDesc", "Choose which workspace path new Agent sessions use by default.")}</span>
+                    </div>
+                    <SettingsSegmentedControl
+                      ariaLabel={t("settings.agentNewSessionWorkspacePath", "New session workspace path")}
+                      value={agentSessionSettings.newSessionWorkspacePathMode}
+                      onChange={(value) => handleNewSessionWorkspacePathModeChange(value as NewSessionWorkspacePathMode)}
+                      options={[
+                        { id: "default", label: t("settings.agentNewSessionWorkspaceDefault", "Default workspace path") },
+                        { id: "recentSession", label: t("settings.agentNewSessionWorkspaceRecent", "Recent session workspace path") },
+                      ]}
+                    />
+                  </div>
+                  <div className="settings-row settings-agent-toggle-row settings-row-stacked">
+                    <div className="settings-row-info">
+                      <span className="settings-label">{t("settings.agentDefaultWorkspacePath", "Default workspace path")}</span>
+                      <span className="settings-sublabel">{t("settings.agentDefaultWorkspacePathDesc", "Used when new sessions are configured to start from the default workspace path.")}</span>
+                    </div>
+                    <div className="settings-path-control">
+                      <input
+                        type="text"
+                        className="settings-path-input"
+                        value={agentSessionSettings.defaultWorkspacePath}
+                        onChange={(event) => handleDefaultWorkspacePathChange(event.target.value)}
+                        placeholder={t("settings.agentDefaultWorkspacePathPlaceholder", "No default workspace path")}
+                      />
+                      <button type="button" className="settings-command-button" onClick={() => void handleChooseDefaultWorkspacePath()}>
+                        {t("settings.chooseFolder", "Choose folder")}
+                      </button>
+                    </div>
+                  </div>
                   <div className="settings-row">
                     <div className="settings-row-info">
                       <span className="settings-label">{t("settings.agentAutoCleanupEmptySessions", "Auto-clean empty sessions")}</span>

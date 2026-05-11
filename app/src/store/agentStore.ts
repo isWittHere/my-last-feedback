@@ -65,8 +65,9 @@ interface AgentStoreState {
   activeSessionId: string | null;
   providerSessionLists: Partial<Record<AgentProviderId, AgentProviderSessionListState>>;
   getActiveSession: () => AgentSession | null;
-  createNewSession: (options?: { cwd?: string | null; workspaceKey?: string | null }) => string;
+  createNewSession: (options?: { cwd?: string | null; workspaceKey?: string | null; fallbackToActiveCwd?: boolean }) => string;
   setActiveSession: (sessionId: string) => void;
+  setSessionWorkspace: (sessionId: string, cwd: string | null) => void;
   setSessionMode: (sessionId: string, modeId: string) => void;
   setSessionModel: (sessionId: string, modelId: string) => void;
   addImage: (sessionId: string, image: ImageAttachment) => void;
@@ -1906,15 +1907,16 @@ export const useAgentStore = create<AgentStoreState>((set, get) => ({
     const activeSession = state.getActiveSession();
     const requestedCwd = normalizeAgentCwd(options.cwd);
     const activeCwd = normalizeAgentCwd(activeSession?.cwd);
-    const workspaceKey = workspacePathKey(options.workspaceKey) || workspacePathKey(requestedCwd || activeCwd || "");
-    const inheritOpenCodeCommands = !requestedCwd || requestedCwd === activeCwd;
+    const sessionCwd = requestedCwd || (options.fallbackToActiveCwd === false ? "" : activeCwd);
+    const workspaceKey = workspacePathKey(options.workspaceKey) || workspacePathKey(sessionCwd);
+    const inheritOpenCodeCommands = !!sessionCwd && sessionCwd === activeCwd;
     const createdAt = nowIso();
     const sessionId = newId("agent_session");
     const session: AgentSession = {
       ...createAgentSession(),
       id: sessionId,
       title: "New Agent Session",
-      cwd: requestedCwd || activeCwd || "",
+      cwd: sessionCwd,
       workspaceKey,
       modelId: activeSession?.modelId,
       modeId: activeSession?.modeId,
@@ -1943,6 +1945,25 @@ export const useAgentStore = create<AgentStoreState>((set, get) => ({
     const cleaned = cleanupEmptyAgentSessions(state.sessions, sessionId, [sessionId]);
     return { sessions: cleaned.sessions, activeSessionId: cleaned.activeSessionId || sessionId };
   }),
+
+  setSessionWorkspace: (sessionId, cwd) => {
+    const nextCwd = normalizeAgentCwd(cwd);
+    set((state) => ({
+      sessions: updateSession(state.sessions, sessionId, (session) => {
+        if (session.cwd === nextCwd && session.workspaceKey === workspacePathKey(nextCwd)) return session;
+        return {
+          ...session,
+          cwd: nextCwd,
+          workspaceKey: workspacePathKey(nextCwd),
+          availableCommands: [],
+          availableCommandsLoading: false,
+          availableCommandsError: undefined,
+          availableCommandsLoadedAt: undefined,
+          updatedAt: nowIso(),
+        };
+      }),
+    }));
+  },
 
   setSessionMode: (sessionId, modeId) => {
     set((state) => ({
