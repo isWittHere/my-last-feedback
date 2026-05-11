@@ -16,6 +16,9 @@ const DEFAULT_SETTINGS: AgentSessionSettings = {
   defaultWorkspacePath: "",
 };
 
+let cachedStorageValue: string | null | undefined;
+let cachedSettings: AgentSessionSettings = DEFAULT_SETTINGS;
+
 function isWorkspacePathMode(value: unknown): value is NewSessionWorkspacePathMode {
   return value === "default" || value === "recentSession";
 }
@@ -30,16 +33,30 @@ function normalizeSettings(value: Partial<AgentSessionSettings> | null | undefin
 export function getAgentSessionSettings(): AgentSessionSettings {
   try {
     const raw = localStorage.getItem(STORAGE_KEY);
-    if (!raw) return DEFAULT_SETTINGS;
-    return normalizeSettings(JSON.parse(raw));
+    if (raw === cachedStorageValue) return cachedSettings;
+    cachedStorageValue = raw;
+    if (!raw) {
+      cachedSettings = DEFAULT_SETTINGS;
+      return cachedSettings;
+    }
+    cachedSettings = normalizeSettings(JSON.parse(raw));
+    return cachedSettings;
   } catch {
+    cachedSettings = DEFAULT_SETTINGS;
     return DEFAULT_SETTINGS;
   }
 }
 
 export function saveAgentSessionSettings(settings: AgentSessionSettings): AgentSessionSettings {
   const normalized = normalizeSettings(settings);
-  try { localStorage.setItem(STORAGE_KEY, JSON.stringify(normalized)); } catch {}
+  try {
+    const raw = JSON.stringify(normalized);
+    localStorage.setItem(STORAGE_KEY, raw);
+    cachedStorageValue = raw;
+  } catch {
+    cachedStorageValue = undefined;
+  }
+  cachedSettings = normalized;
   try { window.dispatchEvent(new CustomEvent(CHANGE_EVENT, { detail: normalized })); } catch {}
   return normalized;
 }
