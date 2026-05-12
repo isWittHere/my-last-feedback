@@ -2316,7 +2316,7 @@ body,
   flex: 1 1 auto;
   min-width: 0;
   font-size: 12px;
-  font-weight: 600;
+  font-weight: 450;
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
@@ -6318,13 +6318,13 @@ body,
 }
 
 .agent-composer-select {
-  min-height: 34px;
-  max-width: 188px;
+  min-height: 24px;
+  max-width: 240px;
   display: inline-flex;
   align-items: center;
   justify-content: space-between;
   gap: 5px;
-  padding: 0 10px !important;
+  padding: 0 8px !important;
   font-size: 12px;
 }
 
@@ -6335,7 +6335,7 @@ body,
   text-overflow: ellipsis;
   white-space: nowrap;
   color: var(--color-text-primary);
-  font-weight: 600;
+  font-weight: 400;
 }
 
 .agent-composer-select-panel {
@@ -6354,13 +6354,49 @@ body,
 }
 
 .agent-composer-select-panel .agent-new-session-workspace-option {
-  min-height: 30px;
+  min-height: 22px;
 }
 
 .agent-composer-select-panel .agent-new-session-workspace-option-time {
   max-width: 42%;
   overflow: hidden;
   text-overflow: ellipsis;
+}
+
+.agent-composer-select-detail {
+  position: fixed;
+  z-index: 10001;
+  width: min(340px, calc(100vw - 24px));
+  overflow: auto;
+  padding: 10px 12px;
+  border: 1px solid var(--color-border);
+  border-radius: 8px;
+  background: var(--color-bg-surface);
+  color: var(--color-text-secondary);
+  box-shadow: 0 12px 28px rgba(0, 0, 0, 0.26);
+}
+
+.agent-composer-select-detail-title {
+  color: var(--color-text-primary);
+  font-size: 13px;
+  font-weight: 700;
+  line-height: 1.35;
+  overflow-wrap: anywhere;
+}
+
+.agent-composer-select-detail-description {
+  margin-top: 6px;
+  color: var(--color-text-muted);
+  font-size: 12px;
+  line-height: 1.45;
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+}
+
+@media (max-width: 760px) {
+  .agent-composer-select-detail {
+    display: none;
+  }
 }
 
 .agent-composer-actions > span {

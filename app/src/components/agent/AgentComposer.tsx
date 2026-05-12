@@ -16,6 +16,8 @@ import { useAgentSessionVisualIdentity } from "./useAgentSessionVisualIdentity";
 
 type AgentSelectMenuOption = AgentChoiceOption & { dividerAfter?: boolean };
 
+let agentSelectMeasureCanvas: HTMLCanvasElement | null = null;
+
 const AGENT_COMPOSER_CALLER_ID = "agent-console";
 const DOCK_COLUMN_IDS: DockColumnId[] = ["leftSidebar", "leftPage", "rightPage", "rightSidebar"];
 
@@ -35,40 +37,94 @@ function collectSessionUserPromptHistory(session: AgentSession): string[] {
   return history;
 }
 
-function AgentSelectButton({ label, value, options, onSelect, onOpen }: { label: string; value: string; options: AgentSelectMenuOption[]; onSelect: (value: string) => void; onOpen?: () => void }) {
+function measureAgentSelectTextWidth(text: string, font: string): number {
+  if (!text) return 0;
+  if (typeof document === "undefined") return text.length * 7;
+  if (!agentSelectMeasureCanvas) agentSelectMeasureCanvas = document.createElement("canvas");
+  const context = agentSelectMeasureCanvas.getContext("2d");
+  if (!context) return text.length * 7;
+  context.font = font;
+  return context.measureText(text).width;
+}
+
+function preferredAgentSelectPanelWidth(options: AgentSelectMenuOption[], detailMode: "inline" | "hover", minWidth: number, maxWidth: number): number {
+  const estimatedWidth = options.reduce((widest, option) => {
+    const labelWidth = measureAgentSelectTextWidth(option.label, "600 12px system-ui");
+    const descriptionWidth = detailMode === "inline" && option.description
+      ? measureAgentSelectTextWidth(option.description, "400 11px system-ui") + 56
+      : 0;
+    return Math.max(widest, Math.ceil(labelWidth + descriptionWidth + 38));
+  }, minWidth);
+  return Math.min(maxWidth, Math.max(minWidth, estimatedWidth));
+}
+
+function AgentSelectButton({ label, value, options, onSelect, onOpen, detailMode = "inline" }: { label: string; value: string; options: AgentSelectMenuOption[]; onSelect: (value: string) => void; onOpen?: () => void; detailMode?: "inline" | "hover" }) {
   const [open, setOpen] = useState(false);
+  const [panelReady, setPanelReady] = useState(false);
   const [panelStyle, setPanelStyle] = useState<CSSProperties>({});
+  const [hoveredOptionId, setHoveredOptionId] = useState<string | null>(null);
   const triggerRef = useRef<HTMLButtonElement>(null);
   const panelRef = useRef<HTMLDivElement>(null);
+  const detailRef = useRef<HTMLElement>(null);
+  const detailHideTimerRef = useRef<number | null>(null);
+  const optionsRef = useRef(options);
+  const detailModeRef = useRef(detailMode);
   const selected = options.find((option) => option.id === value);
   const displayValue = selected?.label || value;
+  useEffect(() => {
+    optionsRef.current = options;
+  }, [options]);
+  useEffect(() => {
+    detailModeRef.current = detailMode;
+  }, [detailMode]);
+  const clearDetailHideTimer = useCallback(() => {
+    if (!detailHideTimerRef.current) return;
+    window.clearTimeout(detailHideTimerRef.current);
+    detailHideTimerRef.current = null;
+  }, []);
+  const scheduleDetailHide = useCallback((nextTarget: EventTarget | null) => {
+    const nextNode = nextTarget as Node | null;
+    if (nextNode && (panelRef.current?.contains(nextNode) || detailRef.current?.contains(nextNode))) return;
+    clearDetailHideTimer();
+    detailHideTimerRef.current = window.setTimeout(() => {
+      setHoveredOptionId(null);
+      detailHideTimerRef.current = null;
+    }, 180);
+  }, [clearDetailHideTimer]);
   const updatePanelPosition = useCallback(() => {
     const rect = triggerRef.current?.getBoundingClientRect();
     if (!rect) return;
     const margin = 8;
-    const maxWidth = Math.max(220, window.innerWidth - margin * 2);
-    const width = Math.min(420, Math.max(220, Math.min(rect.width, maxWidth)));
+    const maxWidth = Math.max(240, Math.min(680, window.innerWidth - margin * 2));
+    const minWidth = Math.min(160, maxWidth);
+    const width = preferredAgentSelectPanelWidth(optionsRef.current, detailModeRef.current, minWidth, maxWidth);
     const left = Math.min(Math.max(margin, rect.left), Math.max(margin, window.innerWidth - width - margin));
-    const maxHeight = Math.min(320, Math.max(180, window.innerHeight - margin * 2));
-    const belowTop = rect.bottom + 6;
-    const top = belowTop + maxHeight <= window.innerHeight - margin
-      ? belowTop
-      : Math.max(margin, rect.top - 6 - maxHeight);
+    const availableAbove = Math.max(0, rect.top - margin - 6);
+    const availableBelow = Math.max(0, window.innerHeight - rect.bottom - margin - 6);
+    const maxHeight = Math.min(320, Math.max(180, Math.max(availableAbove, availableBelow)));
+    const panelHeight = Math.min(maxHeight, panelRef.current?.offsetHeight || maxHeight);
+    const preferAbove = availableAbove >= Math.min(panelHeight, 220) || availableAbove > availableBelow;
+    const top = preferAbove && availableAbove > 0
+      ? Math.max(margin, rect.top - 6 - panelHeight)
+      : Math.min(window.innerHeight - margin - panelHeight, rect.bottom + 6);
     setPanelStyle({ left, top, width, maxHeight });
   }, []);
 
   useEffect(() => {
     if (!open) return;
-    updatePanelPosition();
     const handlePointerDown = (event: MouseEvent) => {
       const target = event.target as Node;
-      if (triggerRef.current?.contains(target) || panelRef.current?.contains(target)) return;
+      if (triggerRef.current?.contains(target) || panelRef.current?.contains(target) || detailRef.current?.contains(target)) return;
       setOpen(false);
     };
     const handleKeyDown = (event: KeyboardEvent) => {
       if (event.key === "Escape") setOpen(false);
     };
-    const handleLayoutChange = () => updatePanelPosition();
+    const handleLayoutChange = (event?: Event) => {
+      const target = event?.target as Node | null;
+      if (target && (panelRef.current?.contains(target) || detailRef.current?.contains(target))) return;
+      updatePanelPosition();
+    };
     document.addEventListener("mousedown", handlePointerDown);
     document.addEventListener("keydown", handleKeyDown);
     window.addEventListener("resize", handleLayoutChange);
@@ -82,11 +138,39 @@ function AgentSelectButton({ label, value, options, onSelect, onOpen }: { label:
   }, [open, updatePanelPosition]);
 
   useLayoutEffect(() => {
-    if (open) updatePanelPosition();
-  }, [open, options.length, updatePanelPosition]);
+    if (!open) return;
+    updatePanelPosition();
+    setPanelReady(true);
+  }, [open, updatePanelPosition]);
+
+  useEffect(() => {
+    if (open) return;
+    clearDetailHideTimer();
+    setPanelReady(false);
+    setHoveredOptionId(null);
+  }, [clearDetailHideTimer, open]);
+
+  useEffect(() => clearDetailHideTimer, [clearDetailHideTimer]);
+
+  const detailOption = detailMode === "hover"
+    ? options.find((option) => option.id === hoveredOptionId && option.description)
+    : undefined;
+  const detailStyle = detailOption ? ({
+    top: Math.max(8, Math.min(Number(panelStyle.top) || 0, window.innerHeight - 220)),
+    left: Math.max(8, Math.min((Number(panelStyle.left) || 0) + (Number(panelStyle.width) || 0) + 8, window.innerWidth - 348)),
+    maxHeight: panelStyle.maxHeight,
+  } as CSSProperties) : undefined;
+  const effectivePanelStyle = panelReady
+    ? panelStyle
+    : {
+      ...panelStyle,
+      left: -10_000,
+      top: 0,
+      visibility: "hidden",
+    } satisfies CSSProperties;
 
   const panel = open ? createPortal(
-    <div ref={panelRef} className="agent-new-session-workspace-panel agent-composer-select-panel" style={panelStyle} role="listbox" aria-label={label}>
+    <div ref={panelRef} className="agent-new-session-workspace-panel agent-composer-select-panel" style={effectivePanelStyle} role="listbox" aria-label={label} onMouseEnter={clearDetailHideTimer} onMouseLeave={(event) => scheduleDetailHide(event.relatedTarget)}>
       {options.map((option) => (
         <div key={option.id} className="agent-composer-select-item">
           <button
@@ -94,18 +178,33 @@ function AgentSelectButton({ label, value, options, onSelect, onOpen }: { label:
             className={`agent-new-session-workspace-option${option.id === value ? " selected" : ""}`}
             role="option"
             aria-selected={option.id === value}
+            onMouseEnter={() => {
+              clearDetailHideTimer();
+              setHoveredOptionId(detailMode === "hover" && option.description ? option.id : null);
+            }}
+            onFocus={() => {
+              clearDetailHideTimer();
+              setHoveredOptionId(detailMode === "hover" && option.description ? option.id : null);
+            }}
             onClick={() => {
               onSelect(option.id);
               setOpen(false);
             }}
           >
             <span className="agent-new-session-workspace-option-label">{option.label}</span>
-            {option.description ? <span className="agent-new-session-workspace-option-time">{option.description}</span> : null}
+            {detailMode !== "hover" && option.description ? <span className="agent-new-session-workspace-option-time">{option.description}</span> : null}
           </button>
           {option.dividerAfter ? <div className="agent-composer-select-divider" aria-hidden="true" /> : null}
         </div>
       ))}
     </div>,
+    document.body,
+  ) : null;
+  const detailPanel = detailOption ? createPortal(
+    <aside ref={detailRef} className="agent-composer-select-detail" style={detailStyle} aria-live="polite" onMouseEnter={clearDetailHideTimer} onMouseLeave={(event) => scheduleDetailHide(event.relatedTarget)}>
+      <div className="agent-composer-select-detail-title">{detailOption.label}</div>
+      <div className="agent-composer-select-detail-description">{detailOption.description}</div>
+    </aside>,
     document.body,
   ) : null;
 
@@ -117,7 +216,10 @@ function AgentSelectButton({ label, value, options, onSelect, onOpen }: { label:
         className="btn agent-composer-select"
         onClick={() => setOpen((current) => {
           const next = !current;
-          if (next) onOpen?.();
+          if (next) {
+            setPanelReady(false);
+            onOpen?.();
+          }
           return next;
         })}
         aria-haspopup="listbox"
@@ -128,6 +230,7 @@ function AgentSelectButton({ label, value, options, onSelect, onOpen }: { label:
         <Icon name="chevron-down" size={10} />
       </button>
       {panel}
+      {detailPanel}
     </div>
   );
 }
@@ -489,7 +592,7 @@ export function AgentComposer({ session }: { session: AgentSession }) {
   }, [appendAgentDiagnostic, imageAttachmentRejectedReason, session.id]);
   const bottomLeftSlot = modeOptions.length > 0 || modelOptions.length > 0 ? (
     <div className="agent-composer-selectors">
-      {modeOptions.length > 0 ? <AgentSelectButton label={t("agentConsole.mode", "Mode")} value={session.modeId || modeOptions[0].id} options={modeOptions} onSelect={(mode) => setSessionMode(session.id, mode)} onOpen={() => { void ensureAgentModes(session.id); }} /> : null}
+      {modeOptions.length > 0 ? <AgentSelectButton label={t("agentConsole.mode", "Mode")} value={session.modeId || modeOptions[0].id} options={modeOptions} onSelect={(mode) => setSessionMode(session.id, mode)} onOpen={() => { void ensureAgentModes(session.id); }} detailMode="hover" /> : null}
       {modelOptions.length > 0 ? <AgentSelectButton label={t("agentConsole.model", "Model")} value={session.modelId || modelOptions[0].id} options={modelOptions} onSelect={(model) => setSessionModel(session.id, model)} /> : null}
     </div>
   ) : null;
