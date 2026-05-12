@@ -19,6 +19,13 @@ solved_lists:
   - 调整未开始新会话使用 APP 青绿色主题色
   - 降低暗色主题青绿色明度
   - 完成 Windows x64 发行包构建
+  - 修复工作区路径盘符大小写与斜杠规范化
+  - 改进新会话工作区选择与最近工作区排序
+  - 改进 OpenCode 权限图标、顶栏提示与动作图标一致性
+  - 修复 provider 准备状态与输出结束状态串扰
+  - 增加 Agent 输入框 session 内历史 prompt 切换
+  - 修复 TodoWrite pending/cleared 语义混淆与任务面板闪动
+  - 将版本升级到 0.6.5 并完成 Windows x64 发行包构建
 ---
 
 # MLFB 工作区路径身份与 OpenCode 标题刷新发行摘要
@@ -471,3 +478,384 @@ cd /e/Dev/my-last-feedback && bash scripts/package-win.sh
 dist/win-x64/my-last-feedback-v0.6.2-win-x64.zip
 .myLastChat/MLC_MLFB工作区路径身份与OpenCode标题刷新发行摘要.md
 ```
+
+---
+
+## 追加记录：2026-05-11 v0.6.5 工作区、权限、状态与 Todo 稳定性续接
+
+### 1. Previous Conversation
+
+本段追加记录承接前文的工作区路径身份、OpenCode session 管理与发行构建主题。用户最初指出当前工作区路径认定逻辑仍有问题，尤其 Windows 盘符大小写不同会被当成不同工作区。之后要求彻查各面板路径规范，明确“盘符统一大写，斜杠统一使用 `/`”，并要求 session 主题色也随统一后的工作区路径保持一致。
+
+随后工作重心扩展到 Agent Console 的新 session 工作区选择、OpenCode session 全局列表、最近工作区语义、未发送 prompt 的 placeholder session 身份显示，以及 session 管理列表的组织方式。用户反复强调最近工作区应当按真实历史 agent session 使用过的工作区与最近活动时间排序，“最近的就是最近的”。
+
+后半段进入 UI 细节打磨，包括新会话工作区下拉顶部 sticky 手动路径输入框、session 管理列表改为“工作区 -> 时间 -> 紧凑单行项”、权限 preset 图标语义调整、顶栏权限 hover 文本、provider 准备状态与完成状态文案动效，以及 Agent 输入框历史 prompt 切换。
+
+最近的问题集中在 TodoWrite 工具的展示时序：用户指出 UI 会把空 todo 列表认定为“任务列表已清空”，导致 TodoWrite 工具刚开始、参数尚未到达时误显示清空；随后又指出输入框上方 todo 面板似乎在工具调用开始时就根据输入参数刷新，而不是等工具结果到达，导致会话过程中 todo 列表闪动。
+
+最后用户要求：
+
+```text
+升级到0.6.5，之后 /bulid-new-release ，然后 /compact
+```
+
+其中 `/bulid-new-release` 展开为“请你先git备份，然后构建新的发行包”，并附带 Git Action 要求在其它操作前先执行 git add/commit，且不得提交 `ref-repos/`。
+
+### 2. Current Work
+
+本轮已完成大量连续修复与发行工作。
+
+第一阶段修复工作区路径身份问题。路径规范化模型以 `normalizeWorkspacePath` 为核心，统一 Windows 盘符大写、反斜杠转正斜杠、去除尾部斜杠，并以 `workspacePathKey` 生成大小写不敏感 key。由此修复了 `E:/Dev/...` 与 `e:/Dev/...` 被误判为不同工作区的问题。相关逻辑影响 session 主题色、MLC active workspace、资源面板、Terminal 最近路径和 Agent session workspaceKey。
+
+第二阶段改进新 session 工作区体验。新增默认工作区路径/最近一次 session 工作区路径设置语义，新会话页面支持选择工作区路径，最近工作区来源改为历史 agent session 使用过的工作区。新增 `collectRecentAgentWorkspaces`，最近工作区排序不再使用泛化的 `session.updatedAt`，而是基于真实 user/assistant message 与 block 活动时间。新 session 默认回填最近工作区，工作区下拉顶部添加 sticky 手动输入框。
+
+第三阶段改进 OpenCode session 列表与 session 管理。`OpenCodeHttpClient` 新增 `/experimental/session` 全局列表能力，`refreshProviderSessions` 优先全局拉取全部 sessions，避免只看到当前 directory 的 session。session 管理面板改为工作区组、时间组、紧凑单行项，并优化折叠箭头、hover actions、sticky 组头与最近时间展示。另写临时清理脚本删除测试 session：`scripts/cleanup-opencode-new-session-tests.mjs` 和 `scripts/cleanup-opencode-greeting-title-tests.mjs`。
+
+第四阶段改进权限 UI。`controlledAuto` preset 图标从播放改为闪电，`overrideAuto` preset 图标从盾牌改为火箭。新增 `zap` 与 `rocket` icon。顶栏权限按钮不再固定盾牌，而是根据 active preset 动态显示；hover/title 与 aria-label 改为 `会话权限 XXX`。权限弹层和设置页里动作级 `超控` 图标也从盾牌改为火箭。
+
+第五阶段修复状态行串扰和动效。`AgentCurrentStatusRow` 原先的通用 settle 逻辑会在 provider preparation 结束后继续显示“输出结束”。现在 provider `preparing/ready` 被视为独立阶段，会清掉通用 `settling`。完成态 `准备就绪` 与 `输出结束` 都关闭扫亮光 shimmer。状态 drawer 收起后残留线来自 `.agent-session-status-stack-inner > * + *` 兄弟分隔线，现在改为只在 current status drawer `data-open="true"` 时显示。
+
+第六阶段给 Agent composer 增加 session 内历史 prompt 切换。`SharedComposerInput` 新增 `historyItems`，支持光标在第一行按 `ArrowUp` 回看更早 prompt，光标在最后一行按 `ArrowDown` 回到更新 prompt，翻到最新后恢复进入历史前的草稿，`Escape` 也能恢复草稿。`AgentComposer` 从当前 session 的 user messages 收集历史，优先使用 `composerDraft`，否则回退 text block。
+
+第七阶段修复 TodoWrite 语义。新增 `AgentTaskListState = "pending" | "updated" | "cleared"`。TodoWrite 未完成且仅有输入参数时标记为 `pending`，不再误当作空列表。只有明确收到空数组时才是 `cleared`，UI 才显示“待办列表已清空”。输入框上方 `AgentTaskPanel` 会跳过 pending task_list，继续显示上一份已确认任务列表，直到 TodoWrite 结果/完成后再更新。
+
+第八阶段完成版本与发行。先备份当前改动，然后把版本从 `0.6.2` 升级到 `0.6.5`，同步修改根 `package.json`、`app/package.json`、`app/src-tauri/Cargo.toml`，构建后 Cargo 自动更新 `app/src-tauri/Cargo.lock`，也已提交。运行 `bash scripts/package-win.sh` 成功产出 Windows x64 发行包。
+
+### 3. Key Technical Concepts
+
+- Windows workspace path normalization：盘符大写、统一 `/`、去尾部斜杠、大小写不敏感 key。
+- workspace identity 与 visual identity 分离：workspace path 决定主题色，providerSessionId 决定 agent 头像、昵称与 4 位 code。
+- OpenCode HTTP/SSE：`/session` directory scoped，`/experimental/session` 全局列表；SSE 生命周期、message part、session status 与 TodoWrite part 分别归一化。
+- Agent provider preparation 状态：`providerSessionLists[providerId].preparationStatus` 独立于正常对话状态。
+- Agent status drawer：通过 `AgentStatusDrawer`、`AgentCompletionStatusRow`、`settling` 和 `AgentActivityMatrix` 控制底部当前状态行。
+- TodoWrite 语义区分：`pending` 表示工具已开始但结果未知，`updated` 表示非空列表，`cleared` 表示明确空数组。
+- Shared composer history：通过 `historyIndexRef`、`historyScratchRef`、`syncValue` 与 selection 判断实现上下方向键历史切换。
+- Tauri release build：`bash scripts/package-win.sh` 内部执行 `cd app && npx tauri build --no-bundle`，然后组装 `dist/win-x64/my-last-feedback-v${VERSION}-win-x64.zip`。
+- Git 操作规则：始终排除 `ref-repos/`，不要提交参考仓库。
+
+### 4. Relevant Files and Code
+
+#### `app/src/workspace/workspacePaths.ts`
+
+- 统一工作区路径规范化工具。
+- 关键行为：Windows drive letter uppercase，反斜杠转 `/`，尾部 slash trim，key 小写。
+- 影响 `workspaceKey`、主题色、候选路径、最近路径判断。
+
+#### `app/src/agent/workspaceHistory.ts`
+
+- 新增 helper，用于收集最近 agent workspace。
+- 关键函数：
+
+```ts
+getAgentSessionWorkspaceActivityAt(session)
+collectRecentAgentWorkspaces(sessions, providerSessionLists, limit?)
+```
+
+- 最近工作区排序使用真实消息/blocks 活动时间，避免 restore 或 UI 刷新污染“最近”。
+
+#### `app/src/agent/opencode/httpClient.ts`
+
+- OpenCode HTTP client。
+- 新增/使用 `listGlobalSessions` 调 `/experimental/session`。
+- build 修复：`listSessions` 与 `listGlobalSessions` 传 query 时改为展开成 record，满足严格 TS 类型：
+
+```ts
+return this.request<OpenCodeSessionInfo[]>("/session", { query: query ? { ...query } : undefined });
+return this.request<OpenCodeSessionInfo[]>("/experimental/session", { query: query ? { ...query } : undefined });
+```
+
+#### `app/src/store/agentStore.ts`
+
+- Agent session store 核心。
+- `refreshProviderSessions` 优先全局 session list，并在 release build 中用 `void cursor;` 消除未使用参数错误。
+- 负责 `setSessionWorkspace`、`sendAgentPrompt`、OpenCode runtime 启动、provider sessions 刷新、Todo/blocks 合并等。
+
+#### `app/src/components/agent/AgentNewSessionWorkspacePicker.tsx`
+
+- 新 session 工作区选择器。
+- 最近工作区来自 `collectRecentAgentWorkspaces(..., 20)`。
+- 下拉中显示路径与相对时间，并新增 sticky 手动路径输入行。
+- 选择路径时同步 local session cwd/workspaceKey、MLC active workspace、Terminal recent path。
+
+#### `app/src/components/agent/AgentSessionManagerPanel.tsx`
+
+- session 管理面板。
+- 改为按工作区分组、时间分组、紧凑单行展示。
+- 新建 session 默认路径使用最近 agent workspace。
+- provider row hover actions 不遮挡文本，默认隐藏，hover/focus 时显示。
+
+#### `app/src/openCodeSettings.ts`
+
+- OpenCode permission preset 定义。
+- 图标改动：
+
+```ts
+controlledAuto.icon = "zap"
+overrideAuto.icon = "rocket"
+```
+
+#### `app/src/components/Icons.tsx`
+
+- 新增 `zap` 与 `rocket` icon。
+- 被设置页、权限面板、顶栏权限按钮复用。
+
+#### `app/src/components/agent/AgentPermissionIndicator.tsx`
+
+- 顶栏权限按钮和权限 popover。
+- 顶栏 icon 改为根据 active preset 动态显示。
+- hover/title 与 aria-label 改为：
+
+```ts
+t("agentConsole.sessionPermissionsWithMode", "Session permissions {{mode}}", { mode })
+```
+
+- 动作级 `override` 图标改为 `rocket`。
+
+#### `app/src/components/SettingsDialog.tsx`
+
+- 设置页 OpenCode permission preset 控件使用 `preset.icon`。
+- 动作级 `override` 图标也改为 `rocket`。
+
+#### `app/src/components/agent/AgentCurrentStatusRow.tsx`
+
+- 当前状态行。
+- provider preparation active 时清理通用 `settling`，避免“准备就绪”后出现“输出结束”。
+- `AgentCompletionStatusRow` 新增 `shimmer` 开关，默认 `false`，让“准备就绪”和“输出结束”不扫亮光。
+
+#### `app/src/index.css`
+
+- 状态栈分隔线修复：
+
+```css
+.agent-session-status-stack-inner > .agent-current-status-drawer[data-open="true"] + * {
+  border-top: 1px solid var(--color-border-subtle);
+}
+
+.agent-session-status-stack-inner > .agent-current-status-drawer[data-open="false"] + * {
+  border-top: 0;
+}
+```
+
+- 工作区下拉 sticky 手动输入行、session manager compact/group 样式也在此前阶段调整。
+
+#### `app/src/components/composer/SharedComposerInput.tsx`
+
+- 新增 `historyItems?: string[]`。
+- 新增历史切换逻辑：
+  - `ArrowUp`：第一行进入/切换到更早 prompt。
+  - `ArrowDown`：最后一行切换到更新 prompt，越过末尾恢复 scratch。
+  - `Escape`：恢复进入历史前草稿。
+- 使用 `editorRef.current?.syncValue(nextValue, selection)` 保持 DOM 与 caret 同步。
+
+#### `app/src/components/agent/AgentComposer.tsx`
+
+- 新增 `collectSessionUserPromptHistory(session)`。
+- 只收集当前 session 的 `role === "user"` 消息。
+- 优先 `message.composerDraft`，否则拼接 text blocks。
+- 传入 `SharedComposerInput historyItems={userPromptHistory}`。
+
+#### `app/src/agent/types.ts`
+
+- 新增：
+
+```ts
+export type AgentTaskListState = "pending" | "updated" | "cleared";
+```
+
+- `AgentTaskListBlock` 增加 `taskListState?: AgentTaskListState`。
+
+#### `app/src/agent/opencode/eventNormalizer.ts`
+
+- TodoWrite normalizer 语义修复。
+- 未完成时即使 `input.todos` 已存在，也不生成真实列表，只标记 pending。
+- 完成后优先读取可解析数组 output，否则回退 metadata/input。
+- 关键判断：
+
+```ts
+const todoSource = todoArrayFromToolState(input, metadata, outputValue, toolStatus === "completed");
+const taskListState = todoSource.known ? todoSource.todos.length > 0 ? "updated" : "cleared" : "pending";
+```
+
+#### `app/src/agent/steps.ts`
+
+- `AgentStepItem` 增加 `taskListState?: AgentTaskListState`。
+- task_list step 状态由 taskListState 决定，pending 时视为 running。
+- 清空文案只由 `cleared` 语义触发。
+
+#### `app/src/components/agent/AgentProcessGroup.tsx`
+
+- task_list detail 只在 `taskListState === "cleared"` 且 tasks 为空时显示“待办列表已清空”。
+- pending task_list 不展示清空 detail，也不会被当作有内容自动展开。
+
+#### `app/src/components/agent/AgentTaskPanel.tsx`
+
+- 输入框上方任务面板跳过 pending task_list：
+
+```ts
+if (block.type === "task_list" && block.taskListState !== "pending") return block.tasks;
+```
+
+- 这样 TodoWrite 开始时不会让面板提前切换或闪动，会保留上一份已确认列表直到结果到达。
+
+#### `scripts/cleanup-opencode-greeting-title-tests.mjs`
+
+- 临时清理脚本，删除标题精确匹配 `你好`、`问候`、`打招呼`、`Greeting` 的 OpenCode sessions。
+- 已 dry-run、apply 并验证清理完成。
+
+#### `package.json`、`app/package.json`、`app/src-tauri/Cargo.toml`、`app/src-tauri/Cargo.lock`
+
+- 版本同步到 `0.6.5`。
+- 构建过程中 Cargo.lock 自动更新 app 包版本，并已单独提交。
+
+#### `scripts/package-win.sh`
+
+- 本轮使用该脚本构建发行包。
+- 成功输出：
+
+```text
+dist/win-x64/my-last-feedback-v0.6.5-win-x64.zip
+```
+
+### 5. Problem Solving
+
+#### 盘符大小写导致工作区分裂
+
+问题：Windows 路径开头盘符大小写不同，被认定为不同工作区。
+
+解决：统一路径 normalization 与 key，盘符大写、slash 统一、比较使用 lowercase key。
+
+#### session 主题色未随统一工作区路径统一
+
+问题：同一工作区不同路径表现会得到不同主题色。
+
+解决：主题色绑定规范化 workspaceKey，而不是原始字符串。
+
+#### OpenCode session 列表不是全局
+
+问题：`/session` directory scoped，导致列表只显示当前目录 sessions。
+
+解决：使用 `/experimental/session` 全局 sessions，并允许 query 覆盖 client 绑定 directory。
+
+#### 最近工作区排序语义错误
+
+问题：使用泛化 `session.updatedAt` 会被 restore、UI 操作污染。
+
+解决：使用真实 message/block activity 计算 workspace recency。
+
+#### 未发送 prompt 的 placeholder session 伪造身份
+
+问题：新 session 尚无 providerSessionId，却生成 agent 头像昵称。
+
+解决：未发送前显示 placeholder，新 provider session id 到达后再派生真实身份。
+
+#### 权限图标语义不一致
+
+问题：可控自动仍是播放，超控自动和动作级超控仍是盾牌，顶栏固定盾牌。
+
+解决：新增 `zap`/`rocket`，preset、topbar、settings、popover、动作级 override 全部一致。
+
+#### provider 准备状态串到输出结束
+
+问题：“正在准备 My Last Chat”后显示“准备就绪”，随后偶发“输出结束”。
+
+解决：provider preparation active 时清理通用 settle 状态。
+
+#### 状态行收起后残留线
+
+问题：兄弟分隔线在 drawer 收起但 DOM 尚存时仍作用于后续面板。
+
+解决：分隔线只在 drawer `data-open="true"` 时出现。
+
+#### 完成态扫亮光过度
+
+问题：“输出结束”和“准备就绪”文本仍有 shimmer。
+
+解决：`AgentCompletionStatusRow` 默认不 shimmer。
+
+#### Agent 输入框缺少历史 prompt 切换
+
+问题：Agent composer 不支持像 MLFB 输入框一样用上下方向键切换历史 prompt。
+
+解决：在 shared composer 层增加 `historyItems` 与 scratch/history index 逻辑，Agent 传入当前 session user prompt 历史。
+
+#### TodoWrite 空列表误报
+
+问题：工具刚开始、参数未到时被 normalize 成空 `task_list`，显示“待办列表已清空”。
+
+解决：区分 pending/updated/cleared，只有明确空数组才 cleared。
+
+#### 输入框上方 todo 面板闪动
+
+问题：TodoWrite 开始时 `input.todos` 可能已出现，面板提前切换；结果到达后又切换。
+
+解决：TodoWrite 未完成时不使用 input/metadata 作为真实列表；`AgentTaskPanel` 跳过 pending task_list，保留上一份 confirmed list。
+
+#### 0.6.5 release build 类型失败
+
+第一次构建失败：
+
+```text
+src/agent/opencode/httpClient.ts: Type 'OpenCodeSessionListQuery' is not assignable to Record...
+src/store/agentStore.ts: 'cursor' is declared but its value is never read.
+```
+
+解决：query 传参时展开为 record；`refreshProviderSessions` 使用 `void cursor;` 保留接口兼容并消除 TS6133。第二次构建成功。
+
+### 6. Pending Tasks and Next Steps
+
+最近明确请求原文：
+
+```text
+升级到0.6.5，之后 /bulid-new-release ，然后 /compact
+```
+
+已完成：
+
+- 按 Git Action 要求先提交当前改动，且排除 `ref-repos/`。
+- 将版本升级到 `0.6.5`。
+- 构建前再次 git 备份版本升级。
+- 修复 release build 暴露的 TypeScript 错误并提交。
+- 运行 `bash scripts/package-win.sh` 成功构建 Windows x64 发行包。
+- 提交构建后同步的 `Cargo.lock` 版本更新。
+- 查询 My Last Chat 既有摘要，并更新本文件作为 `/compact` 结果。
+
+相关提交：
+
+```text
+4d6bc52 Back up permission UI and session status fixes
+80191dd Back up agent composer and todo status fixes
+5d0b720 Bump version to 0.6.5
+7a5d1ff Fix release build type checks
+6b27d24 Update Cargo lock for 0.6.5
+```
+
+构建结果：
+
+```text
+dist/win-x64/my-last-feedback-v0.6.5-win-x64.zip
+```
+
+构建备注：
+
+- Vite 有动态导入和 chunk size warning，但构建成功。
+- Tauri release build 成功，`app.exe` 约 17M。
+- zip 约 12M，dist 目录约 38M。
+
+当前 Git 状态：
+
+```text
+?? ref-repos/catppuccin-vscode-icons/
+?? ref-repos/interactive-feedback-mcp-main/
+?? ref-repos/my-last-chat/
+?? ref-repos/oh-my-openagent-dev/
+?? ref-repos/opencode-1.14.33/
+```
+
+这些是明确黑名单参考目录，未提交。
+
+可选后续：
+
+- 真实 UI 验证 Agent 输入框历史 prompt 上下键切换。
+- 真实 UI 验证 TodoWrite 运行中底部 task panel 不闪动、完成后再更新。
+- 若需要发布说明，可补 `RELEASE.md` 或专门 release note。
+- 若需要将 `dist/win-x64/my-last-feedback-v0.6.5-win-x64.zip` 纳入版本管理，需要先确认当前 dist 忽略策略；本轮构建产物未显示在 `git status --short` 中。
