@@ -86,6 +86,7 @@ interface AgentStoreState {
   appendAgentDiagnostic: (sessionId: string, level: AgentDiagnosticEntry["level"], message: string) => void;
   startOpenCodeProvider: (sessionId: string, options?: { silent?: boolean }) => Promise<void>;
   stopOpenCodeProvider: (sessionId: string) => Promise<void>;
+  ensureAgentModes: (sessionId: string) => Promise<void>;
   ensureAgentCommands: (sessionId: string, options?: { force?: boolean }) => Promise<void>;
   receiveAgentProcessOutput: (processId: string, data: string) => void;
   receiveAgentProcessStderr: (processId: string, data: string) => void;
@@ -291,6 +292,14 @@ function appendDiagnosticToSession(session: AgentSession, level: AgentDiagnostic
   };
 }
 
+function latestSessionDiagnosticMessage(session: AgentSession, levels: AgentDiagnosticEntry["level"][] = ["error", "warn"]): string | undefined {
+  for (let index = session.diagnostics.length - 1; index >= 0; index -= 1) {
+    const entry = session.diagnostics[index];
+    if (levels.includes(entry.level)) return entry.message;
+  }
+  return undefined;
+}
+
 function finitePositiveNumber(value: unknown): number | undefined {
   return typeof value === "number" && Number.isFinite(value) && value > 0 ? value : undefined;
 }
@@ -490,9 +499,22 @@ function choicesFromOpenCodeProviders(providerData: OpenCodeProviderResponse): A
 function choicesFromOpenCodeAgents(agents: OpenCodeAgentInfo[]): AgentChoiceOption[] {
   const visiblePrimaryAgents = agents.filter((agent) => !agent.hidden && (agent.mode === "primary" || agent.mode === "all"));
   const visibleAgents = visiblePrimaryAgents.length > 0 ? visiblePrimaryAgents : agents.filter((agent) => !agent.hidden);
-  return visibleAgents
+  const prioritized: AgentChoiceOption[] = [];
+  const remaining: AgentChoiceOption[] = [];
+  for (const option of visibleAgents
     .map((agent) => toChoiceOption(agent.name, agent.name, agent.description, agent))
-    .filter((option): option is AgentChoiceOption => Boolean(option));
+    .filter((option): option is AgentChoiceOption => Boolean(option))) {
+    if (option.id === "build") {
+      prioritized[0] = option;
+      continue;
+    }
+    if (option.id === "plan") {
+      prioritized[1] = option;
+      continue;
+    }
+    remaining.push(option);
+  }
+  return [...prioritized.filter(Boolean), ...remaining];
 }
 
 function choicesFromOpenCodeCommands(commands: OpenCodeCommandInfo[]): AgentChoiceOption[] {
@@ -2218,11 +2240,50 @@ export const useAgentStore = create<AgentStoreState>((set, get) => ({
     }));
   },
 
+  ensureAgentModes: async (sessionId) => {
+    let session = get().sessions.find((item) => item.id === sessionId);
+    if (!session || session.providerId !== "opencode") return;
+
+    try {
+      let httpRuntime = openCodeHttpRuntimeForSession(session, get().sessions);
+      if (!httpRuntime) {
+        await get().startOpenCodeProvider(sessionId);
+        session = get().sessions.find((item) => item.id === sessionId);
+        if (!session) return;
+        httpRuntime = openCodeHttpRuntimeForSession(session, get().sessions);
+      }
+      if (!httpRuntime) {
+        const startupMessage = latestSessionDiagnosticMessage(session, ["error"]);
+        throw new Error(startupMessage || "OpenCode runtime is not available");
+      }
+      const agents = await httpRuntime.runtime.client.agents();
+      const availableModes = choicesFromOpenCodeAgents(agents);
+      const modeOptions = availableModes.length > 0 ? availableModes : fallbackOpenCodeAgentChoices();
+      set((state) => ({
+        sessions: updateSession(state.sessions, sessionId, (item) => ({
+          ...item,
+          availableModes: modeOptions,
+          modeId: selectOpenCodeAgentMode(item.modeId, modeOptions),
+          updatedAt: nowIso(),
+        })),
+      }));
+    } catch (error) {
+      const message = error instanceof Error ? error.message : String(error);
+      set((state) => ({
+        sessions: updateSession(state.sessions, sessionId, (item) => appendDiagnosticToSession({
+          ...item,
+          updatedAt: nowIso(),
+        }, "warn", `OpenCode agent list failed: ${message}`)),
+      }));
+    }
+  },
+
   ensureAgentCommands: async (sessionId, options = {}) => {
     let session = get().sessions.find((item) => item.id === sessionId);
     if (!session || session.providerId !== "opencode") return;
     if (session.availableCommandsLoading) return;
-    if (!options.force && ((session.availableCommands?.length || 0) > 0 || (session.availableCommandsLoadedAt && !session.availableCommandsError))) return;
+    // Treat an empty command list as stale so newly added OpenCode commands can be discovered.
+    if (!options.force && (session.availableCommands?.length || 0) > 0 && !session.availableCommandsError) return;
 
     set((state) => ({
       sessions: updateSession(state.sessions, sessionId, (item) => ({
@@ -2239,7 +2300,7 @@ export const useAgentStore = create<AgentStoreState>((set, get) => ({
         await get().startOpenCodeProvider(sessionId);
         session = get().sessions.find((item) => item.id === sessionId);
         if (!session) return;
-        if (!options.force && (session.availableCommandsLoadedAt || session.availableCommandsError)) {
+        if (!options.force && (session.availableCommands?.length || 0) > 0 && !session.availableCommandsError) {
           set((state) => ({
             sessions: updateSession(state.sessions, sessionId, (item) => ({ ...item, availableCommandsLoading: false, updatedAt: nowIso() })),
           }));
@@ -2247,7 +2308,10 @@ export const useAgentStore = create<AgentStoreState>((set, get) => ({
         }
         httpRuntime = openCodeHttpRuntimeForSession(session, get().sessions);
       }
-      if (!httpRuntime) throw new Error("OpenCode runtime is not available");
+      if (!httpRuntime) {
+        const startupMessage = latestSessionDiagnosticMessage(session, ["error"]);
+        throw new Error(startupMessage || "OpenCode runtime is not available");
+      }
       const commands = await httpRuntime.runtime.client.commands();
       set((state) => ({
         sessions: updateSession(state.sessions, sessionId, (item) => ({

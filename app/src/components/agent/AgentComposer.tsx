@@ -1,4 +1,5 @@
-import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState, type CSSProperties } from "react";
+import { createPortal } from "react-dom";
 import { useTranslation } from "react-i18next";
 import { readText as readClipboardText } from "@tauri-apps/plugin-clipboard-manager";
 import { useAgentStore } from "../../store/agentStore";
@@ -12,6 +13,8 @@ import type { PromptCommandOption } from "../../composer/promptCommands";
 import { SharedComposerInput } from "../composer/SharedComposerInput";
 import { GIT_ACTION_TYPES, GitActionOptionIcon, GitActionTag, TestLogTag, gitActionLabelKey } from "../CallerPanelParts";
 import { useAgentSessionVisualIdentity } from "./useAgentSessionVisualIdentity";
+
+type AgentSelectMenuOption = AgentChoiceOption & { dividerAfter?: boolean };
 
 const AGENT_COMPOSER_CALLER_ID = "agent-console";
 const DOCK_COLUMN_IDS: DockColumnId[] = ["leftSidebar", "leftPage", "rightPage", "rightSidebar"];
@@ -32,48 +35,112 @@ function collectSessionUserPromptHistory(session: AgentSession): string[] {
   return history;
 }
 
-function AgentSelectButton({ label, value, options, onSelect }: { label: string; value: string; options: AgentChoiceOption[]; onSelect: (value: string) => void }) {
+function AgentSelectButton({ label, value, options, onSelect, onOpen }: { label: string; value: string; options: AgentSelectMenuOption[]; onSelect: (value: string) => void; onOpen?: () => void }) {
   const [open, setOpen] = useState(false);
+  const [panelStyle, setPanelStyle] = useState<CSSProperties>({});
+  const triggerRef = useRef<HTMLButtonElement>(null);
+  const panelRef = useRef<HTMLDivElement>(null);
   const selected = options.find((option) => option.id === value);
   const displayValue = selected?.label || value;
+  const updatePanelPosition = useCallback(() => {
+    const rect = triggerRef.current?.getBoundingClientRect();
+    if (!rect) return;
+    const margin = 8;
+    const maxWidth = Math.max(220, window.innerWidth - margin * 2);
+    const width = Math.min(420, Math.max(220, Math.min(rect.width, maxWidth)));
+    const left = Math.min(Math.max(margin, rect.left), Math.max(margin, window.innerWidth - width - margin));
+    const maxHeight = Math.min(320, Math.max(180, window.innerHeight - margin * 2));
+    const belowTop = rect.bottom + 6;
+    const top = belowTop + maxHeight <= window.innerHeight - margin
+      ? belowTop
+      : Math.max(margin, rect.top - 6 - maxHeight);
+    setPanelStyle({ left, top, width, maxHeight });
+  }, []);
+
+  useEffect(() => {
+    if (!open) return;
+    updatePanelPosition();
+    const handlePointerDown = (event: MouseEvent) => {
+      const target = event.target as Node;
+      if (triggerRef.current?.contains(target) || panelRef.current?.contains(target)) return;
+      setOpen(false);
+    };
+    const handleKeyDown = (event: KeyboardEvent) => {
+      if (event.key === "Escape") setOpen(false);
+    };
+    const handleLayoutChange = () => updatePanelPosition();
+    document.addEventListener("mousedown", handlePointerDown);
+    document.addEventListener("keydown", handleKeyDown);
+    window.addEventListener("resize", handleLayoutChange);
+    window.addEventListener("scroll", handleLayoutChange, true);
+    return () => {
+      document.removeEventListener("mousedown", handlePointerDown);
+      document.removeEventListener("keydown", handleKeyDown);
+      window.removeEventListener("resize", handleLayoutChange);
+      window.removeEventListener("scroll", handleLayoutChange, true);
+    };
+  }, [open, updatePanelPosition]);
+
+  useLayoutEffect(() => {
+    if (open) updatePanelPosition();
+  }, [open, options.length, updatePanelPosition]);
+
+  const panel = open ? createPortal(
+    <div ref={panelRef} className="agent-new-session-workspace-panel agent-composer-select-panel" style={panelStyle} role="listbox" aria-label={label}>
+      {options.map((option) => (
+        <div key={option.id} className="agent-composer-select-item">
+          <button
+            type="button"
+            className={`agent-new-session-workspace-option${option.id === value ? " selected" : ""}`}
+            role="option"
+            aria-selected={option.id === value}
+            onClick={() => {
+              onSelect(option.id);
+              setOpen(false);
+            }}
+          >
+            <span className="agent-new-session-workspace-option-label">{option.label}</span>
+            {option.description ? <span className="agent-new-session-workspace-option-time">{option.description}</span> : null}
+          </button>
+          {option.dividerAfter ? <div className="agent-composer-select-divider" aria-hidden="true" /> : null}
+        </div>
+      ))}
+    </div>,
+    document.body,
+  ) : null;
+
   return (
-    <div
-      className="agent-composer-select-wrap"
-      onBlur={(event) => {
-        const nextFocus = event.relatedTarget as Node | null;
-        if (!event.currentTarget.contains(nextFocus)) setOpen(false);
-      }}
-      onKeyDown={(event) => {
-        if (event.key === "Escape") setOpen(false);
-      }}
-    >
-      <button type="button" className="btn agent-composer-select" onClick={() => setOpen((current) => !current)} aria-haspopup="listbox" aria-expanded={open} aria-label={`${label}: ${displayValue}`}>
-        <span className="agent-composer-select-label">{label}</span>
+    <div className="agent-composer-select-wrap">
+      <button
+        ref={triggerRef}
+        type="button"
+        className="btn agent-composer-select"
+        onClick={() => setOpen((current) => {
+          const next = !current;
+          if (next) onOpen?.();
+          return next;
+        })}
+        aria-haspopup="listbox"
+        aria-expanded={open}
+        aria-label={`${label}: ${displayValue}`}
+      >
         <span className="agent-composer-select-value">{displayValue}</span>
         <Icon name="chevron-down" size={10} />
       </button>
-      {open && (
-        <div className="agent-composer-select-menu" role="listbox" data-preview-overlay>
-          {options.map((option) => (
-            <button
-              key={option.id}
-              type="button"
-              className={option.id === value ? "active" : ""}
-              role="option"
-              aria-selected={option.id === value}
-              onClick={() => {
-                onSelect(option.id);
-                setOpen(false);
-              }}
-            >
-              <span>{option.label}</span>
-              {option.id === value ? <Icon name="check" size={11} /> : null}
-            </button>
-          ))}
-        </div>
-      )}
+      {panel}
     </div>
   );
+}
+
+function modeMenuOptions(options: AgentChoiceOption[]): AgentSelectMenuOption[] {
+  const hasSecondaryGroup = options.some((option) => option.id !== "build" && option.id !== "plan");
+  if (!hasSecondaryGroup) return options;
+  const dividerAnchorId = options.some((option) => option.id === "plan") ? "plan" : options.some((option) => option.id === "build") ? "build" : undefined;
+  if (!dividerAnchorId) return options;
+  return options.map((option) => ({
+    ...option,
+    dividerAfter: option.id === dividerAnchorId,
+  }));
 }
 
 export function AgentComposer({ session }: { session: AgentSession }) {
@@ -97,6 +164,7 @@ export function AgentComposer({ session }: { session: AgentSession }) {
   const sendAgentPrompt = useAgentStore((state) => state.sendAgentPrompt);
   const abortAgentPrompt = useAgentStore((state) => state.abortAgentPrompt);
   const appendAgentDiagnostic = useAgentStore((state) => state.appendAgentDiagnostic);
+  const ensureAgentModes = useAgentStore((state) => state.ensureAgentModes);
   const ensureAgentCommands = useAgentStore((state) => state.ensureAgentCommands);
   const dockLayout = useFeedbackStore((state) => state.dockLayout);
   const setFocusedComposer = useFeedbackStore((state) => state.setFocusedComposer);
@@ -410,7 +478,7 @@ export function AgentComposer({ session }: { session: AgentSession }) {
     </>
   );
 
-  const modeOptions = session.availableModes || [];
+  const modeOptions = useMemo(() => modeMenuOptions(session.availableModes || []), [session.availableModes]);
   const modelOptions = getEnabledOpenCodeModels(session.availableModels || [], session.modelId);
   const effectiveModelId = session.modelId || modelOptions[0]?.id;
   const selectedModel = modelOptions.find((model) => model.id === effectiveModelId) || (effectiveModelId ? session.availableModels?.find((model) => model.id === effectiveModelId) : undefined);
@@ -421,7 +489,7 @@ export function AgentComposer({ session }: { session: AgentSession }) {
   }, [appendAgentDiagnostic, imageAttachmentRejectedReason, session.id]);
   const bottomLeftSlot = modeOptions.length > 0 || modelOptions.length > 0 ? (
     <div className="agent-composer-selectors">
-      {modeOptions.length > 0 ? <AgentSelectButton label={t("agentConsole.mode", "Mode")} value={session.modeId || modeOptions[0].id} options={modeOptions} onSelect={(mode) => setSessionMode(session.id, mode)} /> : null}
+      {modeOptions.length > 0 ? <AgentSelectButton label={t("agentConsole.mode", "Mode")} value={session.modeId || modeOptions[0].id} options={modeOptions} onSelect={(mode) => setSessionMode(session.id, mode)} onOpen={() => { void ensureAgentModes(session.id); }} /> : null}
       {modelOptions.length > 0 ? <AgentSelectButton label={t("agentConsole.model", "Model")} value={session.modelId || modelOptions[0].id} options={modelOptions} onSelect={(model) => setSessionModel(session.id, model)} /> : null}
     </div>
   ) : null;

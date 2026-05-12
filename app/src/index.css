@@ -4701,7 +4701,7 @@ body,
 .agent-approval-row-main {
   min-width: 0;
   flex: 1;
-  gap: 6px;
+  gap: 4px;
 }
 
 .agent-approval-row-label {
@@ -6320,18 +6320,17 @@ body,
 .agent-composer-select {
   min-height: 34px;
   max-width: 188px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: space-between;
   gap: 5px;
   padding: 0 10px !important;
   font-size: 12px;
 }
 
-.agent-composer-select-label {
-  color: var(--color-text-muted);
-  font-size: 11px;
-}
-
 .agent-composer-select-value {
   min-width: 0;
+  flex: 1 1 auto;
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
@@ -6339,40 +6338,29 @@ body,
   font-weight: 600;
 }
 
-.agent-composer-select-menu {
-  position: absolute;
-  left: 0;
-  bottom: 40px;
-  z-index: 20;
-  min-width: 148px;
-  padding: 4px;
-  border: 1px solid var(--color-border);
-  border-radius: var(--radius-md);
-  background: var(--color-bg-elevated);
-  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.18);
+.agent-composer-select-panel {
+  overscroll-behavior: contain;
 }
 
-.agent-composer-select-menu button {
-  width: 100%;
-  min-height: 26px;
+.agent-composer-select-item {
   display: flex;
-  align-items: center;
-  justify-content: space-between;
-  gap: 8px;
-  padding: 0 7px;
-  border: 0;
-  border-radius: var(--radius-md);
-  background: transparent;
-  color: var(--color-text-secondary);
-  cursor: pointer;
-  font-size: 11px;
-  text-align: left;
+  flex-direction: column;
 }
 
-.agent-composer-select-menu button:hover,
-.agent-composer-select-menu button.active {
-  color: var(--color-text-primary);
-  background: rgba(255, 255, 255, 0.06);
+.agent-composer-select-divider {
+  height: 1px;
+  margin: 4px 6px;
+  background: rgba(255, 255, 255, 0.08);
+}
+
+.agent-composer-select-panel .agent-new-session-workspace-option {
+  min-height: 30px;
+}
+
+.agent-composer-select-panel .agent-new-session-workspace-option-time {
+  max-width: 42%;
+  overflow: hidden;
+  text-overflow: ellipsis;
 }
 
 .agent-composer-actions > span {
