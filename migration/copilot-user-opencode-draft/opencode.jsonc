@@ -1,0 +1,65 @@
+{
+  "$schema": "https://opencode.ai/config.json",
+  "instructions": [
+    "./instructions/interactive-feedback.md",
+    "./instructions/microsoft-doc.md",
+    "./instructions/mylastchat-guide.md"
+  ],
+  "mcp": {
+    "my-last-feedback": {
+      "type": "local",
+      "command": [
+        "node",
+        "e:/Dev/MCP/my-last-feedback/mcp/mlfb/index.mjs"
+      ],
+      "timeout": 60000
+    },
+    "my-long-running-agent-expert": {
+      "type": "local",
+      "command": [
+        "node",
+        "e:/Dev/MCP/my-last-feedback/mcp/mlra/servers/mcp-expert.mjs"
+      ],
+      "timeout": 60000
+    },
+    "my-long-running-agent-inspector": {
+      "type": "local",
+      "command": [
+        "node",
+        "e:/Dev/MCP/my-last-feedback/mcp/mlra/servers/mcp-inspector.mjs"
+      ],
+      "timeout": 60000
+    },
+    "my-long-running-agent-ceo": {
+      "type": "local",
+      "command": [
+        "node",
+        "e:/Dev/MCP/my-last-feedback/mcp/mlra/servers/mcp-ceo.mjs"
+      ],
+      "timeout": 60000
+    },
+    "firecrawl/firecrawl-mcp-server": {
+      "type": "local",
+      "command": [
+        "npx",
+        "-y",
+        "firecrawl-mcp@latest"
+      ],
+      "environment": {
+        "FIRECRAWL_API_KEY": "<REPLACE_WITH_FIRECRAWL_API_KEY>"
+      }
+    },
+    "microsoftdocs/mcp": {
+      "type": "remote",
+      "url": "https://learn.microsoft.com/api/mcp"
+    },
+    "tavily": {
+      "type": "remote",
+      "url": "https://mcp.tavily.com/mcp/?tavilyApiKey=<REPLACE_WITH_TAVILY_API_KEY>"
+    }
+  }
+
+  // Excluded servers:
+  // - pencil
+  //   Source args are explicitly bound to visual_studio_code semantics.
+}
