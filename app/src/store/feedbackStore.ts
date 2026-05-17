@@ -265,6 +265,7 @@ export interface FeedbackState {
   showPromptButtons: boolean;
   showTransferSubmitUi: boolean;
   resourceIconTheme: ResourceIconTheme;
+  mlcPreviewShowYaml: boolean;
   sessionListMode: SessionListMode;
   showSessionNavigationAttachmentDots: boolean;
   useSessionNavigationColorCards: boolean;
@@ -272,6 +273,7 @@ export interface FeedbackState {
   setShowPromptButtons: (value: boolean) => void;
   setShowTransferSubmitUi: (value: boolean) => void;
   setResourceIconTheme: (theme: ResourceIconTheme) => void;
+  setMlcPreviewShowYaml: (value: boolean) => void;
   setSessionListMode: (mode: SessionListMode) => void;
   setShowSessionNavigationAttachmentDots: (value: boolean) => void;
   setUseSessionNavigationColorCards: (value: boolean) => void;
@@ -709,6 +711,12 @@ export const useFeedbackStore = create<FeedbackState>((set, get) => ({
     } catch { return true; }
   })(),
   resourceIconTheme: loadResourceIconTheme(),
+  mlcPreviewShowYaml: (() => {
+    try {
+      const stored = localStorage.getItem("mlf-mlc-preview-show-yaml");
+      return stored == null ? true : stored === "true";
+    } catch { return true; }
+  })(),
   sessionListMode: readSessionListMode(),
   showSessionNavigationAttachmentDots: readShowSessionNavigationAttachmentDots(),
   useSessionNavigationColorCards: readUseSessionNavigationColorCards(),
@@ -727,6 +735,10 @@ export const useFeedbackStore = create<FeedbackState>((set, get) => ({
   setResourceIconTheme: (theme) => {
     set({ resourceIconTheme: theme });
     try { localStorage.setItem("mlfb-resource-icon-theme", theme); } catch {}
+  },
+  setMlcPreviewShowYaml: (value) => {
+    set({ mlcPreviewShowYaml: value });
+    try { localStorage.setItem("mlf-mlc-preview-show-yaml", String(value)); } catch {}
   },
   setSessionListMode: (mode) => {
     set({ sessionListMode: mode });

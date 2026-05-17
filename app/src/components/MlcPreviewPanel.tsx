@@ -54,6 +54,7 @@ export function MlcPreviewPanel() {
   const { t } = useTranslation();
   const isLightTheme = useIsLightTheme();
   const selectedDocument = useFeedbackStore((state) => state.selectedMlcDocument);
+  const mlcPreviewShowYaml = useFeedbackStore((state) => state.mlcPreviewShowYaml);
   const focusedComposer = useFeedbackStore((state) => state.focusedComposer);
   const addSessionMlcAttachment = useFeedbackStore((state) => state.addSessionMlcAttachment);
   const addQueuedDraftMlcAttachment = useFeedbackStore((state) => state.addQueuedDraftMlcAttachment);
@@ -187,7 +188,7 @@ export function MlcPreviewPanel() {
           <div className="mlc-preview-state error"><Icon name="circle-x" size={24} /><div>{error}</div></div>
         ) : content ? (
           <>
-            {frontmatterRows.length > 0 ? (
+            {frontmatterRows.length > 0 && mlcPreviewShowYaml ? (
               <div className="mlc-preview-frontmatter" aria-label={t("mlcPreview.frontmatter", "Frontmatter")}>
                 <table className="mlc-preview-frontmatter-table">
                   <tbody>

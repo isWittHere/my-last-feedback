@@ -26,7 +26,7 @@ import { SessionNavigationModeIcon } from "./SessionNavigationModeIcon";
 import { AppSelect, type AppSelectOption } from "./AppSelect";
 import { SettingsSegmentedControl } from "./SettingsSegmentedControl";
 
-type Tab = "general" | "display" | "callers" | "submitted" | "prompts" | "sessionNavigation" | "gitOperations" | "layoutPanels" | "agentConsole" | "agentStepDisplay" | "agentChat" | "agentSessionManager" | "openCode" | "openCodePermissions" | "terminal" | "resources" | "notification" | "about";
+type Tab = "general" | "display" | "callers" | "submitted" | "prompts" | "sessionNavigation" | "gitOperations" | "layoutPanels" | "agentConsole" | "agentStepDisplay" | "agentChat" | "agentSessionManager" | "openCode" | "openCodePermissions" | "terminal" | "resources" | "markdownPreview" | "notification" | "about";
 type SettingsGroupId = "mlfb" | "agent" | "layout";
 
 function renderStickyUserMessageText(text: string, mergeLines: boolean): ReactNode {
@@ -225,6 +225,7 @@ export function SettingsDialog({ open, onClose }: { open: boolean; onClose: () =
   const showPromptButtons = useFeedbackStore((s) => s.showPromptButtons);
   const showTransferSubmitUi = useFeedbackStore((s) => s.showTransferSubmitUi);
   const resourceIconTheme = useFeedbackStore((s) => s.resourceIconTheme);
+  const mlcPreviewShowYaml = useFeedbackStore((s) => s.mlcPreviewShowYaml);
   const sessionListMode = useFeedbackStore((s) => s.sessionListMode);
   const showSessionNavigationAttachmentDots = useFeedbackStore((s) => s.showSessionNavigationAttachmentDots);
   const useSessionNavigationColorCards = useFeedbackStore((s) => s.useSessionNavigationColorCards);
@@ -232,6 +233,7 @@ export function SettingsDialog({ open, onClose }: { open: boolean; onClose: () =
   const setShowPromptButtons = useFeedbackStore((s) => s.setShowPromptButtons);
   const setShowTransferSubmitUi = useFeedbackStore((s) => s.setShowTransferSubmitUi);
   const setResourceIconTheme = useFeedbackStore((s) => s.setResourceIconTheme);
+  const setMlcPreviewShowYaml = useFeedbackStore((s) => s.setMlcPreviewShowYaml);
   const setSessionListMode = useFeedbackStore((s) => s.setSessionListMode);
   const setShowSessionNavigationAttachmentDots = useFeedbackStore((s) => s.setShowSessionNavigationAttachmentDots);
   const setUseSessionNavigationColorCards = useFeedbackStore((s) => s.setUseSessionNavigationColorCards);
@@ -1120,11 +1122,12 @@ export function SettingsDialog({ open, onClose }: { open: boolean; onClose: () =
                 {renderSettingsNavItem("openCodePermissions", "checklist", t("settings.openCodeApprovalPermissions", "Approval permissions"), true)}
               </>
             ))}
-            {renderSettingsNavGroup("layout", t("settings.layout", "Layout"), ["layoutPanels", "terminal", "resources"], (
+            {renderSettingsNavGroup("layout", t("settings.layout", "Layout"), ["layoutPanels", "terminal", "resources", "markdownPreview"], (
               <>
                 {renderSettingsNavItem("layoutPanels", "page-sidebar", t("settings.panelManagement", "Panel management"), true)}
                 {renderSettingsNavItem("terminal", "terminal", t("settings.terminal", "Terminal"), true)}
                 {renderSettingsNavItem("resources", "folder", t("settings.resourceExplorer", "Resource explorer"), true)}
+                {renderSettingsNavItem("markdownPreview", "file-text", t("settings.markdownPreview", "Markdown preview"), true)}
               </>
             ))}
             {renderSettingsNavItem("notification", "bell", t("settings.notification"))}
@@ -1916,6 +1919,23 @@ export function SettingsDialog({ open, onClose }: { open: boolean; onClose: () =
                       { id: "catppuccin", label: t("settings.resourceIconThemeCatppuccin", "Catppuccin"), icon: <Icon name="folder" size={12} /> },
                     ]}
                   />
+                </div>
+              </div>
+            )}
+
+            {tab === "markdownPreview" && (
+              <div className="settings-section">
+                <div className="settings-row">
+                  <div className="settings-row-info">
+                    <span className="settings-label">{t("settings.markdownPreviewShowYaml", "Show YAML")}</span>
+                    <span className="settings-sublabel">{t("settings.markdownPreviewShowYamlDesc", "Display YAML frontmatter in the markdown content preview.")}</span>
+                  </div>
+                  <button
+                    className={`settings-toggle${mlcPreviewShowYaml ? " settings-toggle-on" : ""}`}
+                    onClick={() => setMlcPreviewShowYaml(!mlcPreviewShowYaml)}
+                  >
+                    <span className="settings-toggle-knob" />
+                  </button>
                 </div>
               </div>
             )}
