@@ -97,6 +97,7 @@ function toSelectedDocument(document: MlcDocument): SelectedMlcDocument {
     workspacePath: document.workspacePath,
     folderName: document.folderName,
     folderPath: document.folderPath,
+    source: "mlc",
   };
 }
 

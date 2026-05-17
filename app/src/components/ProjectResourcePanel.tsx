@@ -1,7 +1,7 @@
 import { useCallback, useEffect, useMemo, useState, type CSSProperties, type ReactNode } from "react";
 import { useTranslation } from "react-i18next";
 import { invoke } from "@tauri-apps/api/core";
-import { useFeedbackStore } from "../store/feedbackStore";
+import { useFeedbackStore, type SelectedMlcDocument } from "../store/feedbackStore";
 import { useAgentStore } from "../store/agentStore";
 import { agentIdentityLanguage, resolveAgentGlyphIdentity } from "../identity/agentIdentity";
 import { resolveWorkspaceIdentity, type WorkspaceColorCandidate } from "../identity/workspaceIdentity";
@@ -58,6 +58,38 @@ function insertResourceLink(text: string) {
   }));
 }
 
+function isMarkdownEntry(entry: ProjectResourceEntry): boolean {
+  if (entry.kind !== "file") return false;
+  const lower = entry.name.toLowerCase();
+  return lower.endsWith(".md") || lower.endsWith(".markdown");
+}
+
+function workspaceDisplayName(workspacePath: string): string {
+  if (!workspacePath) return "";
+  const normalized = workspacePath.replace(/\\/g, "/").replace(/\/+$/, "");
+  const segments = normalized.split("/");
+  return segments[segments.length - 1] || normalized;
+}
+
+function toResourceSelectedDocument(entry: ProjectResourceEntry, workspacePath: string): SelectedMlcDocument {
+  const fileName = entry.name;
+  const title = fileName.replace(/\.(md|markdown)$/i, "");
+  return {
+    filePath: entry.absolutePath,
+    fileName,
+    title,
+    description: "",
+    project: "",
+    type: "",
+    updatedAt: "",
+    workspaceName: workspaceDisplayName(workspacePath),
+    workspacePath,
+    folderName: null,
+    folderPath: null,
+    source: "resource",
+  };
+}
+
 const TREE_BASE_INDENT = 4;
 const TREE_INDENT_STEP = 12;
 const TREE_GUIDE_OFFSET = 10;
@@ -108,6 +140,8 @@ export function ProjectResourcePanel() {
   const resourceIconTheme = useFeedbackStore((state) => state.resourceIconTheme);
   const activeWorkspacePath = useFeedbackStore((state) => state.mlcActiveWorkspacePath);
   const setActiveWorkspacePath = useFeedbackStore((state) => state.setMlcActiveWorkspacePath);
+  const setSelectedMlcDocument = useFeedbackStore((state) => state.setSelectedMlcDocument);
+  const openDockTab = useFeedbackStore((state) => state.openDockTab);
   const [workspaceFilterMode, setWorkspaceFilterMode] = useState<"target" | "workspace">("target");
   const [childrenByPath, setChildrenByPath] = useState<Record<string, ProjectResourceEntry[]>>({});
   const [expanded, setExpanded] = useState<Set<string>>(() => new Set());
@@ -234,6 +268,24 @@ export function ProjectResourcePanel() {
     if (!childrenByPath[key]) loadDirectory(entry.absolutePath);
   }, [childrenByPath, loadDirectory]);
 
+  const previewMarkdownEntry = useCallback((entry: ProjectResourceEntry) => {
+    if (!workspacePath) return;
+    setSelectedMlcDocument(toResourceSelectedDocument(entry, workspacePath));
+    openDockTab("mlcPreview", "leftPage");
+  }, [openDockTab, setSelectedMlcDocument, workspacePath]);
+
+  const handleEntryActivate = useCallback((entry: ProjectResourceEntry) => {
+    if (entry.kind === "folder") {
+      toggleFolder(entry);
+      return;
+    }
+    if (isMarkdownEntry(entry)) {
+      previewMarkdownEntry(entry);
+      return;
+    }
+    insertResourceLink(formatMarkdownLink(entry));
+  }, [previewMarkdownEntry, toggleFolder]);
+
   const renderRows = (entries: ProjectResourceEntry[], depth = 0): ReactNode => entries.map((entry) => {
     const key = workspacePathKey(entry.absolutePath);
     const isFolder = entry.kind === "folder";
@@ -258,7 +310,7 @@ export function ProjectResourcePanel() {
           ) : (
             <Icon name={isFolder ? (isExpanded ? "folder-open" : "folder") : "file-text"} size={14} className="resource-tree-icon" />
           )}
-          <button type="button" className="resource-tree-name" onClick={() => isFolder ? toggleFolder(entry) : insertResourceLink(formatMarkdownLink(entry))}>
+          <button type="button" className="resource-tree-name" onClick={() => handleEntryActivate(entry)}>
             {entry.name}
           </button>
           {isLoading ? <Icon name="spinner" size={12} className="animate-spin" /> : null}

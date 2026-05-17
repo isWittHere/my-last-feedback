@@ -175,6 +175,8 @@ export type DockColumnId = "leftSidebar" | "leftPage" | "rightPage" | "rightSide
 export type DockTabId = SidePanelTab;
 export type DockTabBarPosition = "top" | "bottom";
 
+export type SelectedMlcDocumentSource = "mlc" | "resource";
+
 export interface SelectedMlcDocument {
   filePath: string;
   fileName: string;
@@ -187,6 +189,7 @@ export interface SelectedMlcDocument {
   workspacePath: string;
   folderName?: string | null;
   folderPath?: string | null;
+  source?: SelectedMlcDocumentSource;
 }
 
 export interface DockColumnState {

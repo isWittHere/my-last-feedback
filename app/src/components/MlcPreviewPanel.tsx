@@ -14,7 +14,33 @@ interface MlcDocumentContent {
   filePath: string;
   title: string;
   markdown: string;
+  frontmatterRaw: string;
   updatedAt: string;
+}
+
+interface FrontmatterRow {
+  key: string;
+  value: string;
+}
+
+function parseFrontmatterRows(raw: string): FrontmatterRow[] {
+  const lines = raw.split(/\r?\n/);
+  const rows: FrontmatterRow[] = [];
+  let current: FrontmatterRow | null = null;
+  const topLevel = /^([A-Za-z_][\w-]*)\s*:\s*(.*)$/;
+  for (const line of lines) {
+    if (!line.trim()) continue;
+    const m = /^(\S[^:]*?):\s*(.*)$/.exec(line);
+    const isTop = !line.startsWith(" ") && !line.startsWith("\t") && topLevel.test(line);
+    if (isTop && m) {
+      if (current) rows.push(current);
+      current = { key: m[1].trim(), value: m[2].trim() };
+    } else if (current) {
+      current.value += (current.value ? "\n" : "") + line.replace(/^\s+/, "").replace(/^-\s+/, "");
+    }
+  }
+  if (current) rows.push(current);
+  return rows;
 }
 
 function formatTime(value: string): string {
@@ -38,6 +64,8 @@ export function MlcPreviewPanel() {
   const scrollRef = useRef<HTMLDivElement>(null);
   const [activeHeadingIndex, setActiveHeadingIndex] = useState(0);
   const headings = useMemo(() => parseMarkdownHeadings(content?.markdown || ""), [content?.markdown]);
+  const frontmatterRaw = content?.frontmatterRaw?.trim() || "";
+  const frontmatterRows = useMemo(() => parseFrontmatterRows(frontmatterRaw), [frontmatterRaw]);
 
   const loadDocument = useCallback(() => {
     if (!selectedDocument) {
@@ -50,7 +78,10 @@ export function MlcPreviewPanel() {
     let cancelled = false;
     setLoading(true);
     setError(null);
-    invoke<MlcDocumentContent>("mlc_read_document", { filePath: selectedDocument.filePath })
+    invoke<MlcDocumentContent>("mlc_read_document", {
+      filePath: selectedDocument.filePath,
+      workspacePath: selectedDocument.workspacePath || null,
+    })
       .then((result) => {
         if (!cancelled) setContent(result);
       })
@@ -117,29 +148,35 @@ export function MlcPreviewPanel() {
   }
 
   const displayedPath = cleanDisplayPath(selectedDocument.filePath);
-  const typeConfig = getMlcTypeConfig(selectedDocument.type);
-  const typeColor = getMlcTypeColor(selectedDocument.type, isLightTheme) || "var(--color-primary)";
-  const typeLabel = getMlcTypeLabel(selectedDocument.type);
+  const isResource = selectedDocument.source === "resource";
+  const typeConfig = isResource ? undefined : getMlcTypeConfig(selectedDocument.type);
+  const typeColor = isResource
+    ? "var(--color-primary)"
+    : getMlcTypeColor(selectedDocument.type, isLightTheme) || "var(--color-primary)";
+  const typeLabel = isResource
+    ? t("mlcPreview.markdownFile", "Markdown")
+    : getMlcTypeLabel(selectedDocument.type);
+  const typeIconName = isResource ? "file-text" : (typeConfig?.icon || "file-text");
 
   return (
     <div className="mlc-preview-panel" style={{ "--caller-color": typeColor, "--mlc-preview-accent": typeColor } as CSSProperties}>
       <div className="mlc-preview-header">
         <div className="mlc-preview-title-block">
-          <div className="mlc-preview-kicker">
-            <Icon name={typeConfig?.icon || "file-text"} size={13} color={typeColor} />
-            <span>{typeLabel || t("mlcPreview.document", "Document")}</span>
-          </div>
           <div className="mlc-preview-title" title={selectedDocument.title}>{content?.title || selectedDocument.title}</div>
           <div className="mlc-preview-meta" title={displayedPath}>
+            <div className="mlc-preview-kicker">
+              <Icon name={typeIconName} size={13} color={typeColor} />
+              <span>{typeLabel || t("mlcPreview.document", "Document")}</span>
+            </div>
             <span>{selectedDocument.workspaceName}</span>
             {selectedDocument.folderName ? <span>{selectedDocument.folderName}</span> : null}
             <span>{formatTime(content?.updatedAt || selectedDocument.updatedAt)}</span>
+            <div className="mlc-preview-actions">
+              <button type="button" onClick={handleCopyPath} title={t("mlc.copyPath", "Copy link")}> <Icon name="copy" size={13} /> </button>
+              <button type="button" onClick={handleAttach} disabled={!focusedComposer} title={t("mlc.insertToChat", "Insert to chat")}> <Icon name="arrow-bend-down-right" size={13} /> </button>
+              <button type="button" onClick={loadDocument} title={t("mlcPreview.refresh", "Refresh")}> <Icon name="spinner" size={13} /> </button>
+            </div>
           </div>
-        </div>
-        <div className="mlc-preview-actions">
-          <button type="button" onClick={handleCopyPath} title={t("mlc.copyPath", "Copy link")}> <Icon name="copy" size={13} /> </button>
-          <button type="button" onClick={handleAttach} disabled={!focusedComposer} title={t("mlc.insertToChat", "Insert to chat")}> <Icon name="arrow-bend-down-right" size={13} /> </button>
-          <button type="button" onClick={loadDocument} title={t("mlcPreview.refresh", "Refresh")}> <Icon name="spinner" size={13} /> </button>
         </div>
       </div>
 
@@ -149,7 +186,30 @@ export function MlcPreviewPanel() {
         ) : error ? (
           <div className="mlc-preview-state error"><Icon name="circle-x" size={24} /><div>{error}</div></div>
         ) : content ? (
-          <MarkdownContent markdown={content.markdown || `# ${content.title}`} projectDirectory={selectedDocument.workspacePath} className="mlc-preview-markdown" />
+          <>
+            {frontmatterRows.length > 0 ? (
+              <div className="mlc-preview-frontmatter" aria-label={t("mlcPreview.frontmatter", "Frontmatter")}>
+                <table className="mlc-preview-frontmatter-table">
+                  <tbody>
+                    {frontmatterRows.map((row) => (
+                      <tr key={row.key}>
+                        <th scope="row">{row.key}</th>
+                        <td>
+                          {row.value.split(/\r?\n/).map((line, idx, arr) => (
+                            <span key={idx}>
+                              {line}
+                              {idx < arr.length - 1 ? <br /> : null}
+                            </span>
+                          ))}
+                        </td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
+            ) : null}
+            <MarkdownContent markdown={content.markdown || `# ${content.title}`} projectDirectory={selectedDocument.workspacePath} className="mlc-preview-markdown" />
+          </>
         ) : null}
       </div>
       {content && headings.length > 0 ? <MarkdownHeadingNav headings={headings} scrollContainerRef={scrollRef} activeIndex={activeHeadingIndex} /> : null}

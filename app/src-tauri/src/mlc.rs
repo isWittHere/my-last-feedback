@@ -37,6 +37,7 @@ pub struct MlcDocumentContent {
     pub file_path: String,
     pub title: String,
     pub markdown: String,
+    pub frontmatter_raw: String,
     pub updated_at: String,
 }
 
@@ -60,10 +61,24 @@ pub async fn mlc_search_documents(request: MlcSearchRequest) -> Result<Vec<MlcDo
 }
 
 #[tauri::command]
-pub async fn mlc_read_document(file_path: String) -> Result<MlcDocumentContent, String> {
+pub async fn mlc_read_document(
+    file_path: String,
+    workspace_path: Option<String>,
+) -> Result<MlcDocumentContent, String> {
     let path = canonical_markdown_file(&file_path)?;
-    if !is_inside_mlc_storage(&path) {
-        return Err("Markdown file is not inside a .myLastChat directory".to_string());
+    let inside_mlc = is_inside_mlc_storage(&path);
+    let inside_workspace = match workspace_path.as_deref() {
+        Some(raw) if !raw.trim().is_empty() => {
+            let workspace = PathBuf::from(raw).canonicalize().map_err(|e| e.to_string())?;
+            if !workspace.is_dir() {
+                return Err("Workspace path is not a directory".to_string());
+            }
+            path.starts_with(&workspace)
+        }
+        _ => false,
+    };
+    if !inside_mlc && !inside_workspace {
+        return Err("Markdown file is not inside the workspace or a .myLastChat directory".to_string());
     }
     let stats = std::fs::metadata(&path).map_err(|e| e.to_string())?;
     if stats.len() > MLC_PREVIEW_MAX_BYTES {
@@ -72,6 +87,7 @@ pub async fn mlc_read_document(file_path: String) -> Result<MlcDocumentContent, 
 
     let content = std::fs::read_to_string(&path).map_err(|e| e.to_string())?;
     let frontmatter = extract_frontmatter(&content);
+    let frontmatter_raw = extract_frontmatter_raw(&content);
     let file_name = path
         .file_name()
         .map(|name| name.to_string_lossy().to_string())
@@ -85,6 +101,7 @@ pub async fn mlc_read_document(file_path: String) -> Result<MlcDocumentContent, 
         file_path: display_path(&path),
         title: frontmatter.scalar("title").unwrap_or_else(|| file_name.trim_end_matches(".md").to_string()),
         markdown: markdown_body(&content),
+        frontmatter_raw,
         updated_at,
     })
 }
@@ -140,6 +157,17 @@ fn markdown_body(content: &str) -> String {
         trimmed[body_start..].trim_start_matches(|ch| ch == '\r' || ch == '\n').to_string()
     } else {
         trimmed.to_string()
+    }
+}
+
+fn extract_frontmatter_raw(content: &str) -> String {
+    let trimmed = content.trim_start_matches('\u{feff}');
+    if let Some((block_start, marker_start, _)) = frontmatter_bounds(trimmed) {
+        trimmed[block_start..marker_start]
+            .trim_matches(|ch: char| ch == '\n' || ch == '\r')
+            .to_string()
+    } else {
+        String::new()
     }
 }
 
