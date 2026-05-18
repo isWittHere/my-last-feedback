@@ -294,6 +294,14 @@ fn resolve_windows_launch(command: &str, args: &[String]) -> (String, Vec<String
 
     if extension == "cmd" || extension == "bat" {
         if let Some(node_target) = parse_npm_cmd_node_target(&command_path) {
+            let target_ext = node_target
+                .extension()
+                .and_then(|v| v.to_str())
+                .unwrap_or_default()
+                .to_ascii_lowercase();
+            if target_ext == "exe" {
+                return (node_target.to_string_lossy().to_string(), args.to_vec());
+            }
             let node_command = find_windows_command("node")
                 .unwrap_or_else(|| PathBuf::from("node"))
                 .to_string_lossy()
