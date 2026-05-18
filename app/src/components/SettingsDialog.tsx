@@ -25,6 +25,7 @@ import { normalizeWorkspacePath } from "../workspace/workspacePaths";
 import { SessionNavigationModeIcon } from "./SessionNavigationModeIcon";
 import { AppSelect, type AppSelectOption } from "./AppSelect";
 import { SettingsSegmentedControl } from "./SettingsSegmentedControl";
+import { isAgentUiDisabled } from "../agent/agentUiFlags";
 
 type Tab = "general" | "display" | "callers" | "submitted" | "prompts" | "sessionNavigation" | "gitOperations" | "layoutPanels" | "agentConsole" | "agentStepDisplay" | "agentChat" | "agentSessionManager" | "openCode" | "openCodePermissions" | "terminal" | "resources" | "markdownPreview" | "notification" | "about";
 type SettingsGroupId = "mlfb" | "agent" | "layout";
@@ -40,7 +41,9 @@ function renderStickyUserMessageText(text: string, mergeLines: boolean): ReactNo
 }
 
 const SETTINGS_DOCK_COLUMN_IDS: DockColumnId[] = ["leftSidebar", "leftPage", "rightPage", "rightSidebar"];
-const SETTINGS_DOCK_TAB_IDS: DockTabId[] = ["mlc", "mlcPreview", "resources", "previewBrowser", "previewInfo", "agentConsole", "agentSessions", "terminal"];
+const SETTINGS_DOCK_TAB_IDS: DockTabId[] = isAgentUiDisabled
+  ? ["mlc", "mlcPreview", "resources", "previewBrowser", "previewInfo", "terminal"]
+  : ["mlc", "mlcPreview", "resources", "previewBrowser", "previewInfo", "agentConsole", "agentSessions", "terminal"];
 const AGENT_TOPBAR_INDICATOR_MODE_OPTIONS: AgentTopbarIndicatorMode[] = ["hidden", "text", "textAndGraphic"];
 const AGENT_PROCESS_STEP_MODE_OPTIONS: AgentProcessStepDefaultMode[] = ["tabs", "timeline"];
 const AGENT_TIMELINE_STREAMING_STEP_MODE_OPTIONS: AgentTimelineStreamingStepMode[] = ["hidden", "collapseHistory", "expandAll"];
@@ -198,6 +201,13 @@ export function SettingsDialog({ open, onClose }: { open: boolean; onClose: () =
   const [openCodeModelQuery, setOpenCodeModelQuery] = useState("");
   const [agentCleanupMessage, setAgentCleanupMessage] = useState<string | null>(null);
   const [zoomSettings, setZoomSettings] = useState<ZoomSettings>(getZoomSettings);
+
+  useEffect(() => {
+    if (!isAgentUiDisabled) return;
+    if (tab === "agentConsole" || tab === "agentStepDisplay" || tab === "agentChat" || tab === "agentSessionManager" || tab === "openCode" || tab === "openCodePermissions") {
+      setTab("general");
+    }
+  }, [tab]);
   const [submittedViewSettings, setSubmittedViewSettings] = useState<SubmittedViewSettings>(getSubmittedViewSettings);
   const gitReminderIntervalLabel = useMemo(() => {
     const minutes = gitOperationSettings.timedReminderIntervalMinutes;
@@ -1112,7 +1122,7 @@ export function SettingsDialog({ open, onClose }: { open: boolean; onClose: () =
                 {renderSettingsNavItem("gitOperations", "git-branch", t("settings.gitOperations", "Git operations"), true)}
               </>
             ))}
-            {renderSettingsNavGroup("agent", t("settings.agent", "Agent"), ["agentConsole", "agentStepDisplay", "agentChat", "agentSessionManager", "openCode", "openCodePermissions"], (
+            {!isAgentUiDisabled && renderSettingsNavGroup("agent", t("settings.agent", "Agent"), ["agentConsole", "agentStepDisplay", "agentChat", "agentSessionManager", "openCode", "openCodePermissions"], (
               <>
                 {renderSettingsNavItem("agentConsole", "robot", t("settings.agentConsoleDisplay", "Navigation bar"), true)}
                 {renderSettingsNavItem("agentStepDisplay", "rows", t("settings.agentStepDisplay", "Step display"), true)}
@@ -1497,7 +1507,7 @@ export function SettingsDialog({ open, onClose }: { open: boolean; onClose: () =
               </div>
             )}
 
-            {tab === "agentSessionManager" && (
+            {!isAgentUiDisabled && tab === "agentSessionManager" && (
               <div className="settings-section settings-agent-section">
                 <div className="settings-row settings-row-stacked">
                   <div className="settings-row settings-agent-toggle-row">
@@ -1563,7 +1573,7 @@ export function SettingsDialog({ open, onClose }: { open: boolean; onClose: () =
               </div>
             )}
 
-            {tab === "agentStepDisplay" && (
+            {!isAgentUiDisabled && tab === "agentStepDisplay" && (
               <div className="settings-section settings-agent-section">
                 <div className="settings-row settings-row-stacked">
                   <div className="settings-row-info">
@@ -1646,7 +1656,7 @@ export function SettingsDialog({ open, onClose }: { open: boolean; onClose: () =
               </div>
             )}
 
-            {tab === "agentChat" && (
+            {!isAgentUiDisabled && tab === "agentChat" && (
               <div className="settings-section settings-agent-section">
                 <div className="settings-row settings-row-stacked">
                   <div className="settings-row-info">
@@ -1696,7 +1706,7 @@ export function SettingsDialog({ open, onClose }: { open: boolean; onClose: () =
               </div>
             )}
 
-            {tab === "agentConsole" && (
+            {!isAgentUiDisabled && tab === "agentConsole" && (
               <>
                 {renderAgentPreview()}
                 <div className="settings-section settings-agent-section">
@@ -1862,8 +1872,8 @@ export function SettingsDialog({ open, onClose }: { open: boolean; onClose: () =
               </>
             )}
 
-            {tab === "openCode" && renderOpenCodeModelLibrary()}
-            {tab === "openCodePermissions" && (
+            {!isAgentUiDisabled && tab === "openCode" && renderOpenCodeModelLibrary()}
+            {!isAgentUiDisabled && tab === "openCodePermissions" && (
               <>
                 <div className="settings-section settings-agent-section">
                   <div className="settings-row settings-row-stacked">

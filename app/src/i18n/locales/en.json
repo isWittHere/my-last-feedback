@@ -116,6 +116,7 @@
     "historyUnloaded": "History was unloaded to reduce memory.",
     "historyRestoreFailed": "Failed to restore history: {{error}}",
     "historyRestoreAction": "Restore history",
+    "historyLoadMore": "Load older messages ({{count}} hidden)",
     "abort": "Abort",
     "processWorking": "Working",
     "processComplete": "Process",

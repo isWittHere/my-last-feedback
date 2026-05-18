@@ -16,6 +16,7 @@ import { toggleTheme } from "../theme";
 import { useIsLightTheme } from "./useIsLightTheme";
 import i18n from "../i18n";
 import React from "react";
+import { isAgentUiDisabled } from "../agent/agentUiFlags";
 import {
   ORCHESTRATION_PRESETS,
   useMLRAStore,
@@ -48,14 +49,14 @@ function dockTabTitle(tabId: DockTabId, translate: (key: string, defaultValue: s
   if (tabId === "mlcPreview") return translate("mlcPreview.title", "MLC Preview");
   if (tabId === "previewBrowser") return translate("previewBrowser.title", "Preview Browser");
   if (tabId === "previewInfo") return translate("previewBrowser.infoTitle", "Preview Info");
-  if (tabId === "agentConsole") return translate("agentConsole.title", "Agent Console");
+  if (tabId === "agentConsole") return isAgentUiDisabled ? "" : translate("agentConsole.title", "Agent Console");
   if (tabId === "terminal") return translate("terminal.title", "Terminal");
   return translate("resources.title", "Project resources");
 }
 
 function dockTabDragIcon(tabId: DockTabId) {
   if (tabId === "terminal") return "terminal";
-  if (tabId === "agentConsole") return "robot";
+  if (tabId === "agentConsole") return isAgentUiDisabled ? "folder" : "robot";
   if (tabId === "mlcPreview") return "file-text";
   if (tabId === "previewBrowser") return "globe";
     if (tabId === "previewInfo") return "code";

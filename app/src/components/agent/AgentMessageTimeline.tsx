@@ -1,5 +1,4 @@
-import { Fragment, useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState, type CSSProperties, type ReactNode } from "react";
-import { VariableSizeList, type ListChildComponentProps, type ListOnItemsRenderedProps, type ListOnScrollProps } from "react-window";
+import { Fragment, useCallback, useEffect, useMemo, useRef, useState, type CSSProperties } from "react";
 import { useTranslation } from "react-i18next";
 import { useAgentConsoleSettings } from "../../agentConsoleSettings";
 import type { AgentContentBlock, AgentProviderMessagePart, AgentSession } from "../../agent/types";
@@ -10,18 +9,8 @@ import { AgentNewSessionWorkspacePicker } from "./AgentNewSessionWorkspacePicker
 import { AgentPermissionPanel } from "./AgentPermissionIndicator";
 import { AgentSessionHeader } from "./AgentSessionHeader";
 
-const DEFAULT_ROW_HEIGHT = 120;
-const ROW_GAP = 16;
-
-type TimelineItem =
-  | { type: "node"; key: string; node: ReactNode }
-  | { type: "message"; key: string; message: AgentSession["messages"][number] };
-
-interface TimelineRowData {
-  items: TimelineItem[];
-  session: AgentSession;
-  setRowSize: (key: string, size: number, index: number) => void;
-}
+const DEFAULT_WINDOW_SIZE = 80;
+const LOAD_BATCH_SIZE = 80;
 
 function blockText(block: AgentContentBlock): string {
   return block.type === "text" ? block.content : "";
@@ -120,52 +109,22 @@ function HistoryNotice({ session }: { session: AgentSession }) {
   return null;
 }
 
-function TimelineRow({ index, style, data }: ListChildComponentProps<TimelineRowData>) {
-  const { items, session, setRowSize } = data;
-  const item = items[index];
-  const rowRef = useRef<HTMLDivElement | null>(null);
-
-  useLayoutEffect(() => {
-    const node = rowRef.current;
-    if (!node) return;
-    const updateSize = () => {
-      const height = node.getBoundingClientRect().height;
-      setRowSize(item.key, height, index);
-    };
-    updateSize();
-    const observer = new ResizeObserver(updateSize);
-    observer.observe(node);
-    return () => observer.disconnect();
-  }, [index, item.key, setRowSize]);
-
-  return (
-    <div style={{ ...style, width: "100%" }}>
-      <div ref={rowRef} className="agent-message-row" style={{ paddingBottom: ROW_GAP }}>
-        {item.type === "message"
-          ? <AgentMessageItem session={session} message={item.message} projectDirectory={session.cwd} />
-          : item.node}
-      </div>
-    </div>
-  );
-}
-
 export function AgentMessageTimeline({ session }: { session: AgentSession }) {
+  const { t } = useTranslation();
   const { mergeStickyUserMessageLines, showStickyUserMessageBar } = useAgentConsoleSettings();
-  const listRef = useRef<VariableSizeList>(null);
-  const outerRef = useRef<HTMLDivElement>(null);
   const containerRef = useRef<HTMLDivElement>(null);
+  const scrollRef = useRef<HTMLDivElement>(null);
   const stickyUserBarRef = useRef<HTMLButtonElement>(null);
   const stickyUserTextRef = useRef<HTMLSpanElement>(null);
   const stickyUserHeightRef = useRef(0);
   const shouldAutoFollowRef = useRef(true);
-  const rowSizeMapRef = useRef(new Map<string, number>());
   const [stickyUserContent, setStickyUserContent] = useState<string | null>(null);
   const [renderedStickyUserContent, setRenderedStickyUserContent] = useState<string | null>(null);
   const [stickyUserMsgId, setStickyUserMsgId] = useState<string | null>(null);
   const [stickyUserHeight, setStickyUserHeight] = useState(0);
   const [stickyUserResizeDirection, setStickyUserResizeDirection] = useState<"growing" | "shrinking" | "stable">("stable");
-  const [listHeight, setListHeight] = useState(0);
   const [visibleStartIndex, setVisibleStartIndex] = useState(0);
+  const [windowSize, setWindowSize] = useState(() => Math.min(session.messages.length, DEFAULT_WINDOW_SIZE));
 
   const isStreaming = session.messages.some((message) => message.status === "streaming");
   const hasStickyUserContent = Boolean(stickyUserContent);
@@ -207,28 +166,71 @@ export function AgentMessageTimeline({ session }: { session: AgentSession }) {
     return map;
   }, [messageStartIndex, session.messages]);
 
-  const handleItemsRendered = useCallback((info: ListOnItemsRenderedProps) => {
-    setVisibleStartIndex(info.visibleStartIndex);
+  const totalMessages = session.messages.length;
+  const hiddenCount = Math.max(0, totalMessages - windowSize);
+  const visibleMessages = useMemo(() => session.messages.slice(-windowSize), [session.messages, windowSize]);
+
+  const checkNearBottom = useCallback(() => {
+    const container = scrollRef.current;
+    if (!container) return true;
+    return container.scrollHeight - container.scrollTop - container.clientHeight <= 140;
   }, []);
 
-  const handleListScroll = useCallback((info: ListOnScrollProps) => {
-    if (isStreaming) shouldAutoFollowRef.current = checkNearBottom(info.scrollOffset);
-  }, [checkNearBottom, isStreaming]);
-
-  useLayoutEffect(() => {
-    const node = containerRef.current;
-    if (!node) return;
-    const updateHeight = () => setListHeight(node.getBoundingClientRect().height);
-    updateHeight();
-    const observer = new ResizeObserver(updateHeight);
-    observer.observe(node);
-    return () => observer.disconnect();
+  const scrollToEnd = useCallback((behavior: ScrollBehavior = "auto") => {
+    const container = scrollRef.current;
+    if (!container) return;
+    const top = container.scrollHeight - container.clientHeight;
+    container.scrollTo({ top: Math.max(0, top), behavior });
   }, []);
+
+  const handleTimelineScroll = useCallback(() => {
+    if (isStreaming) shouldAutoFollowRef.current = checkNearBottom();
+    const container = scrollRef.current;
+    if (!container) return;
+    const messageElements = container.querySelectorAll('[data-role="user"]');
+    if (messageElements.length === 0) {
+      setVisibleStartIndex(0);
+      return;
+    }
+    const containerRect = container.getBoundingClientRect();
+    let nextStartIndex = 0;
+    for (let index = 0; index < messageElements.length; index += 1) {
+      const rect = messageElements[index].getBoundingClientRect();
+      if (rect.bottom >= containerRect.top) {
+        nextStartIndex = index;
+        break;
+      }
+    }
+    setVisibleStartIndex(nextStartIndex + messageStartIndex + hiddenCount);
+  }, [checkNearBottom, hiddenCount, isStreaming, messageStartIndex]);
+
+  const handleLoadMore = useCallback(() => {
+    const container = scrollRef.current;
+    if (!container) {
+      setWindowSize((current) => Math.min(totalMessages, current + LOAD_BATCH_SIZE));
+      return;
+    }
+    const prevScrollHeight = container.scrollHeight;
+    const prevScrollTop = container.scrollTop;
+    setWindowSize((current) => Math.min(totalMessages, current + LOAD_BATCH_SIZE));
+    requestAnimationFrame(() => {
+      const nextScrollHeight = container.scrollHeight;
+      container.scrollTop = prevScrollTop + (nextScrollHeight - prevScrollHeight);
+    });
+  }, [totalMessages]);
 
   useEffect(() => {
     shouldAutoFollowRef.current = true;
     scrollToEnd();
   }, [scrollToEnd, session.messages.length]);
+
+  useEffect(() => {
+    setWindowSize((current) => Math.min(totalMessages, Math.max(current, Math.min(DEFAULT_WINDOW_SIZE, totalMessages))));
+  }, [totalMessages]);
+
+  useEffect(() => {
+    setWindowSize(Math.min(totalMessages, DEFAULT_WINDOW_SIZE));
+  }, [session.id, totalMessages]);
 
   useEffect(() => {
     if (!showStickyUserMessageBar) {
@@ -238,17 +240,18 @@ export function AgentMessageTimeline({ session }: { session: AgentSession }) {
     }
     let nextContent: string | null = null;
     let nextMsgId: string | null = null;
-    for (let index = Math.min(visibleStartIndex - 1, items.length - 1); index >= 0; index -= 1) {
-      const item = items[index];
-      if (item.type === "message" && item.message.role === "user") {
-        nextContent = userPromptText(item.message);
-        nextMsgId = item.message.id;
+    const scanIndex = Math.min(visibleStartIndex - 1 - messageStartIndex, visibleMessages.length - 1);
+    for (let index = scanIndex; index >= 0; index -= 1) {
+      const message = visibleMessages[index];
+      if (message.role === "user") {
+        nextContent = userPromptText(message);
+        nextMsgId = message.id;
         break;
       }
     }
     setStickyUserContent((current) => current === nextContent ? current : nextContent);
     setStickyUserMsgId((current) => current === nextMsgId ? current : nextMsgId);
-  }, [items, showStickyUserMessageBar, visibleStartIndex]);
+  }, [messageStartIndex, showStickyUserMessageBar, visibleMessages, visibleStartIndex]);
 
   useEffect(() => {
     if (stickyUserContent) {
@@ -299,7 +302,23 @@ export function AgentMessageTimeline({ session }: { session: AgentSession }) {
     const index = messageIndexById.get(stickyUserMsgId);
     if (index == null) return;
     shouldAutoFollowRef.current = false;
-    listRef.current?.scrollToItem(index, "start");
+    if (hiddenCount > 0) {
+      const messageIndex = index - messageStartIndex;
+      if (messageIndex >= 0 && messageIndex < totalMessages - visibleMessages.length) {
+        const needed = totalMessages - messageIndex;
+        setWindowSize((current) => Math.max(current, needed));
+      }
+    }
+    const container = scrollRef.current;
+    if (!container) return;
+    const target = container.querySelector<HTMLElement>(`[data-msg-id="${CSS.escape(stickyUserMsgId)}"]`);
+    if (!target) return;
+    const bubble = target.querySelector<HTMLElement>(".agent-message-main") || target;
+    const containerRect = container.getBoundingClientRect();
+    const targetRect = bubble.getBoundingClientRect();
+    const overlayHeight = container.querySelector<HTMLElement>(".agent-timeline-top-overlay")?.getBoundingClientRect().height ?? 0;
+    const nextScrollTop = container.scrollTop + targetRect.top - containerRect.top - overlayHeight - 8;
+    container.scrollTo({ top: Math.max(0, nextScrollTop), behavior: "smooth" });
   }, [messageIndexById, stickyUserMsgId]);
 
   const headerNode = showTopOverlay ? (
@@ -322,54 +341,14 @@ export function AgentMessageTimeline({ session }: { session: AgentSession }) {
     </div>
   ) : null;
 
-  const items = useMemo<TimelineItem[]>(() => {
-    const next: TimelineItem[] = [];
-    if (headerNode) next.push({ type: "node", key: "header", node: headerNode });
-    if (historyNoticeNode) next.push({ type: "node", key: "history-notice", node: historyNoticeNode });
-    if (newSessionNode) next.push({ type: "node", key: "new-session", node: newSessionNode });
-    session.messages.forEach((message) => {
-      next.push({ type: "message", key: `message:${message.id}`, message });
-    });
-    return next;
-  }, [headerNode, historyNoticeNode, newSessionNode, session.messages]);
-
-  const setRowSize = useCallback((key: string, size: number, index: number) => {
-    const current = rowSizeMapRef.current.get(key);
-    if (current === size) return;
-    rowSizeMapRef.current.set(key, size);
-    listRef.current?.resetAfterIndex(index);
-    if (isStreaming && shouldAutoFollowRef.current && index >= items.length - 1) {
-      requestAnimationFrame(() => listRef.current?.scrollToItem(items.length - 1, "end"));
-    }
-  }, [isStreaming, items.length]);
-
-  const getRowSize = useCallback((index: number) => {
-    const item = items[index];
-    if (!item) return DEFAULT_ROW_HEIGHT;
-    return rowSizeMapRef.current.get(item.key) ?? DEFAULT_ROW_HEIGHT;
-  }, [items]);
-
-  const itemKey = useCallback((index: number, data: TimelineRowData) => data.items[index].key, []);
-
-  const checkNearBottom = useCallback((scrollOffset?: number) => {
-    const container = outerRef.current;
-    if (!container) return true;
-    const offset = scrollOffset ?? container.scrollTop;
-    return container.scrollHeight - offset - container.clientHeight <= 140;
-  }, []);
-
-  const scrollToEnd = useCallback((behavior: ScrollBehavior = "auto") => {
-    if (items.length === 0) return;
-    listRef.current?.scrollToItem(items.length - 1, behavior === "smooth" ? "center" : "end");
-  }, [items.length]);
-
   useEffect(() => {
     const handleFocusMessage = (event: Event) => {
       const detail = (event as CustomEvent<AgentFocusStepEventDetail>).detail;
       if (!detail?.messageId || detail.stepId) return;
-      const index = messageIndexById.get(detail.messageId);
-      if (index == null) return;
-      listRef.current?.scrollToItem(index, "center");
+      const container = scrollRef.current;
+      if (!container) return;
+      const target = container.querySelector<HTMLElement>(`[data-msg-id="${CSS.escape(detail.messageId)}"]`);
+      target?.scrollIntoView({ behavior: "smooth", block: "center" });
     };
     window.addEventListener("mlfb-agent-focus-step", handleFocusMessage);
     return () => window.removeEventListener("mlfb-agent-focus-step", handleFocusMessage);
@@ -383,31 +362,21 @@ export function AgentMessageTimeline({ session }: { session: AgentSession }) {
     }
   }, [isStreaming, scrollToEnd, session.messages]);
 
-  const rowData = useMemo<TimelineRowData>(() => ({
-    items,
-    session,
-    setRowSize,
-  }), [items, session, setRowSize]);
-
   return (
     <div ref={containerRef} className="agent-message-timeline-shell">
-      {listHeight > 0 && (
-        <VariableSizeList
-          ref={listRef}
-          outerRef={outerRef}
-          height={listHeight}
-          width="100%"
-          itemCount={items.length}
-          itemData={rowData}
-          itemKey={itemKey}
-          itemSize={getRowSize}
-          onItemsRendered={handleItemsRendered}
-          onScroll={handleListScroll}
-          className="agent-message-timeline"
-        >
-          {TimelineRow}
-        </VariableSizeList>
-      )}
+      <div ref={scrollRef} className="agent-message-timeline" onScroll={handleTimelineScroll}>
+        {headerNode}
+        {historyNoticeNode}
+        {newSessionNode}
+        {hiddenCount > 0 && !isNewOpenCodeSessionPage && (
+          <button type="button" className="agent-history-load-more" onClick={handleLoadMore}>
+            {t("agentConsole.historyLoadMore", "Load older messages ({{count}} hidden)", { count: hiddenCount })}
+          </button>
+        )}
+        {visibleMessages.map((message) => (
+          <AgentMessageItem key={message.id} session={session} message={message} projectDirectory={session.cwd} />
+        ))}
+      </div>
     </div>
   );
 }

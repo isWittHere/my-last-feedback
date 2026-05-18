@@ -116,6 +116,7 @@
     "historyUnloaded": "为减少内存占用，历史已卸载。",
     "historyRestoreFailed": "恢复历史失败：{{error}}",
     "historyRestoreAction": "恢复历史",
+    "historyLoadMore": "加载更早消息（还剩 {{count}} 条）",
     "abort": "中止",
     "processWorking": "工作中",
     "processComplete": "过程",
