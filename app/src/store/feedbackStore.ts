@@ -1,6 +1,7 @@
 import { create } from "zustand";
 import { invoke } from "@tauri-apps/api/core";
 import { readSessionListMode, readShowSessionNavigationAttachmentDots, readUseSessionNavigationColorCards, saveSessionListMode, saveShowSessionNavigationAttachmentDots, saveUseSessionNavigationColorCards, type SessionListMode } from "../sessionNavigationSettings";
+import { isAgentUiDisabled } from "../agent/agentUiFlags";
 import { normalizeWorkspacePath, sameWorkspacePath, workspacePathKey } from "../workspace/workspacePaths";
 
 export interface ImageAttachment {
@@ -488,11 +489,21 @@ function syncCallerWorkspaceColors(
 }
 
 const DOCK_COLUMN_IDS: DockColumnId[] = ["leftSidebar", "leftPage", "rightPage", "rightSidebar"];
-const KNOWN_DOCK_TABS: DockTabId[] = ["mlc", "resources", "mlcPreview", "previewBrowser", "previewInfo", "agentConsole", "agentSessions", "terminal"];
-const DEFAULT_DOCK_TABS: DockTabId[] = ["mlc", "mlcPreview", "resources", "previewBrowser", "previewInfo", "agentConsole", "agentSessions", "terminal"];
+const AGENT_DOCK_TABS: DockTabId[] = ["agentConsole", "agentSessions"];
+const CORE_DOCK_TABS: DockTabId[] = ["mlc", "resources", "mlcPreview", "previewBrowser", "previewInfo", "terminal"];
+const KNOWN_DOCK_TABS: DockTabId[] = isAgentUiDisabled
+  ? CORE_DOCK_TABS
+  : [...CORE_DOCK_TABS, ...AGENT_DOCK_TABS];
+const DEFAULT_DOCK_TABS: DockTabId[] = isAgentUiDisabled
+  ? ["mlc", "mlcPreview", "resources", "previewBrowser", "previewInfo", "terminal"]
+  : ["mlc", "mlcPreview", "resources", "previewBrowser", "previewInfo", "agentConsole", "agentSessions", "terminal"];
 
 function isDockTabId(value: unknown): value is DockTabId {
   return typeof value === "string" && KNOWN_DOCK_TABS.includes(value as DockTabId);
+}
+
+function isAgentDockTab(tabId: DockTabId): boolean {
+  return tabId === "agentConsole" || tabId === "agentSessions";
 }
 
 function dockColumnMaxWidth(columnId?: DockColumnId): number {
@@ -564,8 +575,8 @@ function migrateLegacyDockLayout(): DockLayoutState {
     collapsed: !legacyVisible,
   });
   columns.rightPage = createDockColumn({
-    tabIds: ["agentConsole", "agentSessions", "terminal"],
-    activeTabId: "agentConsole",
+    tabIds: isAgentUiDisabled ? ["terminal"] : ["agentConsole", "agentSessions", "terminal"],
+    activeTabId: isAgentUiDisabled ? "terminal" : "agentConsole",
     width: legacyWidth,
     tabBarPosition: legacyTabBarPosition,
     collapsed: false,
@@ -1798,6 +1809,7 @@ export const useFeedbackStore = create<FeedbackState>((set, get) => ({
 
   setDockActiveTab: (columnId, tabId) => {
     set((state) => {
+      if (isAgentUiDisabled && tabId && isAgentDockTab(tabId)) return {};
       const column = state.dockLayout.columns[columnId];
       const activeTabId = tabId && column.tabIds.includes(tabId) ? tabId : column.tabIds[0] || null;
       const dockLayout: DockLayoutState = {
@@ -1813,6 +1825,7 @@ export const useFeedbackStore = create<FeedbackState>((set, get) => ({
 
   moveDockTabToColumn: (tabId, targetColumnId, targetIndex) => {
     set((state) => {
+      if (isAgentUiDisabled && isAgentDockTab(tabId)) return {};
       const nextColumns: DockLayoutState["columns"] = {
         leftSidebar: { ...state.dockLayout.columns.leftSidebar, tabIds: [...state.dockLayout.columns.leftSidebar.tabIds] },
         leftPage: { ...state.dockLayout.columns.leftPage, tabIds: [...state.dockLayout.columns.leftPage.tabIds] },
@@ -1853,6 +1866,7 @@ export const useFeedbackStore = create<FeedbackState>((set, get) => ({
 
   openDockTab: (tabId, preferredColumnId) => {
     set((state) => {
+      if (isAgentUiDisabled && isAgentDockTab(tabId)) return {};
       const nextColumns: DockLayoutState["columns"] = {
         leftSidebar: { ...state.dockLayout.columns.leftSidebar, tabIds: [...state.dockLayout.columns.leftSidebar.tabIds] },
         leftPage: { ...state.dockLayout.columns.leftPage, tabIds: [...state.dockLayout.columns.leftPage.tabIds] },
@@ -1877,7 +1891,10 @@ export const useFeedbackStore = create<FeedbackState>((set, get) => ({
     });
   },
 
-  startDraggingDockTab: (tabId, sourceColumnId, pointerX, pointerY, targetColumnId = null) => set({ draggingDockTab: { tabId, sourceColumnId, pointerX, pointerY, targetColumnId } }),
+  startDraggingDockTab: (tabId, sourceColumnId, pointerX, pointerY, targetColumnId = null) => {
+    if (isAgentUiDisabled && isAgentDockTab(tabId)) return;
+    set({ draggingDockTab: { tabId, sourceColumnId, pointerX, pointerY, targetColumnId } });
+  },
   updateDraggingDockTab: (pointerX, pointerY, targetColumnId) => set((state) => state.draggingDockTab
     ? { draggingDockTab: { ...state.draggingDockTab, pointerX, pointerY, targetColumnId } }
     : {}),

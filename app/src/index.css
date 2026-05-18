@@ -5447,6 +5447,23 @@ body,
     background: color-mix(in srgb, var(--color-bg-input-raised) 60%, transparent);
 }
 
+.agent-history-load-more {
+    align-self: center;
+    padding: 6px 14px;
+    border-radius: 999px;
+    border: 1px solid var(--color-border-subtle);
+    background: color-mix(in srgb, var(--color-bg-input-raised) 42%, transparent);
+    color: var(--color-text-primary);
+    font-size: 12px;
+    cursor: pointer;
+}
+
+.agent-history-load-more:hover,
+.agent-history-load-more:focus-visible {
+    border-color: color-mix(in srgb, var(--color-border-subtle) 60%, var(--color-accent) 40%);
+    background: color-mix(in srgb, var(--color-bg-input-raised) 60%, transparent);
+}
+
 .agent-new-session-permission-shell {
     position: relative;
     flex: 1 0 auto;

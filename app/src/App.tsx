@@ -8,6 +8,7 @@ import { FeedbackApp } from "./components/FeedbackApp";
 import { AppTooltipProvider } from "./components/AppTooltip";
 import { TerminalEventBridge } from "./components/TerminalEventBridge";
 import { AgentProcessEventBridge } from "./components/agent/AgentProcessEventBridge";
+import { isAgentUiDisabled } from "./agent/agentUiFlags";
 import type { ImageAttachment, Session } from "./store/feedbackStore";
 import { getNotificationSettings, hasStoredNotificationSettings, saveNotificationSettings, syncAutoFocusNewRequest } from "./notificationSettings";
 import type { FeedbackDraft } from "./store/feedbackStore";
@@ -240,7 +241,7 @@ function App() {
   return (
     <AppTooltipProvider>
       <TerminalEventBridge />
-      <AgentProcessEventBridge />
+      {!isAgentUiDisabled && <AgentProcessEventBridge />}
       <FeedbackApp />
     </AppTooltipProvider>
   );
