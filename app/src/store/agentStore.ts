@@ -47,10 +47,13 @@ interface AgentOpenCodeHttpRuntimeEntry {
 const openCodeHttpRuntimes = new Map<string, AgentOpenCodeHttpRuntimeEntry>();
 const OPEN_CODE_RECONNECT_BACKFILL_MIN_INTERVAL_MS = 30_000;
 const OPEN_CODE_SESSION_LIST_IDLE_REFRESH_DELAY_MS = 700;
+const AGENT_SESSION_IDLE_STOP_MS = 5 * 60 * 1000;
+const AGENT_SESSION_HISTORY_KEEP_LOCAL = 30;
 
 let openCodeIdLastTimestamp = 0;
 let openCodeIdCounter = 0;
 const openCodeSessionListRefreshTimers = new Map<string, number>();
+const agentIdleStopTimers = new Map<string, number>();
 
 interface CompactionSummaryRoute {
   sessionId: string;
@@ -97,6 +100,7 @@ interface AgentStoreState {
   forkAgentSessionFromMessage: (sessionId: string, messageId: string) => Promise<void>;
   refreshProviderSessions: (providerId: AgentProviderId, cursor?: string | null) => Promise<void>;
   restoreProviderSession: (providerId: AgentProviderId, providerSessionId: string) => Promise<void>;
+  rehydrateSessionHistory: (sessionId: string) => Promise<void>;
   renameProviderSession: (providerId: AgentProviderId, providerSessionId: string, title: string) => Promise<void>;
   deleteProviderSession: (providerId: AgentProviderId, providerSessionId: string) => Promise<void>;
   updateOpenCodeSessionPermission: (sessionId: string, permission: string, action: OpenCodePermissionSettingAction) => Promise<void>;
@@ -136,6 +140,69 @@ function createOpenCodeAscendingId(prefix: "message" | "part"): string {
 
 function openCodePromptPartsWithIds(parts: OpenCodePromptPart[]): OpenCodePromptPart[] {
   return parts.map((part) => ({ ...part, id: part.id || createOpenCodeAscendingId("part") }));
+}
+
+function isSessionStreaming(session: AgentSession): boolean {
+  return session.messages.some((message) => message.status === "streaming");
+}
+
+function shouldUnloadSessionHistory(session: AgentSession): boolean {
+  return session.status === "idle" && !isSessionStreaming(session);
+}
+
+function unloadSessionHistory(session: AgentSession): AgentSession {
+  if (!shouldUnloadSessionHistory(session)) return session;
+
+  const totalCount = session.messages.length;
+  if (totalCount === 0) {
+    if (session.historyState === "loaded" && (session.historyTotalCount || 0) === 0 && (session.historyTrimmedCount || 0) === 0 && !session.historyError) return session;
+    return {
+      ...session,
+      historyState: "loaded",
+      historyTotalCount: 0,
+      historyTrimmedCount: 0,
+      historyError: undefined,
+    };
+  }
+
+  if (session.providerSessionId) {
+    if (session.historyState === "cold" && session.messages.length === 0) return session;
+    return {
+      ...session,
+      messages: [],
+      historyState: "cold",
+      historyTotalCount: totalCount,
+      historyTrimmedCount: 0,
+      historyError: undefined,
+      updatedAt: nowIso(),
+    };
+  }
+
+  if (totalCount > AGENT_SESSION_HISTORY_KEEP_LOCAL) {
+    const trimmed = session.messages.slice(-AGENT_SESSION_HISTORY_KEEP_LOCAL);
+    return {
+      ...session,
+      messages: trimmed,
+      historyState: "trimmed",
+      historyTotalCount: totalCount,
+      historyTrimmedCount: totalCount - trimmed.length,
+      historyError: undefined,
+      updatedAt: nowIso(),
+    };
+  }
+
+  if (session.historyState === "loaded" && (session.historyTotalCount || 0) === totalCount && (session.historyTrimmedCount || 0) === 0 && !session.historyError) return session;
+  return {
+    ...session,
+    historyState: "loaded",
+    historyTotalCount: totalCount,
+    historyTrimmedCount: 0,
+    historyError: undefined,
+  };
+}
+
+function unloadInactiveSessionHistories(sessions: AgentSession[], activeSessionId: string | null): AgentSession[] {
+  return sessions.map((session) => (session.id === activeSessionId ? session : unloadSessionHistory(session)));
 }
 
 function normalizeOpenCodeDirectory(value: string | null | undefined): string | undefined {
@@ -1807,6 +1874,15 @@ function applyOpenCodeBusEvent(session: AgentSession, event: OpenCodeBusEvent): 
       if (normalized.status === "error") nextSession = { ...nextSession, status: "error", updatedAt: nowIso() };
     }
   }
+  if ((nextSession.historyState === "cold" || nextSession.historyState === "loading") && nextSession.messages.length > 0) {
+    return {
+      ...nextSession,
+      historyState: "loaded",
+      historyTotalCount: nextSession.messages.length,
+      historyTrimmedCount: 0,
+      historyError: undefined,
+    };
+  }
   return nextSession;
 }
 
@@ -1867,9 +1943,14 @@ async function backfillOpenCodeSession(runtimeEntry: AgentOpenCodeHttpRuntimeEnt
   useAgentStore.setState((current) => ({
     sessions: updateSession(current.sessions, sessionId, (item) => {
       if (item.providerSessionId !== providerSessionId) return item;
+      const nextMessages = replayedMessages.length > 0 ? replayedMessages : item.messages;
       return {
         ...item,
-        messages: replayedMessages.length > 0 ? replayedMessages : item.messages,
+        messages: nextMessages,
+        historyState: "loaded",
+        historyTotalCount: nextMessages.length,
+        historyTrimmedCount: 0,
+        historyError: undefined,
         status: providerBusy ? "running" : item.status === "cancelling" ? item.status : "idle",
         providerSessionState: "active",
         ...(restoredModelId ? { modelId: restoredModelId } : {}),
@@ -1972,15 +2053,27 @@ export const useAgentStore = create<AgentStoreState>((set, get) => ({
     const cleaned = getAgentConsoleSettings().autoCleanupEmptySessions
       ? cleanupEmptyAgentSessions(state.sessions, sessionId, [sessionId])
       : { sessions: state.sessions, activeSessionId: sessionId, removedCount: 0 };
-    set({ sessions: [...cleaned.sessions, session], activeSessionId: sessionId });
+    const nextSessions = unloadInactiveSessionHistories([...cleaned.sessions, session], sessionId);
+    set({ sessions: nextSessions, activeSessionId: sessionId });
     return sessionId;
   },
 
-  setActiveSession: (sessionId) => set((state) => {
-    if (!getAgentConsoleSettings().autoCleanupEmptySessions) return { activeSessionId: sessionId };
-    const cleaned = cleanupEmptyAgentSessions(state.sessions, sessionId, [sessionId]);
-    return { sessions: cleaned.sessions, activeSessionId: cleaned.activeSessionId || sessionId };
-  }),
+  setActiveSession: (sessionId) => {
+    set((state) => {
+      const cleaned = getAgentConsoleSettings().autoCleanupEmptySessions
+        ? cleanupEmptyAgentSessions(state.sessions, sessionId, [sessionId])
+        : { sessions: state.sessions, activeSessionId: sessionId, removedCount: 0 };
+      const nextActiveSessionId = cleaned.activeSessionId || sessionId;
+      return {
+        sessions: unloadInactiveSessionHistories(cleaned.sessions, nextActiveSessionId),
+        activeSessionId: nextActiveSessionId,
+      };
+    });
+    const session = get().sessions.find((item) => item.id === sessionId);
+    if (session?.historyState === "cold") {
+      void get().rehydrateSessionHistory(sessionId);
+    }
+  },
 
   setSessionWorkspace: (sessionId, cwd) => {
     const nextCwd = normalizeAgentCwd(cwd);
@@ -2854,7 +2947,6 @@ export const useAgentStore = create<AgentStoreState>((set, get) => ({
     if (existingSession) {
       const providerRuntime = runtimeOwner?.providerRuntime;
       set((state) => ({
-        activeSessionId: existingSession.id,
         sessions: updateSession(state.sessions, existingSession.id, (item) => ({
           ...item,
           agentName: agentNameFromProviderSessionId(providerSessionId),
@@ -2862,6 +2954,7 @@ export const useAgentStore = create<AgentStoreState>((set, get) => ({
           updatedAt: nowIso(),
         })),
       }));
+      get().setActiveSession(existingSession.id);
       return;
     }
 
@@ -3105,6 +3198,50 @@ export const useAgentStore = create<AgentStoreState>((set, get) => ({
     }
   },
 
+  rehydrateSessionHistory: async (sessionId) => {
+    let session = get().sessions.find((item) => item.id === sessionId);
+    if (!session || session.historyState !== "cold") return;
+    if (!session.providerSessionId) return;
+
+    set((state) => ({
+      sessions: updateSession(state.sessions, sessionId, (item) => ({
+        ...item,
+        historyState: "loading",
+        historyError: undefined,
+        updatedAt: nowIso(),
+      })),
+    }));
+
+    try {
+      const httpRuntime = await ensureOpenCodeRuntime(session.providerId, get);
+      session = get().sessions.find((item) => item.id === sessionId);
+      if (!httpRuntime || !session?.providerSessionId) throw new Error("OpenCode runtime is not available");
+
+      await backfillOpenCodeSession(httpRuntime, sessionId, session.providerSessionId, { assumeBusyUntilAssistant: true });
+
+      set((state) => ({
+        sessions: updateSession(state.sessions, sessionId, (item) => ({
+          ...item,
+          historyState: "loaded",
+          historyTotalCount: item.messages.length,
+          historyTrimmedCount: 0,
+          historyError: undefined,
+          updatedAt: nowIso(),
+        })),
+      }));
+    } catch (error) {
+      const message = error instanceof Error ? error.message : String(error);
+      set((state) => ({
+        sessions: updateSession(state.sessions, sessionId, (item) => ({
+          ...item,
+          historyState: "cold",
+          historyError: message,
+          updatedAt: nowIso(),
+        })),
+      }));
+    }
+  },
+
   applyOpenCodeSessionPermissionPreset: async (sessionId, presetId) => {
         const session = get().sessions.find((item) => item.id === sessionId);
         const httpRuntime = openCodeHttpRuntimeForSession(session, get().sessions);
@@ -3291,3 +3428,52 @@ export const useAgentStore = create<AgentStoreState>((set, get) => ({
     }));
   },
 }));
+
+function clearIdleStopTimer(sessionId: string) {
+  const timer = agentIdleStopTimers.get(sessionId);
+  if (!timer) return;
+  window.clearTimeout(timer);
+  agentIdleStopTimers.delete(sessionId);
+}
+
+function scheduleIdleStopTimer(state: AgentStoreState, session: AgentSession) {
+  if (session.id === state.activeSessionId) {
+    clearIdleStopTimer(session.id);
+    return;
+  }
+  if (session.status !== "idle") {
+    clearIdleStopTimer(session.id);
+    return;
+  }
+  if (!session.providerRuntime?.processId) {
+    clearIdleStopTimer(session.id);
+    return;
+  }
+  if (agentIdleStopTimers.has(session.id)) return;
+
+  const timer = window.setTimeout(() => {
+    agentIdleStopTimers.delete(session.id);
+    const latest = useAgentStore.getState().sessions.find((item) => item.id === session.id);
+    if (!latest) return;
+    if (latest.id === useAgentStore.getState().activeSessionId) return;
+    if (latest.status !== "idle") return;
+    if (!latest.providerRuntime?.processId) return;
+    void useAgentStore.getState().stopOpenCodeProvider(latest.id);
+    useAgentStore.getState().appendAgentDiagnostic(latest.id, "info", "Agent session stopped after 5 minutes idle.");
+  }, AGENT_SESSION_IDLE_STOP_MS);
+
+  agentIdleStopTimers.set(session.id, timer);
+}
+
+function syncIdleStopTimers(state: AgentStoreState) {
+  const sessionIds = new Set(state.sessions.map((session) => session.id));
+  for (const sessionId of agentIdleStopTimers.keys()) {
+    if (!sessionIds.has(sessionId)) clearIdleStopTimer(sessionId);
+  }
+  state.sessions.forEach((session) => scheduleIdleStopTimer(state, session));
+}
+
+useAgentStore.subscribe((state, prev) => {
+  if (state.activeSessionId === prev.activeSessionId && state.sessions === prev.sessions) return;
+  syncIdleStopTimers(state);
+});

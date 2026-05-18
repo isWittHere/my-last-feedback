@@ -268,6 +268,8 @@ export interface AgentContextUsage {
   updatedAt: string;
 }
 
+export type AgentSessionHistoryState = "loaded" | "cold" | "loading" | "trimmed";
+
 export interface AgentSession {
   id: string;
   providerId: AgentProviderId;
@@ -297,6 +299,10 @@ export interface AgentSession {
   mlcAttachments: MlcAttachment[];
   webAttachments: WebAttachment[];
   messages: AgentMessage[];
+  historyState?: AgentSessionHistoryState;
+  historyTotalCount?: number;
+  historyTrimmedCount?: number;
+  historyError?: string;
   pendingPermissionIds: string[];
   openCodePermissionRules?: AgentOpenCodePermissionRule[];
   openCodePermissionUpdating?: boolean;
