@@ -293,6 +293,9 @@ const ICONS: Record<string, IconDef> = {
   flag: {
     paths: '<path d="M4 15s1-1 4-1 5 2 8 2 4-1 4-1V3s-1 1-4 1-5-2-8-2-4 1-4 1z" /><line x1="4" y1="22" x2="4" y2="15" />',
   },
+  "dollar-sign": {
+    paths: '<line x1="12" y1="2" x2="12" y2="22" /><path d="M17 5H9.5a3.5 3.5 0 0 0 0 7h5a3.5 3.5 0 0 1 0 7H6" />',
+  },
 };
 
 export interface IconProps {

@@ -91,6 +91,9 @@ export function AgentContextIndicator({ session }: { session: AgentSession }) {
           {summary.cacheWriteTokens != null && (
             <ContextMetric iconName="upload" label={t("agentConsole.cacheWriteTokens", "Cache write")} value={formatCompactTokenCount(summary.cacheWriteTokens)} />
           )}
+          {session.contextUsage?.cost?.amount != null && session.contextUsage.cost.amount > 0 && (
+            <ContextMetric iconName="dollar-sign" label={t("agentConsole.sessionCost", "Session cost")} value={`$${session.contextUsage.cost.amount.toFixed(2)}`} />
+          )}
         </div>
         <div className="agent-context-combined-bar" aria-label={t("agentConsole.contextUsage", "Context usage")}>
           {combinedBar}

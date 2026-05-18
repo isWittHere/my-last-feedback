@@ -2,7 +2,6 @@ import type { CSSProperties } from "react";
 import { useEffect, useMemo, useState } from "react";
 import { useTranslation } from "react-i18next";
 import { useAgentConsoleSettings } from "../../agentConsoleSettings";
-import type { AgentSessionIdentity } from "../../agent/sessionIdentity";
 import type { AgentContentBlock, AgentMessage, AgentProviderMessagePart, AgentSession, AgentSubmittedAttachmentTag } from "../../agent/types";
 import { splitAgentMessageBlocks } from "../../agent/steps";
 import { useAgentStore } from "../../store/agentStore";
@@ -12,6 +11,8 @@ import { IdenticonAvatar } from "../IdenticonAvatar";
 import { AgentProcessGroup } from "./AgentProcessGroup";
 import { OpenCodeInitialAvatar } from "./OpenCodeInitialAvatar";
 import { useAgentSessionVisualIdentity } from "./useAgentSessionVisualIdentity";
+import type { AgentSessionIdentity } from "../../agent/sessionIdentity";
+import { formatCompactTokenCount } from "../../agent/tokenStats";
 
 function blockText(block: AgentContentBlock): string {
   if (block.type === "text") return block.content;
@@ -170,12 +171,21 @@ function actorInfo(message: AgentMessage, identity: AgentSessionIdentity): { ali
   return { alias: identity.code || identity.name, color: identity.color, says: `${identity.name} 说:`, avatarKind: identity.code ? "identicon" : "opencode" };
 }
 
+function formatCost(amount: number): string {
+  if (amount <= 0) return "";
+  if (amount < 0.01) return `<$${amount.toFixed(4)}`;
+  return `$${amount.toFixed(2)}`;
+}
+
 function AgentMessageActions({ session, message, copyText, disabled, canShowFullInfo, fullInfoOpen, onToggleFullInfo }: { session: AgentSession; message: AgentMessage; copyText: string; disabled?: boolean; canShowFullInfo?: boolean; fullInfoOpen?: boolean; onToggleFullInfo?: () => void }) {
   const { t } = useTranslation();
   const [copied, setCopied] = useState(false);
   const forkAgentSessionFromMessage = useAgentStore((state) => state.forkAgentSessionFromMessage);
   const canActOnUserMessage = message.role === "user" && Boolean(session.providerSessionId);
   const canCopy = Boolean(copyText.trim()) && !disabled;
+
+  const usage = message.providerTokenUsage;
+  const hasTokenStats = message.role === "assistant" && usage && usage.totalTokens > 0;
 
   const copy = () => {
     if (!canCopy) return;
@@ -187,24 +197,42 @@ function AgentMessageActions({ session, message, copyText, disabled, canShowFull
     });
   };
 
-  if (!canCopy && !canActOnUserMessage && !canShowFullInfo) return null;
+  if (!canCopy && !canActOnUserMessage && !canShowFullInfo && !hasTokenStats) return null;
 
   return (
     <div className="agent-message-actions" aria-label={t("agentConsole.messageActions", "Message actions")}>
-      {canActOnUserMessage && (
-        <button type="button" className="agent-message-action" onClick={() => void forkAgentSessionFromMessage(session.id, message.id)} title={t("agentConsole.forkFromMessage", "Fork from message")} disabled={disabled}>
-          <Icon name="git-branch" size={12} />
-        </button>
-      )}
-      {canCopy && (
-        <button type="button" className="agent-message-action" onClick={copy} title={copied ? t("agentConsole.messageCopied", "Copied") : message.role === "assistant" ? t("agentConsole.copyResponse", "Copy response") : t("agentConsole.copyMessage", "Copy message")}>
-          <Icon name={copied ? "check" : "copy"} size={12} />
-        </button>
-      )}
-      {canShowFullInfo && (
-        <button type="button" className={`agent-message-action${fullInfoOpen ? " active" : ""}`} onClick={onToggleFullInfo} title={fullInfoOpen ? t("agentConsole.hideFullUserMessage", "Hide original message") : t("agentConsole.showFullUserMessage", "Show original message")} aria-pressed={fullInfoOpen}>
-          <Icon name="file-text" size={12} />
-        </button>
+      <span className="agent-message-actions-left">
+        {canActOnUserMessage && (
+          <button type="button" className="agent-message-action" onClick={() => void forkAgentSessionFromMessage(session.id, message.id)} title={t("agentConsole.forkFromMessage", "Fork from message")} disabled={disabled}>
+            <Icon name="git-branch" size={12} />
+          </button>
+        )}
+        {canCopy && (
+          <button type="button" className="agent-message-action" onClick={copy} title={copied ? t("agentConsole.messageCopied", "Copied") : message.role === "assistant" ? t("agentConsole.copyResponse", "Copy response") : t("agentConsole.copyMessage", "Copy message")}>
+            <Icon name={copied ? "check" : "copy"} size={12} />
+          </button>
+        )}
+        {canShowFullInfo && (
+          <button type="button" className={`agent-message-action${fullInfoOpen ? " active" : ""}`} onClick={onToggleFullInfo} title={fullInfoOpen ? t("agentConsole.hideFullUserMessage", "Hide original message") : t("agentConsole.showFullUserMessage", "Show original message")} aria-pressed={fullInfoOpen}>
+            <Icon name="file-text" size={12} />
+          </button>
+        )}
+      </span>
+      {hasTokenStats && (
+        <span className="agent-message-stats">
+          <span className="agent-message-stat" title={t("agentConsole.messageInputTokens", "Input tokens")}>
+            <Icon name="arrow-up" size={10} />{formatCompactTokenCount(usage!.inputTokens)}
+          </span>
+          <span className="agent-message-stat" title={t("agentConsole.messageOutputTokens", "Output tokens")}>
+            <Icon name="arrow-down" size={10} />{formatCompactTokenCount(usage!.outputTokens)}
+          </span>
+          {usage!.cost != null && usage!.cost > 0 && (
+            <span className="agent-message-stat agent-message-stat-cost" title={t("agentConsole.messageCost", "Cost")}>{formatCost(usage!.cost)}</span>
+          )}
+          {message.modelId && (
+            <span className="agent-message-stat agent-message-stat-model" title={t("agentConsole.messageModel", "Model")}>{message.modelId}</span>
+          )}
+        </span>
       )}
     </div>
   );
