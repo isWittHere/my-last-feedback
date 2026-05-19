@@ -9,10 +9,7 @@ import {
   GIT_OPERATION_SETTINGS_EVENT,
 } from "../gitOperationSettings";
 import { resolveWorkspaceIdentity } from "../identity/workspaceIdentity";
-import {
-  AgentDiffPatchList,
-  type AgentUiDiffFile,
-} from "./agent/AgentDiffViewer";
+import { type AgentUiDiffFile } from "./agent/AgentDiffViewer";
 
 interface GitLogEntry {
   hash: string;
@@ -52,6 +49,57 @@ function formatCommitDate(dateStr: string): string {
 
 function shortHash(hash: string): string {
   return hash.slice(0, 7);
+}
+
+type GitDiffSegment = "add" | "delete" | "empty";
+
+function buildGitDiffSegments(
+  additions: number,
+  deletions: number,
+  slots: number,
+): GitDiffSegment[] {
+  const total = additions + deletions;
+  if (total <= 0) return Array.from({ length: slots }, () => "empty");
+
+  let addSlots: number;
+  let deleteSlots: number;
+
+  if (additions > 0 && deletions > 0) {
+    addSlots = 1;
+    deleteSlots = 1;
+    const remaining = slots - 2;
+    if (remaining > 0) {
+      const extraAdd = Math.round((additions / total) * remaining);
+      addSlots += extraAdd;
+      deleteSlots += remaining - extraAdd;
+    }
+  } else if (additions > 0) {
+    addSlots = slots;
+    deleteSlots = 0;
+  } else if (deletions > 0) {
+    addSlots = 0;
+    deleteSlots = slots;
+  } else {
+    return Array.from({ length: slots }, () => "empty");
+  }
+
+  return [
+    ...Array.from({ length: addSlots }, () => "add" as const),
+    ...Array.from({ length: deleteSlots }, () => "delete" as const),
+  ];
+}
+
+const STATUS_LETTER: Record<string, string> = {
+  modified: "M",
+  added: "A",
+  deleted: "D",
+  create: "A",
+  edit: "M",
+  delete: "D",
+};
+
+function statusLetter(status: string | undefined): string {
+  return STATUS_LETTER[status ?? ""] ?? "?";
 }
 
 export function GitPanel() {
@@ -313,6 +361,22 @@ export function GitPanel() {
 
   const commits = useMemo(() => logResult?.commits || [], [logResult]);
 
+  const addWidthPx = useMemo(() => {
+    if (!diffFiles || diffFiles.length === 0) return undefined;
+    const maxChars = Math.max(
+      ...diffFiles.map((f) => String(f.additions).length + 1),
+    );
+    return maxChars * 7 + 2;
+  }, [diffFiles]);
+
+  const delWidthPx = useMemo(() => {
+    if (!diffFiles || diffFiles.length === 0) return undefined;
+    const maxChars = Math.max(
+      ...diffFiles.map((f) => String(f.deletions).length + 1),
+    );
+    return maxChars * 7 + 2;
+  }, [diffFiles]);
+
   return (
     <div className="git-panel flex flex-col h-full min-h-0">
       <div className="terminal-tab-strip" data-preview-overlay>
@@ -508,7 +572,49 @@ export function GitPanel() {
             {diffLoading ? (
               <div className="git-diff-popover-loading">Loading...</div>
             ) : diffFiles && diffFiles.length > 0 ? (
-              <AgentDiffPatchList files={diffFiles} />
+              <div className="git-diff-file-list">
+                {diffFiles.map((file) => (
+                  <div key={file.path} className="git-diff-file-item">
+                    <div className="git-diff-file-header">
+                      <span
+                        className={`git-diff-status-letter git-diff-status-${statusLetter(file.status)}`}
+                      >
+                        {statusLetter(file.status)}
+                      </span>
+                      <span className="git-diff-file-path">{file.path}</span>
+                      <span className="git-diff-file-meter">
+                        {buildGitDiffSegments(
+                          file.additions,
+                          file.deletions,
+                          Math.min(
+                            Math.max((file.additions + file.deletions) / 10, 1),
+                            12,
+                          ),
+                        ).map((segment, i) => (
+                          <span
+                            key={i}
+                            className={`git-diff-file-square git-diff-file-square-${segment}`}
+                          />
+                        ))}
+                      </span>
+                      <span className="git-diff-file-stats">
+                        <span
+                          className="git-diff-summary-add"
+                          style={{ width: addWidthPx, minWidth: addWidthPx }}
+                        >
+                          +{file.additions}
+                        </span>
+                        <span
+                          className="git-diff-summary-delete"
+                          style={{ width: delWidthPx, minWidth: delWidthPx }}
+                        >
+                          -{file.deletions}
+                        </span>
+                      </span>
+                    </div>
+                  </div>
+                ))}
+              </div>
             ) : diffFiles && diffFiles.length === 0 ? (
               <div className="git-diff-popover-empty">No changes</div>
             ) : null}
