@@ -15393,16 +15393,52 @@ button.mlra-inspector-gate-pill {
 .git-changes-badge {
     font-size: 11px;
     padding: 1px 6px;
-    border-radius: 999px;
-    background: var(--color-warning-bg, rgba(234, 179, 8, 0.15));
-    color: var(--color-warning, #eab308);
     line-height: 1.4;
     flex-shrink: 0;
     cursor: default;
 }
 
+.git-changes-badge:first-child {
+    border-radius: 999px 0 0 999px;
+    padding-left: 6px;
+}
+
+.git-changes-badge:last-child {
+    border-radius: 0 999px 999px 0;
+    padding-right: 6px;
+}
+
+.git-changes-badge:only-child {
+    border-radius: 999px;
+}
+
+.git-changes-badge:not(:first-child):not(:last-child) {
+    border-radius: 0;
+}
+
+.git-changes-badge + .git-changes-badge {
+    border-left: 1px solid color-mix(in srgb, var(--color-border) 40%, transparent);
+}
+
+.git-changes-modified {
+    background: color-mix(in srgb, var(--color-warning) 20%, transparent);
+    color: var(--color-warning, #eab308);
+}
+
+.git-changes-added {
+    background: color-mix(in srgb, var(--color-success) 20%, transparent);
+    color: var(--color-success);
+}
+
+.git-changes-deleted {
+    background: color-mix(in srgb, var(--color-danger) 20%, transparent);
+    color: var(--color-danger);
+}
+
 .git-diff-indicator-wrap {
     display: inline-flex;
+    overflow: hidden;
+    border-radius: 999px;
 }
 
 .git-diff-popover {

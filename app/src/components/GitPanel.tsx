@@ -29,6 +29,12 @@ interface GitLogResult {
   commits: GitLogEntry[];
 }
 
+interface GitChangesBreakdown {
+  modified: number;
+  added: number;
+  deleted: number;
+}
+
 function formatCommitDate(dateStr: string): string {
   try {
     const d = new Date(dateStr);
@@ -154,7 +160,8 @@ export function GitPanel() {
   } | null>(null);
   const tooltipTimerRef = useRef<number | null>(null);
   const [gitReminderTick, setGitReminderTick] = useState(0);
-  const [changesCount, setChangesCount] = useState<number | null>(null);
+  const [changesBreakdown, setChangesBreakdown] =
+    useState<GitChangesBreakdown | null>(null);
   const [diffFiles, setDiffFiles] = useState<AgentUiDiffFile[] | null>(null);
   const [diffLoading, setDiffLoading] = useState(false);
   const diffHideTimerRef = useRef<number | null>(null);
@@ -189,12 +196,15 @@ export function GitPanel() {
   const fetchChangesCount = useCallback(async () => {
     if (!workspacePath) return;
     try {
-      const count = await invoke<number>("git_changes_count", {
-        projectDirectory: workspacePath,
-      });
-      setChangesCount(count);
+      const breakdown = await invoke<GitChangesBreakdown>(
+        "git_changes_breakdown",
+        {
+          projectDirectory: workspacePath,
+        },
+      );
+      setChangesBreakdown(breakdown);
     } catch {
-      setChangesCount(null);
+      setChangesBreakdown(null);
     }
   }, [workspacePath]);
 
@@ -219,8 +229,7 @@ export function GitPanel() {
       diffHideTimerRef.current = null;
     }
     positionDiffPopover();
-    fetchDiff();
-  }, [fetchDiff, positionDiffPopover]);
+  }, [positionDiffPopover]);
 
   const hideDiffPopover = useCallback(() => {
     diffHideTimerRef.current = window.setTimeout(() => {
@@ -356,8 +365,9 @@ export function GitPanel() {
     if (workspacePath) {
       fetchGitLog();
       fetchChangesCount();
+      fetchDiff();
     }
-  }, [workspacePath, fetchGitLog, fetchChangesCount]);
+  }, [workspacePath, fetchGitLog, fetchChangesCount, fetchDiff]);
 
   const commits = useMemo(() => logResult?.commits || [], [logResult]);
 
@@ -376,6 +386,25 @@ export function GitPanel() {
     );
     return maxChars * 7 + 2;
   }, [diffFiles]);
+
+  const handleQuickBackup = useCallback(async () => {
+    if (!workspacePath) return;
+    const now = new Date();
+    const pad = (n: number) => String(n).padStart(2, "0");
+    const ts = `${now.getFullYear()}-${pad(now.getMonth() + 1)}-${pad(now.getDate())} ${pad(now.getHours())}:${pad(now.getMinutes())}:${pad(now.getSeconds())}`;
+    const message = `Backup ${ts}`;
+    try {
+      await invoke("git_quick_backup", {
+        projectDirectory: workspacePath,
+        message,
+      });
+    } catch {
+      // ignore — git will report "nothing to commit" when there are no changes
+    }
+    fetchGitLog();
+    fetchChangesCount();
+    fetchDiff();
+  }, [workspacePath, fetchGitLog, fetchChangesCount, fetchDiff]);
 
   return (
     <div className="git-panel flex flex-col h-full min-h-0">
@@ -407,14 +436,23 @@ export function GitPanel() {
               <span>{logResult.branch.current}</span>
             </div>
           )}
-          {changesCount !== null && changesCount > 0 && (
+          {changesBreakdown !== null &&
+            (changesBreakdown.modified + changesBreakdown.added + changesBreakdown.deleted) > 0 && (
             <div
               ref={badgeRef}
               className="git-diff-indicator-wrap"
               onMouseEnter={showDiffPopover}
               onMouseLeave={hideDiffPopover}
             >
-              <span className="git-changes-badge">{changesCount}</span>
+              {changesBreakdown.modified > 0 && (
+                <span className="git-changes-badge git-changes-modified">{changesBreakdown.modified}</span>
+              )}
+              {changesBreakdown.added > 0 && (
+                <span className="git-changes-badge git-changes-added">{changesBreakdown.added}</span>
+              )}
+              {changesBreakdown.deleted > 0 && (
+                <span className="git-changes-badge git-changes-deleted">{changesBreakdown.deleted}</span>
+              )}
             </div>
           )}
         </div>
@@ -422,9 +460,19 @@ export function GitPanel() {
           <button
             type="button"
             className="terminal-tool-button"
+            onClick={handleQuickBackup}
+            disabled={loading || !workspacePath}
+            title={t("git.backup", "Quick Backup")}
+          >
+            <Icon name="database" size={13} />
+          </button>
+          <button
+            type="button"
+            className="terminal-tool-button"
             onClick={() => {
               fetchGitLog();
               fetchChangesCount();
+              fetchDiff();
             }}
             disabled={loading || !workspacePath}
             title={t("git.refresh", "Refresh")}

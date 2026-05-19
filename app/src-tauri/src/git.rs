@@ -119,6 +119,60 @@ pub async fn git_changes_count(project_directory: String) -> Result<usize, Strin
 
 #[derive(Debug, Serialize)]
 #[serde(rename_all = "camelCase")]
+pub struct GitChangesBreakdown {
+    pub modified: usize,
+    pub added: usize,
+    pub deleted: usize,
+}
+
+#[tauri::command]
+pub async fn git_changes_breakdown(
+    project_directory: String,
+) -> Result<GitChangesBreakdown, String> {
+    let output = Command::new("git")
+        .args(["status", "--porcelain"])
+        .current_dir(&project_directory)
+        .output()
+        .map_err(|e| format!("Failed to run git status: {}", e))?;
+
+    if !output.status.success() {
+        return Err(String::from_utf8_lossy(&output.stderr).to_string());
+    }
+
+    let stdout = String::from_utf8_lossy(&output.stdout);
+    let mut modified = 0usize;
+    let mut added = 0usize;
+    let mut deleted = 0usize;
+
+    for line in stdout.lines() {
+        let line = line.trim();
+        if line.is_empty() {
+            continue;
+        }
+        if line.len() < 2 {
+            continue;
+        }
+        let xy = &line.as_bytes()[..2];
+        match xy {
+            [b'?', b'?'] => added += 1,
+            [b'A', _] => added += 1,
+            [b'D', _] | [b' ', b'D'] => deleted += 1,
+            [b' ', b'M'] | [b'M', _] | [b'R', _] | [b' ', b'R'] | [b'C', _] | [b' ', b'C'] => {
+                modified += 1
+            }
+            _ => {}
+        }
+    }
+
+    Ok(GitChangesBreakdown {
+        modified,
+        added,
+        deleted,
+    })
+}
+
+#[derive(Debug, Serialize)]
+#[serde(rename_all = "camelCase")]
 pub struct GitDiffFile {
     pub path: String,
     pub status: String,
@@ -245,4 +299,32 @@ fn parse_diff_files(output: &str) -> Vec<GitDiffFile> {
     }
 
     files
+}
+
+#[tauri::command]
+pub async fn git_quick_backup(
+    project_directory: String,
+    message: String,
+) -> Result<String, String> {
+    let add_output = Command::new("git")
+        .args(["add", "-A"])
+        .current_dir(&project_directory)
+        .output()
+        .map_err(|e| format!("Failed to run git add: {}", e))?;
+
+    if !add_output.status.success() {
+        return Err(String::from_utf8_lossy(&add_output.stderr).to_string());
+    }
+
+    let commit_output = Command::new("git")
+        .args(["commit", "-m", &message])
+        .current_dir(&project_directory)
+        .output()
+        .map_err(|e| format!("Failed to run git commit: {}", e))?;
+
+    if !commit_output.status.success() {
+        return Err(String::from_utf8_lossy(&commit_output.stderr).to_string());
+    }
+
+    Ok(message)
 }
