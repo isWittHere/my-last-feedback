@@ -994,5 +994,16 @@
     "consoleFilter": "控制台筛选",
     "clearConsole": "清空",
     "noConsole": "暂无控制台信息"
+  },
+  "git": {
+    "title": "Git",
+    "refresh": "刷新",
+    "loading": "加载中...",
+    "noCommits": "暂无提交记录",
+    "branch": "分支",
+    "hash": "哈希",
+    "author": "作者",
+    "date": "日期",
+    "message": "提交信息"
   }
 }

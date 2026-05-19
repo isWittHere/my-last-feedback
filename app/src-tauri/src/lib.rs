@@ -1,3 +1,4 @@
+mod git;
 mod ipc;
 mod agent_process;
 mod mlc;
@@ -832,6 +833,9 @@ pub fn run() {
             agent_process_kill,
             agent_process_list,
             send_to_mlra_daemon,
+            git::git_log,
+            git::git_changes_count,
+            git::git_diff,
         ])
         .setup(move |app| {
             let app_handle = app.handle().clone();

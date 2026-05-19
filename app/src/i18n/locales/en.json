@@ -994,5 +994,16 @@
     "consoleFilter": "Console filter",
     "clearConsole": "Clear",
     "noConsole": "No console entries"
+  },
+  "git": {
+    "title": "Git",
+    "refresh": "Refresh",
+    "loading": "Loading...",
+    "noCommits": "No commits found",
+    "branch": "Branch",
+    "hash": "Hash",
+    "author": "Author",
+    "date": "Date",
+    "message": "Message"
   }
 }
