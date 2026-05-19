@@ -14,6 +14,7 @@ import {
   type FormEvent,
 } from "react";
 import { parseComposerTextTokens } from "../../composer/composerTokens";
+import { gitCommitLinkInfo } from "../../composer/resourceLinks";
 import type { PromptCommandOption } from "../../composer/promptCommands";
 import { useFeedbackStore, type ResourceIconTheme } from "../../store/feedbackStore";
 import { resolveCatppuccinResourceIcon, type CatppuccinIconFlavor } from "../CatppuccinResourceIcon";
@@ -352,7 +353,7 @@ function createTokenChip(className: string, tokenType: string, raw: string, titl
   return chip;
 }
 
-function createChipIcon(kind: "file" | "folder" | "terminal"): SVGSVGElement {
+function createChipIcon(kind: "file" | "folder" | "commit" | "terminal"): SVGSVGElement {
   const svg = document.createElementNS("http://www.w3.org/2000/svg", "svg");
   svg.setAttribute("viewBox", "0 0 24 24");
   svg.setAttribute("width", "11");
@@ -367,13 +368,15 @@ function createChipIcon(kind: "file" | "folder" | "terminal"): SVGSVGElement {
     svg.innerHTML = '<path d="M4 20h16a2 2 0 0 0 2-2V8a2 2 0 0 0-2-2h-7.93a2 2 0 0 1-1.66-.9l-.82-1.2A2 2 0 0 0 7.93 3H4a2 2 0 0 0-2 2v13c0 1.1.9 2 2 2Z" />';
   } else if (kind === "terminal") {
     svg.innerHTML = '<polyline points="4 17 10 11 4 5" /><line x1="12" y1="19" x2="20" y2="19" />';
+  } else if (kind === "commit") {
+    svg.innerHTML = '<circle cx="12" cy="12" r="3" /><line x1="12" y1="15" x2="12" y2="21" /><line x1="8" y1="8" x2="8" y2="6" /><line x1="16" y1="8" x2="16" y2="6" />';
   } else {
     svg.innerHTML = '<path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z" /><polyline points="14 2 14 8 20 8" /><line x1="16" y1="13" x2="8" y2="13" /><line x1="16" y1="17" x2="8" y2="17" />';
   }
   return svg;
 }
 
-function createResourceChipIcon(token: Extract<ReturnType<typeof parseComposerTextTokens>[number], { type: "resourceLink" }>, resourceIconTheme: ResourceIconTheme, catppuccinFlavor: CatppuccinIconFlavor): Element {
+function createResourceChipIcon(token: { label: string; href: string; kind: "file" | "folder" }, resourceIconTheme: ResourceIconTheme, catppuccinFlavor: CatppuccinIconFlavor): Element {
   if (resourceIconTheme === "catppuccin") {
     const image = document.createElement("img");
     image.src = resolveCatppuccinResourceIcon({ name: token.label, relativePath: token.href, kind: token.kind }, false, catppuccinFlavor);
@@ -390,10 +393,19 @@ function renderComposerDom(root: HTMLElement, value: string, tokens: ReturnType<
   const fragment = document.createDocumentFragment();
   for (const token of tokens) {
     if (token.type === "resourceLink") {
-      const chip = createTokenChip("composer-token-chip composer-token-chip-resource", "resourceLink", token.raw, token.href);
-      chip.appendChild(createResourceChipIcon(token, resourceIconTheme, catppuccinFlavor));
-      appendTokenLabel(chip, displayResourceLabel(token.label));
-      fragment.appendChild(chip);
+      if (token.kind === "commit") {
+        const commitInfo = gitCommitLinkInfo(token.label, token.href);
+        const tooltip = commitInfo ? `${commitInfo.fullHash}\n${commitInfo.message}` : token.href;
+        const chip = createTokenChip("composer-token-chip composer-token-chip-git", "resourceLink", token.raw, tooltip);
+        chip.appendChild(createChipIcon("commit"));
+        appendTokenLabel(chip, token.label);
+        fragment.appendChild(chip);
+      } else {
+        const chip = createTokenChip("composer-token-chip composer-token-chip-resource", "resourceLink", token.raw, token.href);
+        chip.appendChild(createResourceChipIcon({ label: token.label, href: token.href, kind: token.kind as "file" | "folder" }, resourceIconTheme, catppuccinFlavor));
+        appendTokenLabel(chip, displayResourceLabel(token.label));
+        fragment.appendChild(chip);
+      }
     } else if (token.type === "slashCommand" && token.matched) {
       const chip = createTokenChip("composer-token-chip composer-token-chip-command", "slashCommand", token.raw, `/${token.command}`);
       chip.appendChild(createChipIcon("terminal"));

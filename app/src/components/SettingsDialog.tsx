@@ -42,8 +42,8 @@ function renderStickyUserMessageText(text: string, mergeLines: boolean): ReactNo
 
 const SETTINGS_DOCK_COLUMN_IDS: DockColumnId[] = ["leftSidebar", "leftPage", "rightPage", "rightSidebar"];
 const SETTINGS_DOCK_TAB_IDS: DockTabId[] = isAgentUiDisabled
-  ? ["mlc", "mlcPreview", "resources", "previewBrowser", "previewInfo", "terminal"]
-  : ["mlc", "mlcPreview", "resources", "previewBrowser", "previewInfo", "agentConsole", "agentSessions", "terminal"];
+  ? ["mlc", "mlcPreview", "resources", "previewBrowser", "previewInfo", "terminal", "git"]
+  : ["mlc", "mlcPreview", "resources", "previewBrowser", "previewInfo", "agentConsole", "agentSessions", "terminal", "git"];
 const AGENT_TOPBAR_INDICATOR_MODE_OPTIONS: AgentTopbarIndicatorMode[] = ["hidden", "text", "textAndGraphic"];
 const AGENT_PROCESS_STEP_MODE_OPTIONS: AgentProcessStepDefaultMode[] = ["tabs", "timeline"];
 const AGENT_TIMELINE_STREAMING_STEP_MODE_OPTIONS: AgentTimelineStreamingStepMode[] = ["hidden", "collapseHistory", "expandAll"];
@@ -1034,6 +1034,7 @@ export function SettingsDialog({ open, onClose }: { open: boolean; onClose: () =
     if (tabId === "agentConsole") return t("agentConsole.title", "Agent Console");
     if (tabId === "agentSessions") return t("agentSessions.title", "Sessions");
     if (tabId === "terminal") return t("terminal.title", "Terminal");
+    if (tabId === "git") return t("git.title", "Git");
     return t("resources.title", "Project resources");
   };
 
@@ -1045,6 +1046,7 @@ export function SettingsDialog({ open, onClose }: { open: boolean; onClose: () =
     if (tabId === "agentConsole") return <Icon name="robot" size={13} />;
     if (tabId === "agentSessions") return <Icon name="message" size={13} />;
     if (tabId === "terminal") return <Icon name="terminal" size={13} />;
+    if (tabId === "git") return <Icon name="git-commit" size={13} />;
     return <Icon name="folder" size={13} />;
   };
 
