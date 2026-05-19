@@ -15419,7 +15419,7 @@ button.mlra-inspector-gate-pill {
 .git-diff-popover-scroll {
     max-height: min(70vh, 640px);
     overflow: auto;
-    padding: 8px;
+    padding: 2px 4px;
     border-radius: inherit;
 }
 
@@ -15430,6 +15430,116 @@ button.mlra-inspector-gate-pill {
     font-size: 11px;
     color: var(--color-text-muted);
 }
+
+.git-diff-file-list {
+    display: grid;
+    gap: 0;
+    min-width: 0;
+}
+
+.git-diff-file-item + .git-diff-file-item {
+    border-top: 1px solid var(--color-border-subtle);
+}
+
+.git-diff-file-header {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    min-width: 0;
+    padding: 2px 4px;
+    color: var(--color-text-secondary);
+    font-size: 11px;
+    font-weight: 700;
+}
+
+.git-diff-file-path {
+    flex: 1 1 auto;
+    min-width: 0;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+}
+
+.git-diff-file-meter {
+    flex: 0 0 auto;
+    display: flex;
+    align-items: center;
+    gap: 1px;
+    min-width: 0;
+}
+
+.git-diff-file-square {
+    width: 4px;
+    height: 10px;
+    flex: 0 0 4px;
+    border-radius: 1px;
+}
+
+.git-diff-status-letter {
+    flex: 0 0 12px;
+    width: 12px;
+    font-size: 12px;
+    font-weight: 800;
+    text-align: center;
+    font-family: var(--font-mono, "Cascadia Mono", Consolas, monospace);
+    line-height: 16px;
+}
+
+.git-diff-status-M {
+    color: var(--color-warning);
+}
+
+.git-diff-status-A {
+    color: var(--color-success);
+}
+
+.git-diff-status-D {
+    color: var(--color-danger);
+}
+
+.git-diff-file-square {
+    width: 4px;
+    height: 10px;
+    flex: 1 1 4px;
+    min-width: 2px;
+    border-radius: 1px;
+}
+
+.git-diff-file-square-add {
+    background: var(--color-success);
+}
+
+.git-diff-file-square-delete {
+    background: var(--color-danger);
+}
+
+.git-diff-file-square-empty {
+    background: var(--color-border-subtle);
+}
+
+.git-diff-file-stats {
+    flex: 0 0 auto;
+    display: inline-flex;
+    align-items: center;
+    gap: 0px;
+    font-variant-numeric: tabular-nums;
+}
+
+.git-diff-summary-add,
+.git-diff-summary-delete {
+    flex-shrink: 0;
+    text-align: right;
+    overflow: visible;
+}
+
+.git-diff-summary-add {
+    color: var(--color-success);
+}
+
+.git-diff-summary-delete {
+    color: var(--color-danger);
+}
+
 .git-panel {
     user-select: text;
 }

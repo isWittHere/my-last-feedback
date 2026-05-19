@@ -1,4 +1,5 @@
 use serde::Serialize;
+use std::fs;
 use std::process::Command;
 
 #[derive(Debug, Serialize)]
@@ -139,7 +140,54 @@ pub async fn git_diff(project_directory: String) -> Result<Vec<GitDiffFile>, Str
     }
 
     let stdout = String::from_utf8_lossy(&output.stdout);
-    Ok(parse_diff_files(&stdout))
+    let mut files = parse_diff_files(&stdout);
+
+    let untracked = Command::new("git")
+        .args(["ls-files", "--others", "--exclude-standard"])
+        .current_dir(&project_directory)
+        .output()
+        .map_err(|e| format!("Failed to run git ls-files: {}", e))?;
+
+    if untracked.status.success() {
+        let untracked_stdout = String::from_utf8_lossy(&untracked.stdout);
+        for line in untracked_stdout.lines() {
+            let path = line.trim();
+            if path.is_empty() {
+                continue;
+            }
+            if let Some(diff_file) = build_untracked_diff(path, &project_directory) {
+                files.push(diff_file);
+            }
+        }
+    }
+
+    Ok(files)
+}
+
+fn build_untracked_diff(path: &str, project_directory: &str) -> Option<GitDiffFile> {
+    let full_path = format!("{}/{}", project_directory, path);
+    let content = fs::read_to_string(&full_path).ok()?;
+    let line_count = content.lines().count();
+    let mut patch = String::new();
+    patch.push_str(&format!("diff --git a/{} b/{}\n", path, path));
+    patch.push_str("new file mode 100644\n");
+    patch.push_str("index 0000000..0000000\n");
+    patch.push_str("--- /dev/null\n");
+    patch.push_str(&format!("+++ b/{}\n", path));
+    patch.push_str(&format!("@@ -0,0 +1,{} @@\n", line_count));
+    for line in content.lines() {
+        patch.push('+');
+        patch.push_str(line);
+        patch.push('\n');
+    }
+    let additions = content.lines().count();
+    Some(GitDiffFile {
+        path: path.to_string(),
+        status: String::from("added"),
+        patch,
+        additions,
+        deletions: 0,
+    })
 }
 
 fn parse_diff_files(output: &str) -> Vec<GitDiffFile> {
