@@ -587,7 +587,11 @@ export function SettingsDialog({ open, onClose }: { open: boolean; onClose: () =
   }, []);
 
   const updateGitOperationSettings = useCallback((updater: (current: GitOperationSettings) => GitOperationSettings) => {
-    setGitOperationSettings((current) => saveGitOperationSettings(updater(current)));
+    setGitOperationSettings((current) => {
+      const next = updater(current);
+      queueMicrotask(() => saveGitOperationSettings(next));
+      return next;
+    });
   }, []);
 
   const handleGitReminderEnabledToggle = useCallback(() => {
