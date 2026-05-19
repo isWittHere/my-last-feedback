@@ -2,6 +2,19 @@ use serde::Serialize;
 use std::fs;
 use std::process::Command;
 
+#[cfg(windows)]
+fn git_command() -> Command {
+    use std::os::windows::process::CommandExt;
+    let mut cmd = Command::new("git");
+    cmd.creation_flags(0x08000000); // CREATE_NO_WINDOW
+    cmd
+}
+
+#[cfg(not(windows))]
+fn git_command() -> Command {
+    Command::new("git")
+}
+
 #[derive(Debug, Serialize)]
 #[serde(rename_all = "camelCase")]
 pub struct GitLogEntry {
@@ -28,7 +41,7 @@ pub struct GitLogResult {
 
 #[tauri::command]
 pub async fn git_log(project_directory: String) -> Result<GitLogResult, String> {
-    let branch_output = Command::new("git")
+    let branch_output = git_command()
         .args(["branch", "--list"])
         .current_dir(&project_directory)
         .output()
@@ -52,7 +65,7 @@ pub async fn git_log(project_directory: String) -> Result<GitLogResult, String> 
         all_branches.push(trimmed.trim_start_matches('*').trim().to_string());
     }
 
-    let log_output = Command::new("git")
+    let log_output = git_command()
         .args([
             "log",
             "--oneline",
@@ -102,7 +115,7 @@ pub async fn git_log(project_directory: String) -> Result<GitLogResult, String> 
 
 #[tauri::command]
 pub async fn git_changes_count(project_directory: String) -> Result<usize, String> {
-    let output = Command::new("git")
+    let output = git_command()
         .args(["status", "--porcelain"])
         .current_dir(&project_directory)
         .output()
@@ -129,7 +142,7 @@ pub struct GitChangesBreakdown {
 pub async fn git_changes_breakdown(
     project_directory: String,
 ) -> Result<GitChangesBreakdown, String> {
-    let output = Command::new("git")
+    let output = git_command()
         .args(["status", "--porcelain"])
         .current_dir(&project_directory)
         .output()
@@ -183,7 +196,7 @@ pub struct GitDiffFile {
 
 #[tauri::command]
 pub async fn git_diff(project_directory: String) -> Result<Vec<GitDiffFile>, String> {
-    let output = Command::new("git")
+    let output = git_command()
         .args(["diff", "--no-color"])
         .current_dir(&project_directory)
         .output()
@@ -196,7 +209,7 @@ pub async fn git_diff(project_directory: String) -> Result<Vec<GitDiffFile>, Str
     let stdout = String::from_utf8_lossy(&output.stdout);
     let mut files = parse_diff_files(&stdout);
 
-    let untracked = Command::new("git")
+    let untracked = git_command()
         .args(["ls-files", "--others", "--exclude-standard"])
         .current_dir(&project_directory)
         .output()
@@ -306,7 +319,7 @@ pub async fn git_quick_backup(
     project_directory: String,
     message: String,
 ) -> Result<String, String> {
-    let add_output = Command::new("git")
+    let add_output = git_command()
         .args(["add", "-A"])
         .current_dir(&project_directory)
         .output()
@@ -316,7 +329,7 @@ pub async fn git_quick_backup(
         return Err(String::from_utf8_lossy(&add_output.stderr).to_string());
     }
 
-    let commit_output = Command::new("git")
+    let commit_output = git_command()
         .args(["commit", "-m", &message])
         .current_dir(&project_directory)
         .output()
