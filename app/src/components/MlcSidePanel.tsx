@@ -340,38 +340,54 @@ export function MlcSidePanel() {
       const pathRows = Math.min(3, Math.max(1, Math.ceil(cleanDisplayPath(document.filePath).length / 58)));
       return Math.min(260, 74 + titleRows * 18 + descRows * 17 + pathRows * 16);
     };
-    const getPosition = (rect: DOMRect) => ({
-      left: Math.min(Math.max(8, rect.left), Math.max(8, window.innerWidth - 368)),
-      top: (() => {
-        if (!tooltipContent) return rect.bottom + 6;
-        const gap = 6;
-        const viewportPadding = 8;
-        const estimatedHeight = estimateHeight(tooltipContent);
-        const fitsBelow = rect.bottom + gap + estimatedHeight <= window.innerHeight - viewportPadding;
-        const fitsAbove = rect.top - gap - estimatedHeight >= viewportPadding;
-        const placeAbove = placement === "above" || (placement === "auto" && !fitsBelow && fitsAbove);
-        const preferredTop = placeAbove ? rect.top - gap - estimatedHeight : rect.bottom + gap;
-        return Math.min(
-          Math.max(viewportPadding, preferredTop),
-          Math.max(viewportPadding, window.innerHeight - viewportPadding - estimatedHeight),
-        );
-      })(),
-    });
+    const getPosition = (rect: DOMRect, element: HTMLElement) => {
+      const measureTooltipWidth = () => {
+        const el = document.querySelector(".mlc-custom-tooltip");
+        return el?.getBoundingClientRect().width || 360;
+      };
+      const gap = 8;
+      const viewportPadding = 8;
+      const estimatedTooltipWidth = measureTooltipWidth();
+      const panelSide = element.closest("[data-position]")?.getAttribute("data-position") || "right";
+      const isPanelLeft = panelSide === "left";
+      let left: number;
+      if (isPanelLeft) {
+        left = rect.right + gap;
+        if (left + estimatedTooltipWidth > window.innerWidth - viewportPadding)
+          left = rect.left - estimatedTooltipWidth - gap;
+      } else {
+        left = rect.left - estimatedTooltipWidth - gap;
+        if (left < viewportPadding)
+          left = rect.right + gap;
+      }
+      left = Math.max(viewportPadding, Math.min(left, window.innerWidth - estimatedTooltipWidth - viewportPadding));
+      const estimatedHeight = tooltipContent ? estimateHeight(tooltipContent) : 0;
+      const fitsBelow = rect.bottom + gap + estimatedHeight <= window.innerHeight - viewportPadding;
+      const fitsAbove = rect.top - gap - estimatedHeight >= viewportPadding;
+      const placeAbove = placement === "above" || (placement === "auto" && !fitsBelow && fitsAbove);
+      const preferredTop = placeAbove ? rect.top - gap - estimatedHeight : rect.bottom + gap;
+      return {
+        left,
+        top: Math.min(Math.max(viewportPadding, preferredTop), Math.max(viewportPadding, window.innerHeight - viewportPadding - estimatedHeight)),
+      };
+    };
     return {
     onMouseEnter: (event: React.MouseEvent<HTMLElement>) => {
       clearTooltip();
       if (!tooltipContent) return;
-      const rect = event.currentTarget.getBoundingClientRect();
+      const element = event.currentTarget;
+      const rect = element.getBoundingClientRect();
       tooltipTimerRef.current = window.setTimeout(() => {
-        const { left, top } = getPosition(rect);
+        const { left, top } = getPosition(rect, element);
         setTooltip({ content: tooltipContent, left, top });
       }, 400);
     },
     onMouseLeave: clearTooltip,
     onFocus: (event: React.FocusEvent<HTMLElement>) => {
       if (!tooltipContent) return;
-      const rect = event.currentTarget.getBoundingClientRect();
-      const { left, top } = getPosition(rect);
+      const element = event.currentTarget;
+      const rect = element.getBoundingClientRect();
+      const { left, top } = getPosition(rect, element);
       setTooltip({ content: tooltipContent, left, top });
     },
     onBlur: clearTooltip,

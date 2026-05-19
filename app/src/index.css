@@ -5413,7 +5413,11 @@ body,
     padding: 8px 10px;
     border-radius: 8px;
     border: 1px solid var(--color-border-subtle);
-    background: color-mix(in srgb, var(--color-bg-input-raised) 48%, transparent);
+    background: color-mix(
+        in srgb,
+        var(--color-bg-input-raised) 48%,
+        transparent
+    );
     color: var(--color-text-secondary);
     font-size: 12px;
 }
@@ -5423,11 +5427,19 @@ body,
 }
 
 .agent-history-notice[data-variant="cold"] {
-    border-color: color-mix(in srgb, var(--color-border-subtle) 60%, var(--color-warning) 40%);
+    border-color: color-mix(
+        in srgb,
+        var(--color-border-subtle) 60%,
+        var(--color-warning) 40%
+    );
 }
 
 .agent-history-notice[data-variant="trimmed"] {
-    border-color: color-mix(in srgb, var(--color-border-subtle) 60%, var(--color-accent) 40%);
+    border-color: color-mix(
+        in srgb,
+        var(--color-border-subtle) 60%,
+        var(--color-accent) 40%
+    );
 }
 
 .agent-history-restore {
@@ -5443,8 +5455,16 @@ body,
 
 .agent-history-restore:hover,
 .agent-history-restore:focus-visible {
-    border-color: color-mix(in srgb, var(--color-border-subtle) 60%, var(--color-accent) 40%);
-    background: color-mix(in srgb, var(--color-bg-input-raised) 60%, transparent);
+    border-color: color-mix(
+        in srgb,
+        var(--color-border-subtle) 60%,
+        var(--color-accent) 40%
+    );
+    background: color-mix(
+        in srgb,
+        var(--color-bg-input-raised) 60%,
+        transparent
+    );
 }
 
 .agent-history-load-more {
@@ -5452,7 +5472,11 @@ body,
     padding: 6px 14px;
     border-radius: 999px;
     border: 1px solid var(--color-border-subtle);
-    background: color-mix(in srgb, var(--color-bg-input-raised) 42%, transparent);
+    background: color-mix(
+        in srgb,
+        var(--color-bg-input-raised) 42%,
+        transparent
+    );
     color: var(--color-text-primary);
     font-size: 12px;
     cursor: pointer;
@@ -5460,8 +5484,16 @@ body,
 
 .agent-history-load-more:hover,
 .agent-history-load-more:focus-visible {
-    border-color: color-mix(in srgb, var(--color-border-subtle) 60%, var(--color-accent) 40%);
-    background: color-mix(in srgb, var(--color-bg-input-raised) 60%, transparent);
+    border-color: color-mix(
+        in srgb,
+        var(--color-border-subtle) 60%,
+        var(--color-accent) 40%
+    );
+    background: color-mix(
+        in srgb,
+        var(--color-bg-input-raised) 60%,
+        transparent
+    );
 }
 
 .agent-new-session-permission-shell {
@@ -5821,41 +5853,41 @@ body,
 }
 
 .agent-message-action:disabled {
-  opacity: 0.45;
-  cursor: not-allowed;
+    opacity: 0.45;
+    cursor: not-allowed;
 }
 
 .agent-message-actions-left {
-  display: inline-flex;
-  align-items: center;
-  gap: 4px;
+    display: inline-flex;
+    align-items: center;
+    gap: 4px;
 }
 
 .agent-message-stats {
-  margin-left: auto;
-  display: inline-flex;
-  align-items: center;
-  gap: 6px;
+    margin-left: auto;
+    display: inline-flex;
+    align-items: center;
+    gap: 6px;
 }
 
 .agent-message-stat {
-  display: inline-flex;
-  align-items: center;
-  gap: 2px;
-  font-size: 10px;
-  line-height: 14px;
-  color: var(--color-text-muted);
-  white-space: nowrap;
-  user-select: none;
+    display: inline-flex;
+    align-items: center;
+    gap: 2px;
+    font-size: 10px;
+    line-height: 14px;
+    color: var(--color-text-muted);
+    white-space: nowrap;
+    user-select: none;
 }
 
 .agent-message-stat-cost {
-  font-variant-numeric: tabular-nums;
+    font-variant-numeric: tabular-nums;
 }
 
 .agent-message-stat-model {
-  overflow: hidden;
-  text-overflow: ellipsis;
+    overflow: hidden;
+    text-overflow: ellipsis;
 }
 
 .agent-message-user .agent-message-speaker {
@@ -15328,4 +15360,222 @@ button.mlra-inspector-gate-pill {
     color: var(--color-text-muted);
     font-size: 11px;
     font-weight: 400;
+}
+
+/* ── Git Panel ── */
+.git-branch-capsule {
+    display: inline-flex;
+    align-items: center;
+    gap: 4px;
+    font-size: 11px;
+    padding: 2px 8px 2px 4px;
+    border-radius: 999px;
+    background: var(--color-bg-elevated);
+    border: 1px solid var(--color-border);
+    color: var(--color-text-secondary);
+    max-width: 160px;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+}
+
+.git-countdown-pie {
+    display: inline-block;
+    width: 12px;
+    height: 12px;
+    border-radius: 50%;
+    flex-shrink: 0;
+    background: conic-gradient(
+        var(--git-pie-color) 0deg var(--git-pie-angle),
+        var(--color-border) var(--git-pie-angle) 360deg
+    );
+}
+.git-changes-badge {
+    font-size: 11px;
+    padding: 1px 6px;
+    border-radius: 999px;
+    background: var(--color-warning-bg, rgba(234, 179, 8, 0.15));
+    color: var(--color-warning, #eab308);
+    line-height: 1.4;
+    flex-shrink: 0;
+    cursor: default;
+}
+
+.git-diff-indicator-wrap {
+    display: inline-flex;
+}
+
+.git-diff-popover {
+    position: fixed;
+    width: min(360px, calc(100vw - 24px));
+    border: 1px solid var(--color-border);
+    border-radius: 6px;
+    background: var(--color-bg-elevated);
+    box-shadow: 0 12px 30px rgba(0, 0, 0, 0.28);
+    color: var(--color-text-primary);
+    z-index: 9999;
+}
+
+.git-diff-popover-scroll {
+    max-height: min(70vh, 640px);
+    overflow: auto;
+    padding: 8px;
+    border-radius: inherit;
+}
+
+.git-diff-popover-loading,
+.git-diff-popover-empty {
+    padding: 12px 8px;
+    text-align: center;
+    font-size: 11px;
+    color: var(--color-text-muted);
+}
+.git-panel {
+    user-select: text;
+}
+
+.git-commit-list {
+    padding: 0px 0;
+}
+
+.git-commit-item + .git-commit-item {
+    border-top: 1px solid var(--color-border-subtle);
+}
+
+.git-commit-header {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    width: 100%;
+    padding: 6px 12px;
+    border: none;
+    background: transparent;
+    color: var(--color-text-primary);
+    cursor: pointer;
+    text-align: left;
+    font-size: 12px;
+    transition: background 0.1s;
+}
+
+.git-commit-header:hover {
+    background: var(--color-bg-elevated);
+}
+
+.git-commit-dot {
+    width: 8px;
+    height: 8px;
+    border-radius: 50%;
+    background: var(--color-primary);
+    flex-shrink: 0;
+    opacity: 0.6;
+}
+
+.git-commit-info {
+    flex: 1;
+    min-width: 0;
+}
+
+.git-commit-message {
+    font-size: 12px;
+    line-height: 1.3;
+    margin-bottom: 2px;
+}
+
+.git-commit-meta {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    font-size: 10px;
+    color: var(--color-text-muted);
+}
+
+.git-commit-hash {
+    font-family:
+        "Cascadia Mono", "JetBrains Mono", "Fira Code", Consolas, "Courier New",
+        monospace;
+    color: var(--color-primary);
+}
+
+.git-commit-author {
+    max-width: 80px;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+}
+
+.git-commit-date {
+    flex-shrink: 0;
+}
+
+.git-commit-detail {
+    padding: 4px 12px 8px 28px;
+    font-size: 11px;
+    display: flex;
+    flex-direction: column;
+    gap: 4px;
+    background: var(--color-bg-elevated);
+}
+
+.git-commit-detail-row {
+    display: flex;
+    align-items: flex-start;
+    gap: 6px;
+    min-width: 0;
+}
+
+.git-commit-detail-label {
+    color: var(--color-text-muted);
+    flex-shrink: 0;
+    min-width: 48px;
+}
+
+.git-commit-detail-row code {
+    font-family:
+        "Cascadia Mono", "JetBrains Mono", "Fira Code", Consolas, "Courier New",
+        monospace;
+    font-size: 10px;
+    word-break: break-all;
+    color: var(--color-text-secondary);
+}
+
+.git-commit-detail-message {
+    word-break: break-word;
+    color: var(--color-text-primary);
+}
+
+.git-commit-tooltip {
+    max-width: 320px;
+    padding: 8px 10px;
+    display: flex;
+    flex-direction: column;
+    gap: 5px;
+    font-size: 11px;
+    line-height: 1.4;
+}
+
+.git-commit-tooltip-row {
+    display: flex;
+    align-items: flex-start;
+    gap: 6px;
+    min-width: 0;
+}
+
+.git-commit-tooltip-label {
+    color: var(--color-text-muted);
+    flex-shrink: 0;
+    min-width: 48px;
+}
+
+.git-commit-tooltip-row code {
+    font-family:
+        "Cascadia Mono", "JetBrains Mono", "Fira Code", Consolas, "Courier New",
+        monospace;
+    font-size: 10px;
+    word-break: break-all;
+    color: var(--color-text-secondary);
+}
+
+.git-commit-tooltip-message {
+    word-break: break-word;
+    color: var(--color-text-primary);
 }

@@ -13,6 +13,7 @@ import { ProjectResourcePanel } from "./ProjectResourcePanel";
 import { PreviewBrowserViewPanel } from "./PreviewBrowserViewPanel";
 import { PreviewBrowserInfoPanel } from "./PreviewBrowserInfoPanel";
 import { TerminalPanel } from "./TerminalPanel";
+import { GitPanel } from "./GitPanel";
 import { AgentConsolePanel } from "./agent/AgentConsolePanel";
 import { AgentSessionManagerPanel } from "./agent/AgentSessionManagerPanel";
 import { usePreviewBrowserStore } from "../store/previewBrowserStore";
@@ -43,6 +44,7 @@ function dockTabLabel(tabId: DockTabId, translate: (key: string, defaultValue: s
   if (tabId === "agentConsole") return isAgentUiDisabled ? "" : translate("agentConsole.title", "Agent Console");
   if (tabId === "agentSessions") return isAgentUiDisabled ? "" : translate("agentSessions.title", "Sessions");
   if (tabId === "terminal") return translate("terminal.title", "Terminal");
+  if (tabId === "git") return translate("git.title", "Git");
   return translate("resources.title", "Project resources");
 }
 
@@ -54,12 +56,13 @@ function dockTabIcon(tabId: DockTabId): ReactNode {
   if (tabId === "agentConsole") return isAgentUiDisabled ? null : <Icon name="robot" size={16} />;
     if (tabId === "agentSessions") return isAgentUiDisabled ? null : <Icon name="message" size={16} />;
   if (tabId === "terminal") return <Icon name="terminal" size={16} />;
+  if (tabId === "git") return <Icon name="git-commit" size={16} />;
   return <Icon name="folder" size={16} />;
 }
 
 function isDockTabId(value: string): value is DockTabId {
   if (value === "agentConsole" || value === "agentSessions") return !isAgentUiDisabled;
-  return value === "mlc" || value === "resources" || value === "mlcPreview" || value === "previewBrowser" || value === "previewInfo" || value === "terminal";
+  return value === "mlc" || value === "resources" || value === "mlcPreview" || value === "previewBrowser" || value === "previewInfo" || value === "terminal" || value === "git";
 }
 
 function dockColumnTargetIcon(columnId: DockColumnId): ReactNode {
@@ -78,6 +81,7 @@ function DockTabContent({ tabId }: { tabId: DockTabId | null }) {
   if (tabId === "agentConsole") return isAgentUiDisabled ? null : <AgentConsolePanel />;
   if (tabId === "agentSessions") return isAgentUiDisabled ? null : <AgentSessionManagerPanel />;
   if (tabId === "terminal") return <TerminalPanel />;
+  if (tabId === "git") return <GitPanel />;
   return null;
 }
 

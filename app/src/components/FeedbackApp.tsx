@@ -51,11 +51,13 @@ function dockTabTitle(tabId: DockTabId, translate: (key: string, defaultValue: s
   if (tabId === "previewInfo") return translate("previewBrowser.infoTitle", "Preview Info");
   if (tabId === "agentConsole") return isAgentUiDisabled ? "" : translate("agentConsole.title", "Agent Console");
   if (tabId === "terminal") return translate("terminal.title", "Terminal");
+  if (tabId === "git") return translate("git.title", "Git");
   return translate("resources.title", "Project resources");
 }
 
 function dockTabDragIcon(tabId: DockTabId) {
   if (tabId === "terminal") return "terminal";
+  if (tabId === "git") return "git-commit";
   if (tabId === "agentConsole") return isAgentUiDisabled ? "folder" : "robot";
   if (tabId === "mlcPreview") return "file-text";
   if (tabId === "previewBrowser") return "globe";
