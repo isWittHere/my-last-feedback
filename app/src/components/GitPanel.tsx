@@ -461,7 +461,7 @@ export function GitPanel() {
             type="button"
             className="terminal-tool-button"
             onClick={handleQuickBackup}
-            disabled={loading || !workspacePath}
+            disabled={loading || !workspacePath || (changesBreakdown !== null && changesBreakdown.modified + changesBreakdown.added + changesBreakdown.deleted === 0)}
             title={t("git.backup", "Quick Backup")}
           >
             <Icon name="database" size={13} />
