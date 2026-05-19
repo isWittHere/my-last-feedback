@@ -294,7 +294,13 @@ function buildSubmittedAttachmentTags(session: AgentSession): AgentSubmittedAtta
   session.images.forEach((image) => tags.push(createSubmittedAttachmentTag("image", image.name || image.path, image.path)));
   session.mlcAttachments.forEach((attachment) => tags.push(createSubmittedAttachmentTag("mlc", attachment.title || attachment.filePath, attachment.filePath)));
   session.webAttachments.forEach((attachment) => tags.push(createSubmittedAttachmentTag("web", attachment.pageTitle || attachment.sourceUrl, attachment.sourceUrl)));
-  collectSubmittedResourceLinks(session.draft, session.cwd).forEach((link) => tags.push(createSubmittedAttachmentTag("resource", link.label, link.href)));
+  collectSubmittedResourceLinks(session.draft, session.cwd).forEach((link) => {
+    if (link.kind === "commit") {
+      tags.push(createSubmittedAttachmentTag("git", link.label, link.href));
+    } else {
+      tags.push(createSubmittedAttachmentTag("resource", link.label, link.href));
+    }
+  });
   return tags;
 }
 

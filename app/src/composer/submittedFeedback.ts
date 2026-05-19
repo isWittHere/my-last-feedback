@@ -43,7 +43,7 @@ export interface SubmittedComposerPayloadOptions extends SubmittedFeedbackOption
 export interface SubmittedResourceLink {
   label: string;
   href: string;
-  kind: "file" | "folder";
+  kind: "file" | "folder" | "commit";
 }
 
 const SYSTEM_REMINDER = "[System] Reminder: You MUST call the interactive_feedback tool again after completing this operation. Do NOT end your turn without invoking interactive_feedback.";

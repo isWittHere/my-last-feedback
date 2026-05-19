@@ -9581,6 +9581,11 @@ body,
     background: color-mix(in srgb, var(--color-bg-elevated) 82%, transparent);
     color: var(--color-text-primary);
 }
+.composer-token-chip-git {
+    border-color: color-mix(in srgb, var(--color-primary) 34%, transparent);
+    background: color-mix(in srgb, var(--color-primary) 12%, transparent);
+    color: var(--color-primary);
+}
 .composer-token-chip-command {
     margin-right: 0;
     border-color: color-mix(
@@ -15443,7 +15448,9 @@ button.mlra-inspector-gate-pill {
 
 .git-diff-popover {
     position: fixed;
-    width: min(360px, calc(100vw - 24px));
+    min-width: 200px;
+    max-width: min(560px, calc(100vw - 24px));
+    width: max-content;
     border: 1px solid var(--color-border);
     border-radius: 6px;
     background: var(--color-bg-elevated);
@@ -15651,6 +15658,29 @@ button.mlra-inspector-gate-pill {
 
 .git-commit-date {
     flex-shrink: 0;
+}
+
+.git-commit-attach {
+    flex-shrink: 0;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    width: 24px;
+    height: 24px;
+    border-radius: 4px;
+    color: var(--color-text-muted);
+    opacity: 0;
+    transition: opacity 0.15s;
+    cursor: pointer;
+}
+
+.git-commit-header:hover .git-commit-attach {
+    opacity: 1;
+}
+
+.git-commit-attach:hover {
+    color: var(--color-text-primary);
+    background: color-mix(in srgb, var(--color-border) 40%, transparent);
 }
 
 .git-commit-detail {

@@ -1,4 +1,4 @@
-import { resourceLinkInfo, type ResourceKind } from "./resourceLinks";
+import { gitCommitLinkInfo, resourceLinkInfo, type ResourceKind } from "./resourceLinks";
 
 export type ComposerInlineToken =
   | { type: "text"; value: string; start: number; end: number }
@@ -107,6 +107,21 @@ function collectResourceLinkCandidates(text: string, projectDirectory?: string):
     const raw = match[0];
     const label = match[1] || "resource";
     const href = match[2] || "";
+    const commit = gitCommitLinkInfo(label, href);
+    if (commit) {
+      matches.push({
+        type: "resourceLink",
+        value: raw,
+        raw,
+        label: commit.fullHash.slice(0, 7),
+        href: href,
+        kind: "commit" as ResourceKind,
+        start: match.index,
+        end: match.index + raw.length,
+        priority: 0,
+      });
+      continue;
+    }
     const resource = resourceLinkInfo(label, href, projectDirectory);
     if (!resource) continue;
     matches.push({

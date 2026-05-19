@@ -954,7 +954,7 @@ export function ReadonlyTagBar({ session }: { session: import("../store/feedback
   const hasGitAction = !!session.gitAction;
   const mlcAttachments = session.mlcAttachments || [];
   const webAttachments = session.webAttachments || [];
-  const resourceLinks = collectSubmittedResourceLinks(session.feedbackText, session.projectDirectory);
+  const resourceLinks = collectSubmittedResourceLinks(session.feedbackText, session.projectDirectory).filter((link) => link.kind !== "commit");
   const hasTags = session.images.length > 0 || hasLog || hasCommandLogs || hasGitAction || mlcAttachments.length > 0 || webAttachments.length > 0 || resourceLinks.length > 0;
 
   const gitLabel = hasGitAction ? ({
@@ -1067,7 +1067,7 @@ export function ResourceAttachmentTag({ link }: { link: SubmittedResourceLink })
       onClick={openResource}
     >
       {resourceIconTheme === "catppuccin" ? (
-        <CatppuccinResourceIcon entry={{ name: link.label, relativePath: link.href, kind: link.kind }} size={12} className="attachment-resource-icon" />
+        <CatppuccinResourceIcon entry={{ name: link.label, relativePath: link.href, kind: link.kind as "file" | "folder" }} size={12} className="attachment-resource-icon" />
       ) : (
         <Icon name={link.kind === "folder" ? "folder" : "file-text"} size={10} />
       )}

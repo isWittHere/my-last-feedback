@@ -1,12 +1,32 @@
 import { isAbsoluteWorkspacePath, joinWorkspacePath, normalizeResourcePath as normalizeWorkspaceResourcePath } from "../workspace/workspacePaths";
 
-export type ResourceKind = "file" | "folder";
+export type ResourceKind = "file" | "folder" | "commit";
 
 export interface ResourceLinkInfo {
   label: string;
   href: string;
   normalizedHref: string;
   kind: ResourceKind;
+}
+
+export interface GitCommitLinkInfo {
+  label: string;
+  href: string;
+  fullHash: string;
+  message: string;
+}
+
+export function gitCommitLinkInfo(label: string, href: string): GitCommitLinkInfo | null {
+  if (!href.startsWith("git:")) return null;
+  const rest = href.slice(4);
+  const sep = rest.indexOf("|");
+  const fullHash = sep >= 0 ? rest.slice(0, sep) : rest;
+  try {
+    const message = sep >= 0 ? decodeURIComponent(rest.slice(sep + 1)) : "";
+    return { label, href, fullHash, message };
+  } catch {
+    return { label, href, fullHash, message: rest.slice(sep + 1) };
+  }
 }
 
 export function decodeResourceHref(value: string): string {

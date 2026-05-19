@@ -178,7 +178,7 @@ export function GitPanel() {
     const rect = el.getBoundingClientRect();
     const gap = 6;
     const right = window.innerWidth - rect.right;
-    const popoverWidth = Math.min(360, window.innerWidth - 24);
+    const popoverWidth = Math.min(420, window.innerWidth - 24);
     let left: number;
     if (rect.left + popoverWidth > window.innerWidth - 8) {
       left = window.innerWidth - popoverWidth - 8;
@@ -406,6 +406,23 @@ export function GitPanel() {
     fetchDiff();
   }, [workspacePath, fetchGitLog, fetchChangesCount, fetchDiff]);
 
+  const handleAttachCommit = useCallback((commit: GitLogEntry) => {
+    const fc = useFeedbackStore.getState().focusedComposer;
+    if (!fc) return;
+    const encodedMessage = encodeURIComponent(commit.message);
+    const raw = `[${shortHash(commit.hash)}](git:${commit.hash}|${encodedMessage})`;
+    window.dispatchEvent(
+      new CustomEvent("mlfb-insert-feedback-text", {
+        detail: {
+          callerId: fc.callerId,
+          sessionId: fc.sessionId,
+          kind: fc.kind,
+          text: raw,
+        },
+      }),
+    );
+  }, []);
+
   return (
     <div className="git-panel flex flex-col h-full min-h-0">
       <div className="terminal-tab-strip" data-preview-overlay>
@@ -437,31 +454,48 @@ export function GitPanel() {
             </div>
           )}
           {changesBreakdown !== null &&
-            (changesBreakdown.modified + changesBreakdown.added + changesBreakdown.deleted) > 0 && (
-            <div
-              ref={badgeRef}
-              className="git-diff-indicator-wrap"
-              onMouseEnter={showDiffPopover}
-              onMouseLeave={hideDiffPopover}
-            >
-              {changesBreakdown.modified > 0 && (
-                <span className="git-changes-badge git-changes-modified">{changesBreakdown.modified}</span>
-              )}
-              {changesBreakdown.added > 0 && (
-                <span className="git-changes-badge git-changes-added">{changesBreakdown.added}</span>
-              )}
-              {changesBreakdown.deleted > 0 && (
-                <span className="git-changes-badge git-changes-deleted">{changesBreakdown.deleted}</span>
-              )}
-            </div>
-          )}
+            changesBreakdown.modified +
+              changesBreakdown.added +
+              changesBreakdown.deleted >
+              0 && (
+              <div
+                ref={badgeRef}
+                className="git-diff-indicator-wrap"
+                onMouseEnter={showDiffPopover}
+                onMouseLeave={hideDiffPopover}
+              >
+                {changesBreakdown.modified > 0 && (
+                  <span className="git-changes-badge git-changes-modified">
+                    {changesBreakdown.modified}
+                  </span>
+                )}
+                {changesBreakdown.added > 0 && (
+                  <span className="git-changes-badge git-changes-added">
+                    {changesBreakdown.added}
+                  </span>
+                )}
+                {changesBreakdown.deleted > 0 && (
+                  <span className="git-changes-badge git-changes-deleted">
+                    {changesBreakdown.deleted}
+                  </span>
+                )}
+              </div>
+            )}
         </div>
         <div className="terminal-new-tab-split">
           <button
             type="button"
             className="terminal-tool-button"
             onClick={handleQuickBackup}
-            disabled={loading || !workspacePath || (changesBreakdown !== null && changesBreakdown.modified + changesBreakdown.added + changesBreakdown.deleted === 0)}
+            disabled={
+              loading ||
+              !workspacePath ||
+              (changesBreakdown !== null &&
+                changesBreakdown.modified +
+                  changesBreakdown.added +
+                  changesBreakdown.deleted ===
+                  0)
+            }
             title={t("git.backup", "Quick Backup")}
           >
             <Icon name="database" size={13} />
@@ -542,6 +576,16 @@ export function GitPanel() {
                           {formatCommitDate(commit.date)}
                         </span>
                       </div>
+                    </div>
+                    <div
+                      className="git-commit-attach"
+                      onClick={(e) => {
+                        e.stopPropagation();
+                        handleAttachCommit(commit);
+                      }}
+                      title={t("git.attachToChat", "Attach to chat")}
+                    >
+                      <Icon name="paperclip" size={13} />
                     </div>
                   </button>
                   {isExpanded && (
@@ -629,7 +673,17 @@ export function GitPanel() {
                       >
                         {statusLetter(file.status)}
                       </span>
-                      <span className="git-diff-file-path">{file.path}</span>
+                      <span
+                        className="git-diff-file-path"
+                        onMouseEnter={(e) => {
+                          const el = e.currentTarget;
+                          if (el.scrollWidth > el.clientWidth) {
+                            el.title = file.path;
+                          }
+                        }}
+                      >
+                        {file.path}
+                      </span>
                       <span className="git-diff-file-meter">
                         {buildGitDiffSegments(
                           file.additions,

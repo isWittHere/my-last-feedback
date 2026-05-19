@@ -7,17 +7,18 @@ import { CatppuccinResourceIcon } from "../CatppuccinResourceIcon";
 export function ResourceLinkToken({ label, href, kind }: { label: string; href: string; kind: ResourceKind }) {
   const resourceIconTheme = useFeedbackStore((state) => state.resourceIconTheme);
   const openResource = useCallback(() => {
+    if (kind === "commit") return;
     import("@tauri-apps/plugin-opener")
       .then(({ openPath }) => openPath(href))
       .catch(() => navigator.clipboard.writeText(href).catch(() => {}));
-  }, [href]);
+  }, [href, kind]);
 
   return (
     <span
       className="readonly-resource-tag"
       role="button"
       tabIndex={0}
-      data-tooltip={`${kind === "folder" ? "Folder" : "File"}\n${href}`}
+      data-tooltip={`${kind === "folder" ? "Folder" : kind === "commit" ? "Commit" : "File"}\n${href}`}
       data-tooltip-placement="top"
       onClick={openResource}
       onKeyDown={(event) => {
@@ -28,9 +29,9 @@ export function ResourceLinkToken({ label, href, kind }: { label: string; href: 
       }}
     >
       {resourceIconTheme === "catppuccin" ? (
-        <CatppuccinResourceIcon entry={{ name: label, relativePath: href, kind }} size={12} className="readonly-resource-icon" />
+        <CatppuccinResourceIcon entry={{ name: label, relativePath: href, kind: kind === "commit" ? "file" : kind }} size={12} className="readonly-resource-icon" />
       ) : (
-        <Icon name={kind === "folder" ? "folder" : "file-text"} size={11} />
+        <Icon name={kind === "folder" ? "folder" : kind === "commit" ? "git-commit" : "file-text"} size={11} />
       )}
       <span>{label}</span>
     </span>
