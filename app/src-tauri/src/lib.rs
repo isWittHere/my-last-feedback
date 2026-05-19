@@ -835,7 +835,9 @@ pub fn run() {
             send_to_mlra_daemon,
             git::git_log,
             git::git_changes_count,
+            git::git_changes_breakdown,
             git::git_diff,
+            git::git_quick_backup,
         ])
         .setup(move |app| {
             let app_handle = app.handle().clone();
