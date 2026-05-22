@@ -6,6 +6,7 @@ mod preview_browser;
 mod project_resources;
 mod remote;
 mod session;
+mod subscriptions;
 mod terminal;
 
 use std::collections::HashSet;
@@ -833,6 +834,7 @@ pub fn run() {
             agent_process_kill,
             agent_process_list,
             send_to_mlra_daemon,
+            subscriptions::fetch_dashboard_html,
             git::git_log,
             git::git_changes_count,
             git::git_changes_breakdown,

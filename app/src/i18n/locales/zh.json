@@ -5,7 +5,9 @@
   "common": {
     "confirm": "确定",
     "copy": "复制",
-    "retry": "重试"
+    "retry": "重试",
+    "save": "保存",
+    "cancel": "取消"
   },
   "summary": {
     "title": "AI 摘要",
@@ -1005,5 +1007,29 @@
     "author": "作者",
     "date": "日期",
     "message": "提交信息"
+  },
+  "subscriptions": {
+    "title": "订阅管理",
+    "addGroup": "添加订阅",
+    "addOpenCodeGo": "添加 OpenCode Go",
+    "opencodeGo": "OpenCode Go",
+    "workspaceId": "工作区 ID",
+    "authCookie": "认证 Cookie",
+    "refreshInterval": "刷新间隔（秒）",
+    "refresh": "刷新",
+    "refreshAll": "全部刷新",
+    "configure": "配置",
+    "enable": "启用",
+    "disable": "禁用",
+    "remove": "删除",
+    "rolling": "滚动周期",
+    "weekly": "每周",
+    "monthly": "每月",
+    "remaining": "剩余 {{pct}}",
+    "resetsIn": "{{time}} 后重置",
+    "noData": "暂无用量数据",
+    "updated": "更新于",
+    "every": "每",
+    "empty": "尚未配置订阅"
   }
 }

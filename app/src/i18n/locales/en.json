@@ -5,7 +5,9 @@
   "common": {
     "confirm": "Confirm",
     "copy": "Copy",
-    "retry": "Retry"
+    "retry": "Retry",
+    "save": "Save",
+    "cancel": "Cancel"
   },
   "summary": {
     "title": "AI Summary",
@@ -1005,5 +1007,29 @@
     "author": "Author",
     "date": "Date",
     "message": "Message"
+  },
+  "subscriptions": {
+    "title": "Subscriptions",
+    "addGroup": "Add subscription",
+    "addOpenCodeGo": "Add OpenCode Go",
+    "opencodeGo": "OpenCode Go",
+    "workspaceId": "Workspace ID",
+    "authCookie": "Auth Cookie",
+    "refreshInterval": "Refresh interval (s)",
+    "refresh": "Refresh",
+    "refreshAll": "Refresh all",
+    "configure": "Configure",
+    "enable": "Enable",
+    "disable": "Disable",
+    "remove": "Remove",
+    "rolling": "Rolling",
+    "weekly": "Weekly",
+    "monthly": "Monthly",
+    "remaining": "{{pct}} remaining",
+    "resetsIn": "Resets in {{time}}",
+    "noData": "No usage data available",
+    "updated": "Updated",
+    "every": "Every",
+    "empty": "No subscriptions configured"
   }
 }

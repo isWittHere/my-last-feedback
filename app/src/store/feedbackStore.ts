@@ -171,7 +171,7 @@ export interface FocusedComposer {
 }
 
 export type MlcPanelPosition = "left" | "right";
-export type SidePanelTab = "mlc" | "resources" | "mlcPreview" | "previewBrowser" | "previewInfo" | "agentConsole" | "agentSessions" | "terminal" | "git";
+export type SidePanelTab = "mlc" | "resources" | "mlcPreview" | "previewBrowser" | "previewInfo" | "agentConsole" | "agentSessions" | "terminal" | "git" | "subscriptions";
 export type DockColumnId = "leftSidebar" | "leftPage" | "rightPage" | "rightSidebar";
 export type DockTabId = SidePanelTab;
 export type DockTabBarPosition = "top" | "bottom";
@@ -490,13 +490,13 @@ function syncCallerWorkspaceColors(
 
 const DOCK_COLUMN_IDS: DockColumnId[] = ["leftSidebar", "leftPage", "rightPage", "rightSidebar"];
 const AGENT_DOCK_TABS: DockTabId[] = ["agentConsole", "agentSessions"];
-const CORE_DOCK_TABS: DockTabId[] = ["mlc", "resources", "mlcPreview", "previewBrowser", "previewInfo", "terminal", "git"];
+const CORE_DOCK_TABS: DockTabId[] = ["mlc", "resources", "mlcPreview", "previewBrowser", "previewInfo", "terminal", "git", "subscriptions"];
 const KNOWN_DOCK_TABS: DockTabId[] = isAgentUiDisabled
   ? CORE_DOCK_TABS
   : [...CORE_DOCK_TABS, ...AGENT_DOCK_TABS];
 const DEFAULT_DOCK_TABS: DockTabId[] = isAgentUiDisabled
-  ? ["mlc", "mlcPreview", "resources", "previewBrowser", "previewInfo", "terminal", "git"]
-  : ["mlc", "mlcPreview", "resources", "previewBrowser", "previewInfo", "agentConsole", "agentSessions", "terminal", "git"];
+  ? ["mlc", "mlcPreview", "resources", "previewBrowser", "previewInfo", "terminal", "git", "subscriptions"]
+  : ["mlc", "mlcPreview", "resources", "previewBrowser", "previewInfo", "agentConsole", "agentSessions", "terminal", "git", "subscriptions"];
 
 function isDockTabId(value: unknown): value is DockTabId {
   return typeof value === "string" && KNOWN_DOCK_TABS.includes(value as DockTabId);
