@@ -2789,6 +2789,407 @@ body,
     cursor: pointer;
 }
 
+/* ── Subscription Panel ── */
+
+.subscription-panel {
+    height: 100%;
+    min-height: 0;
+    display: flex;
+    flex-direction: column;
+    gap: 4px;
+    padding: 0 4px 6px;
+    overflow: auto;
+    background: var(--color-bg-card);
+}
+
+.subscription-toolbar {
+    position: sticky;
+    top: 0;
+    z-index: 10;
+    display: flex;
+    align-items: center;
+    gap: 0;
+    height: 31px;
+    min-height: 31px;
+    margin: 0 -4px;
+    padding: 0;
+    border-bottom: 1px solid var(--color-border-subtle);
+    background: color-mix(in srgb, var(--color-bg-input-raised) 48%, transparent);
+    -webkit-backdrop-filter: blur(22px) saturate(1.24);
+    backdrop-filter: blur(22px) saturate(1.24);
+}
+
+.subscription-new-button,
+.subscription-refresh-button {
+    display: flex;
+    align-items: center;
+    height: 31px;
+    min-height: 31px;
+    border: none;
+    border-radius: 0;
+    background: transparent;
+    color: var(--color-text-muted);
+    cursor: pointer;
+}
+
+.subscription-new-button {
+    flex: 1 1 auto;
+    min-width: 0;
+    gap: 5px;
+    padding: 0 8px;
+    font-size: 11px;
+    text-align: left;
+}
+
+.subscription-new-button span {
+    min-width: 0;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+}
+
+.subscription-refresh-button {
+    flex: 0 0 24px;
+    justify-content: center;
+    width: 24px;
+    padding: 0;
+    box-shadow: inset 1px 0 0 var(--color-border-subtle);
+}
+
+.subscription-refresh-button:disabled {
+    cursor: default;
+    opacity: 0.5;
+}
+
+.subscription-new-button:hover,
+.subscription-refresh-button:not(:disabled):hover {
+    background: color-mix(in srgb, var(--color-primary) 8%, transparent);
+    color: var(--color-text-primary);
+}
+
+.subscription-empty {
+    flex: 1;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    gap: 8px;
+    font-size: 11px;
+    color: var(--color-text-muted);
+    padding: 24px;
+}
+
+.subscription-new-form {
+    margin: 4px 0;
+    border: 1px solid var(--color-border-subtle);
+    border-radius: var(--radius-md);
+    background: var(--color-bg-surface);
+}
+
+.subscription-new-form-header {
+    font-size: 11px;
+    font-weight: 600;
+    padding: 6px 8px;
+    color: var(--color-text-secondary);
+    border-bottom: 1px solid var(--color-border-subtle);
+}
+
+.subscription-groups {
+    display: flex;
+    flex-direction: column;
+    gap: 4px;
+}
+
+.subscription-group {
+    border: 1px solid var(--color-border-subtle);
+    border-radius: var(--radius-md);
+    background: var(--color-bg-surface);
+    overflow: hidden;
+}
+
+.subscription-group-header {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    width: 100%;
+    padding: 6px 8px;
+    border: none;
+    background: transparent;
+    color: var(--color-text-primary);
+    cursor: pointer;
+    font-size: 12px;
+    text-align: left;
+    transition: background 0.12s;
+}
+
+.subscription-group-header:hover {
+    background: rgba(255, 255, 255, 0.04);
+}
+
+.subscription-group-caret {
+    flex: 0 0 auto;
+    color: var(--color-text-muted);
+    transition: transform 0.12s;
+}
+
+.subscription-group.collapsed .subscription-group-caret {
+    transform: rotate(-90deg);
+}
+
+.subscription-group-name {
+    flex: 1;
+    min-width: 0;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+    font-weight: 500;
+}
+
+.subscription-group-status {
+    flex: 0 0 auto;
+    display: flex;
+    align-items: center;
+}
+
+.subscription-group-body {
+    border-top: 1px solid var(--color-border-subtle);
+}
+
+.subscription-group.collapsed .subscription-group-body {
+    display: none;
+}
+
+.subscription-group-meta {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    padding: 4px 8px;
+    font-size: 10px;
+    color: var(--color-text-muted);
+}
+
+.subscription-group-error {
+    display: flex;
+    align-items: center;
+    gap: 5px;
+    font-size: 11px;
+    color: var(--color-danger, #ef4444);
+    padding: 4px 8px;
+    background: rgba(239, 68, 68, 0.08);
+}
+
+.subscription-usage-display {
+    padding: 4px 8px 8px;
+    display: flex;
+    flex-direction: column;
+    gap: 4px;
+}
+
+.subscription-group-minibars {
+    flex: 0 0 auto;
+    display: flex;
+    flex-direction: column;
+    gap: 2px;
+    width: 32px;
+    margin-right: 4px;
+}
+
+.subscription-group-minibar {
+    height: 2px;
+    background: var(--color-bg-input);
+    overflow: hidden;
+    border-radius: 1px;
+}
+
+.subscription-group-minibar-fill {
+    height: 100%;
+    background: var(--color-primary);
+    border-radius: 1px;
+    transition: width 0.3s ease;
+}
+
+.subscription-usage-display {
+    padding: 4px 8px 8px;
+    display: flex;
+    flex-direction: column;
+    gap: 8px;
+}
+
+.subscription-usage-window {
+    display: flex;
+    flex-direction: column;
+    gap: 3px;
+}
+
+.subscription-usage-header {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    font-size: 11px;
+}
+
+.subscription-usage-label {
+    flex: 0 0 auto;
+    font-weight: 500;
+    color: var(--color-text-secondary);
+    min-width: 52px;
+}
+
+.subscription-usage-pct {
+    flex: 0 0 auto;
+    font-weight: 600;
+    color: var(--color-text-primary);
+}
+
+.subscription-usage-remaining {
+    flex: 1;
+    text-align: right;
+    font-size: 10px;
+    color: var(--color-text-muted);
+}
+
+.subscription-usage-bar-track {
+    height: 4px;
+    border-radius: 2px;
+    background: var(--color-bg-input);
+    overflow: hidden;
+}
+
+.subscription-usage-bar-fill {
+    height: 100%;
+    border-radius: 2px;
+    background: var(--color-primary);
+    transition: width 0.3s ease;
+}
+
+.subscription-usage-reset {
+    font-size: 10px;
+    color: var(--color-text-muted);
+}
+
+.subscription-usage-empty {
+    font-size: 11px;
+    color: var(--color-text-muted);
+    font-style: italic;
+}
+
+.subscription-group-actions {
+    display: flex;
+    align-items: center;
+    gap: 2px;
+    padding: 4px 8px;
+    border-top: 1px solid var(--color-border-subtle);
+}
+
+.subscription-group-action-btn {
+    display: flex;
+    align-items: center;
+    gap: 4px;
+    padding: 3px 6px;
+    border: none;
+    border-radius: 3px;
+    background: transparent;
+    color: var(--color-text-muted);
+    font-size: 10px;
+    cursor: pointer;
+    transition: background 0.12s;
+}
+
+.subscription-group-action-btn:hover {
+    background: color-mix(in srgb, var(--color-primary) 8%, transparent);
+    color: var(--color-text-primary);
+}
+
+.subscription-group-action-btn:disabled {
+    opacity: 0.5;
+    cursor: default;
+}
+
+.subscription-group-action-delete:hover {
+    background: rgba(239, 68, 68, 0.12);
+    color: #ef4444;
+}
+
+.subscription-group-action-toggle:hover {
+    background: rgba(250, 204, 21, 0.12);
+    color: #eab308;
+}
+
+.subscription-config-form {
+    padding: 8px;
+    display: flex;
+    flex-direction: column;
+    gap: 6px;
+}
+
+.subscription-config-field {
+    display: flex;
+    flex-direction: column;
+    gap: 2px;
+}
+
+.subscription-config-field span {
+    font-size: 10px;
+    font-weight: 500;
+    color: var(--color-text-secondary);
+}
+
+.subscription-config-field input {
+    padding: 4px 6px;
+    border: 1px solid var(--color-border);
+    border-radius: 3px;
+    background: var(--color-bg-input);
+    color: var(--color-text-primary);
+    font-size: 11px;
+    outline: none;
+    transition: border-color 0.12s;
+}
+
+.subscription-config-field input:focus {
+    border-color: var(--color-primary);
+}
+
+.subscription-config-actions {
+    display: flex;
+    align-items: center;
+    gap: 4px;
+    margin-top: 2px;
+}
+
+.subscription-config-save,
+.subscription-config-cancel {
+    display: flex;
+    align-items: center;
+    gap: 4px;
+    padding: 4px 8px;
+    border: none;
+    border-radius: 3px;
+    font-size: 11px;
+    cursor: pointer;
+    transition: background 0.12s;
+}
+
+.subscription-config-save {
+    background: var(--color-primary);
+    color: var(--color-bg);
+}
+
+.subscription-config-save:hover {
+    opacity: 0.9;
+}
+
+.subscription-config-cancel {
+    background: transparent;
+    color: var(--color-text-muted);
+}
+
+.subscription-config-cancel:hover {
+    background: rgba(255, 255, 255, 0.06);
+    color: var(--color-text-primary);
+}
+
+/* ── End Subscription Panel ── */
+
 .agent-token-topbar {
     position: relative;
     flex: 1;
