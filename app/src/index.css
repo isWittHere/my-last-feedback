@@ -2814,7 +2814,11 @@ body,
     margin: 0 -4px;
     padding: 0;
     border-bottom: 1px solid var(--color-border-subtle);
-    background: color-mix(in srgb, var(--color-bg-input-raised) 48%, transparent);
+    background: color-mix(
+        in srgb,
+        var(--color-bg-input-raised) 48%,
+        transparent
+    );
     -webkit-backdrop-filter: blur(22px) saturate(1.24);
     backdrop-filter: blur(22px) saturate(1.24);
 }
@@ -2945,6 +2949,18 @@ body,
     font-weight: 500;
 }
 
+.subscription-group-balance {
+    flex: 0 0 auto;
+    font-size: 11px;
+    font-weight: 700;
+    color: var(--color-primary);
+    white-space: nowrap;
+}
+
+.subscription-group-balance.low {
+    color: #f59e0b;
+}
+
 .subscription-group-status {
     flex: 0 0 auto;
     display: flex;
@@ -2966,6 +2982,12 @@ body,
     padding: 4px 8px;
     font-size: 10px;
     color: var(--color-text-muted);
+}
+
+.subscription-group-meta-item {
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
 }
 
 .subscription-group-error {
@@ -3073,6 +3095,42 @@ body,
     font-style: italic;
 }
 
+.subscription-toioto-display {
+    padding: 0px 8px 10px;
+    display: flex;
+    flex-direction: column;
+    gap: 6px;
+}
+
+.subscription-toioto-balance {
+    display: flex;
+    align-items: baseline;
+    gap: 8px;
+}
+
+.subscription-toioto-balance-amount {
+    font-size: 22px;
+    font-weight: 700;
+    color: var(--color-primary);
+}
+
+.subscription-toioto-balance-label {
+    font-size: 11px;
+    color: var(--color-text-muted);
+}
+
+.subscription-toioto-meta {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 8px;
+    font-size: 11px;
+    color: var(--color-text-secondary);
+}
+
+.subscription-toioto-meta-item {
+    white-space: nowrap;
+}
+
 .subscription-group-actions {
     display: flex;
     align-items: center;
@@ -3171,7 +3229,7 @@ body,
 
 .subscription-config-save {
     background: var(--color-primary);
-    color: var(--color-bg);
+    color: #fff;
 }
 
 .subscription-config-save:hover {
@@ -15823,7 +15881,8 @@ button.mlra-inspector-gate-pill {
 }
 
 .git-changes-badge + .git-changes-badge {
-    border-left: 1px solid color-mix(in srgb, var(--color-border) 40%, transparent);
+    border-left: 1px solid
+        color-mix(in srgb, var(--color-border) 40%, transparent);
 }
 
 .git-changes-modified {

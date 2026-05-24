@@ -1,7 +1,7 @@
 import { create } from "zustand";
-import { fetchOpenCodeGoUsage, type NormalizedUsage } from "../services/subscriptionScrapers";
+import { fetchOpenCodeGoUsage, fetchToiotoUsage, type NormalizedUsage, type ToiotoUsage } from "../services/subscriptionScrapers";
 
-export type SubscriptionGroupType = "opencode-go";
+export type SubscriptionGroupType = "opencode-go" | "toioto";
 
 export interface SubscriptionGroupConfig {
   id: string;
@@ -22,6 +22,7 @@ export interface SubscriptionGroupState extends SubscriptionGroupConfig {
   rolling?: NormalizedUsage | null;
   weekly?: NormalizedUsage | null;
   monthly?: NormalizedUsage | null;
+  toioto?: ToiotoUsage | null;
 }
 
 interface SubscriptionStore {
@@ -41,7 +42,7 @@ function generateId(): string {
 const STORAGE_KEY = "mlfb-subscription-groups-v1";
 
 function persistGroups(groups: SubscriptionGroupState[]) {
-  const configs = groups.map(({ loading, error, lastFetched, rolling, weekly, monthly, ...config }) => config);
+  const configs = groups.map(({ loading, error, lastFetched, rolling, weekly, monthly, toioto, ...config }) => config);
   try {
     localStorage.setItem(STORAGE_KEY, JSON.stringify(configs));
   } catch {}
@@ -60,6 +61,7 @@ function loadGroups(): SubscriptionGroupState[] {
       rolling: null,
       weekly: null,
       monthly: null,
+      toioto: null,
     }));
   } catch {
     return [];
@@ -79,6 +81,7 @@ export const useSubscriptionStore = create<SubscriptionStore>((set, get) => ({
       rolling: null,
       weekly: null,
       monthly: null,
+      toioto: null,
     };
     const groups = [...get().groups, group];
     set({ groups });
@@ -100,10 +103,19 @@ export const useSubscriptionStore = create<SubscriptionStore>((set, get) => ({
   refreshGroup: async (id) => {
     const group = get().groups.find((g) => g.id === id);
     if (!group) return;
-    if (!group.workspaceId.trim() || !group.authCookie.trim()) {
+
+    const missingFields: string[] = [];
+    if (group.type === "opencode-go") {
+      if (!group.workspaceId.trim()) missingFields.push("Workspace ID");
+      if (!group.authCookie.trim()) missingFields.push("Auth Cookie");
+    } else if (group.type === "toioto") {
+      if (!group.authCookie.trim()) missingFields.push("JWT Token");
+    }
+
+    if (missingFields.length > 0) {
       set({
         groups: get().groups.map((g) =>
-          g.id === id ? { ...g, error: "Workspace ID and auth cookie are required" } : g,
+          g.id === id ? { ...g, error: `${missingFields.join(" and ")} required` } : g,
         ),
       });
       return;
@@ -127,6 +139,29 @@ export const useSubscriptionStore = create<SubscriptionStore>((set, get) => ({
                   rolling: result.rolling ?? null,
                   weekly: result.weekly ?? null,
                   monthly: result.monthly ?? null,
+                }
+              : g,
+          ),
+        });
+      } else {
+        set({
+          groups: get().groups.map((g) =>
+            g.id === id ? { ...g, loading: false, error: result.error, lastFetched: Date.now() } : g,
+          ),
+        });
+      }
+    } else if (group.type === "toioto") {
+      const result = await fetchToiotoUsage(group.authCookie);
+      if (result.success) {
+        set({
+          groups: get().groups.map((g) =>
+            g.id === id
+              ? {
+                  ...g,
+                  loading: false,
+                  error: null,
+                  lastFetched: Date.now(),
+                  toioto: result.data,
                 }
               : g,
           ),

@@ -835,6 +835,7 @@ pub fn run() {
             agent_process_list,
             send_to_mlra_daemon,
             subscriptions::fetch_dashboard_html,
+            subscriptions::fetch_toioto_me,
             git::git_log,
             git::git_changes_count,
             git::git_changes_breakdown,

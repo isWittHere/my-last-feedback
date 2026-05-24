@@ -1012,9 +1012,12 @@
     "title": "订阅管理",
     "addGroup": "添加订阅",
     "addOpenCodeGo": "添加 OpenCode Go",
+    "addToioto": "添加 Toioto",
     "opencodeGo": "OpenCode Go",
+    "toioto": "Toioto",
     "workspaceId": "工作区 ID",
     "authCookie": "认证 Cookie",
+    "jwt": "JWT 令牌",
     "refreshInterval": "刷新间隔（秒）",
     "refresh": "刷新",
     "refreshAll": "全部刷新",
@@ -1030,6 +1033,9 @@
     "noData": "暂无用量数据",
     "updated": "更新于",
     "every": "每",
-    "empty": "尚未配置订阅"
+    "empty": "尚未配置订阅",
+    "balance": "余额",
+    "concurrency": "并发数",
+    "totalRecharged": "累计充值"
   }
 }
