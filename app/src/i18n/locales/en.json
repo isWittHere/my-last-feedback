@@ -1012,9 +1012,12 @@
     "title": "Subscriptions",
     "addGroup": "Add subscription",
     "addOpenCodeGo": "Add OpenCode Go",
+    "addToioto": "Add Toioto",
     "opencodeGo": "OpenCode Go",
+    "toioto": "Toioto",
     "workspaceId": "Workspace ID",
     "authCookie": "Auth Cookie",
+    "jwt": "JWT Token",
     "refreshInterval": "Refresh interval (s)",
     "refresh": "Refresh",
     "refreshAll": "Refresh all",
@@ -1030,6 +1033,9 @@
     "noData": "No usage data available",
     "updated": "Updated",
     "every": "Every",
-    "empty": "No subscriptions configured"
+    "empty": "No subscriptions configured",
+    "balance": "Balance",
+    "concurrency": "Concurrency",
+    "totalRecharged": "Recharged"
   }
 }

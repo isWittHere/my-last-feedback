@@ -26,6 +26,19 @@ export interface OpenCodeGoError {
 
 export type OpenCodeGoResponse = OpenCodeGoResult | OpenCodeGoError;
 
+export interface ToiotoUsage {
+  balance: number;
+  status: string;
+  concurrency: number;
+  rpmLimit: number;
+  totalRecharged: number;
+  email: string;
+}
+
+export type ToiotoResponse =
+  | { success: true; data: ToiotoUsage }
+  | { success: false; error: string };
+
 const NUMBER_PATTERN = String.raw`(-?\d+(?:\.\d+)?)`;
 
 const WINDOW_PATTERNS = [
@@ -102,6 +115,33 @@ export async function fetchOpenCodeGoUsage(
     }
 
     return { success: true, ...result } as OpenCodeGoResult;
+  } catch (err) {
+    return { success: false, error: err instanceof Error ? err.message : String(err) };
+  }
+}
+
+export async function fetchToiotoUsage(jwt: string): Promise<ToiotoResponse> {
+  try {
+    const timezone = encodeURIComponent(
+      Intl.DateTimeFormat().resolvedOptions().timeZone,
+    );
+    const text = await invoke<string>("fetch_toioto_me", { request: { jwt, timezone } });
+    const parsed = JSON.parse(text);
+    if (parsed.code !== 0) {
+      return { success: false, error: parsed.message || "API error" };
+    }
+    const d = parsed.data;
+    return {
+      success: true,
+      data: {
+        balance: d.balance ?? 0,
+        status: d.status ?? "unknown",
+        concurrency: d.concurrency ?? 0,
+        rpmLimit: d.rpm_limit ?? 0,
+        totalRecharged: d.total_recharged ?? 0,
+        email: d.email ?? "",
+      },
+    };
   } catch (err) {
     return { success: false, error: err instanceof Error ? err.message : String(err) };
   }

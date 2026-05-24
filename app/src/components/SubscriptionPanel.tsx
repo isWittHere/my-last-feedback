@@ -1,4 +1,5 @@
 import { useCallback, useEffect, useRef, useState } from "react";
+import { createPortal } from "react-dom";
 import { useTranslation } from "react-i18next";
 import { useSubscriptionStore, type SubscriptionGroupState, type SubscriptionGroupConfig } from "../store/subscriptionStore";
 import { Icon } from "./Icons";
@@ -30,6 +31,10 @@ function formatLastFetched(timestamp: number | null): string {
 
 function usageBarPercent(percent: number): string {
   return `${Math.round(percent)}%`;
+}
+
+function formatBalance(value: number): string {
+  return `$${value.toFixed(2)}`;
 }
 
 function GroupConfigForm({
@@ -74,6 +79,80 @@ function GroupConfigForm({
           <Icon name="close" size={12} />
           {t("common.cancel", "Cancel")}
         </button>
+      </div>
+    </div>
+  );
+}
+
+function ToiotoConfigForm({
+  group,
+  onSave,
+  onCancel,
+}: {
+  group: Pick<SubscriptionGroupState, "authCookie" | "refreshIntervalSeconds" | "name">;
+  onSave: (config: Pick<SubscriptionGroupConfig, "authCookie" | "refreshIntervalSeconds" | "name">) => void;
+  onCancel: () => void;
+}) {
+  const { t } = useTranslation();
+  const [jwt, setJwt] = useState(group.authCookie);
+  const [interval, setInterval] = useState(String(group.refreshIntervalSeconds));
+
+  const handleSave = () => {
+    const intervalSecs = Math.max(10, parseInt(interval, 10) || 60);
+    onSave({ authCookie: jwt.trim(), refreshIntervalSeconds: intervalSecs, name: group.name || t("subscriptions.toioto", "Toioto") });
+  };
+
+  return (
+    <div className="subscription-config-form">
+      <label className="subscription-config-field">
+        <span>{t("subscriptions.jwt", "JWT Token")}</span>
+        <input type="password" value={jwt} onChange={(e) => setJwt(e.target.value)} placeholder="eyJ..." />
+      </label>
+      <label className="subscription-config-field">
+        <span>{t("subscriptions.refreshInterval", "Refresh interval (s)")}</span>
+        <input type="number" min={10} value={interval} onChange={(e) => setInterval(e.target.value)} />
+      </label>
+      <div className="subscription-config-actions">
+        <button type="button" className="subscription-config-save" onClick={handleSave}>
+          <Icon name="check" size={12} />
+          {t("common.save", "Save")}
+        </button>
+        <button type="button" className="subscription-config-cancel" onClick={onCancel}>
+          <Icon name="close" size={12} />
+          {t("common.cancel", "Cancel")}
+        </button>
+      </div>
+    </div>
+  );
+}
+
+function ToiotoDisplay({ group }: { group: SubscriptionGroupState }) {
+  const { t } = useTranslation();
+  const data = group.toioto;
+  if (!data) {
+    return (
+      <div className="subscription-usage-empty">
+        {group.lastFetched ? t("subscriptions.noData", "No usage data available") : ""}
+      </div>
+    );
+  }
+
+  return (
+    <div className="subscription-toioto-display">
+      <div className="subscription-toioto-balance">
+        <span className="subscription-toioto-balance-amount">{formatBalance(data.balance)}</span>
+        <span className="subscription-toioto-balance-label">{t("subscriptions.balance", "Balance")}</span>
+      </div>
+      <div className="subscription-toioto-meta">
+        <span className="subscription-toioto-meta-item">
+          {t("subscriptions.concurrency", "Concurrency")}: {data.concurrency}
+        </span>
+        <span className="subscription-toioto-meta-item">
+          RPM: {data.rpmLimit}
+        </span>
+        <span className="subscription-toioto-meta-item">
+          {t("subscriptions.totalRecharged", "Recharged")}: {formatBalance(data.totalRecharged)}
+        </span>
       </div>
     </div>
   );
@@ -154,22 +233,34 @@ function SubscriptionGroupCard({
     setEditing(false);
   };
 
+  const handleSaveToiotoConfig = (config: Pick<SubscriptionGroupConfig, "authCookie" | "refreshIntervalSeconds" | "name">) => {
+    updateGroup(group.id, config);
+    setEditing(false);
+  };
+
   return (
     <section className={`subscription-group${collapsed ? " collapsed" : ""}`}>
       <button type="button" className="subscription-group-header" onClick={() => setCollapsed((v) => !v)} aria-expanded={!collapsed}>
         <Icon name={collapsed ? "chevron-right" : "chevron-down"} size={12} className="subscription-group-caret" />
-        <span className="subscription-group-name">{group.name || "OpenCode Go"}</span>
-        <div className="subscription-group-minibars">
-          <div className="subscription-group-minibar">
-            <div className="subscription-group-minibar-fill" style={{ width: group.rolling ? usageBarPercent(group.rolling.usagePercent) : "0%" }} />
+        <span className="subscription-group-name">{group.name || (group.type === "toioto" ? "Toioto" : "OpenCode Go")}</span>
+        {group.type === "opencode-go" && (
+          <div className="subscription-group-minibars">
+            <div className="subscription-group-minibar">
+              <div className="subscription-group-minibar-fill" style={{ width: group.rolling ? usageBarPercent(group.rolling.usagePercent) : "0%" }} />
+            </div>
+            <div className="subscription-group-minibar">
+              <div className="subscription-group-minibar-fill" style={{ width: group.weekly ? usageBarPercent(group.weekly.usagePercent) : "0%" }} />
+            </div>
+            <div className="subscription-group-minibar">
+              <div className="subscription-group-minibar-fill" style={{ width: group.monthly ? usageBarPercent(group.monthly.usagePercent) : "0%" }} />
+            </div>
           </div>
-          <div className="subscription-group-minibar">
-            <div className="subscription-group-minibar-fill" style={{ width: group.weekly ? usageBarPercent(group.weekly.usagePercent) : "0%" }} />
-          </div>
-          <div className="subscription-group-minibar">
-            <div className="subscription-group-minibar-fill" style={{ width: group.monthly ? usageBarPercent(group.monthly.usagePercent) : "0%" }} />
-          </div>
-        </div>
+        )}
+        {group.type === "toioto" && group.toioto && (
+          <span className={`subscription-group-balance${group.toioto.balance < 5 ? " low" : ""}`}>
+            {formatBalance(group.toioto.balance)}
+          </span>
+        )}
         <span className="subscription-group-status">
           {group.loading ? (
             <Icon name="spinner" size={12} className="animate-spin" />
@@ -193,6 +284,9 @@ function SubscriptionGroupCard({
                 {t("subscriptions.every", "Every")} {group.refreshIntervalSeconds}s
               </span>
             )}
+            {group.type === "toioto" && group.toioto?.email && (
+              <span className="subscription-group-meta-item">{group.toioto.email}</span>
+            )}
           </div>
         ) : null}
 
@@ -204,11 +298,21 @@ function SubscriptionGroupCard({
         ) : null}
 
         {editing ? (
-          <GroupConfigForm
-            group={group}
-            onSave={handleSaveConfig}
-            onCancel={() => setEditing(false)}
-          />
+          group.type === "toioto" ? (
+            <ToiotoConfigForm
+              group={group}
+              onSave={handleSaveToiotoConfig}
+              onCancel={() => setEditing(false)}
+            />
+          ) : (
+            <GroupConfigForm
+              group={group}
+              onSave={handleSaveConfig}
+              onCancel={() => setEditing(false)}
+            />
+          )
+        ) : group.type === "toioto" ? (
+          <ToiotoDisplay group={group} />
         ) : (
           <UsageDisplay group={group} />
         )}
@@ -262,7 +366,38 @@ export function SubscriptionPanel() {
   const refreshGroup = useSubscriptionStore((s) => s.refreshGroup);
   const refreshAll = useSubscriptionStore((s) => s.refreshAll);
   const [showNewForm, setShowNewForm] = useState(false);
+  const [showNewToiotoForm, setShowNewToiotoForm] = useState(false);
   const [refreshing, setRefreshing] = useState(false);
+  const [showDropdown, setShowDropdown] = useState(false);
+  const addBtnRef = useRef<HTMLButtonElement>(null);
+  const dropdownRef = useRef<HTMLDivElement>(null);
+
+  useEffect(() => {
+    if (!showDropdown) return;
+    const handler = (e: MouseEvent) => {
+      if (
+        dropdownRef.current &&
+        !dropdownRef.current.contains(e.target as Node) &&
+        addBtnRef.current &&
+        !addBtnRef.current.contains(e.target as Node)
+      ) {
+        setShowDropdown(false);
+      }
+    };
+    document.addEventListener("mousedown", handler);
+    return () => document.removeEventListener("mousedown", handler);
+  }, [showDropdown]);
+
+  const openForm = (type: "opencode-go" | "toioto") => {
+    setShowDropdown(false);
+    if (type === "opencode-go") {
+      setShowNewToiotoForm(false);
+      setShowNewForm((v) => !v);
+    } else {
+      setShowNewForm(false);
+      setShowNewToiotoForm((v) => !v);
+    }
+  };
 
   const handleRefreshAll = useCallback(async () => {
     setRefreshing(true);
@@ -277,15 +412,31 @@ export function SubscriptionPanel() {
     addGroup({
       ...config,
       type: "opencode-go",
+      workspaceId: config.workspaceId || "",
       enabled: true,
     });
     setShowNewForm(false);
   };
 
+  const handleAddToiotoGroup = (config: Pick<SubscriptionGroupConfig, "authCookie" | "refreshIntervalSeconds" | "name">) => {
+    addGroup({
+      type: "toioto",
+      workspaceId: "",
+      ...config,
+      enabled: true,
+    });
+    setShowNewToiotoForm(false);
+  };
+
   return (
     <div className="subscription-panel">
       <div className="subscription-toolbar">
-        <button type="button" className="subscription-new-button" onClick={() => setShowNewForm((v) => !v)}>
+        <button
+          type="button"
+          ref={addBtnRef}
+          className="subscription-new-button"
+          onClick={() => setShowDropdown((v) => !v)}
+        >
           <Icon name="plus" size={12} />
           <span>{t("subscriptions.addGroup", "Add subscription")}</span>
         </button>
@@ -313,8 +464,19 @@ export function SubscriptionPanel() {
         </div>
       )}
 
+      {showNewToiotoForm && (
+        <div className="subscription-new-form">
+          <div className="subscription-new-form-header">{t("subscriptions.addToioto", "Add Toioto")}</div>
+          <ToiotoConfigForm
+            group={{ authCookie: "", refreshIntervalSeconds: 120, name: t("subscriptions.toioto", "Toioto") }}
+            onSave={handleAddToiotoGroup}
+            onCancel={() => setShowNewToiotoForm(false)}
+          />
+        </div>
+      )}
+
       <div className="subscription-groups">
-        {groups.length === 0 && !showNewForm ? (
+        {groups.length === 0 && !showNewForm && !showNewToiotoForm ? (
           <div className="subscription-empty">
             <Icon name="dollar-sign" size={24} />
             <div>{t("subscriptions.empty", "No subscriptions configured")}</div>
@@ -325,6 +487,50 @@ export function SubscriptionPanel() {
           ))
         )}
       </div>
+
+      {showDropdown &&
+        createPortal(
+          <div
+            ref={dropdownRef}
+            className="app-select-panel"
+            role="listbox"
+            aria-label={t("subscriptions.addGroup", "Add subscription")}
+            style={
+              addBtnRef.current
+                ? (() => {
+                    const rect = addBtnRef.current.getBoundingClientRect();
+                return { position: "fixed", minWidth: 0, maxWidth: "unset", left: rect.left, top: rect.bottom + 4 };
+              })()
+            : { position: "fixed", minWidth: 0, maxWidth: "unset" }
+            }
+          >
+            <button
+              type="button"
+              className="app-select-option"
+              role="option"
+              aria-selected={false}
+              onClick={() => openForm("opencode-go")}
+            >
+              <Icon name="dollar-sign" size={13} />
+              <span className="app-select-option-text">
+                <span className="app-select-option-label">{t("subscriptions.opencodeGo", "OpenCode Go")}</span>
+              </span>
+            </button>
+            <button
+              type="button"
+              className="app-select-option"
+              role="option"
+              aria-selected={false}
+              onClick={() => openForm("toioto")}
+            >
+              <Icon name="dollar-sign" size={13} />
+              <span className="app-select-option-text">
+                <span className="app-select-option-label">{t("subscriptions.toioto", "Toioto")}</span>
+              </span>
+            </button>
+          </div>,
+          document.body,
+        )}
     </div>
   );
 }
