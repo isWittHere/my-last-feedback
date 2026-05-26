@@ -14,9 +14,11 @@ function generateConfig(client: Client, format: Format, serverPath: string): str
   if (client === "codex") {
     return [
       "[mcp_servers.\"my-last-feedback\"]",
-      "type = \"sse\"",
-      "url = \"http://127.0.0.1:3838/mcp\"",
+      "type = \"stdio\"",
+      "command = \"node\"",
+      `args = ["${escaped}"]`,
       "tool_timeout_sec = 64800",
+      "enabled = true",
       "",
       "",
       "[mcp_servers.\"my-last-feedback\".tools.interactive_feedback]",

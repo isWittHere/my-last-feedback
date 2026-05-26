@@ -12,7 +12,7 @@ mod terminal;
 use std::collections::HashSet;
 use std::path::PathBuf;
 use std::sync::Mutex;
-use std::process::{Command, Stdio};
+use std::process::Command;
 use tauri::{Manager, State};
 use serde::{Deserialize, Serialize};
 use tauri_plugin_autostart::{MacosLauncher, ManagerExt};
@@ -604,71 +604,6 @@ fn get_server_path() -> String {
     "/path/to/my-last-feedback/mcp/mlfb/index.mjs".to_string()
 }
 
-fn resolve_http_server_repo_root() -> Option<std::path::PathBuf> {
-    let server_path = get_server_path();
-    let path = std::path::PathBuf::from(server_path);
-    if !path.exists() {
-        return None;
-    }
-    // Prefer canonical mcp/mlfb/index.mjs location
-    if path.ends_with(std::path::Path::new("mcp").join("mlfb").join("index.mjs")) {
-        return path.parent()?.parent()?.parent().map(|p| p.to_path_buf());
-    }
-    // Legacy fallback: server.mjs at repo root
-    path.parent().map(|p| p.to_path_buf())
-}
-
-#[tauri::command]
-fn get_sse_service_status() -> bool {
-    std::net::TcpStream::connect("127.0.0.1:3838").is_ok()
-}
-
-#[tauri::command]
-fn set_sse_service_enabled(enabled: bool) -> Result<bool, String> {
-    if enabled {
-        if get_sse_service_status() {
-            return Ok(true);
-        }
-        let repo_root = resolve_http_server_repo_root()
-            .ok_or_else(|| "Cannot resolve my-last-feedback repository path".to_string())?;
-        let http_entry = repo_root.join("mcp").join("mlfb").join("http-server.mjs");
-        if !http_entry.exists() {
-            return Err(format!("HTTP MCP entry not found: {}", http_entry.to_string_lossy()));
-        }
-
-        let mut cmd = Command::new("node");
-        cmd.arg("mcp/mlfb/http-server.mjs")
-            .current_dir(&repo_root)
-            .stdin(Stdio::null())
-            .stdout(Stdio::null())
-            .stderr(Stdio::null());
-        #[cfg(target_os = "windows")]
-        {
-            use std::os::windows::process::CommandExt;
-            cmd.creation_flags(0x08000000); // CREATE_NO_WINDOW
-        }
-        let _child = cmd.spawn().map_err(|e| format!("Failed to start SSE service: {}", e))?;
-        std::thread::sleep(std::time::Duration::from_millis(400));
-        return Ok(get_sse_service_status());
-    }
-
-    #[cfg(target_os = "windows")]
-    {
-        let script = "Get-NetTCPConnection -LocalPort 3838 -State Listen -ErrorAction SilentlyContinue | ForEach-Object { Stop-Process -Id $_.OwningProcess -Force -ErrorAction SilentlyContinue }";
-        let _ = Command::new("powershell")
-            .args(["-NoProfile", "-Command", script])
-            .status();
-    }
-    #[cfg(not(target_os = "windows"))]
-    {
-        let _ = Command::new("sh")
-            .args(["-lc", "lsof -ti tcp:3838 | xargs -r kill -9"])
-            .status();
-    }
-    std::thread::sleep(std::time::Duration::from_millis(250));
-    Ok(get_sse_service_status())
-}
-
 /// Load .prompt.md files from the mcp_prompts/ directory next to the executable
 #[tauri::command]
 fn load_prompts() -> Vec<PromptItem> {
@@ -854,8 +789,6 @@ pub fn run() {
             get_autostart,
             set_autostart,
             get_server_path,
-            get_sse_service_status,
-            set_sse_service_enabled,
             // Persistent-mode commands
             get_callers,
             get_all_sessions,
