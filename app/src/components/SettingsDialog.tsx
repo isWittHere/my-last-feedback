@@ -18,6 +18,7 @@ import { getSubmittedViewSettings, saveSubmittedViewSettings, SUBMITTED_VIEW_SEC
 import { getTerminalSettings, saveTerminalSettings, type TerminalSettings, type TerminalShellId } from "../terminalSettings";
 import { getComposerSettings, saveComposerSettings, type ComposerSettings } from "../composerSettings";
 import { formatGitFolderBlacklistText, getGitOperationSettings, GIT_TIMED_REMINDER_MAX_MINUTES, GIT_TIMED_REMINDER_MIN_MINUTES, GIT_TIMED_REMINDER_STEP_MINUTES, parseGitFolderBlacklistText, saveGitOperationSettings, type GitOperationSettings } from "../gitOperationSettings";
+import { getGitPanelSettings, saveGitPanelSettings, type GitDiffPathDisplayMode, type GitPanelSettings } from "../gitPanelSettings";
 import { AGENT_DIFF_COLOR_PRESETS, getAgentConsoleSettings, saveAgentConsoleSettings, type AgentApprovalDisplayMode, type AgentConsoleSettings, type AgentDiffColorPresetId, type AgentNavigationGroupBackgroundMode, type AgentNavigationIndicatorOrder, type AgentNavigationVisualizationMode, type AgentProcessStepDefaultMode, type AgentTaskPanelTemplateStyle, type AgentTimelineStreamingStepMode, type AgentTodoUpdateDisplayMode, type AgentTopbarIndicatorMode } from "../agentConsoleSettings";
 import { getOpenCodePermissionPresetAction, getOpenCodePermissionPresetId, getOpenCodeSettings, OPEN_CODE_PERMISSION_DEFINITIONS, OPEN_CODE_PERMISSION_PRESETS, setOpenCodeDefaultPermissionAction, setOpenCodeDefaultPermissionPreset, setOpenCodeModelEnabled, setOpenCodePreferredModel, type OpenCodePermissionPresetId, type OpenCodePermissionSettingAction, type OpenCodeSettings } from "../openCodeSettings";
 import { SESSION_LIST_MODE_OPTIONS } from "../sessionNavigationSettings";
@@ -27,7 +28,7 @@ import { AppSelect, type AppSelectOption } from "./AppSelect";
 import { SettingsSegmentedControl } from "./SettingsSegmentedControl";
 import { isAgentUiDisabled } from "../agent/agentUiFlags";
 
-type Tab = "general" | "display" | "callers" | "submitted" | "prompts" | "sessionNavigation" | "gitOperations" | "layoutPanels" | "agentConsole" | "agentStepDisplay" | "agentChat" | "agentSessionManager" | "openCode" | "openCodePermissions" | "terminal" | "resources" | "markdownPreview" | "notification" | "about";
+type Tab = "general" | "display" | "callers" | "submitted" | "prompts" | "sessionNavigation" | "gitOperations" | "layoutPanels" | "agentConsole" | "agentStepDisplay" | "agentChat" | "agentSessionManager" | "openCode" | "openCodePermissions" | "terminal" | "resources" | "gitPanel" | "markdownPreview" | "notification" | "about";
 type SettingsGroupId = "mlfb" | "agent" | "layout";
 
 function renderStickyUserMessageText(text: string, mergeLines: boolean): ReactNode {
@@ -197,6 +198,7 @@ export function SettingsDialog({ open, onClose }: { open: boolean; onClose: () =
   const [terminalSettings, setTerminalSettings] = useState<TerminalSettings>(getTerminalSettings);
   const [composerSettings, setComposerSettings] = useState<ComposerSettings>(getComposerSettings);
   const [gitOperationSettings, setGitOperationSettings] = useState<GitOperationSettings>(getGitOperationSettings);
+  const [gitPanelSettings, setGitPanelSettings] = useState<GitPanelSettings>(getGitPanelSettings);
   const [agentConsoleSettings, setAgentConsoleSettings] = useState<AgentConsoleSettings>(getAgentConsoleSettings);
   const [agentSessionSettings, setAgentSessionSettings] = useState<AgentSessionSettings>(getAgentSessionSettings);
   const [openCodeSettings, setOpenCodeSettings] = useState<OpenCodeSettings>(getOpenCodeSettings);
@@ -261,6 +263,7 @@ export function SettingsDialog({ open, onClose }: { open: boolean; onClose: () =
     setTerminalSettings(getTerminalSettings());
     setComposerSettings(getComposerSettings());
     setGitOperationSettings(getGitOperationSettings());
+    setGitPanelSettings(getGitPanelSettings());
     setAgentConsoleSettings(getAgentConsoleSettings());
     setAgentSessionSettings(getAgentSessionSettings());
     setAgentCleanupMessage(null);
@@ -607,6 +610,12 @@ export function SettingsDialog({ open, onClose }: { open: boolean; onClose: () =
       queueMicrotask(() => saveGitOperationSettings(next));
       return next;
     });
+  }, []);
+
+  const handleGitPanelPathModeChange = useCallback((mode: GitDiffPathDisplayMode) => {
+    setGitPanelSettings((current) =>
+      saveGitPanelSettings({ ...current, diffPathDisplayMode: mode }),
+    );
   }, []);
 
   const handleGitReminderEnabledToggle = useCallback(() => {
@@ -1164,11 +1173,12 @@ export function SettingsDialog({ open, onClose }: { open: boolean; onClose: () =
                 {renderSettingsNavItem("openCodePermissions", "checklist", t("settings.openCodeApprovalPermissions", "Approval permissions"), true)}
               </>
             ))}
-            {renderSettingsNavGroup("layout", t("settings.layout", "Layout"), ["layoutPanels", "terminal", "resources", "markdownPreview"], (
+            {renderSettingsNavGroup("layout", t("settings.layout", "Layout"), ["layoutPanels", "terminal", "resources", "gitPanel", "markdownPreview"], (
               <>
                 {renderSettingsNavItem("layoutPanels", "page-sidebar", t("settings.panelManagement", "Panel management"), true)}
                 {renderSettingsNavItem("terminal", "terminal", t("settings.terminal", "Terminal"), true)}
                 {renderSettingsNavItem("resources", "folder", t("settings.resourceExplorer", "Resource explorer"), true)}
+                {renderSettingsNavItem("gitPanel", "git-commit", t("settings.gitPanel", "Git panel"), true)}
                 {renderSettingsNavItem("markdownPreview", "file-text", t("settings.markdownPreview", "Markdown preview"), true)}
               </>
             ))}
@@ -1955,6 +1965,26 @@ export function SettingsDialog({ open, onClose }: { open: boolean; onClose: () =
                     options={[
                       { id: "default", label: t("settings.resourceIconThemeDefault", "Default"), icon: <Icon name="file-text" size={12} /> },
                       { id: "catppuccin", label: t("settings.resourceIconThemeCatppuccin", "Catppuccin"), icon: <Icon name="folder" size={12} /> },
+                    ]}
+                  />
+                </div>
+              </div>
+            )}
+
+            {tab === "gitPanel" && (
+              <div className="settings-section">
+                <div className="settings-row">
+                  <div className="settings-row-info" style={{ flex: 1 }}>
+                    <span className="settings-label">{t("settings.gitDiffPathDisplay", "Diff list display")}</span>
+                    <span className="settings-sublabel">{t("settings.gitDiffPathDisplayDesc", "Choose whether Git diff rows show full paths or file names only.")}</span>
+                  </div>
+                  <SettingsSegmentedControl
+                    ariaLabel={t("settings.gitDiffPathDisplay", "Diff list display")}
+                    value={gitPanelSettings.diffPathDisplayMode}
+                    onChange={(value) => handleGitPanelPathModeChange(value as GitDiffPathDisplayMode)}
+                    options={[
+                      { id: "fullPath", label: t("settings.gitDiffPathDisplayFull", "Full path"), icon: <Icon name="list-tree" size={12} /> },
+                      { id: "fileName", label: t("settings.gitDiffPathDisplayNameOnly", "File name only"), icon: <Icon name="file-text" size={12} /> },
                     ]}
                   />
                 </div>
