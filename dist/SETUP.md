@@ -2,9 +2,10 @@
 
 A lightweight MCP feedback GUI for AI-assisted development tools.
 
-This guide is updated for the latest setup, including:
-- `STDIO` mode (legacy-compatible)
-- `Streamable HTTP` mode (recommended for long-running tools and `tool_timeout_sec`)
+This guide includes complete Codex usage steps:
+- Streamable HTTP MCP setup (`tool_timeout_sec` supported)
+- User-compatible hooks package installation
+- Optional desktop quick launch and auto-start
 
 ---
 
@@ -24,11 +25,9 @@ npm install
 
 ---
 
-## 2) Choose Transport Mode
+## 2) Start MCP Server (Recommended)
 
-## Recommended: Streamable HTTP (for Codex)
-
-### Start MCP HTTP server
+Use Streamable HTTP entry:
 
 ```bash
 npm run start:http
@@ -38,7 +37,11 @@ Default endpoint:
 
 - `http://127.0.0.1:3838/mcp`
 
-### Codex config (`~/.codex/config.toml`)
+---
+
+## 3) Codex MCP Configuration
+
+Edit `~/.codex/config.toml` and add/update:
 
 ```toml
 [mcp_servers."my-last-feedback"]
@@ -52,7 +55,61 @@ approval_mode = "approve"
 
 `64800` seconds = 18 hours.
 
-## Legacy: STDIO mode
+---
+
+## 4) Codex Hooks Configuration
+
+Use packaged files in `dist/codex-hooks/`:
+
+- `hooks.json` (generic template)
+- `hooks.local.example.json` (local example)
+- `scripts/inject-agent-name.mjs`
+- `README.md` (install instructions)
+
+Recommended install:
+
+1. Copy `dist/codex-hooks/scripts/inject-agent-name.mjs` to:
+   `C:\Users\<YOUR_USER>\.codex\hooks\scripts\inject-agent-name.mjs`
+2. Copy `dist/codex-hooks/hooks.json` to:
+   `C:\Users\<YOUR_USER>\.codex\hooks.json`
+3. Replace `<YOUR_USER>` in `hooks.json`.
+
+If only for local machine, you can use `hooks.local.example.json` directly as `hooks.json`.
+
+---
+
+## 5) Agent Instructions
+
+Use `dist/prompt.instructions.md` as Codex instruction source.
+
+---
+
+## 6) Optional: Desktop Quick Launch
+
+You can create launchers for users:
+
+- Visible launch via `.cmd`
+- Silent launch via `.vbs`
+
+Typical silent launch command:
+
+```powershell
+Start-Process -WindowStyle Hidden -FilePath npm.cmd -ArgumentList 'run','start:http' -WorkingDirectory 'E:\Dev\my-last-feedback'
+```
+
+---
+
+## 7) Optional: Auto-Start on Login (Windows)
+
+If Scheduled Task is unavailable due to permission limits, use:
+
+- `HKCU\Software\Microsoft\Windows\CurrentVersion\Run`
+
+Register a hidden startup command that executes `npm run start:http`.
+
+---
+
+## Legacy STDIO Mode (Compatibility)
 
 If your client only supports process-based MCP:
 
@@ -69,56 +126,14 @@ If your client only supports process-based MCP:
 
 ---
 
-## 3) Add Agent Instructions
-
-Use `dist/prompt.instructions.md` as your tool instruction source.
-
-The instruction must enforce calling `interactive_feedback` for important confirmations and before completion.
-
----
-
-## 4) Optional: Desktop One-Click Launch
-
-You can create local launchers for convenience:
-
-- Visible launcher: `.cmd`
-- Silent launcher: `.vbs`
-
-Typical silent command:
-
-```powershell
-Start-Process -WindowStyle Hidden -FilePath npm.cmd -ArgumentList 'run','start:http' -WorkingDirectory 'E:\Dev\my-last-feedback'
-```
-
----
-
-## 5) Optional: Auto-Start on Login (Windows)
-
-If Scheduled Task permissions are restricted, use `HKCU\Software\Microsoft\Windows\CurrentVersion\Run`.
-
-Startup command should launch `npm run start:http` in hidden mode.
-
----
-
-## Directory Notes
-
-Key files:
-
-- `mcp/mlfb/index.mjs` — stdio entry
-- `mcp/mlfb/http-server.mjs` — streamable HTTP entry
-- `dist/prompt.instructions.md` — agent instruction template
-- `package.json` — includes `start` and `start:http`
-
----
-
 ## Troubleshooting
 
 | Issue | Solution |
 |---|---|
-| `EADDRINUSE 127.0.0.1:3838` | Another instance already running. Stop old process or change port via `MLFB_MCP_PORT`. |
-| Tool call times out in Codex | Verify `tool_timeout_sec` is set on the MCP server entry. |
+| `EADDRINUSE 127.0.0.1:3838` | Another instance is running. Stop old process or change port using `MLFB_MCP_PORT`. |
+| Tool call timeout | Verify `tool_timeout_sec` is configured on `my-last-feedback` MCP server entry. |
+| Hook not triggered | Check `~/.codex/hooks.json` path and script command path. |
 | GUI not showing | Ensure desktop app binary is available and MCP server can launch/connect to it. |
-| Client cannot connect `/mcp` | Check local firewall and confirm server is listening on `127.0.0.1:3838`. |
 
 ---
 
