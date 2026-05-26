@@ -36,18 +36,21 @@ interface GitChangesBreakdown {
   deleted: number;
 }
 
-function formatCommitDate(dateStr: string): string {
+function formatCommitDate(
+  dateStr: string,
+  translate: (key: string, defaultValue: string, options?: Record<string, unknown>) => string,
+): string {
   try {
     const d = new Date(dateStr);
     const now = new Date();
     const diffMs = now.getTime() - d.getTime();
     const diffMin = Math.floor(diffMs / 60000);
-    if (diffMin < 1) return "just now";
-    if (diffMin < 60) return `${diffMin} min ago`;
+    if (diffMin < 1) return translate("git.timeJustNow", "just now");
+    if (diffMin < 60) return translate("git.timeMinutesAgo", "{{count}} min ago", { count: diffMin });
     const diffH = Math.floor(diffMin / 60);
-    if (diffH < 24) return `${diffH}h ago`;
+    if (diffH < 24) return translate("git.timeHoursAgo", "{{count}}h ago", { count: diffH });
     const diffD = Math.floor(diffH / 24);
-    if (diffD < 7) return `${diffD}d ago`;
+    if (diffD < 7) return translate("git.timeDaysAgo", "{{count}}d ago", { count: diffD });
     return d.toLocaleDateString();
   } catch {
     return dateStr;
@@ -512,8 +515,10 @@ export function GitPanel() {
   const handleAttachCommit = useCallback((commit: GitLogEntry) => {
     const fc = useFeedbackStore.getState().focusedComposer;
     if (!fc) return;
+    const isLatest = latestCommitHash === commit.hash;
     const encodedMessage = encodeURIComponent(commit.message);
-    const raw = `[${shortHash(commit.hash)}](git:${commit.hash}|${encodedMessage})`;
+    const encodedMeta = `latest=${isLatest ? "1" : "0"}`;
+    const raw = `[${shortHash(commit.hash)}](git:${commit.hash}|${encodedMessage}|${encodedMeta})`;
     window.dispatchEvent(
       new CustomEvent("mlfb-insert-feedback-text", {
         detail: {
@@ -524,7 +529,7 @@ export function GitPanel() {
         },
       }),
     );
-  }, []);
+  }, [latestCommitHash]);
 
   return (
     <div className="git-panel flex flex-col h-full min-h-0">
@@ -686,6 +691,10 @@ export function GitPanel() {
                           gitPanelSettings.timelineStyle === "none"
                             ? " git-commit-item-no-timeline"
                             : ""
+                        }${
+                          gitPanelSettings.listItemStyle === "compact"
+                            ? " git-commit-item-compact"
+                            : " git-commit-item-detailed"
                         }`}
                       >
                         <button
@@ -735,7 +744,7 @@ export function GitPanel() {
                                 {commit.authorName}
                               </span>
                               <span className="git-commit-date">
-                                {formatCommitDate(commit.date)}
+                                {formatCommitDate(commit.date, t)}
                               </span>
                             </div>
                           </div>

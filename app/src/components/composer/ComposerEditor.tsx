@@ -376,6 +376,38 @@ function createChipIcon(kind: "file" | "folder" | "commit" | "terminal"): SVGSVG
   return svg;
 }
 
+function quickBackupTimestamp(message: string): string | null {
+  const match = /^Backup (\d{4}-\d{2}-\d{2} \d{2}:\d{2}:\d{2})$/.exec(
+    message.trim(),
+  );
+  return match?.[1] || null;
+}
+
+function createCommitChipIcon(commitInfo: ReturnType<typeof gitCommitLinkInfo>): SVGSVGElement {
+  const svg = document.createElementNS("http://www.w3.org/2000/svg", "svg");
+  svg.setAttribute("viewBox", "0 0 24 24");
+  svg.setAttribute("width", "11");
+  svg.setAttribute("height", "11");
+  svg.setAttribute("fill", "none");
+  svg.setAttribute("stroke", "currentColor");
+  svg.setAttribute("stroke-width", "2");
+  svg.setAttribute("stroke-linecap", "round");
+  svg.setAttribute("stroke-linejoin", "round");
+  svg.classList.add("composer-token-chip-svg");
+  if (!commitInfo) return svg;
+  const isQuickBackup = Boolean(quickBackupTimestamp(commitInfo.message));
+  if (isQuickBackup) {
+    svg.innerHTML = '<ellipse cx="12" cy="5" rx="9" ry="3"/><path d="M21 12c0 1.66-4 3-9 3s-9-1.34-9-3"/><path d="M3 5v14c0 1.66 4 3 9 3s9-1.34 9-3V5"/>';
+    return svg;
+  }
+  if (commitInfo.isLatest) {
+    svg.innerHTML = '<circle cx="12" cy="12" r="8"/><circle cx="12" cy="12" r="3"/>';
+    return svg;
+  }
+  svg.innerHTML = '<circle cx="12" cy="12" r="5"/>';
+  return svg;
+}
+
 function createResourceChipIcon(token: { label: string; href: string; kind: "file" | "folder" }, resourceIconTheme: ResourceIconTheme, catppuccinFlavor: CatppuccinIconFlavor): Element {
   if (resourceIconTheme === "catppuccin") {
     const image = document.createElement("img");
@@ -397,7 +429,7 @@ function renderComposerDom(root: HTMLElement, value: string, tokens: ReturnType<
         const commitInfo = gitCommitLinkInfo(token.label, token.href);
         const tooltip = commitInfo ? `${commitInfo.fullHash}\n${commitInfo.message}` : token.href;
         const chip = createTokenChip("composer-token-chip composer-token-chip-git", "resourceLink", token.raw, tooltip);
-        chip.appendChild(createChipIcon("commit"));
+        chip.appendChild(createCommitChipIcon(commitInfo));
         appendTokenLabel(chip, token.label);
         fragment.appendChild(chip);
       } else {
