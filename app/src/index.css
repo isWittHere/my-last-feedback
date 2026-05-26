@@ -9693,6 +9693,9 @@ body,
     font-size: 12px;
     min-width: 0;
 }
+.resource-tree-row.resource-tree-row-ignored {
+    opacity: 0.5;
+}
 .resource-tree-children {
     border-left: 1px solid
         color-mix(in srgb, var(--color-text-muted) 42%, transparent);
@@ -9708,6 +9711,10 @@ body,
         transparent
     );
     color: var(--color-text-primary);
+}
+.resource-tree-row.resource-tree-row-ignored:hover,
+.resource-tree-row.resource-tree-row-ignored:focus-within {
+    opacity: 0.72;
 }
 .resource-tree-disclosure,
 .resource-tree-insert {
@@ -9754,6 +9761,30 @@ body,
     flex-shrink: 0;
     color: var(--color-text-muted);
 }
+.resource-tree-icon-shell {
+    position: relative;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    width: 16px;
+    height: 16px;
+    flex-shrink: 0;
+}
+.resource-tree-diff-dot {
+    position: absolute;
+    left: -1px;
+    bottom: 0px;
+    width: 6px;
+    height: 6px;
+    border-radius: 50%;
+    border: 1px solid var(--color-bg-base);
+}
+.resource-tree-diff-dot-added {
+    background: var(--color-success);
+}
+.resource-tree-diff-dot-modified {
+    background: var(--color-warning, #eab308);
+}
 .resource-tree-icon-img {
     display: block;
     object-fit: contain;
@@ -9773,6 +9804,12 @@ body,
     text-align: left;
     padding: 0;
     cursor: pointer;
+}
+.resource-tree-row-diff-added .resource-tree-name {
+    color: var(--color-success);
+}
+.resource-tree-row-diff-modified .resource-tree-name {
+    color: var(--color-warning, #eab308);
 }
 .readonly-resource-tag {
     display: inline-flex;
@@ -15836,7 +15873,7 @@ button.mlra-inspector-gate-pill {
     background: var(--color-bg-elevated);
     border: 1px solid var(--color-border);
     color: var(--color-text-secondary);
-    max-width: 160px;
+    max-width: 200px;
     overflow: hidden;
     text-overflow: ellipsis;
     white-space: nowrap;
@@ -16051,7 +16088,7 @@ button.mlra-inspector-gate-pill {
 }
 
 .git-commit-item + .git-commit-item {
-    border-top: 1px solid var(--color-border-subtle);
+    border-top: 0px solid var(--color-border-subtle);
 }
 
 .git-commit-header {
@@ -16059,7 +16096,7 @@ button.mlra-inspector-gate-pill {
     align-items: center;
     gap: 8px;
     width: 100%;
-    padding: 6px 12px;
+    padding: 4px 8px;
     border: none;
     background: transparent;
     color: var(--color-text-primary);
@@ -16077,7 +16114,7 @@ button.mlra-inspector-gate-pill {
     width: 8px;
     height: 8px;
     border-radius: 50%;
-    background: var(--color-primary);
+    background: var(--git-workspace-color, var(--color-primary));
     flex-shrink: 0;
     opacity: 0.6;
 }
@@ -16105,7 +16142,7 @@ button.mlra-inspector-gate-pill {
     font-family:
         "Cascadia Mono", "JetBrains Mono", "Fira Code", Consolas, "Courier New",
         monospace;
-    color: var(--color-primary);
+    color: var(--git-workspace-color, var(--color-primary));
 }
 
 .git-commit-author {
@@ -16124,17 +16161,24 @@ button.mlra-inspector-gate-pill {
     display: flex;
     align-items: center;
     justify-content: center;
-    width: 24px;
+    width: 0;
     height: 24px;
+    overflow: hidden;
+    margin-left: 0;
     border-radius: 4px;
     color: var(--color-text-muted);
     opacity: 0;
-    transition: opacity 0.15s;
+    pointer-events: none;
+    transition: width 0.15s ease, opacity 0.15s ease, margin-left 0.15s ease;
     cursor: pointer;
 }
 
-.git-commit-header:hover .git-commit-attach {
+.git-commit-header:hover .git-commit-attach,
+.git-commit-header:focus-within .git-commit-attach {
+    width: 24px;
+    margin-left: 4px;
     opacity: 1;
+    pointer-events: auto;
 }
 
 .git-commit-attach:hover {

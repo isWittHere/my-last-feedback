@@ -29,6 +29,7 @@ pub struct ProjectResourceEntry {
     pub absolute_path: String,
     pub relative_path: String,
     pub kind: String,
+    pub ignored: bool,
 }
 
 #[tauri::command]
@@ -57,15 +58,16 @@ pub async fn project_list_directory(
             .to_string_lossy()
             .replace('\\', "/");
 
-        if fixed_ignores.contains(name.as_str()) || is_gitignored(&relative_path, &name, is_dir, &ignore_rules) {
-            continue;
-        }
+        let ignored =
+            fixed_ignores.contains(name.as_str())
+                || is_gitignored(&relative_path, &name, is_dir, &ignore_rules);
 
         entries.push(ProjectResourceEntry {
             name,
             absolute_path: display_path(&path),
             relative_path,
             kind: if is_dir { "folder" } else { "file" }.to_string(),
+            ignored,
         });
     }
 

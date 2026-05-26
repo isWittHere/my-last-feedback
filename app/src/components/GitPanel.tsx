@@ -189,9 +189,24 @@ export function GitPanel() {
           : rect.left;
       left = Math.max(8, Math.min(left, window.innerWidth - popoverWidth - 8));
     }
-    const top = rect.bottom + gap;
+    const estimatedHeight = 360;
+    let top = rect.bottom + gap;
+    if (top + estimatedHeight > window.innerHeight - 8) {
+      top = rect.top - estimatedHeight - gap;
+    }
+    top = Math.max(8, Math.min(top, window.innerHeight - estimatedHeight - 8));
     setDiffPopover({ left, top });
   }, []);
+
+  useEffect(() => {
+    if (!diffPopover || !popoverRef.current) return;
+    const rect = popoverRef.current.getBoundingClientRect();
+    const clampedLeft = Math.max(8, Math.min(rect.left, window.innerWidth - rect.width - 8));
+    const clampedTop = Math.max(8, Math.min(rect.top, window.innerHeight - rect.height - 8));
+    if (clampedLeft !== diffPopover.left || clampedTop !== diffPopover.top) {
+      setDiffPopover({ left: clampedLeft, top: clampedTop });
+    }
+  }, [diffPopover]);
 
   const fetchChangesCount = useCallback(async () => {
     if (!workspacePath) return;
@@ -443,8 +458,15 @@ export function GitPanel() {
                   }
                   title={
                     gitReminderProgress.ready
-                      ? "Timed Git reminder ready"
-                      : `Next timed Git reminder in ${gitReminderProgress.minutesUntil ?? 0} min`
+                      ? t(
+                          "gitAction.buttonTooltipTimedReady",
+                          "Timed Git reminder ready now",
+                        )
+                      : t(
+                          "gitAction.buttonTooltipNextTimed",
+                          "Next timed Git reminder in {{count}} min",
+                          { count: gitReminderProgress.minutesUntil ?? 0 },
+                        )
                   }
                 />
               ) : (
@@ -497,6 +519,7 @@ export function GitPanel() {
                   0)
             }
             title={t("git.backup", "Quick Backup")}
+            data-tooltip={t("git.backup", "Quick Backup")}
           >
             <Icon name="database" size={13} />
           </button>
@@ -548,7 +571,14 @@ export function GitPanel() {
             </span>
           </div>
         ) : (
-          <div className="git-commit-list">
+          <div
+            className="git-commit-list"
+            style={
+              {
+                "--git-workspace-color": workspaceIdentity.color,
+              } as React.CSSProperties
+            }
+          >
             {commits.map((commit) => {
               const isExpanded = expandedCommit === commit.hash;
               return (
