@@ -27,9 +27,9 @@ export function readSessionListMode(): SessionListMode {
     const stored = localStorage.getItem(SESSION_LIST_MODE_STORAGE_KEY);
     if (isSessionListMode(stored)) return stored;
     if (stored === "topbar") return "topbarStats";
-    return localStorage.getItem(LEGACY_COLLAPSED_STORAGE_KEY) === "true" ? "rail" : "expanded";
+    return localStorage.getItem(LEGACY_COLLAPSED_STORAGE_KEY) === "true" ? "rail" : "topbarStats";
   } catch {
-    return "expanded";
+    return "topbarStats";
   }
 }
 

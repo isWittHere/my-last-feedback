@@ -1,15 +1,6 @@
-# Snapshot extracted from C:\Users\Aftersix\.codex\config.toml
 # Contains MCP server configuration relevant to current Codex setup.
 
 [mcp_servers]
-
-[mcp_servers."microsoftdocs/mcp"]
-type = "sse"
-url = "https://learn.microsoft.com/api/mcp"
-
-[mcp_servers.tavily]
-type = "sse"
-url = "https://mcp.tavily.com/mcp/?tavilyApiKey=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"
 
 [mcp_servers."my-last-feedback"]
 type = "sse"
@@ -19,5 +10,3 @@ tool_timeout_sec = 64800
 
 [mcp_servers."my-last-feedback".tools.interactive_feedback]
 approval_mode = "approve"
-
-

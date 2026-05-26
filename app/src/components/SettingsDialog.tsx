@@ -189,7 +189,6 @@ export function SettingsDialog({ open, onClose }: { open: boolean; onClose: () =
   const [theme, setTheme] = useState<Theme>(getStoredTheme);
   const [autostart, setAutostart] = useState(false);
   const [autostartMessage, setAutostartMessage] = useState<string | null>(null);
-  const [confirmClear, setConfirmClear] = useState(false);
   const [diffOffsetCollapsed, setDiffOffsetCollapsed] = useState(true);
   const [notifSettings, setNotifSettings] = useState<NotificationSettings>(getNotificationSettings);
   const [terminalSettings, setTerminalSettings] = useState<TerminalSettings>(getTerminalSettings);
@@ -1172,41 +1171,6 @@ export function SettingsDialog({ open, onClose }: { open: boolean; onClose: () =
                 </div>
                 <McpConfigHelper />
 
-                {/* Clear all history */}
-                <div className="settings-row" style={{ borderTop: "1px solid var(--color-border)", paddingTop: 12, marginTop: 8 }}>
-                  <div className="settings-row-info">
-                    <span className="settings-label">{t("settings.clearHistory")}</span>
-                    <span className="settings-sublabel">{t("settings.clearHistoryDesc")}</span>
-                  </div>
-                  {!confirmClear ? (
-                    <div className="settings-command-actions">
-                      <button
-                        className="settings-command-button danger"
-                        onClick={() => setConfirmClear(true)}
-                      >
-                        {t("settings.clearHistoryBtn")}
-                      </button>
-                    </div>
-                  ) : (
-                    <div className="settings-command-actions">
-                      <button
-                        className="settings-command-button danger active"
-                        onClick={async () => {
-                          await useFeedbackStore.getState().clearAllHistory();
-                          setConfirmClear(false);
-                        }}
-                      >
-                        {t("settings.clearHistoryConfirm")}
-                      </button>
-                      <button
-                        className="settings-command-button"
-                        onClick={() => setConfirmClear(false)}
-                      >
-                        {t("settings.clearHistoryCancel")}
-                      </button>
-                    </div>
-                  )}
-                </div>
               </div>
             )}
 

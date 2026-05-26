@@ -1,4 +1,4 @@
-# For Copilot instructions
+# For Codex AGENTS.md
 
 ---
 > From interactive_feedback.instructions.md
@@ -98,41 +98,6 @@ solved_lists: [可选]
 - **必填字段**：title、description、workplace
 - **可选字段**：project、type、tags、solved_lists
 - **更新规则**：保留原内容，标记新增部分（添加时间戳）
-
-
----
-## 二、语言模型工具
-
-你可以使用以下语言模型工具来查询、管理、补充或改进已存在的文档：
-
-### 1. `#tool:my-last-chat.my-last-chat/lastchats`
-获取所有已保存的聊天摘要列表。
-
-**参数**：
-| 参数 | 类型 | 默认值 | 可选值 |
-|------|------|--------|--------|
-| scope | string | "all" | workspace / global / all |
-| feedbackLevel | string | "DESCRIPTION" | TITLE_ONLY / DESCRIPTION / META / ALL |
-
-### 2. `#tool:my-last-chat.my-last-chat/searchchat`
-通过标题关键词搜索。
-
-**参数**：
-| 参数 | 类型 | 默认值 | 可选值 |
-|------|------|--------|--------|
-| keywords | array | *必填* | - |
-| scope | string | "all" | workspace / global / all |
-| feedbackLevel | string | "DESCRIPTION" | TITLE_ONLY / DESCRIPTION / META / ALL |
-
-### 3. `#tool:my-last-chat.my-last-chat/searchmeta`
-跨所有元数据字段（title、description、workplace、project、type、solved_lists）搜索。
-
-**参数**：
-| 参数 | 类型 | 默认值 | 可选值 |
-|------|------|--------|--------|
-| keywords | array | *必填* | - |
-| scope | string | "all" | workspace / global / all |
-| feedbackLevel | string | "META" | TITLE_ONLY / DESCRIPTION / META / ALL |
 
 ---
 ## 三、其他文档提示
