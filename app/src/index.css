@@ -15997,6 +15997,7 @@ button.mlra-inspector-gate-pill {
     overflow: hidden;
     text-overflow: ellipsis;
     white-space: nowrap;
+    font-weight: 400;
 }
 
 .git-diff-file-meter {

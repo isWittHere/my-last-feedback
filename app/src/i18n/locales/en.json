@@ -1006,6 +1006,7 @@
   },
   "git": {
     "title": "Git",
+    "backup": "Quick Backup",
     "refresh": "Refresh",
     "loading": "Loading...",
     "noCommits": "No commits found",

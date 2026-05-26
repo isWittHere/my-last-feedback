@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
 import { invoke } from "@tauri-apps/api/core";
 import { useTranslation } from "react-i18next";
 import { useFeedbackStore } from "../store/feedbackStore";
@@ -164,6 +164,8 @@ export function GitPanel() {
     useState<GitChangesBreakdown | null>(null);
   const [diffFiles, setDiffFiles] = useState<AgentUiDiffFile[] | null>(null);
   const [diffLoading, setDiffLoading] = useState(false);
+  const changesReqSeqRef = useRef(0);
+  const diffReqSeqRef = useRef(0);
   const diffHideTimerRef = useRef<number | null>(null);
   const badgeRef = useRef<HTMLDivElement | null>(null);
   const popoverRef = useRef<HTMLDivElement | null>(null);
@@ -198,7 +200,7 @@ export function GitPanel() {
     setDiffPopover({ left, top });
   }, []);
 
-  useEffect(() => {
+  useLayoutEffect(() => {
     if (!diffPopover || !popoverRef.current) return;
     const rect = popoverRef.current.getBoundingClientRect();
     const clampedLeft = Math.max(8, Math.min(rect.left, window.innerWidth - rect.width - 8));
@@ -210,6 +212,7 @@ export function GitPanel() {
 
   const fetchChangesCount = useCallback(async () => {
     if (!workspacePath) return;
+    const reqId = ++changesReqSeqRef.current;
     try {
       const breakdown = await invoke<GitChangesBreakdown>(
         "git_changes_breakdown",
@@ -217,23 +220,29 @@ export function GitPanel() {
           projectDirectory: workspacePath,
         },
       );
+      if (reqId !== changesReqSeqRef.current) return;
       setChangesBreakdown(breakdown);
     } catch {
+      if (reqId !== changesReqSeqRef.current) return;
       setChangesBreakdown(null);
     }
   }, [workspacePath]);
 
   const fetchDiff = useCallback(async () => {
     if (!workspacePath) return;
+    const reqId = ++diffReqSeqRef.current;
     setDiffLoading(true);
     try {
       const result = await invoke<AgentUiDiffFile[]>("git_diff", {
         projectDirectory: workspacePath,
       });
+      if (reqId !== diffReqSeqRef.current) return;
       setDiffFiles(result);
     } catch {
+      if (reqId !== diffReqSeqRef.current) return;
       setDiffFiles(null);
     } finally {
+      if (reqId !== diffReqSeqRef.current) return;
       setDiffLoading(false);
     }
   }, [workspacePath]);
@@ -419,6 +428,7 @@ export function GitPanel() {
     fetchGitLog();
     fetchChangesCount();
     fetchDiff();
+    window.dispatchEvent(new CustomEvent("mlfb-git-updated"));
   }, [workspacePath, fetchGitLog, fetchChangesCount, fetchDiff]);
 
   const handleAttachCommit = useCallback((commit: GitLogEntry) => {
@@ -740,7 +750,9 @@ export function GitPanel() {
                           className="git-diff-summary-delete"
                           style={{ width: delWidthPx, minWidth: delWidthPx }}
                         >
-                          -{file.deletions}
+                          {statusLetter(file.status) === "A"
+                            ? "\u00A0"
+                            : `-${file.deletions}`}
                         </span>
                       </span>
                     </div>

@@ -254,10 +254,15 @@ export function MlcSidePanel() {
     const handleVisibilityChange = () => {
       if (document.visibilityState === "visible") loadDocuments();
     };
+    const handleGitUpdated = () => {
+      loadDocuments();
+    };
     window.addEventListener("focus", refreshWhenVisible);
+    window.addEventListener("mlfb-git-updated", handleGitUpdated as EventListener);
     document.addEventListener("visibilitychange", handleVisibilityChange);
     return () => {
       window.removeEventListener("focus", refreshWhenVisible);
+      window.removeEventListener("mlfb-git-updated", handleGitUpdated as EventListener);
       document.removeEventListener("visibilitychange", handleVisibilityChange);
     };
   }, [loadDocuments]);
