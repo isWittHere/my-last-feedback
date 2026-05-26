@@ -532,7 +532,7 @@ function MLRARow2() {
   const currentStageNo = totalStages > 0 && currentStageIndex >= 0 ? `${currentStageIndex + 1}/${totalStages}` : null;
 
   return (
-    <div data-tauri-drag-region className="flex items-center gap-2 px-3" style={{ height: 26 }}>
+    <div className="flex items-center gap-2 px-3" style={{ height: 26 }}>
       {isActive && launcher && (
         <div className="mlra-control-mode-switcher">
           {ORCHESTRATION_PRESETS.map(({ id, label, description, icon, policy }) => (

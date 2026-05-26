@@ -165,9 +165,9 @@ export function GitPanel() {
   const gitPanelSettings = useGitPanelSettings();
 
   const workspacePath =
+    focusedComposer?.projectDirectory ||
     mlcActiveWorkspacePath ||
     projectDirectory ||
-    focusedComposer?.projectDirectory ||
     "";
 
   const workspaceColorCandidates = useMemo(() => {
