@@ -3,9 +3,11 @@
 [mcp_servers]
 
 [mcp_servers."my-last-feedback"]
-type = "sse"
-url = "http://127.0.0.1:3838/mcp"
+type = "stdio"
+command = "node"
+args = ["E:/Dev/my-last-feedback/mcp/mlfb/index.mjs"]
 tool_timeout_sec = 64800
+enabled = true
 
 
 [mcp_servers."my-last-feedback".tools.interactive_feedback]

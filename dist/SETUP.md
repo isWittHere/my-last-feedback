@@ -25,17 +25,13 @@ npm install
 
 ---
 
-## 2) Start MCP Server (Recommended)
+## 2) MCP Server Entry (Recommended)
 
-Use Streamable HTTP entry:
+Use stdio MCP entry:
 
 ```bash
-npm run start:http
+node E:/Dev/my-last-feedback/mcp/mlfb/index.mjs
 ```
-
-Default endpoint:
-
-- `http://127.0.0.1:3838/mcp`
 
 ---
 
@@ -45,9 +41,11 @@ Edit `~/.codex/config.toml` and add/update:
 
 ```toml
 [mcp_servers."my-last-feedback"]
-type = "sse"
-url = "http://127.0.0.1:3838/mcp"
+type = "stdio"
+command = "node"
+args = ["E:/Dev/my-last-feedback/mcp/mlfb/index.mjs"]
 tool_timeout_sec = 64800
+enabled = true
 
 [mcp_servers."my-last-feedback".tools.interactive_feedback]
 approval_mode = "approve"
@@ -84,32 +82,7 @@ Use `dist/prompt.instructions.md` as Codex instruction source.
 
 ---
 
-## 6) Optional: Desktop Quick Launch
-
-You can create launchers for users:
-
-- Visible launch via `.cmd`
-- Silent launch via `.vbs`
-
-Typical silent launch command:
-
-```powershell
-Start-Process -WindowStyle Hidden -FilePath npm.cmd -ArgumentList 'run','start:http' -WorkingDirectory 'E:\Dev\my-last-feedback'
-```
-
----
-
-## 7) Optional: Auto-Start on Login (Windows)
-
-If Scheduled Task is unavailable due to permission limits, use:
-
-- `HKCU\Software\Microsoft\Windows\CurrentVersion\Run`
-
-Register a hidden startup command that executes `npm run start:http`.
-
----
-
-## Legacy STDIO Mode (Compatibility)
+## Legacy JSON Mode (Compatibility)
 
 If your client only supports process-based MCP:
 
@@ -130,7 +103,7 @@ If your client only supports process-based MCP:
 
 | Issue | Solution |
 |---|---|
-| `EADDRINUSE 127.0.0.1:3838` | Another instance is running. Stop old process or change port using `MLFB_MCP_PORT`. |
+| MCP process failed to start | Verify `node` is available in PATH and `args` points to `mcp/mlfb/index.mjs`. |
 | Tool call timeout | Verify `tool_timeout_sec` is configured on `my-last-feedback` MCP server entry. |
 | Hook not triggered | Check `~/.codex/hooks.json` path and script command path. |
 | GUI not showing | Ensure desktop app binary is available and MCP server can launch/connect to it. |
@@ -141,8 +114,6 @@ If your client only supports process-based MCP:
 
 | Variable | Description | Default |
 |---|---|---|
-| `MLFB_MCP_HOST` | HTTP bind host | `127.0.0.1` |
-| `MLFB_MCP_PORT` | HTTP bind port | `3838` |
 | `MLF_APP_PATH` | Override GUI binary path | auto-detect |
 | `MLF_CALLER_NAME` | Caller display name | `codex` |
 
