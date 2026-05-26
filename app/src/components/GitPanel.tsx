@@ -54,6 +54,31 @@ function formatCommitDate(dateStr: string): string {
   }
 }
 
+function commitGroupLabel(
+  dateStr: string,
+  translate: (key: string, defaultValue: string) => string,
+): string {
+  const time = new Date(dateStr).getTime();
+  if (!Number.isFinite(time)) return translate("git.groupEarlier", "Earlier");
+  const now = new Date();
+  const current = new Date(time);
+  const startOfToday = new Date(
+    now.getFullYear(),
+    now.getMonth(),
+    now.getDate(),
+  ).getTime();
+  const startOfCurrent = new Date(
+    current.getFullYear(),
+    current.getMonth(),
+    current.getDate(),
+  ).getTime();
+  const days = Math.floor((startOfToday - startOfCurrent) / 86400000);
+  if (days <= 0) return translate("git.groupToday", "Today");
+  if (days === 1) return translate("git.groupYesterday", "Yesterday");
+  if (days < 7) return translate("git.groupPastWeek", "Past week");
+  return translate("git.groupEarlier", "Earlier");
+}
+
 function shortHash(hash: string): string {
   return hash.slice(0, 7);
 }
@@ -431,6 +456,14 @@ export function GitPanel() {
   }, [workspacePath, fetchGitLog, fetchChangesCount, fetchDiff]);
 
   const commits = useMemo(() => logResult?.commits || [], [logResult]);
+  const groupedCommits = useMemo(() => {
+    const groups = new Map<string, GitLogEntry[]>();
+    for (const commit of commits) {
+      const label = commitGroupLabel(commit.date, t);
+      groups.set(label, [...(groups.get(label) || []), commit]);
+    }
+    return Array.from(groups.entries());
+  }, [commits, t]);
 
   const addWidthPx = useMemo(() => {
     if (!diffFiles || diffFiles.length === 0) return undefined;
@@ -626,72 +659,82 @@ export function GitPanel() {
               } as React.CSSProperties
             }
           >
-            {commits.map((commit) => {
-              const isExpanded = expandedCommit === commit.hash;
-              return (
-                <div key={commit.hash} className="git-commit-item">
-                  <button
-                    className="git-commit-header"
-                    onClick={() =>
-                      setExpandedCommit(isExpanded ? null : commit.hash)
-                    }
-                    {...tooltipProps(commit)}
-                  >
-                    <div className="git-commit-dot" />
-                    <div className="git-commit-info">
-                      <div className="git-commit-message truncate">
-                        {commit.message}
-                      </div>
-                      <div className="git-commit-meta">
-                        <span className="git-commit-hash">
-                          {shortHash(commit.hash)}
-                        </span>
-                        <span className="git-commit-author">
-                          {commit.authorName}
-                        </span>
-                        <span className="git-commit-date">
-                          {formatCommitDate(commit.date)}
-                        </span>
-                      </div>
-                    </div>
-                    <div
-                      className="git-commit-attach"
-                      onClick={(e) => {
-                        e.stopPropagation();
-                        handleAttachCommit(commit);
-                      }}
-                      title={t("git.attachToChat", "Attach to chat")}
-                    >
-                      <Icon name="paperclip" size={13} />
-                    </div>
-                  </button>
-                  {isExpanded && (
-                    <div className="git-commit-detail">
-                      <div className="git-commit-detail-row">
-                        <span className="git-commit-detail-label">Hash</span>
-                        <code>{commit.hash}</code>
-                      </div>
-                      <div className="git-commit-detail-row">
-                        <span className="git-commit-detail-label">Author</span>
-                        <span>
-                          {commit.authorName} &lt;{commit.authorEmail}&gt;
-                        </span>
-                      </div>
-                      <div className="git-commit-detail-row">
-                        <span className="git-commit-detail-label">Date</span>
-                        <span>{commit.date}</span>
-                      </div>
-                      <div className="git-commit-detail-row">
-                        <span className="git-commit-detail-label">Message</span>
-                        <span className="git-commit-detail-message">
-                          {commit.message}
-                        </span>
-                      </div>
-                    </div>
-                  )}
+            {groupedCommits.map(([label, items]) => (
+              <section key={label} className="git-commit-group">
+                <div className="git-commit-group-header">
+                  <span className="git-commit-group-label">{label}</span>
+                  <span className="git-commit-group-count">({items.length})</span>
                 </div>
-              );
-            })}
+                <div className="git-commit-group-items">
+                  {items.map((commit) => {
+                    const isExpanded = expandedCommit === commit.hash;
+                    return (
+                      <div key={commit.hash} className="git-commit-item">
+                        <button
+                          className="git-commit-header"
+                          onClick={() =>
+                            setExpandedCommit(isExpanded ? null : commit.hash)
+                          }
+                          {...tooltipProps(commit)}
+                        >
+                          <div className="git-commit-dot" />
+                          <div className="git-commit-info">
+                            <div className="git-commit-message truncate">
+                              {commit.message}
+                            </div>
+                            <div className="git-commit-meta">
+                              <span className="git-commit-hash">
+                                {shortHash(commit.hash)}
+                              </span>
+                              <span className="git-commit-author">
+                                {commit.authorName}
+                              </span>
+                              <span className="git-commit-date">
+                                {formatCommitDate(commit.date)}
+                              </span>
+                            </div>
+                          </div>
+                          <div
+                            className="git-commit-attach"
+                            onClick={(e) => {
+                              e.stopPropagation();
+                              handleAttachCommit(commit);
+                            }}
+                            title={t("git.attachToChat", "Attach to chat")}
+                          >
+                            <Icon name="paperclip" size={13} />
+                          </div>
+                        </button>
+                        {isExpanded && (
+                          <div className="git-commit-detail">
+                            <div className="git-commit-detail-row">
+                              <span className="git-commit-detail-label">Hash</span>
+                              <code>{commit.hash}</code>
+                            </div>
+                            <div className="git-commit-detail-row">
+                              <span className="git-commit-detail-label">Author</span>
+                              <span>
+                                {commit.authorName} &lt;{commit.authorEmail}&gt;
+                              </span>
+                            </div>
+                            <div className="git-commit-detail-row">
+                              <span className="git-commit-detail-label">Date</span>
+                              <span>{commit.date}</span>
+                            </div>
+                            <div className="git-commit-detail-row">
+                              <span className="git-commit-detail-label">Message</span>
+                              <span className="git-commit-detail-message">
+                                {commit.message}
+                              </span>
+                            </div>
+                          </div>
+                        )}
+                      </div>
+                    );
+                  })}
+                </div>
+              </section>
+            ))}
           </div>
         )}
       </div>
