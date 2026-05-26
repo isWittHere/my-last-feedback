@@ -6,6 +6,7 @@ set -e
 
 PROJ_ROOT="$(cd "$(dirname "$0")/.." && pwd)"
 APP_DIR="$PROJ_ROOT/app"
+DISABLE_MLRA_UI="${DISABLE_MLRA_UI:-$(grep -E '^VITE_DISABLE_MLRA_UI=' "$APP_DIR/.env" 2>/dev/null | tail -n1 | cut -d= -f2 | tr -d '\r')}"
 
 # Read version from package.json (requires node)
 VERSION="$(cd "$PROJ_ROOT" && node -e "console.log(require('./package.json').version)")"
@@ -43,6 +44,11 @@ cp "$PROJ_ROOT/package.json"         "$DIST_DIR/package.json"
 cp "$PROJ_ROOT/mcp.json.template"    "$DIST_DIR/mcp.json.template"
 cp "$PROJ_ROOT/dist/SETUP.md"        "$DIST_DIR/SETUP.md"
 cp "$PROJ_ROOT/dist/prompt.instructions.md" "$DIST_DIR/prompt.instructions.md"
+
+if [ "$DISABLE_MLRA_UI" = "true" ]; then
+  echo "      MLRA is disabled: removing mcp/mlra from package payload"
+  rm -rf "$DIST_DIR/mcp/mlra"
+fi
 
 # Copy example prompts
 cp "$PROJ_ROOT/mcp_prompts/"*.prompt.md "$DIST_DIR/mcp_prompts/" 2>/dev/null || true

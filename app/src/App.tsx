@@ -9,6 +9,7 @@ import { AppTooltipProvider } from "./components/AppTooltip";
 import { TerminalEventBridge } from "./components/TerminalEventBridge";
 import { AgentProcessEventBridge } from "./components/agent/AgentProcessEventBridge";
 import { isAgentUiDisabled } from "./agent/agentUiFlags";
+import { isMlraUiDisabled } from "./mlra/mlraUiFlags";
 import type { ImageAttachment, Session } from "./store/feedbackStore";
 import { getNotificationSettings, hasStoredNotificationSettings, saveNotificationSettings, syncAutoFocusNewRequest } from "./notificationSettings";
 import type { FeedbackDraft } from "./store/feedbackStore";
@@ -220,14 +221,18 @@ function App() {
       s.markSessionCancelled(event.payload.session_id);
     });
 
-    // Listen for MLRA daemon messages
-    const unlistenMlra = listen<string>("mlra-message", (event) => {
-      useMLRAStore.getState().handleDaemonMessage(event.payload);
-    });
+    // Listen for MLRA daemon messages only when MLRA UI is enabled.
+    const unlistenMlra = isMlraUiDisabled
+      ? Promise.resolve(() => {})
+      : listen<string>("mlra-message", (event) => {
+        useMLRAStore.getState().handleDaemonMessage(event.payload);
+      });
 
-    const unlistenMlraDisconnect = listen("mlra-disconnected", () => {
-      console.log("[MLRA] Daemon disconnected");
-    });
+    const unlistenMlraDisconnect = isMlraUiDisabled
+      ? Promise.resolve(() => {})
+      : listen("mlra-disconnected", () => {
+        console.log("[MLRA] Daemon disconnected");
+      });
 
     return () => {
       unlisten.then((fn) => fn());

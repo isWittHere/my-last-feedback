@@ -17,6 +17,7 @@ import { useIsLightTheme } from "./useIsLightTheme";
 import i18n from "../i18n";
 import React from "react";
 import { isAgentUiDisabled } from "../agent/agentUiFlags";
+import { isMlraUiDisabled } from "../mlra/mlraUiFlags";
 import {
   ORCHESTRATION_PRESETS,
   useMLRAStore,
@@ -741,22 +742,26 @@ export function FeedbackApp() {
             <g transform="matrix(1,0,0,1,1.4995,1)"><path d="M12.364,0L14.5,2.137L7.637,9L5.5,9L5.5,6.864L12.364,0ZM13.086,2.137L12.364,1.414L6.5,7.278L6.5,8L7.223,8L13.086,2.137Z"/></g>
             <g transform="matrix(6.12323e-17,-1,1,6.12323e-17,-2,15)"><path d="M6,4.487C6,4.218 5.782,4 5.513,4C5.513,4 5.512,4 5.512,4C5.229,4 5,4.229 5,4.512C5,6.126 5,11 5,11L6,11L6,4.487Z"/></g>
           </svg>
-          <div className="app-view-toggle">
-            <button
-              className={`app-view-toggle-btn${appView === "MLFB" ? " app-view-toggle-active" : ""}`}
-              onClick={() => setAppView("MLFB")}
-            >
-              <Icon name="message" size={12} />
-              MLFB
-            </button>
-            <button
-              className={`app-view-toggle-btn${appView === "MLRA" ? " app-view-toggle-active" : ""}`}
-              onClick={() => setAppView("MLRA")}
-            >
-              <Icon name="clock" size={12} />
-              MLRA
-            </button>
-          </div>
+          {isMlraUiDisabled ? (
+            <div className="text-sm font-medium text-[var(--color-text-primary)]">My Last Feedback</div>
+          ) : (
+            <div className="app-view-toggle">
+              <button
+                className={`app-view-toggle-btn${appView === "MLFB" ? " app-view-toggle-active" : ""}`}
+                onClick={() => setAppView("MLFB")}
+              >
+                <Icon name="message" size={12} />
+                MLFB
+              </button>
+              <button
+                className={`app-view-toggle-btn${appView === "MLRA" ? " app-view-toggle-active" : ""}`}
+                onClick={() => setAppView("MLRA")}
+              >
+                <Icon name="clock" size={12} />
+                MLRA
+              </button>
+            </div>
+          )}
           {appView === "MLFB" && (leftSidebarColumn.tabIds.length > 0 || leftPageColumn.tabIds.length > 0) && (
             <div className="titlebar-dock-group">
               {leftSidebarColumn.tabIds.length > 0 && (
@@ -794,7 +799,7 @@ export function FeedbackApp() {
           </div>
         )}
         {/* Center: MLRA role tabs when in MLRA mode with active running launcher */}
-        {appView === "MLRA" && (
+        {!isMlraUiDisabled && appView === "MLRA" && (
           <MLRAErrorBoundary>
           <div className="absolute inset-0 flex items-center justify-center pointer-events-none" style={IS_MACOS ? { left: 70 } : undefined}>
             <div className="pointer-events-auto">
@@ -863,14 +868,14 @@ export function FeedbackApp() {
         {/* Row 1 end */}
 
         {/* Row 2: MLRA second bar — ☰ launcher + Control Mode + Pause/Resume + Timer */}
-        {appView === "MLRA" && (
+        {!isMlraUiDisabled && appView === "MLRA" && (
           <MLRARow2 />
         )}
       </div>
 
       {/* Body */}
       <div className="flex-1 flex min-h-0">
-        {appView === "MLRA" ? (
+        {!isMlraUiDisabled && appView === "MLRA" ? (
           /* MLRA view — wrapped in error boundary to prevent full app crash */
           <MLRAErrorBoundary>
             <MLRAView />

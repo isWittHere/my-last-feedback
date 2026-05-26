@@ -688,6 +688,10 @@
     "sseService": "SSE Service",
     "sseServiceOn": "Always On",
     "sseServiceOff": "Off",
+    "sseServiceApplying": "Applying...",
+    "sseServiceUnknown": "Status unknown",
+    "sseServiceRunning": "Running",
+    "sseServiceStopped": "Stopped",
     "cmdArgs": "Cmd+Args",
     "addTo": "Add to",
     "copy": "Copy"

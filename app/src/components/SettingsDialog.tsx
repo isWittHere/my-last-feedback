@@ -189,6 +189,9 @@ export function SettingsDialog({ open, onClose }: { open: boolean; onClose: () =
   const [theme, setTheme] = useState<Theme>(getStoredTheme);
   const [autostart, setAutostart] = useState(false);
   const [autostartMessage, setAutostartMessage] = useState<string | null>(null);
+  const [sseServiceMode, setSseServiceMode] = useState<"on" | "off">("off");
+  const [sseServiceRunning, setSseServiceRunning] = useState<boolean | null>(null);
+  const [sseServiceBusy, setSseServiceBusy] = useState(false);
   const [diffOffsetCollapsed, setDiffOffsetCollapsed] = useState(true);
   const [notifSettings, setNotifSettings] = useState<NotificationSettings>(getNotificationSettings);
   const [terminalSettings, setTerminalSettings] = useState<TerminalSettings>(getTerminalSettings);
@@ -281,6 +284,16 @@ export function SettingsDialog({ open, onClose }: { open: boolean; onClose: () =
     setTheme(t);
     applyTheme(t);
   }, []);
+
+  useEffect(() => {
+    if (tab !== "general") return;
+    invoke<boolean>("get_sse_service_status")
+      .then((running) => {
+        setSseServiceRunning(running);
+        setSseServiceMode(running ? "on" : "off");
+      })
+      .catch(() => setSseServiceRunning(null));
+  }, [tab]);
 
   const handleLangChange = useCallback((lang: string) => {
     i18n.changeLanguage(lang);
@@ -1168,6 +1181,37 @@ export function SettingsDialog({ open, onClose }: { open: boolean; onClose: () =
                   >
                     <span className="settings-toggle-knob" />
                   </button>
+                </div>
+                <div className="settings-row">
+                  <div className="settings-row-info">
+                    <span className="settings-label">{t("mcpConfig.sseService", "SSE服务")}</span>
+                    <span className="settings-sublabel">
+                      {sseServiceBusy
+                        ? t("mcpConfig.sseServiceApplying", "Applying...")
+                        : sseServiceRunning == null
+                        ? t("mcpConfig.sseServiceUnknown", "Status unknown")
+                        : sseServiceRunning
+                        ? t("mcpConfig.sseServiceRunning", "Running")
+                        : t("mcpConfig.sseServiceStopped", "Stopped")}
+                    </span>
+                  </div>
+                  <SettingsSegmentedControl
+                    ariaLabel={t("mcpConfig.sseService", "SSE服务")}
+                    value={sseServiceMode}
+                    onChange={(value) => {
+                      const mode = value as "on" | "off";
+                      setSseServiceMode(mode);
+                      setSseServiceBusy(true);
+                      invoke<boolean>("set_sse_service_enabled", { enabled: mode === "on" })
+                        .then((running) => setSseServiceRunning(running))
+                        .catch(() => setSseServiceRunning(null))
+                        .finally(() => setSseServiceBusy(false));
+                    }}
+                    options={[
+                      { id: "on", label: t("mcpConfig.sseServiceOn", "始终开启") },
+                      { id: "off", label: t("mcpConfig.sseServiceOff", "关闭") },
+                    ]}
+                  />
                 </div>
                 <McpConfigHelper />
 
