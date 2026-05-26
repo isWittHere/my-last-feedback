@@ -2960,6 +2960,72 @@ body,
     color: #f59e0b;
 }
 
+.subscription-status-tooltip-container {
+    position: fixed;
+    z-index: 100001;
+    pointer-events: none;
+}
+
+.subscription-status-tooltip {
+    background: var(--color-bg-input-raised);
+    border: 1px solid var(--color-border);
+    border-radius: var(--radius-md);
+    box-shadow: 0 6px 18px rgba(0, 0, 0, 0.32);
+    padding: 6px 8px;
+    min-width: 180px;
+    max-width: 260px;
+}
+
+.subscription-status-channel {
+    display: flex;
+    flex-direction: column;
+    gap: 3px;
+}
+
+.subscription-status-channel + .subscription-status-channel {
+    margin-top: 8px;
+    padding-top: 8px;
+    border-top: 1px solid var(--color-border-subtle);
+}
+
+.subscription-status-channel-name {
+    font-size: 10px;
+    font-weight: 600;
+    color: var(--color-text-muted);
+    text-transform: uppercase;
+    margin-bottom: 2px;
+}
+
+.subscription-status-model {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    font-size: 11px;
+    color: var(--color-text-secondary);
+}
+
+.subscription-status-model-name {
+    flex: 1;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+}
+
+.subscription-status-model-name--degraded,
+.subscription-status-model-name--error {
+    color: #f59e0b;
+}
+
+.subscription-status-model-name--failed {
+    color: #ef4444;
+}
+
+.subscription-status-model-latency {
+    font-size: 10px;
+    color: var(--color-text-muted);
+    white-space: nowrap;
+}
+
 .subscription-group-status {
     flex: 0 0 auto;
     display: flex;

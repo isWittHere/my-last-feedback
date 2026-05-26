@@ -723,7 +723,6 @@ export function FeedbackApp() {
       <div className={`flex flex-col flex-1 min-h-0${settingsOpen ? " content-blurred" : ""}`}>
       {/* Custom title bar */}
       <div
-        data-tauri-drag-region
         className={`relative flex flex-col shrink-0 titlebar${appView === "MLRA" ? " titlebar-mlra" : ""}`}
         style={{
           background: "var(--color-bg-surface)",
@@ -736,8 +735,8 @@ export function FeedbackApp() {
         {/* Row 1: main title bar */}
         <div data-tauri-drag-region className="relative flex items-center justify-between px-3" style={{ height: 34 }}>
         {/* Left: title or request name */}
-        <div data-tauri-drag-region className="flex items-center gap-2 min-w-0 flex-shrink-0 z-10" style={{ maxWidth: "40%" }}>
-          <svg data-tauri-drag-region width="14" height="14" viewBox="0 0 16 16" fill="currentColor" style={{ flexShrink: 0 }}>
+        <div className="flex items-center gap-2 min-w-0 flex-shrink-0 z-10" style={{ maxWidth: "40%" }}>
+          <svg width="14" height="14" viewBox="0 0 16 16" fill="currentColor" style={{ flexShrink: 0 }}>
             <path d="M4,3L11.995,3L11.995,4L4,4C3.45,4 3,4.45 3,5L3,10C3,10.55 3.45,11.001 4,11.001L6,11.001L6,13.001L8.75,11.001C8.75,11.001 10.744,11.001 12,11C12.265,11.001 12.52,10.895 12.707,10.708C12.895,10.52 13,10.266 13,10.001L13,5.004L14,5.004L14,10.017C14,11.115 13.115,12.008 12.017,12.017C10.625,12.029 9.012,12.042 9.012,12.042L6.59,13.81C5.93,14.291 5,13.82 5,13.001L5,12.001L4,12.001C2.9,12 2,11.1 2,10L2,5C2,3.9 2.9,3.001 4,3Z" fillRule="nonzero"/>
             <g transform="matrix(1,0,0,1,1.4995,1)"><path d="M12.364,0L14.5,2.137L7.637,9L5.5,9L5.5,6.864L12.364,0ZM13.086,2.137L12.364,1.414L6.5,7.278L6.5,8L7.223,8L13.086,2.137Z"/></g>
             <g transform="matrix(6.12323e-17,-1,1,6.12323e-17,-2,15)"><path d="M6,4.487C6,4.218 5.782,4 5.513,4C5.513,4 5.512,4 5.512,4C5.229,4 5,4.229 5,4.512C5,6.126 5,11 5,11L6,11L6,4.487Z"/></g>

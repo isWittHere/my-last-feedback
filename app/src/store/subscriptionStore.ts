@@ -1,5 +1,5 @@
 import { create } from "zustand";
-import { fetchOpenCodeGoUsage, fetchToiotoUsage, type NormalizedUsage, type ToiotoUsage } from "../services/subscriptionScrapers";
+import { fetchOpenCodeGoUsage, fetchToiotoUsage, fetchChannelMonitors, type NormalizedUsage, type ToiotoUsage, type ChannelMonitor } from "../services/subscriptionScrapers";
 
 export type SubscriptionGroupType = "opencode-go" | "toioto";
 
@@ -23,6 +23,7 @@ export interface SubscriptionGroupState extends SubscriptionGroupConfig {
   weekly?: NormalizedUsage | null;
   monthly?: NormalizedUsage | null;
   toioto?: ToiotoUsage | null;
+  channelMonitors?: ChannelMonitor[] | null;
 }
 
 interface SubscriptionStore {
@@ -42,7 +43,7 @@ function generateId(): string {
 const STORAGE_KEY = "mlfb-subscription-groups-v1";
 
 function persistGroups(groups: SubscriptionGroupState[]) {
-  const configs = groups.map(({ loading, error, lastFetched, rolling, weekly, monthly, toioto, ...config }) => config);
+  const configs = groups.map(({ loading, error, lastFetched, rolling, weekly, monthly, toioto, channelMonitors, ...config }) => config);
   try {
     localStorage.setItem(STORAGE_KEY, JSON.stringify(configs));
   } catch {}
@@ -62,6 +63,7 @@ function loadGroups(): SubscriptionGroupState[] {
       weekly: null,
       monthly: null,
       toioto: null,
+      channelMonitors: null,
     }));
   } catch {
     return [];
@@ -82,6 +84,7 @@ export const useSubscriptionStore = create<SubscriptionStore>((set, get) => ({
       weekly: null,
       monthly: null,
       toioto: null,
+      channelMonitors: null,
     };
     const groups = [...get().groups, group];
     set({ groups });
@@ -151,7 +154,10 @@ export const useSubscriptionStore = create<SubscriptionStore>((set, get) => ({
         });
       }
     } else if (group.type === "toioto") {
-      const result = await fetchToiotoUsage(group.authCookie);
+      const [result, monitorResult] = await Promise.all([
+        fetchToiotoUsage(group.authCookie),
+        fetchChannelMonitors(group.authCookie),
+      ]);
       if (result.success) {
         set({
           groups: get().groups.map((g) =>
@@ -162,6 +168,7 @@ export const useSubscriptionStore = create<SubscriptionStore>((set, get) => ({
                   error: null,
                   lastFetched: Date.now(),
                   toioto: result.data,
+                  channelMonitors: monitorResult.success ? monitorResult.items : g.channelMonitors,
                 }
               : g,
           ),
