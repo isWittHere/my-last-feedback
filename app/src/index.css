@@ -16087,15 +16087,46 @@ button.mlra-inspector-gate-pill {
 .git-commit-list {
     padding: 0px 0;
 }
+.git-commit-group + .git-commit-group {
+    margin-top: 6px;
+}
+.git-commit-group-header {
+    position: sticky;
+    top: 0;
+    z-index: 10;
+    display: flex;
+    align-items: center;
+    gap: 4px;
+    min-height: 24px;
+    padding: 4px 8px;
+    background: var(--color-bg-surface);
+    color: var(--color-text-muted);
+    font-size: 11px;
+    font-weight: 600;
+    line-height: 16px;
+}
+.git-commit-group-label {
+    min-width: 0;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+}
+.git-commit-group-count {
+    color: var(--color-text-muted);
+    font-weight: 400;
+}
 
 .git-commit-item + .git-commit-item {
     border-top: 0px solid var(--color-border-subtle);
+}
+.git-commit-item {
+    position: relative;
 }
 
 .git-commit-header {
     display: flex;
     align-items: center;
-    gap: 8px;
+    gap: 6px;
     width: 100%;
     padding: 4px 8px;
     border: none;
@@ -16112,12 +16143,43 @@ button.mlra-inspector-gate-pill {
 }
 
 .git-commit-dot {
-    width: 8px;
-    height: 8px;
+    position: relative;
+    width: 9px;
+    height: 9px;
     border-radius: 50%;
     background: var(--git-workspace-color, var(--color-primary));
     flex-shrink: 0;
     opacity: 0.6;
+    z-index: 3;
+}
+
+.git-commit-group-items .git-commit-item::before,
+.git-commit-group-items .git-commit-item::after {
+    content: "";
+    position: absolute;
+    left: 12px;
+    width: 1px;
+    background: color-mix(in srgb, var(--git-workspace-color, var(--color-primary)) 45%, transparent);
+    pointer-events: none;
+    z-index: 2;
+}
+
+.git-commit-group-items .git-commit-item::before {
+    top: 0;
+    bottom: calc(100% - 11px);
+}
+
+.git-commit-group-items .git-commit-item::after {
+    top: 29px;
+    bottom: 0;
+}
+
+.git-commit-group-items .git-commit-item:first-child::before {
+    display: none;
+}
+
+.git-commit-group-items .git-commit-item:last-child::after {
+    display: none;
 }
 
 .git-commit-info {
