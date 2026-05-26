@@ -5,11 +5,36 @@ import { writeText } from "@tauri-apps/plugin-clipboard-manager";
 import { Icon } from "./Icons";
 import { SettingsSegmentedControl } from "./SettingsSegmentedControl";
 
-type Client = "cursor" | "vscode" | "cline";
+type Client = "cursor" | "vscode" | "cline" | "codex";
 type Format = "json" | "args";
+type SseServiceMode = "on" | "off";
 
-function generateConfig(client: Client, format: Format, serverPath: string): string {
+function generateConfig(client: Client, format: Format, serverPath: string, sseServiceMode: SseServiceMode): string {
   const escaped = serverPath.replace(/\\/g, "/");
+
+  if (client === "codex") {
+    if (sseServiceMode === "on") {
+      return [
+        "[mcp_servers.\"my-last-feedback\"]",
+        "type = \"sse\"",
+        "url = \"http://127.0.0.1:3838/mcp\"",
+        "tool_timeout_sec = 64800",
+        "",
+        "",
+        "[mcp_servers.\"my-last-feedback\".tools.interactive_feedback]",
+        "approval_mode = \"approve\"",
+      ].join("\n");
+    }
+    return [
+      "[mcp_servers.\"my-last-feedback\"]",
+      "type = \"stdio\"",
+      "command = \"node\"",
+      `args = [\"${escaped}\"]`,
+      "",
+      "[mcp_servers.\"my-last-feedback\".tools.interactive_feedback]",
+      "approval_mode = \"approve\"",
+    ].join("\n");
+  }
 
   if (format === "args") {
     return `node ${escaped}`;
@@ -56,6 +81,7 @@ function clientLabel(c: Client): string {
     case "cursor": return "Cursor";
     case "vscode": return "VS Code";
     case "cline": return "Cline";
+    case "codex": return "Codex";
   }
 }
 
@@ -64,6 +90,7 @@ function configFilePath(c: Client): string {
     case "cursor": return "~/.cursor/mcp.json";
     case "vscode": return ".vscode/mcp.json";
     case "cline": return "MCP Settings";
+    case "codex": return "~/.codex/config.toml";
   }
 }
 
@@ -72,13 +99,14 @@ export function McpConfigHelper({ compact }: { compact?: boolean }) {
   const [serverPath, setServerPath] = useState("");
   const [client, setClient] = useState<Client>("cursor");
   const [format, setFormat] = useState<Format>("json");
+  const [sseServiceMode, setSseServiceMode] = useState<SseServiceMode>("on");
   const [copied, setCopied] = useState(false);
 
   useEffect(() => {
     invoke<string>("get_server_path").then(setServerPath).catch(() => {});
   }, []);
 
-  const config = serverPath ? generateConfig(client, format, serverPath) : "";
+  const config = serverPath ? generateConfig(client, format, serverPath, sseServiceMode) : "";
 
   const handleCopy = useCallback(() => {
     if (!config) return;
@@ -103,23 +131,40 @@ export function McpConfigHelper({ compact }: { compact?: boolean }) {
           ariaLabel={t("mcpConfig.client", "Client")}
           value={client}
           onChange={(value) => setClient(value as Client)}
-          options={(["cursor", "vscode", "cline"] as Client[]).map((c) => ({ id: c, label: clientLabel(c) }))}
+          options={(["cursor", "vscode", "cline", "codex"] as Client[]).map((c) => ({ id: c, label: clientLabel(c) }))}
         />
       </div>
 
+      {client === "codex" && (
+        <div className="mcp-config-row">
+          <span className="mcp-config-label">{t("mcpConfig.sseService", "SSE服务")}</span>
+          <SettingsSegmentedControl
+            ariaLabel={t("mcpConfig.sseService", "SSE服务")}
+            value={sseServiceMode}
+            onChange={(value) => setSseServiceMode(value as SseServiceMode)}
+            options={[
+              { id: "on", label: t("mcpConfig.sseServiceOn", "始终开启") },
+              { id: "off", label: t("mcpConfig.sseServiceOff", "关闭") },
+            ]}
+          />
+        </div>
+      )}
+
       {/* Format selector */}
-      <div className="mcp-config-row">
-        <span className="mcp-config-label">{t("mcpConfig.format", "Format")}</span>
-        <SettingsSegmentedControl
-          ariaLabel={t("mcpConfig.format", "Format")}
-          value={format}
-          onChange={(value) => setFormat(value as Format)}
-          options={[
-            { id: "json", label: "JSON" },
-            { id: "args", label: t("mcpConfig.cmdArgs", "Cmd+Args") },
-          ]}
-        />
-      </div>
+      {client !== "codex" && (
+        <div className="mcp-config-row">
+          <span className="mcp-config-label">{t("mcpConfig.format", "Format")}</span>
+          <SettingsSegmentedControl
+            ariaLabel={t("mcpConfig.format", "Format")}
+            value={format}
+            onChange={(value) => setFormat(value as Format)}
+            options={[
+              { id: "json", label: "JSON" },
+              { id: "args", label: t("mcpConfig.cmdArgs", "Cmd+Args") },
+            ]}
+          />
+        </div>
+      )}
 
       {/* Config file hint */}
       {format === "json" && (

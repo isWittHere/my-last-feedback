@@ -685,6 +685,9 @@
     "title": "MCP Configuration",
     "client": "Client",
     "format": "Format",
+    "sseService": "SSE Service",
+    "sseServiceOn": "Always On",
+    "sseServiceOff": "Off",
     "cmdArgs": "Cmd+Args",
     "addTo": "Add to",
     "copy": "Copy"
