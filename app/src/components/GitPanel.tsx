@@ -182,42 +182,70 @@ export function GitPanel() {
     left: number;
     top: number;
   } | null>(null);
+  const lastPopoverSizeRef = useRef<{ width: number; height: number }>({
+    width: 420,
+    height: 360,
+  });
 
   const positionDiffPopover = useCallback(() => {
     const el = badgeRef.current;
     if (!el) return;
     const rect = el.getBoundingClientRect();
     const gap = 6;
-    const right = window.innerWidth - rect.right;
-    const popoverWidth = Math.min(420, window.innerWidth - 24);
-    let left: number;
-    if (rect.left + popoverWidth > window.innerWidth - 8) {
-      left = window.innerWidth - popoverWidth - 8;
-    } else {
-      left =
-        rect.right + right >= popoverWidth
-          ? rect.right - popoverWidth
-          : rect.left;
-      left = Math.max(8, Math.min(left, window.innerWidth - popoverWidth - 8));
-    }
-    const estimatedHeight = 360;
-    let top = rect.bottom + gap;
-    if (top + estimatedHeight > window.innerHeight - 8) {
-      top = rect.top - estimatedHeight - gap;
-    }
-    top = Math.max(8, Math.min(top, window.innerHeight - estimatedHeight - 8));
+    const viewportPadding = 8;
+
+    const viewportWidth = window.innerWidth;
+    const viewportHeight = window.innerHeight;
+
+    const maxAllowedWidth = Math.min(560, viewportWidth - 24);
+    const maxAllowedHeight = Math.min(640, Math.floor(viewportHeight * 0.7));
+    const predictedWidth = Math.min(
+      lastPopoverSizeRef.current.width || 420,
+      maxAllowedWidth,
+    );
+    const predictedHeight = Math.min(
+      lastPopoverSizeRef.current.height || 360,
+      maxAllowedHeight,
+    );
+
+    const spaceLeft = rect.right - viewportPadding;
+    const spaceRight = viewportWidth - rect.left - viewportPadding;
+    const useRightAnchor = spaceLeft >= spaceRight;
+    let left = useRightAnchor ? rect.right - predictedWidth : rect.left;
+
+    const spaceBelow = viewportHeight - rect.bottom - gap - viewportPadding;
+    const spaceAbove = rect.top - gap - viewportPadding;
+    const useBelow = spaceBelow >= spaceAbove;
+    let top = useBelow ? rect.bottom + gap : rect.top - predictedHeight - gap;
+
+    left = Math.max(
+      viewportPadding,
+      Math.min(left, viewportWidth - predictedWidth - viewportPadding),
+    );
+    top = Math.max(
+      viewportPadding,
+      Math.min(top, viewportHeight - predictedHeight - viewportPadding),
+    );
     setDiffPopover({ left, top });
   }, []);
 
   useLayoutEffect(() => {
     if (!diffPopover || !popoverRef.current) return;
     const rect = popoverRef.current.getBoundingClientRect();
+    lastPopoverSizeRef.current = { width: rect.width, height: rect.height };
     const clampedLeft = Math.max(8, Math.min(rect.left, window.innerWidth - rect.width - 8));
     const clampedTop = Math.max(8, Math.min(rect.top, window.innerHeight - rect.height - 8));
     if (clampedLeft !== diffPopover.left || clampedTop !== diffPopover.top) {
       setDiffPopover({ left: clampedLeft, top: clampedTop });
     }
   }, [diffPopover]);
+
+  useEffect(() => {
+    if (!diffPopover) return;
+    const handleViewportChange = () => positionDiffPopover();
+    window.addEventListener("resize", handleViewportChange);
+    return () => window.removeEventListener("resize", handleViewportChange);
+  }, [diffPopover, positionDiffPopover]);
 
   const fetchChangesCount = useCallback(async () => {
     if (!workspacePath) return;
