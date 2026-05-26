@@ -32,6 +32,7 @@ export function CallerManager() {
   const {
     callers, sessions, renameCaller, mergeCallers, hiddenCallerIds, toggleCallerHidden,
     removeCaller, removeEmptyCallers,
+    clearAllHistory,
     maxSessionsPerCaller, setMaxSessionsPerCaller,
     autoRemoveEmptyCallers, setAutoRemoveEmptyCallers,
     autoHideInactiveHours, setAutoHideInactiveHours,
@@ -46,6 +47,7 @@ export function CallerManager() {
       toggleCallerHidden: s.toggleCallerHidden,
       removeCaller: s.removeCaller,
       removeEmptyCallers: s.removeEmptyCallers,
+      clearAllHistory: s.clearAllHistory,
       maxSessionsPerCaller: s.maxSessionsPerCaller,
       setMaxSessionsPerCaller: s.setMaxSessionsPerCaller,
       autoRemoveEmptyCallers: s.autoRemoveEmptyCallers,
@@ -141,6 +143,7 @@ export function CallerManager() {
 
   // Remove caller state
   const [removeConfirmId, setRemoveConfirmId] = useState<string | null>(null);
+  const [confirmClearHistory, setConfirmClearHistory] = useState(false);
   const [cleanMessage, setCleanMessage] = useState<string | null>(null);
 
   const handleRemoveCaller = useCallback(async () => {
@@ -288,6 +291,38 @@ export function CallerManager() {
             <button className="settings-command-button" onClick={handleCleanEmpty}>
               {t("callerManager.cleanEmptyBtn")}
             </button>
+          </div>
+          <div className="settings-row">
+            <div className="settings-row-info">
+              <span className="settings-label">{t("settings.clearHistory")}</span>
+              <span className="settings-sublabel">{t("settings.clearHistoryDesc")}</span>
+            </div>
+            {!confirmClearHistory ? (
+              <button
+                className="settings-command-button danger"
+                onClick={() => setConfirmClearHistory(true)}
+              >
+                {t("settings.clearHistoryBtn")}
+              </button>
+            ) : (
+              <div className="settings-command-actions">
+                <button
+                  className="settings-command-button danger active"
+                  onClick={async () => {
+                    await clearAllHistory();
+                    setConfirmClearHistory(false);
+                  }}
+                >
+                  {t("settings.clearHistoryConfirm")}
+                </button>
+                <button
+                  className="settings-command-button"
+                  onClick={() => setConfirmClearHistory(false)}
+                >
+                  {t("settings.clearHistoryCancel")}
+                </button>
+              </div>
+            )}
           </div>
           {cleanMessage && <span style={{ fontSize: 10, color: "var(--color-text-secondary)", padding: "2px 0" }}>{cleanMessage}</span>}
         </div>
