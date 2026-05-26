@@ -1019,6 +1019,7 @@
     "groupYesterday": "昨天",
     "groupPastWeek": "近一周",
     "groupEarlier": "更早",
+    "quickBackupItemTitle": "快速备份 {{timestamp}}",
     "branch": "分支",
     "hash": "哈希",
     "author": "作者",

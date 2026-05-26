@@ -83,6 +83,13 @@ function shortHash(hash: string): string {
   return hash.slice(0, 7);
 }
 
+function quickBackupTimestamp(message: string): string | null {
+  const match = /^Backup (\d{4}-\d{2}-\d{2} \d{2}:\d{2}:\d{2})$/.exec(
+    message.trim(),
+  );
+  return match?.[1] || null;
+}
+
 type GitDiffSegment = "add" | "delete" | "empty";
 
 function buildGitDiffSegments(
@@ -456,6 +463,7 @@ export function GitPanel() {
   }, [workspacePath, fetchGitLog, fetchChangesCount, fetchDiff]);
 
   const commits = useMemo(() => logResult?.commits || [], [logResult]);
+  const latestCommitHash = commits[0]?.hash || null;
   const groupedCommits = useMemo(() => {
     const groups = new Map<string, GitLogEntry[]>();
     for (const commit of commits) {
@@ -668,6 +676,9 @@ export function GitPanel() {
                 <div className="git-commit-group-items">
                   {items.map((commit) => {
                     const isExpanded = expandedCommit === commit.hash;
+                    const backupTs = quickBackupTimestamp(commit.message);
+                    const isQuickBackup = Boolean(backupTs);
+                    const isLatest = latestCommitHash === commit.hash;
                     return (
                       <div key={commit.hash} className="git-commit-item">
                         <button
@@ -677,10 +688,30 @@ export function GitPanel() {
                           }
                           {...tooltipProps(commit)}
                         >
-                          <div className="git-commit-dot" />
+                          <div
+                            className={`git-commit-dot${
+                              isQuickBackup ? " git-commit-dot-backup" : ""
+                            }${
+                              !isQuickBackup ? " git-commit-dot-plain" : ""
+                            }${
+                              isLatest ? " git-commit-dot-latest" : ""
+                            }${
+                              isLatest && !isQuickBackup
+                                ? " git-commit-dot-latest-ring"
+                                : ""
+                            }`}
+                          >
+                            {isQuickBackup ? <Icon name="database" size={9} /> : null}
+                          </div>
                           <div className="git-commit-info">
                             <div className="git-commit-message truncate">
-                              {commit.message}
+                              {isQuickBackup
+                                ? t(
+                                    "git.quickBackupItemTitle",
+                                    "快速备份 {{timestamp}}",
+                                    { timestamp: backupTs },
+                                  )
+                                : commit.message}
                             </div>
                             <div className="git-commit-meta">
                               <span className="git-commit-hash">
