@@ -1,0 +1,555 @@
+{
+  "ok": true,
+  "startedAt": "2026-05-06T16:16:23.456Z",
+  "finishedAt": "2026-05-06T16:16:32.363Z",
+  "workspace": "E:\\Dev\\my-last-feedback",
+  "baseUrl": "http://127.0.0.1:8003",
+  "username": "opencode",
+  "passwordSet": true,
+  "spawned": true,
+  "pid": 14384,
+  "promptProvided": true,
+  "keepSession": false,
+  "results": [
+    {
+      "name": "server.spawn",
+      "ok": true,
+      "at": "2026-05-06T16:16:23.483Z",
+      "summary": "opencode serve --hostname 127.0.0.1 --port 8003",
+      "pid": 14384,
+      "baseUrl": "http://127.0.0.1:8003"
+    },
+    {
+      "name": "global.health",
+      "ok": true,
+      "at": "2026-05-06T16:16:25.363Z",
+      "summary": "version=1.14.39",
+      "data": {
+        "healthy": true,
+        "version": "1.14.39"
+      }
+    },
+    {
+      "name": "provider.list",
+      "ok": true,
+      "at": "2026-05-06T16:16:25.860Z",
+      "summary": "all=117 connected=2",
+      "connected": [
+        "opencode-go",
+        "opencode"
+      ]
+    },
+    {
+      "name": "prompt.model",
+      "ok": true,
+      "at": "2026-05-06T16:16:25.860Z",
+      "summary": "opencode/minimax-m2.5-free",
+      "model": {
+        "providerID": "opencode",
+        "modelID": "minimax-m2.5-free"
+      }
+    },
+    {
+      "name": "session.create",
+      "ok": true,
+      "at": "2026-05-06T16:16:25.871Z",
+      "summary": "sessionID=ses_201ec78f4ffeY78UameV8yDRVC title=New session - 2026-05-06T16:16:25.867Z",
+      "data": {
+        "id": "ses_201ec78f4ffeY78UameV8yDRVC",
+        "slug": "happy-otter",
+        "version": "1.14.39",
+        "projectID": "a3f933c1f2b122b47d0b4c1fad302202effe8a94",
+        "directory": "E:\\Dev\\my-last-feedback",
+        "path": "",
+        "title": "New session - 2026-05-06T16:16:25.867Z",
+        "time": {
+          "created": 1778084185867,
+          "updated": 1778084185867
+        }
+      }
+    },
+    {
+      "name": "session.permission.readonly",
+      "ok": true,
+      "at": "2026-05-06T16:16:25.879Z",
+      "summary": "rules=7",
+      "permission": [
+        {
+          "permission": "glob",
+          "pattern": "*",
+          "action": "allow"
+        },
+        {
+          "permission": "grep",
+          "pattern": "*",
+          "action": "allow"
+        },
+        {
+          "permission": "read",
+          "pattern": "*",
+          "action": "allow"
+        },
+        {
+          "permission": "list",
+          "pattern": "*",
+          "action": "allow"
+        },
+        {
+          "permission": "external_directory",
+          "pattern": "*",
+          "action": "deny"
+        },
+        {
+          "permission": "edit",
+          "pattern": "*",
+          "action": "deny"
+        },
+        {
+          "permission": "bash",
+          "pattern": "*",
+          "action": "deny"
+        }
+      ]
+    },
+    {
+      "name": "session.prompt_async",
+      "ok": true,
+      "at": "2026-05-06T16:16:26.142Z",
+      "summary": "accepted sessionID=ses_201ec78f4ffeY78UameV8yDRVC",
+      "body": {
+        "parts": [
+          {
+            "type": "text",
+            "text": "Use the Glob tool exactly once to find files matching .myLastChat/opencode_*probe_demo.cjs, then answer with only the nu"
+          }
+        ],
+        "model": {
+          "providerID": "opencode",
+          "modelID": "minimax-m2.5-free"
+        }
+      }
+    },
+    {
+      "name": "prompt.completion.event",
+      "ok": true,
+      "at": "2026-05-06T16:16:32.325Z",
+      "summary": "message.updated",
+      "event": {
+        "raw": {
+          "id": "evt_dfe139f48001WRLc0SiA1D55Rm",
+          "type": "message.updated",
+          "properties": {
+            "sessionID": "ses_201ec78f4ffeY78UameV8yDRVC",
+            "info": {
+              "id": "msg_dfe13882d001JbvDszUukzon9o",
+              "parentID": "msg_dfe138822001cCUQBPgNLqMURc",
+              "role": "assistant",
+              "mode": "build",
+              "agent": "build",
+              "path": {
+                "cwd": "E:\\Dev\\my-last-feedback",
+                "root": "E:\\Dev\\my-last-feedback"
+              },
+              "cost": 0,
+              "tokens": {
+                "total": 7973,
+                "input": 6109,
+                "output": 72,
+                "reasoning": 0,
+                "cache": {
+                  "write": 0,
+                  "read": 1792
+                }
+              },
+              "modelID": "minimax-m2.5-free",
+              "providerID": "opencode",
+              "time": {
+                "created": 1778084186157
+              },
+              "sessionID": "ses_201ec78f4ffeY78UameV8yDRVC",
+              "finish": "tool-calls"
+            }
+          }
+        },
+        "type": "message.updated",
+        "properties": {
+          "sessionID": "ses_201ec78f4ffeY78UameV8yDRVC",
+          "info": {
+            "id": "msg_dfe13882d001JbvDszUukzon9o",
+            "parentID": "msg_dfe138822001cCUQBPgNLqMURc",
+            "role": "assistant",
+            "mode": "build",
+            "agent": "build",
+            "path": {
+              "cwd": "E:\\Dev\\my-last-feedback",
+              "root": "E:\\Dev\\my-last-feedback"
+            },
+            "cost": 0,
+            "tokens": {
+              "total": 7973,
+              "input": 6109,
+              "output": 72,
+              "reasoning": 0,
+              "cache": {
+                "write": 0,
+                "read": 1792
+              }
+            },
+            "modelID": "minimax-m2.5-free",
+            "providerID": "opencode",
+            "time": {
+              "created": 1778084186157
+            },
+            "sessionID": "ses_201ec78f4ffeY78UameV8yDRVC",
+            "finish": "tool-calls"
+          }
+        }
+      }
+    },
+    {
+      "name": "session.messages.after_prompt",
+      "ok": true,
+      "at": "2026-05-06T16:16:32.332Z",
+      "summary": "messages=2",
+      "data": [
+        {
+          "info": {
+            "role": "user",
+            "time": {
+              "created": 1778084186146
+            },
+            "agent": "build",
+            "model": {
+              "providerID": "opencode",
+              "modelID": "minimax-m2.5-free"
+            },
+            "summary": {
+              "diffs": []
+            },
+            "id": "msg_dfe138822001cCUQBPgNLqMURc",
+            "sessionID": "ses_201ec78f4ffeY78UameV8yDRVC"
+          },
+          "parts": [
+            {
+              "type": "text",
+              "text": "Use the Glob tool exactly once to find files matching .myLastChat/opencode_*probe_demo.cjs, then answer with only the number of files found.",
+              "id": "prt_dfe138823001ZcuaUMa2QdW8r5",
+              "sessionID": "ses_201ec78f4ffeY78UameV8yDRVC",
+              "messageID": "msg_dfe138822001cCUQBPgNLqMURc"
+            }
+          ]
+        },
+        {
+          "info": {
+            "parentID": "msg_dfe138822001cCUQBPgNLqMURc",
+            "role": "assistant",
+            "mode": "build",
+            "agent": "build",
+            "path": {
+              "cwd": "E:\\Dev\\my-last-feedback",
+              "root": "E:\\Dev\\my-last-feedback"
+            },
+            "cost": 0,
+            "tokens": {
+              "total": 7973,
+              "input": 6109,
+              "output": 72,
+              "reasoning": 0,
+              "cache": {
+                "write": 0,
+                "read": 1792
+              }
+            },
+            "modelID": "minimax-m2.5-free",
+            "providerID": "opencode",
+            "time": {
+              "created": 1778084186157
+            },
+            "finish": "tool-calls",
+            "id": "msg_dfe13882d001JbvDszUukzon9o",
+            "sessionID": "ses_201ec78f4ffeY78UameV8yDRVC"
+          },
+          "parts": [
+            {
+              "snapshot": "424196897edf7f102b6ddac28d128d7d9385e2b8",
+              "type": "step-start",
+              "id": "prt_dfe139c45001VQqaREKgQp5dL1",
+              "sessionID": "ses_201ec78f4ffeY78UameV8yDRVC",
+              "messageID": "msg_dfe13882d001JbvDszUukzon9o"
+            },
+            {
+              "type": "reasoning",
+              "text": "The user wants me to use the Glob tool exactly once to find files matching .myLastChat/opencode_*probe_demo.cjs, then answer with only the number of files found.\n",
+              "time": {
+                "start": 1778084191302,
+                "end": 1778084191311
+              },
+              "metadata": {
+                "anthropic": {
+                  "signature": ""
+                }
+              },
+              "id": "prt_dfe139c46001oCWFCvoZli0kz9",
+              "sessionID": "ses_201ec78f4ffeY78UameV8yDRVC",
+              "messageID": "msg_dfe13882d001JbvDszUukzon9o"
+            },
+            {
+              "type": "text",
+              "text": "\n\n\n",
+              "time": {
+                "start": 1778084191311,
+                "end": 1778084191439
+              },
+              "id": "prt_dfe139c4f002JGnjY3aniPcvXZ",
+              "sessionID": "ses_201ec78f4ffeY78UameV8yDRVC",
+              "messageID": "msg_dfe13882d001JbvDszUukzon9o"
+            },
+            {
+              "type": "tool",
+              "tool": "glob",
+              "callID": "call_501245e5b9e64d2b82466b78",
+              "state": {
+                "status": "completed",
+                "input": {
+                  "pattern": ".myLastChat/opencode_*probe_demo.cjs"
+                },
+                "output": "E:\\Dev\\my-last-feedback\\.myLastChat\\opencode_prompt_event_probe_demo.cjs\nE:\\Dev\\my-last-feedback\\.myLastChat\\opencode_http_probe_demo.cjs",
+                "metadata": {
+                  "count": 2,
+                  "truncated": false
+                },
+                "title": "",
+                "time": {
+                  "start": 1778084191460,
+                  "end": 1778084191564
+                }
+              },
+              "id": "prt_dfe139cd1001HGB2XadhJWaxec",
+              "sessionID": "ses_201ec78f4ffeY78UameV8yDRVC",
+              "messageID": "msg_dfe13882d001JbvDszUukzon9o"
+            },
+            {
+              "reason": "tool-calls",
+              "snapshot": "424196897edf7f102b6ddac28d128d7d9385e2b8",
+              "type": "step-finish",
+              "tokens": {
+                "total": 7973,
+                "input": 6109,
+                "output": 72,
+                "reasoning": 0,
+                "cache": {
+                  "write": 0,
+                  "read": 1792
+                }
+              },
+              "cost": 0,
+              "id": "prt_dfe139f470015UnQcoXJpCtPYZ",
+              "sessionID": "ses_201ec78f4ffeY78UameV8yDRVC",
+              "messageID": "msg_dfe13882d001JbvDszUukzon9o"
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "name": "session.todo.after_prompt",
+      "ok": true,
+      "at": "2026-05-06T16:16:32.351Z",
+      "summary": "todos=0",
+      "data": []
+    },
+    {
+      "name": "tool.expected",
+      "ok": true,
+      "at": "2026-05-06T16:16:32.352Z",
+      "summary": "glob seen",
+      "expectedTool": "glob",
+      "matchingTool": {
+        "tool": "glob",
+        "callID": "call_501245e5b9e64d2b82466b78",
+        "status": "pending",
+        "input": {}
+      },
+      "completedTool": {
+        "tool": "glob",
+        "callID": "call_501245e5b9e64d2b82466b78",
+        "status": "completed",
+        "title": "",
+        "input": {
+          "pattern": ".myLastChat/opencode_*probe_demo.cjs"
+        },
+        "output": "E:\\Dev\\my-last-feedback\\.myLastChat\\opencode_prompt_event_probe_demo.cjs\nE:\\Dev\\my-last-feedback\\.myLastChat\\opencode_http_probe_demo.cjs",
+        "metadata": {
+          "count": 2,
+          "truncated": false
+        }
+      }
+    },
+    {
+      "name": "tool.completed",
+      "ok": true,
+      "at": "2026-05-06T16:16:32.352Z",
+      "summary": "glob completed",
+      "expectedTool": "glob",
+      "completedTool": {
+        "tool": "glob",
+        "callID": "call_501245e5b9e64d2b82466b78",
+        "status": "completed",
+        "title": "",
+        "input": {
+          "pattern": ".myLastChat/opencode_*probe_demo.cjs"
+        },
+        "output": "E:\\Dev\\my-last-feedback\\.myLastChat\\opencode_prompt_event_probe_demo.cjs\nE:\\Dev\\my-last-feedback\\.myLastChat\\opencode_http_probe_demo.cjs",
+        "metadata": {
+          "count": 2,
+          "truncated": false
+        }
+      }
+    },
+    {
+      "name": "prompt.model_response",
+      "ok": true,
+      "at": "2026-05-06T16:16:32.353Z",
+      "summary": "textDelta=165",
+      "textDelta": "The user wants me to use the Glob tool exactly once to find files matching .myLastChat/opencode_*probe_demo.cjs, then answer with only the number of files found.\n\n\n\n"
+    },
+    {
+      "name": "events.instance.summary",
+      "ok": true,
+      "at": "2026-05-06T16:16:32.353Z",
+      "summary": "{\"message.updated\":4,\"message.part.updated\":10,\"session.updated\":2,\"session.status\":2,\"session.diff\":1,\"message.part.delta\":39}",
+      "data": {
+        "counts": {
+          "message.updated": 4,
+          "message.part.updated": 10,
+          "session.updated": 2,
+          "session.status": 2,
+          "session.diff": 1,
+          "message.part.delta": 39
+        },
+        "textDelta": "The user wants me to use the Glob tool exactly once to find files matching .myLastChat/opencode_*probe_demo.cjs, then answer with only the number of files found.\n\n\n\n",
+        "partTypes": [
+          "text",
+          "step-start",
+          "reasoning",
+          "reasoning",
+          "text",
+          "text",
+          "tool",
+          "tool",
+          "tool",
+          "step-finish"
+        ],
+        "toolEvents": [
+          {
+            "tool": "glob",
+            "callID": "call_501245e5b9e64d2b82466b78",
+            "status": "pending",
+            "input": {}
+          },
+          {
+            "tool": "glob",
+            "callID": "call_501245e5b9e64d2b82466b78",
+            "status": "running",
+            "input": {
+              "pattern": ".myLastChat/opencode_*probe_demo.cjs"
+            }
+          },
+          {
+            "tool": "glob",
+            "callID": "call_501245e5b9e64d2b82466b78",
+            "status": "completed",
+            "title": "",
+            "input": {
+              "pattern": ".myLastChat/opencode_*probe_demo.cjs"
+            },
+            "output": "E:\\Dev\\my-last-feedback\\.myLastChat\\opencode_prompt_event_probe_demo.cjs\nE:\\Dev\\my-last-feedback\\.myLastChat\\opencode_http_probe_demo.cjs",
+            "metadata": {
+              "count": 2,
+              "truncated": false
+            }
+          }
+        ],
+        "toolStatusCounts": {
+          "glob:pending": 1,
+          "glob:running": 1,
+          "glob:completed": 1
+        },
+        "total": 58,
+        "errors": []
+      }
+    },
+    {
+      "name": "events.global.summary",
+      "ok": true,
+      "at": "2026-05-06T16:16:32.354Z",
+      "summary": "{\"message.updated\":4,\"message.part.updated\":10,\"session.updated\":2,\"session.status\":2,\"session.diff\":1,\"message.part.delta\":39}",
+      "data": {
+        "counts": {
+          "message.updated": 4,
+          "message.part.updated": 10,
+          "session.updated": 2,
+          "session.status": 2,
+          "session.diff": 1,
+          "message.part.delta": 39
+        },
+        "textDelta": "The user wants me to use the Glob tool exactly once to find files matching .myLastChat/opencode_*probe_demo.cjs, then answer with only the number of files found.\n\n\n\n",
+        "partTypes": [
+          "text",
+          "step-start",
+          "reasoning",
+          "reasoning",
+          "text",
+          "text",
+          "tool",
+          "tool",
+          "tool",
+          "step-finish"
+        ],
+        "toolEvents": [
+          {
+            "tool": "glob",
+            "callID": "call_501245e5b9e64d2b82466b78",
+            "status": "pending",
+            "input": {}
+          },
+          {
+            "tool": "glob",
+            "callID": "call_501245e5b9e64d2b82466b78",
+            "status": "running",
+            "input": {
+              "pattern": ".myLastChat/opencode_*probe_demo.cjs"
+            }
+          },
+          {
+            "tool": "glob",
+            "callID": "call_501245e5b9e64d2b82466b78",
+            "status": "completed",
+            "title": "",
+            "input": {
+              "pattern": ".myLastChat/opencode_*probe_demo.cjs"
+            },
+            "output": "E:\\Dev\\my-last-feedback\\.myLastChat\\opencode_prompt_event_probe_demo.cjs\nE:\\Dev\\my-last-feedback\\.myLastChat\\opencode_http_probe_demo.cjs",
+            "metadata": {
+              "count": 2,
+              "truncated": false
+            }
+          }
+        ],
+        "toolStatusCounts": {
+          "glob:pending": 1,
+          "glob:running": 1,
+          "glob:completed": 1
+        },
+        "total": 58,
+        "errors": []
+      }
+    },
+    {
+      "name": "session.delete",
+      "ok": true,
+      "at": "2026-05-06T16:16:32.363Z",
+      "summary": "deleted=true"
+    }
+  ]
+}

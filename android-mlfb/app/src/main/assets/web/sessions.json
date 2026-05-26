@@ -1,0 +1,174 @@
+{
+  "meta": {
+    "source": "MLFB mock data",
+    "generatedAt": "2026-04-22T10:00:00Z"
+  },
+  "callers": [
+    { "id": "caller-vscode", "name": "VS Code", "alias": "前端 Copilot", "version": "1.99.0", "color": "#3b82f6", "clientName": "vscode" },
+    { "id": "caller-cursor", "name": "Cursor", "alias": "Cursor Agent", "version": "0.44.2", "color": "#8b5cf6", "clientName": "cursor" },
+    { "id": "caller-windsurf", "name": "Windsurf", "alias": "Cascade", "version": "1.2.3", "color": "#10b981", "clientName": "windsurf" }
+  ],
+  "sessions": [
+    {
+      "id": "sess-001",
+      "callerId": "caller-vscode",
+      "requestName": "确认 Android MLFB 骨架方案",
+      "summary": "## 方案核对\n\n已读 [feedbackStore.ts](app/src/store/feedbackStore.ts)，计划把 MLFB 桌面端的关键功能映射到安卓平台：\n\n- **tabbar** 三面板：Pending / History / Settings\n- **session 详情**：session-mode + 多张 question-card\n- **零新增 CSS**\n\n请确认映射方案是否 OK，以及从哪一步开始。",
+      "projectDirectory": "e:\\Dev\\my-last-feedback",
+      "status": "pending",
+      "createdAt": "2026-04-22T09:45:00Z",
+      "feedbackText": "",
+      "testLogText": "",
+      "images": [],
+      "commandLogs": "",
+      "questions": [
+        { "label": "映射方案是否 OK", "options": ["OK 开工", "部分需调整", "整体推翻"], "selectedOptions": [], "answer": "" },
+        { "label": "从 Step 几开始", "options": ["Step1", "Step1+2", "一次性做完"], "selectedOptions": [], "answer": "" },
+        { "label": "options 交互方式", "options": ["多选 checkbox", "单选 radio", "按 MLFB 桌面行为"], "selectedOptions": [], "answer": "" }
+      ],
+      "gitAction": null
+    },
+    {
+      "id": "sess-002",
+      "callerId": "caller-cursor",
+      "requestName": "重构 SummaryPanel 组件",
+      "summary": "## 需要你的决定\n\n`SummaryPanel.tsx` 当前 280 行，承担了：\n- Markdown 渲染\n- 图片缩略展示\n- Questions chips 交互\n- TestLog 折叠\n\n建议拆分为 4 个子组件。是否同意？如果同意我将：\n1. 新建 `SummaryMarkdown.tsx`\n2. 新建 `QuestionsChips.tsx`\n3. 新建 `TestLogBlock.tsx`\n4. 保留主壳 `SummaryPanel.tsx`",
+      "projectDirectory": "e:\\Dev\\my-last-feedback",
+      "status": "pending",
+      "createdAt": "2026-04-22T09:20:00Z",
+      "feedbackText": "",
+      "testLogText": "",
+      "images": [],
+      "commandLogs": "",
+      "questions": [
+        { "label": "是否同意拆分", "options": ["同意", "保持不变", "只拆 Questions"], "selectedOptions": [], "answer": "" },
+        { "label": "额外补充说明", "selectedOptions": [], "answer": "" }
+      ],
+      "gitAction": { "type": "create-branch", "branchName": "refactor/summary-panel-split" }
+    },
+    {
+      "id": "sess-003",
+      "callerId": "caller-windsurf",
+      "requestName": "测试日志异常需要排查",
+      "summary": "执行 `pnpm test` 时出现 3 个失败用例。日志已贴在下面，麻烦看一下是否是环境问题还是真 bug。\n\n```\nFAIL  app/src/store/feedbackStore.test.ts\n  ✕ should toggle option in selectedOptions (5ms)\n    expected [\"A\"] to equal [\"A\", \"B\"]\n```",
+      "projectDirectory": "e:\\Dev\\my-last-feedback",
+      "status": "pending",
+      "createdAt": "2026-04-22T08:10:00Z",
+      "feedbackText": "",
+      "testLogText": "FAIL  app/src/store/feedbackStore.test.ts\n  ✕ should toggle option (5ms)\n  ✕ should clear selectedOptions on submit (3ms)\n  ✕ should handle empty options (2ms)",
+      "images": [],
+      "commandLogs": "",
+      "questions": [
+        { "label": "这些失败是否已知", "options": ["已知-可忽略", "未知-需排查", "环境问题"], "selectedOptions": [], "answer": "" }
+      ],
+      "gitAction": null
+    },
+    {
+      "id": "sess-004",
+      "callerId": "caller-vscode",
+      "requestName": "Phase 1 完成度确认",
+      "summary": "Phase 1 的三项任务已经跑通：\n\n- [x] axum server 在 Tauri setup 启动\n- [x] /api/sessions 列表返回 3 条 mock\n- [x] /ws 广播 session.new/updated\n\n是否进入 Phase 2（鉴权与写路径）？",
+      "projectDirectory": "e:\\Dev\\my-last-feedback",
+      "status": "responded",
+      "createdAt": "2026-04-21T15:30:00Z",
+      "feedbackText": "通过，进入 Phase 2。pairing 用 6 位数字码即可。",
+      "testLogText": "",
+      "images": [],
+      "commandLogs": "",
+      "questions": [
+        { "label": "是否进入 Phase 2", "options": ["继续", "先优化 Phase 1", "暂停"], "selectedOptions": ["继续"], "answer": "pairing 用 6 位数字码即可" }
+      ],
+      "gitAction": { "type": "commit-push", "branchName": "" }
+    },
+    {
+      "id": "sess-005",
+      "callerId": "caller-cursor",
+      "requestName": "旧 session 已取消",
+      "summary": "你手动取消了这条 session。",
+      "projectDirectory": "e:\\Dev\\my-last-feedback",
+      "status": "cancelled",
+      "createdAt": "2026-04-20T11:00:00Z",
+      "feedbackText": "",
+      "testLogText": "",
+      "images": [],
+      "commandLogs": "",
+      "questions": [],
+      "gitAction": null
+    },
+    {
+      "id": "sess-006",
+      "callerId": "caller-vscode",
+      "requestName": "Markdown 渲染能力展示 — 标题 / 强调 / 列表",
+      "summary": "# Markdown 渲染能力测试\n\n## 第一节：文本强调\n\n这是一段包含 **粗体文字**、*斜体文字* 和 `inline code` 的段落。还可以有 [带链接的文字](https://example.com/docs) 穿插其中，点击应该能跳转。\n\n### 小节：嵌套与组合\n\n- 第一项：**重要事项**\n- 第二项：包含 `code.method()` 调用\n- 第三项：[参考文档](https://example.com)\n\n## 第二节：任务清单\n\n- [x] 已完成：初始化项目骨架\n- [x] 已完成：配置 ESLint + Prettier\n- [ ] 待办：编写单元测试\n- [ ] 待办：集成 CI/CD\n- [ ] 待办：部署到生产环境\n\n## 第三节：代码块\n\n下面是一段 TypeScript 代码：\n\n```typescript\ninterface User {\n  id: string;\n  name: string;\n  email: string;\n}\n\nasync function fetchUser(id: string): Promise<User> {\n  const resp = await fetch(`/api/users/${id}`);\n  if (!resp.ok) throw new Error('Not found');\n  return resp.json();\n}\n```\n\n这段 JSON 配置：\n\n```json\n{\n  \"name\": \"mlfb\",\n  \"version\": \"1.0.0\",\n  \"dependencies\": {\n    \"vue\": \"^3.4.0\",\n    \"pinia\": \"^2.1.0\"\n  }\n}\n```\n\n请确认 Markdown 渲染效果是否符合预期。",
+      "projectDirectory": "e:\\Dev\\my-last-feedback",
+      "status": "pending",
+      "createdAt": "2026-04-22T11:00:00Z",
+      "feedbackText": "",
+      "testLogText": "",
+      "images": [],
+      "commandLogs": "",
+      "questions": [
+        { "label": "标题层级是否清晰", "options": ["清晰", "需调整", "层级太密"], "selectedOptions": [], "answer": "" },
+        { "label": "任务清单交互是否符合预期", "options": ["符合", "需可点击", "需统计进度"], "selectedOptions": [], "answer": "" },
+        { "label": "代码块样式反馈", "selectedOptions": [], "answer": "" }
+      ],
+      "gitAction": null
+    },
+    {
+      "id": "sess-007",
+      "callerId": "caller-cursor",
+      "requestName": "长文档 — 设计方案评审",
+      "summary": "# 移动端反馈系统设计方案\n\n## 1. 背景\n\n目前 PC 端的反馈流程依赖桌面窗口，在**开发者走动场景下体验受限**。本方案提出一个 Android 端的轻量替代，通过 WebView + 本地 JSON mock 数据实现离线可用的反馈面板。\n\n> **关键约束**：不要求实时与 PC 同步，仅作为**移动端 prototype**，用于展示反馈流程。\n\n## 2. 架构概览\n\n整体由三层构成：\n\n- **UI 层**：单文件 `index.html`，原生 CSS + 原生 JS\n- **数据层**：`sessions.json` 作为静态 mock，应用内 `State` 内存模型\n- **交互层**：触摸手势、弹出面板、底部悬浮栏\n\n### 2.1 UI 层细节\n\n采用 `position: fixed` 悬浮底栏 + `:has()` 选择器适配展开面板。核心 CSS 变量：\n\n- `--fs-scale`：全局字号倍率（0.85 / 1.0 / 1.15）\n- `--caller-color`：每个 caller 注入不同色调\n- `--sab`：safe-area-bottom，适配刘海屏\n\n### 2.2 数据层细节\n\n```javascript\nconst State = {\n  sessions: [],\n  callers: [],\n  current: null,\n  inputExpanded: false,\n  submitMenuOpen: false,\n};\n```\n\n所有修改走 `renderDetail()` 重绘，避免手动 DOM 操作。\n\n## 3. 关键决策\n\n- [x] 放弃 React / Vue，用原生 JS\n- [x] 单文件 HTML 部署到 `assets/web/`\n- [x] WebView 设置 `domStorageEnabled=true` 支持 localStorage\n- [ ] 决策：是否需要接入真实 SSE\n- [ ] 决策：图片附件上限\n\n## 4. 风险点\n\n1. **WebView 兼容性**：`:has()` 仅在 Chromium 105+ 可用，老设备可能 fallback 失败。\n2. **字体一致性**：Android WebView 默认字体因厂商而异，已通过 `--font-sans` 约束。\n3. **触摸反馈延迟**：已禁用 `-webkit-tap-highlight-color`，改用 `:active` 变色。\n\n## 5. 需要你决定的事项\n\n请查看下方问题表单。\n\n---\n\n**附**：完整源码位于 [index.html](app/src/main/assets/web/index.html)",
+      "projectDirectory": "e:\\Dev\\my-last-feedback",
+      "status": "pending",
+      "createdAt": "2026-04-22T10:45:00Z",
+      "feedbackText": "",
+      "testLogText": "",
+      "images": [],
+      "commandLogs": "",
+      "questions": [
+        { "label": "架构是否合理", "options": ["合理", "需重构", "整体推翻"], "selectedOptions": [], "answer": "" },
+        { "label": "是否接入真实 SSE", "options": ["接入", "保持 mock", "后续再说"], "selectedOptions": [], "answer": "" },
+        { "label": "图片附件上限", "options": ["3 张", "6 张", "无上限"], "selectedOptions": [], "answer": "" },
+        { "label": "补充意见", "selectedOptions": [], "answer": "" }
+      ],
+      "gitAction": null
+    },
+    {
+      "id": "sess-008",
+      "callerId": "caller-windsurf",
+      "requestName": "多语言代码片段 — 渲染边界测试",
+      "summary": "## 渲染边界测试\n\n需要确认下列多语言代码片段是否**都能正确显示**：\n\n### Python\n\n```python\ndef fibonacci(n: int) -> list[int]:\n    \"\"\"返回前 n 项斐波那契数列\"\"\"\n    result = [0, 1]\n    for i in range(2, n):\n        result.append(result[-1] + result[-2])\n    return result[:n]\n\nif __name__ == '__main__':\n    print(fibonacci(10))\n```\n\n### Rust\n\n```rust\nfn main() {\n    let nums: Vec<i32> = (1..=10).collect();\n    let sum: i32 = nums.iter().sum();\n    println!(\"Sum: {}\", sum);\n}\n```\n\n### Shell\n\n```bash\n#!/usr/bin/env bash\nset -euo pipefail\n\nfor f in *.log; do\n  echo \"Processing $f\"\n  grep -E 'ERROR|WARN' \"$f\" | wc -l\ndone\n```\n\n### 长行代码（横向滚动测试）\n\n```\nconst veryLongVariableName = someReallyLongFunctionCall(argument1, argument2, argument3, argument4, argument5).chainedMethod().anotherChainedMethod();\n```\n\n### 特殊字符与 HTML 实体\n\n内联示例：`<script>alert('xss')</script>`、`&amp;`、`<div class=\"test\">`\n\n以上所有都应作为**纯文本**显示，不应实际执行或解析为 HTML。\n\n### Emoji 混排\n\n- 🚀 发射按钮\n- ✅ 通过测试\n- ❌ 失败用例\n- ⚠️ 警告信息\n- 💡 提示：可以使用 emoji 增强可读性\n\n请检查渲染是否正常。",
+      "projectDirectory": "e:\\Dev\\my-last-feedback\\android-mlfb",
+      "status": "pending",
+      "createdAt": "2026-04-22T10:15:00Z",
+      "feedbackText": "",
+      "testLogText": "",
+      "images": [],
+      "commandLogs": "",
+      "questions": [
+        { "label": "代码块是否可横向滚动", "options": ["可以", "不能", "需要 word-wrap"], "selectedOptions": [], "answer": "" },
+        { "label": "特殊字符是否被正确转义", "options": ["正确", "看到了原始标签", "部分错误"], "selectedOptions": [], "answer": "" },
+        { "label": "Emoji 显示正常吗", "options": ["正常", "字体缺失", "位置错乱"], "selectedOptions": [], "answer": "" }
+      ],
+      "gitAction": null
+    },
+    {
+      "id": "sess-009",
+      "callerId": "caller-vscode",
+      "requestName": "已响应案例 — 富文本反馈",
+      "summary": "## 设计稿已更新\n\n根据上次讨论的三个方向：\n\n- **方向 A**：胶囊+描边\n- **方向 B**：幽灵按钮\n- **方向 C**：混合风格\n\n已在 Figma 更新设计稿，请查看并选择最终方案。\n\n### 方向 A 示例\n\n```css\n.pill {\n  border-radius: 999px;\n  border: 1px solid var(--border);\n  padding: 4px 10px;\n}\n```\n\n### 性能对比\n\n- [x] A 方案：渲染耗时 12ms\n- [x] B 方案：渲染耗时 8ms\n- [x] C 方案：渲染耗时 10ms\n\n**推荐**: B 方案，性能最佳且视觉最简洁。",
+      "projectDirectory": "e:\\Dev\\my-last-feedback",
+      "status": "responded",
+      "createdAt": "2026-04-21T16:20:00Z",
+      "feedbackText": "## 采纳 B 方案\n\n同意采用**幽灵按钮**风格。理由：\n\n- 视觉噪声最小\n- 性能最佳（8ms）\n- 与现有按钮体系一致\n\n### 后续调整\n\n- [x] 所有 `.sub-pane` 去掉外框\n- [x] 按钮改为 transparent 背景 + 边框\n- [ ] 待验证：深色主题下的对比度\n\n请按此实现。",
+      "testLogText": "",
+      "images": [],
+      "commandLogs": "",
+      "questions": [
+        { "label": "最终采用哪个方案", "options": ["方向 A", "方向 B", "方向 C"], "selectedOptions": ["方向 B"], "answer": "同意采用幽灵按钮风格" }
+      ],
+      "gitAction": null
+    }
+  ]
+}

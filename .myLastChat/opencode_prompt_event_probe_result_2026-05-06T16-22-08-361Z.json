@@ -1,0 +1,641 @@
+{
+  "ok": false,
+  "startedAt": "2026-05-06T16:22:08.361Z",
+  "finishedAt": "2026-05-06T16:23:11.161Z",
+  "workspace": "E:\\Dev\\my-last-feedback",
+  "baseUrl": "http://127.0.0.1:1614",
+  "username": "opencode",
+  "passwordSet": true,
+  "spawned": true,
+  "pid": 17752,
+  "promptProvided": true,
+  "keepSession": false,
+  "results": [
+    {
+      "name": "server.spawn",
+      "ok": true,
+      "at": "2026-05-06T16:22:08.387Z",
+      "summary": "opencode serve --hostname 127.0.0.1 --port 1614",
+      "pid": 17752,
+      "baseUrl": "http://127.0.0.1:1614"
+    },
+    {
+      "name": "global.health",
+      "ok": true,
+      "at": "2026-05-06T16:22:10.260Z",
+      "summary": "version=1.14.39",
+      "data": {
+        "healthy": true,
+        "version": "1.14.39"
+      }
+    },
+    {
+      "name": "provider.list",
+      "ok": true,
+      "at": "2026-05-06T16:22:10.817Z",
+      "summary": "all=117 connected=2",
+      "connected": [
+        "opencode-go",
+        "opencode"
+      ]
+    },
+    {
+      "name": "prompt.model",
+      "ok": true,
+      "at": "2026-05-06T16:22:10.818Z",
+      "summary": "opencode/minimax-m2.5-free",
+      "model": {
+        "providerID": "opencode",
+        "modelID": "minimax-m2.5-free"
+      }
+    },
+    {
+      "name": "session.create",
+      "ok": true,
+      "at": "2026-05-06T16:22:10.833Z",
+      "summary": "sessionID=ses_201e73576ffeFKO2Xhn8XG5pNp title=New session - 2026-05-06T16:22:10.825Z",
+      "data": {
+        "id": "ses_201e73576ffeFKO2Xhn8XG5pNp",
+        "slug": "stellar-wizard",
+        "version": "1.14.39",
+        "projectID": "a3f933c1f2b122b47d0b4c1fad302202effe8a94",
+        "directory": "E:\\Dev\\my-last-feedback",
+        "path": "",
+        "title": "New session - 2026-05-06T16:22:10.825Z",
+        "time": {
+          "created": 1778084530825,
+          "updated": 1778084530825
+        }
+      }
+    },
+    {
+      "name": "session.prompt_async",
+      "ok": true,
+      "at": "2026-05-06T16:22:11.108Z",
+      "summary": "accepted sessionID=ses_201e73576ffeFKO2Xhn8XG5pNp",
+      "body": {
+        "parts": [
+          {
+            "type": "text",
+            "text": "Use the Glob tool exactly once to find package.json, then stop."
+          }
+        ],
+        "model": {
+          "providerID": "opencode",
+          "modelID": "minimax-m2.5-free"
+        }
+      }
+    },
+    {
+      "name": "permission.asked",
+      "ok": false,
+      "at": "2026-05-06T16:23:11.133Z",
+      "summary": "not seen within 60000ms"
+    },
+    {
+      "name": "prompt.completion.event",
+      "ok": true,
+      "at": "2026-05-06T16:23:11.135Z",
+      "summary": "message.updated",
+      "event": {
+        "raw": {
+          "id": "evt_dfe18db01001ARSeuGAbvS3xdr",
+          "type": "message.updated",
+          "properties": {
+            "sessionID": "ses_201e73576ffeFKO2Xhn8XG5pNp",
+            "info": {
+              "id": "msg_dfe18cbb3001FqHCg8vzgjd70q",
+              "parentID": "msg_dfe18cba700192DGwGmJWQcRkg",
+              "role": "assistant",
+              "mode": "build",
+              "agent": "build",
+              "path": {
+                "cwd": "E:\\Dev\\my-last-feedback",
+                "root": "E:\\Dev\\my-last-feedback"
+              },
+              "cost": 0,
+              "tokens": {
+                "total": 11170,
+                "input": 8894,
+                "output": 52,
+                "reasoning": 0,
+                "cache": {
+                  "write": 0,
+                  "read": 2224
+                }
+              },
+              "modelID": "minimax-m2.5-free",
+              "providerID": "opencode",
+              "time": {
+                "created": 1778084531123
+              },
+              "sessionID": "ses_201e73576ffeFKO2Xhn8XG5pNp",
+              "finish": "tool-calls"
+            }
+          }
+        },
+        "type": "message.updated",
+        "properties": {
+          "sessionID": "ses_201e73576ffeFKO2Xhn8XG5pNp",
+          "info": {
+            "id": "msg_dfe18cbb3001FqHCg8vzgjd70q",
+            "parentID": "msg_dfe18cba700192DGwGmJWQcRkg",
+            "role": "assistant",
+            "mode": "build",
+            "agent": "build",
+            "path": {
+              "cwd": "E:\\Dev\\my-last-feedback",
+              "root": "E:\\Dev\\my-last-feedback"
+            },
+            "cost": 0,
+            "tokens": {
+              "total": 11170,
+              "input": 8894,
+              "output": 52,
+              "reasoning": 0,
+              "cache": {
+                "write": 0,
+                "read": 2224
+              }
+            },
+            "modelID": "minimax-m2.5-free",
+            "providerID": "opencode",
+            "time": {
+              "created": 1778084531123
+            },
+            "sessionID": "ses_201e73576ffeFKO2Xhn8XG5pNp",
+            "finish": "tool-calls"
+          }
+        }
+      }
+    },
+    {
+      "name": "session.messages.after_prompt",
+      "ok": true,
+      "at": "2026-05-06T16:23:11.146Z",
+      "summary": "messages=3",
+      "data": [
+        {
+          "info": {
+            "role": "user",
+            "time": {
+              "created": 1778084531111
+            },
+            "agent": "build",
+            "model": {
+              "providerID": "opencode",
+              "modelID": "minimax-m2.5-free"
+            },
+            "summary": {
+              "diffs": []
+            },
+            "id": "msg_dfe18cba700192DGwGmJWQcRkg",
+            "sessionID": "ses_201e73576ffeFKO2Xhn8XG5pNp"
+          },
+          "parts": [
+            {
+              "type": "text",
+              "text": "Use the Glob tool exactly once to find package.json, then stop.",
+              "id": "prt_dfe18cba90018iL3Eltku7YzN1",
+              "sessionID": "ses_201e73576ffeFKO2Xhn8XG5pNp",
+              "messageID": "msg_dfe18cba700192DGwGmJWQcRkg"
+            }
+          ]
+        },
+        {
+          "info": {
+            "parentID": "msg_dfe18cba700192DGwGmJWQcRkg",
+            "role": "assistant",
+            "mode": "build",
+            "agent": "build",
+            "path": {
+              "cwd": "E:\\Dev\\my-last-feedback",
+              "root": "E:\\Dev\\my-last-feedback"
+            },
+            "cost": 0,
+            "tokens": {
+              "total": 11170,
+              "input": 8894,
+              "output": 52,
+              "reasoning": 0,
+              "cache": {
+                "write": 0,
+                "read": 2224
+              }
+            },
+            "modelID": "minimax-m2.5-free",
+            "providerID": "opencode",
+            "time": {
+              "created": 1778084531123,
+              "completed": 1778084535519
+            },
+            "finish": "tool-calls",
+            "id": "msg_dfe18cbb3001FqHCg8vzgjd70q",
+            "sessionID": "ses_201e73576ffeFKO2Xhn8XG5pNp"
+          },
+          "parts": [
+            {
+              "snapshot": "738e429551349c8639a00ec7c9d66a740dfed0ad",
+              "type": "step-start",
+              "id": "prt_dfe18d852001A14hdGBdfTvWsu",
+              "sessionID": "ses_201e73576ffeFKO2Xhn8XG5pNp",
+              "messageID": "msg_dfe18cbb3001FqHCg8vzgjd70q"
+            },
+            {
+              "type": "reasoning",
+              "text": "The user wants me to use the Glob tool exactly once to find package.json, then stop. Let me do that.\n",
+              "time": {
+                "start": 1778084534357,
+                "end": 1778084534358
+              },
+              "metadata": {
+                "anthropic": {
+                  "signature": "41d729df5ea27f98de1c100a5549f0e58bc22eb1d4608bda48a289bb0d727461"
+                }
+              },
+              "id": "prt_dfe18d8550019w0im9H76DlzuW",
+              "sessionID": "ses_201e73576ffeFKO2Xhn8XG5pNp",
+              "messageID": "msg_dfe18cbb3001FqHCg8vzgjd70q"
+            },
+            {
+              "type": "tool",
+              "tool": "glob",
+              "callID": "call_function_1uwe6pq3uev3_1",
+              "state": {
+                "status": "completed",
+                "input": {
+                  "pattern": "**/package.json"
+                },
+                "output": "E:\\Dev\\my-last-feedback\\package.json\nE:\\Dev\\my-last-feedback\\app\\package.json\nE:\\Dev\\my-last-feedback\\ref-repos\\opencode-1.14.33\\sdks\\vscode\\package.json\nE:\\Dev\\my-last-feedback\\ref-repos\\opencode-1.14.33\\packages\\script\\package.json\nE:\\Dev\\my-last-feedback\\ref-repos\\opencode-1.14.33\\packages\\plugin\\package.json\nE:\\Dev\\my-last-feedback\\ref-repos\\opencode-1.14.33\\packages\\web\\package.json\nE:\\Dev\\my-last-feedback\\ref-repos\\opencode-1.14.33\\packages\\console\\resource\\package.json\nE:\\Dev\\my-last-feedback\\ref-repos\\opencode-1.14.33\\packages\\console\\mail\\package.json\nE:\\Dev\\my-last-feedback\\ref-repos\\opencode-1.14.33\\packages\\console\\function\\package.json\nE:\\Dev\\my-last-feedback\\ref-repos\\opencode-1.14.33\\github\\package.json\nE:\\Dev\\my-last-feedback\\ref-repos\\opencode-1.14.33\\packages\\desktop\\package.json\nE:\\Dev\\my-last-feedback\\ref-repos\\opencode-1.14.33\\packages\\console\\core\\package.json\nE:\\Dev\\my-last-feedback\\ref-repos\\opencode-1.14.33\\packages\\core\\package.json\nE:\\Dev\\my-last-feedback\\ref-repos\\opencode-1.14.33\\packages\\console\\app\\package.json\nE:\\Dev\\my-last-feedback\\ref-repos\\opencode-1.14.33\\packages\\ui\\package.json\nE:\\Dev\\my-last-feedback\\ref-repos\\opencode-1.14.33\\packages\\opencode\\package.json\nE:\\Dev\\my-last-feedback\\ref-repos\\opencode-1.14.33\\packages\\storybook\\package.json\nE:\\Dev\\my-last-feedback\\ref-repos\\opencode-1.14.33\\packages\\slack\\package.json\nE:\\Dev\\my-last-feedback\\ref-repos\\opencode-1.14.33\\packages\\app\\package.json\nE:\\Dev\\my-last-feedback\\ref-repos\\opencode-1.14.33\\package.json\nE:\\Dev\\my-last-feedback\\ref-repos\\opencode-1.14.33\\packages\\function\\package.json\nE:\\Dev\\my-last-feedback\\ref-repos\\opencode-1.14.33\\packages\\enterprise\\package.json\nE:\\Dev\\my-last-feedback\\ref-repos\\opencode-1.14.33\\packages\\sdk\\js\\package.json\nE:\\Dev\\my-last-feedback\\ref-repos\\opencode-1.14.33\\packages\\desktop-electron\\package.json\nE:\\Dev\\my-last-feedback\\ref-repos\\catppuccin-vscode-icons\\package.json\nE:\\Dev\\my-last-feedback\\.myLastChat\\acp-poc\\vscode-ext\\package.json\nE:\\Dev\\my-last-feedback\\.myLastChat\\acp-poc\\package.json\nE:\\Dev\\my-last-feedback\\ref-repos\\oh-my-openagent-dev\\tests\\hashline\\package.json\nE:\\Dev\\my-last-feedback\\ref-repos\\oh-my-openagent-dev\\package.json\nE:\\Dev\\my-last-feedback\\ref-repos\\oh-my-openagent-dev\\packages\\windows-x64-baseline\\package.json\nE:\\Dev\\my-last-feedback\\ref-repos\\oh-my-openagent-dev\\packages\\linux-arm64\\package.json\nE:\\Dev\\my-last-feedback\\ref-repos\\oh-my-openagent-dev\\packages\\windows-x64\\package.json\nE:\\Dev\\my-last-feedback\\ref-repos\\oh-my-openagent-dev\\packages\\linux-x64-musl-baseline\\package.json\nE:\\Dev\\my-last-feedback\\ref-repos\\oh-my-openagent-dev\\packages\\linux-x64-musl\\package.json\nE:\\Dev\\my-last-feedback\\ref-repos\\oh-my-openagent-dev\\packages\\darwin-x64-baseline\\package.json\nE:\\Dev\\my-last-feedback\\ref-repos\\oh-my-openagent-dev\\packages\\darwin-x64\\package.json\nE:\\Dev\\my-last-feedback\\ref-repos\\oh-my-openagent-dev\\packages\\linux-x64-baseline\\package.json\nE:\\Dev\\my-last-feedback\\ref-repos\\oh-my-openagent-dev\\packages\\linux-x64\\package.json\nE:\\Dev\\my-last-feedback\\ref-repos\\oh-my-openagent-dev\\packages\\darwin-arm64\\package.json\nE:\\Dev\\my-last-feedback\\ref-repos\\oh-my-openagent-dev\\packages\\linux-arm64-musl\\package.json\nE:\\Dev\\my-last-feedback\\ref-repos\\my-last-chat\\package.json",
+                "metadata": {
+                  "count": 41,
+                  "truncated": false
+                },
+                "title": "",
+                "time": {
+                  "start": 1778084534365,
+                  "end": 1778084534481
+                }
+              },
+              "id": "prt_dfe18d857002yuDcoIrjtuTfVm",
+              "sessionID": "ses_201e73576ffeFKO2Xhn8XG5pNp",
+              "messageID": "msg_dfe18cbb3001FqHCg8vzgjd70q"
+            },
+            {
+              "reason": "tool-calls",
+              "snapshot": "738e429551349c8639a00ec7c9d66a740dfed0ad",
+              "type": "step-finish",
+              "tokens": {
+                "total": 11170,
+                "input": 8894,
+                "output": 52,
+                "reasoning": 0,
+                "cache": {
+                  "write": 0,
+                  "read": 2224
+                }
+              },
+              "cost": 0,
+              "id": "prt_dfe18daff001iefx5a36UgWcbA",
+              "sessionID": "ses_201e73576ffeFKO2Xhn8XG5pNp",
+              "messageID": "msg_dfe18cbb3001FqHCg8vzgjd70q"
+            }
+          ]
+        },
+        {
+          "info": {
+            "parentID": "msg_dfe18cba700192DGwGmJWQcRkg",
+            "role": "assistant",
+            "mode": "build",
+            "agent": "build",
+            "path": {
+              "cwd": "E:\\Dev\\my-last-feedback",
+              "root": "E:\\Dev\\my-last-feedback"
+            },
+            "cost": 0,
+            "tokens": {
+              "total": 12290,
+              "input": 1115,
+              "output": 71,
+              "reasoning": 0,
+              "cache": {
+                "write": 0,
+                "read": 11104
+              }
+            },
+            "modelID": "minimax-m2.5-free",
+            "providerID": "opencode",
+            "time": {
+              "created": 1778084535522,
+              "completed": 1778084539139
+            },
+            "finish": "stop",
+            "id": "msg_dfe18dce20011e3DNqh3tPTwJf",
+            "sessionID": "ses_201e73576ffeFKO2Xhn8XG5pNp"
+          },
+          "parts": [
+            {
+              "snapshot": "738e429551349c8639a00ec7c9d66a740dfed0ad",
+              "type": "step-start",
+              "id": "prt_dfe18e6f4001664Fz5F2FFuErJ",
+              "sessionID": "ses_201e73576ffeFKO2Xhn8XG5pNp",
+              "messageID": "msg_dfe18dce20011e3DNqh3tPTwJf"
+            },
+            {
+              "type": "reasoning",
+              "text": "The user asked me to find package.json using the Glob tool exactly once, then stop. I found multiple package.json files. The main one in the workspace root is E:\\Dev\\my-last-feedback\\package.json.\n",
+              "time": {
+                "start": 1778084538101,
+                "end": 1778084538102
+              },
+              "metadata": {
+                "anthropic": {
+                  "signature": "f11aee87280377ec676c43d0d7f4f5301eff06d85bd717fad431e39aa2eb56db"
+                }
+              },
+              "id": "prt_dfe18e6f5001efR49ynitq6L5J",
+              "sessionID": "ses_201e73576ffeFKO2Xhn8XG5pNp",
+              "messageID": "msg_dfe18dce20011e3DNqh3tPTwJf"
+            },
+            {
+              "type": "text",
+              "text": "\n\nFound 40 package.json files. The root workspace one is `E:\\Dev\\my-last-feedback\\package.json`.",
+              "time": {
+                "start": 1778084538103,
+                "end": 1778084538104
+              },
+              "id": "prt_dfe18e6f70026Xqb3U6kHb7tVW",
+              "sessionID": "ses_201e73576ffeFKO2Xhn8XG5pNp",
+              "messageID": "msg_dfe18dce20011e3DNqh3tPTwJf"
+            },
+            {
+              "reason": "stop",
+              "snapshot": "738e429551349c8639a00ec7c9d66a740dfed0ad",
+              "type": "step-finish",
+              "tokens": {
+                "total": 12290,
+                "input": 1115,
+                "output": 71,
+                "reasoning": 0,
+                "cache": {
+                  "write": 0,
+                  "read": 11104
+                }
+              },
+              "cost": 0,
+              "id": "prt_dfe18e961001EetIgA7nEt14R1",
+              "sessionID": "ses_201e73576ffeFKO2Xhn8XG5pNp",
+              "messageID": "msg_dfe18dce20011e3DNqh3tPTwJf"
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "name": "session.todo.after_prompt",
+      "ok": true,
+      "at": "2026-05-06T16:23:11.151Z",
+      "summary": "todos=0",
+      "data": []
+    },
+    {
+      "name": "prompt.model_response",
+      "ok": true,
+      "at": "2026-05-06T16:23:11.152Z",
+      "summary": "textDelta=394",
+      "textDelta": "The user wants me to use the Glob tool exactly once to find package.json, then stop. Let me do that.\nThe user asked me to find package.json using the Glob tool exactly once, then stop. I found multiple package.json files. The main one in the workspace root is E:\\Dev\\my-last-feedback\\package.json.\n\n\nFound 40 package.json files. The root workspace one is `E:\\Dev\\my-last-feedback\\package.json`."
+    },
+    {
+      "name": "events.instance.summary",
+      "ok": true,
+      "at": "2026-05-06T16:23:11.152Z",
+      "summary": "{\"message.updated\":10,\"message.part.updated\":14,\"session.updated\":4,\"session.status\":6,\"session.diff\":3,\"message.part.delta\":5,\"session.idle\":1}",
+      "data": {
+        "counts": {
+          "message.updated": 10,
+          "message.part.updated": 14,
+          "session.updated": 4,
+          "session.status": 6,
+          "session.diff": 3,
+          "message.part.delta": 5,
+          "session.idle": 1
+        },
+        "textDelta": "The user wants me to use the Glob tool exactly once to find package.json, then stop. Let me do that.\nThe user asked me to find package.json using the Glob tool exactly once, then stop. I found multiple package.json files. The main one in the workspace root is E:\\Dev\\my-last-feedback\\package.json.\n\n\nFound 40 package.json files. The root workspace one is `E:\\Dev\\my-last-feedback\\package.json`.",
+        "partTypes": [
+          "text",
+          "step-start",
+          "reasoning",
+          "reasoning",
+          "tool",
+          "tool",
+          "tool",
+          "step-finish",
+          "step-start",
+          "reasoning",
+          "reasoning",
+          "text",
+          "text",
+          "step-finish"
+        ],
+        "toolEvents": [
+          {
+            "tool": "glob",
+            "callID": "call_function_1uwe6pq3uev3_1",
+            "status": "pending",
+            "input": {}
+          },
+          {
+            "tool": "glob",
+            "callID": "call_function_1uwe6pq3uev3_1",
+            "status": "running",
+            "input": {
+              "pattern": "**/package.json"
+            }
+          },
+          {
+            "tool": "glob",
+            "callID": "call_function_1uwe6pq3uev3_1",
+            "status": "completed",
+            "title": "",
+            "input": {
+              "pattern": "**/package.json"
+            },
+            "output": "E:\\Dev\\my-last-feedback\\package.json\nE:\\Dev\\my-last-feedback\\app\\package.json\nE:\\Dev\\my-last-feedback\\ref-repos\\opencode-1.14.33\\sdks\\vscode\\package.json\nE:\\Dev\\my-last-feedback\\ref-repos\\opencode-1.14.33\\packages\\script\\package.json\nE:\\Dev\\my-last-feedback\\ref-repos\\opencode-1.14.33\\packages\\plugin\\package.json\nE:\\Dev\\my-last-feedback\\ref-repos\\opencode-1.14.33\\packages\\web\\package.json\nE:\\Dev\\my-last-feedback\\ref-repos\\opencode-1.14.33\\packages\\console\\resource\\package.json\nE:\\Dev\\my-last-feedback\\ref-repos\\opencode-1.14.33\\packages\\console\\mail\\package.json\nE:\\Dev\\my-last-feedback\\ref-repos\\opencode-1.14.33\\packages\\console\\function\\package.json\nE:\\Dev\\my-last-feedback\\ref-repos\\opencode-1.14.33\\github\\package.json\nE:\\Dev\\my-last-feedback\\ref-repos\\opencode-1.14.33\\packages\\desktop\\package.json\nE:\\Dev\\my-last-feedback\\ref-repos\\opencode-1.14.33\\packages\\console\\core\\package.json\nE:\\Dev\\my-last-feedback\\ref-repos\\opencode-1.14.33\\packages\\core\\package.json\nE:\\Dev\\my-last-feedback\\ref",
+            "metadata": {
+              "count": 41,
+              "truncated": false
+            }
+          }
+        ],
+        "toolStatusCounts": {
+          "glob:pending": 1,
+          "glob:running": 1,
+          "glob:completed": 1
+        },
+        "permissionRequests": [],
+        "statusEvents": [
+          {
+            "type": "session.status",
+            "status": {
+              "type": "busy"
+            }
+          },
+          {
+            "type": "session.status",
+            "status": {
+              "type": "busy"
+            }
+          },
+          {
+            "type": "session.status",
+            "status": {
+              "type": "busy"
+            }
+          },
+          {
+            "type": "session.status",
+            "status": {
+              "type": "busy"
+            }
+          },
+          {
+            "type": "session.status",
+            "status": {
+              "type": "busy"
+            }
+          },
+          {
+            "type": "session.status",
+            "status": {
+              "type": "idle"
+            }
+          },
+          {
+            "type": "session.idle"
+          }
+        ],
+        "total": 43,
+        "errors": []
+      }
+    },
+    {
+      "name": "events.global.summary",
+      "ok": true,
+      "at": "2026-05-06T16:23:11.153Z",
+      "summary": "{\"message.updated\":10,\"message.part.updated\":14,\"session.updated\":4,\"session.status\":6,\"session.diff\":3,\"message.part.delta\":5,\"session.idle\":1}",
+      "data": {
+        "counts": {
+          "message.updated": 10,
+          "message.part.updated": 14,
+          "session.updated": 4,
+          "session.status": 6,
+          "session.diff": 3,
+          "message.part.delta": 5,
+          "session.idle": 1
+        },
+        "textDelta": "The user wants me to use the Glob tool exactly once to find package.json, then stop. Let me do that.\nThe user asked me to find package.json using the Glob tool exactly once, then stop. I found multiple package.json files. The main one in the workspace root is E:\\Dev\\my-last-feedback\\package.json.\n\n\nFound 40 package.json files. The root workspace one is `E:\\Dev\\my-last-feedback\\package.json`.",
+        "partTypes": [
+          "text",
+          "step-start",
+          "reasoning",
+          "reasoning",
+          "tool",
+          "tool",
+          "tool",
+          "step-finish",
+          "step-start",
+          "reasoning",
+          "reasoning",
+          "text",
+          "text",
+          "step-finish"
+        ],
+        "toolEvents": [
+          {
+            "tool": "glob",
+            "callID": "call_function_1uwe6pq3uev3_1",
+            "status": "pending",
+            "input": {}
+          },
+          {
+            "tool": "glob",
+            "callID": "call_function_1uwe6pq3uev3_1",
+            "status": "running",
+            "input": {
+              "pattern": "**/package.json"
+            }
+          },
+          {
+            "tool": "glob",
+            "callID": "call_function_1uwe6pq3uev3_1",
+            "status": "completed",
+            "title": "",
+            "input": {
+              "pattern": "**/package.json"
+            },
+            "output": "E:\\Dev\\my-last-feedback\\package.json\nE:\\Dev\\my-last-feedback\\app\\package.json\nE:\\Dev\\my-last-feedback\\ref-repos\\opencode-1.14.33\\sdks\\vscode\\package.json\nE:\\Dev\\my-last-feedback\\ref-repos\\opencode-1.14.33\\packages\\script\\package.json\nE:\\Dev\\my-last-feedback\\ref-repos\\opencode-1.14.33\\packages\\plugin\\package.json\nE:\\Dev\\my-last-feedback\\ref-repos\\opencode-1.14.33\\packages\\web\\package.json\nE:\\Dev\\my-last-feedback\\ref-repos\\opencode-1.14.33\\packages\\console\\resource\\package.json\nE:\\Dev\\my-last-feedback\\ref-repos\\opencode-1.14.33\\packages\\console\\mail\\package.json\nE:\\Dev\\my-last-feedback\\ref-repos\\opencode-1.14.33\\packages\\console\\function\\package.json\nE:\\Dev\\my-last-feedback\\ref-repos\\opencode-1.14.33\\github\\package.json\nE:\\Dev\\my-last-feedback\\ref-repos\\opencode-1.14.33\\packages\\desktop\\package.json\nE:\\Dev\\my-last-feedback\\ref-repos\\opencode-1.14.33\\packages\\console\\core\\package.json\nE:\\Dev\\my-last-feedback\\ref-repos\\opencode-1.14.33\\packages\\core\\package.json\nE:\\Dev\\my-last-feedback\\ref",
+            "metadata": {
+              "count": 41,
+              "truncated": false
+            }
+          }
+        ],
+        "toolStatusCounts": {
+          "glob:pending": 1,
+          "glob:running": 1,
+          "glob:completed": 1
+        },
+        "permissionRequests": [],
+        "statusEvents": [
+          {
+            "type": "session.status",
+            "status": {
+              "type": "busy"
+            }
+          },
+          {
+            "type": "session.status",
+            "status": {
+              "type": "busy"
+            }
+          },
+          {
+            "type": "session.status",
+            "status": {
+              "type": "busy"
+            }
+          },
+          {
+            "type": "session.status",
+            "status": {
+              "type": "busy"
+            }
+          },
+          {
+            "type": "session.status",
+            "status": {
+              "type": "busy"
+            }
+          },
+          {
+            "type": "session.status",
+            "status": {
+              "type": "idle"
+            }
+          },
+          {
+            "type": "session.idle"
+          }
+        ],
+        "total": 43,
+        "errors": []
+      }
+    },
+    {
+      "name": "session.delete",
+      "ok": true,
+      "at": "2026-05-06T16:23:11.160Z",
+      "summary": "deleted=true"
+    }
+  ]
+}

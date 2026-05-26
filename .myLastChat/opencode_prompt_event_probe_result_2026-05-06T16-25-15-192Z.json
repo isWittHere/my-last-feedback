@@ -1,0 +1,385 @@
+{
+  "ok": true,
+  "startedAt": "2026-05-06T16:25:15.192Z",
+  "finishedAt": "2026-05-06T16:25:19.369Z",
+  "workspace": "E:\\Dev\\my-last-feedback",
+  "baseUrl": "http://127.0.0.1:3955",
+  "username": "opencode",
+  "passwordSet": true,
+  "spawned": true,
+  "pid": 2452,
+  "promptProvided": true,
+  "keepSession": false,
+  "results": [
+    {
+      "name": "server.spawn",
+      "ok": true,
+      "at": "2026-05-06T16:25:15.221Z",
+      "summary": "opencode serve --hostname 127.0.0.1 --port 3955",
+      "pid": 2452,
+      "baseUrl": "http://127.0.0.1:3955"
+    },
+    {
+      "name": "global.health",
+      "ok": true,
+      "at": "2026-05-06T16:25:17.119Z",
+      "summary": "version=1.14.39",
+      "data": {
+        "healthy": true,
+        "version": "1.14.39"
+      }
+    },
+    {
+      "name": "provider.list",
+      "ok": true,
+      "at": "2026-05-06T16:25:17.610Z",
+      "summary": "all=117 connected=2",
+      "connected": [
+        "opencode-go",
+        "opencode"
+      ]
+    },
+    {
+      "name": "prompt.model",
+      "ok": true,
+      "at": "2026-05-06T16:25:17.611Z",
+      "summary": "opencode/minimax-m2.5-free",
+      "model": {
+        "providerID": "opencode",
+        "modelID": "minimax-m2.5-free"
+      }
+    },
+    {
+      "name": "session.create",
+      "ok": true,
+      "at": "2026-05-06T16:25:17.623Z",
+      "summary": "sessionID=ses_201e45bceffezvg8ZAe6VQimLs title=New session - 2026-05-06T16:25:17.618Z",
+      "data": {
+        "id": "ses_201e45bceffezvg8ZAe6VQimLs",
+        "slug": "glowing-orchid",
+        "version": "1.14.39",
+        "projectID": "a3f933c1f2b122b47d0b4c1fad302202effe8a94",
+        "directory": "E:\\Dev\\my-last-feedback",
+        "path": "",
+        "title": "New session - 2026-05-06T16:25:17.618Z",
+        "time": {
+          "created": 1778084717618,
+          "updated": 1778084717618
+        }
+      }
+    },
+    {
+      "name": "session.prompt_async",
+      "ok": true,
+      "at": "2026-05-06T16:25:17.898Z",
+      "summary": "accepted sessionID=ses_201e45bceffezvg8ZAe6VQimLs",
+      "body": {
+        "parts": [
+          {
+            "type": "text",
+            "text": "Write a very long numbered list from 1 to 1000, one item per line. Do not summarize."
+          }
+        ],
+        "model": {
+          "providerID": "opencode",
+          "modelID": "minimax-m2.5-free"
+        }
+      }
+    },
+    {
+      "name": "session.abort.request",
+      "ok": true,
+      "at": "2026-05-06T16:25:19.348Z",
+      "summary": "aborted=true"
+    },
+    {
+      "name": "prompt.completion.event",
+      "ok": true,
+      "at": "2026-05-06T16:25:19.350Z",
+      "summary": "session.error",
+      "event": {
+        "raw": {
+          "id": "evt_dfe1ba93e001VZvHJ7z7RQBsAS",
+          "type": "session.error",
+          "properties": {
+            "sessionID": "ses_201e45bceffezvg8ZAe6VQimLs",
+            "error": {
+              "name": "MessageAbortedError",
+              "data": {
+                "message": "Aborted"
+              }
+            }
+          }
+        },
+        "type": "session.error",
+        "properties": {
+          "sessionID": "ses_201e45bceffezvg8ZAe6VQimLs",
+          "error": {
+            "name": "MessageAbortedError",
+            "data": {
+              "message": "Aborted"
+            }
+          }
+        }
+      }
+    },
+    {
+      "name": "session.messages.after_prompt",
+      "ok": true,
+      "at": "2026-05-06T16:25:19.355Z",
+      "summary": "messages=2",
+      "data": [
+        {
+          "info": {
+            "role": "user",
+            "time": {
+              "created": 1778084717903
+            },
+            "agent": "build",
+            "model": {
+              "providerID": "opencode",
+              "modelID": "minimax-m2.5-free"
+            },
+            "summary": {
+              "diffs": []
+            },
+            "id": "msg_dfe1ba54f001HY02r7L4cIZeij",
+            "sessionID": "ses_201e45bceffezvg8ZAe6VQimLs"
+          },
+          "parts": [
+            {
+              "type": "text",
+              "text": "Write a very long numbered list from 1 to 1000, one item per line. Do not summarize.",
+              "id": "prt_dfe1ba551001nCfr9z7KHAfaAS",
+              "sessionID": "ses_201e45bceffezvg8ZAe6VQimLs",
+              "messageID": "msg_dfe1ba54f001HY02r7L4cIZeij"
+            }
+          ]
+        },
+        {
+          "info": {
+            "parentID": "msg_dfe1ba54f001HY02r7L4cIZeij",
+            "role": "assistant",
+            "mode": "build",
+            "agent": "build",
+            "path": {
+              "cwd": "E:\\Dev\\my-last-feedback",
+              "root": "E:\\Dev\\my-last-feedback"
+            },
+            "cost": 0,
+            "tokens": {
+              "input": 0,
+              "output": 0,
+              "reasoning": 0,
+              "cache": {
+                "read": 0,
+                "write": 0
+              }
+            },
+            "modelID": "minimax-m2.5-free",
+            "providerID": "opencode",
+            "time": {
+              "created": 1778084717915,
+              "completed": 1778084719333
+            },
+            "error": {
+              "name": "MessageAbortedError",
+              "data": {
+                "message": "Aborted"
+              }
+            },
+            "id": "msg_dfe1ba55b001QslWq1JDi2SsT9",
+            "sessionID": "ses_201e45bceffezvg8ZAe6VQimLs"
+          },
+          "parts": []
+        }
+      ]
+    },
+    {
+      "name": "session.todo.after_prompt",
+      "ok": true,
+      "at": "2026-05-06T16:25:19.359Z",
+      "summary": "todos=0",
+      "data": []
+    },
+    {
+      "name": "session.abort.observed",
+      "ok": true,
+      "at": "2026-05-06T16:25:19.360Z",
+      "summary": "abort requested or idle observed",
+      "abortResult": {
+        "ok": true,
+        "data": true
+      },
+      "statusEvents": [
+        {
+          "type": "session.status",
+          "status": {
+            "type": "busy"
+          }
+        },
+        {
+          "type": "session.status",
+          "status": {
+            "type": "busy"
+          }
+        },
+        {
+          "type": "session.status",
+          "status": {
+            "type": "idle"
+          }
+        },
+        {
+          "type": "session.idle"
+        },
+        {
+          "type": "session.status",
+          "status": {
+            "type": "idle"
+          }
+        },
+        {
+          "type": "session.idle"
+        }
+      ]
+    },
+    {
+      "name": "prompt.model_response",
+      "ok": true,
+      "at": "2026-05-06T16:25:19.361Z",
+      "summary": "not required for abort probe",
+      "assistantError": {
+        "name": "MessageAbortedError",
+        "data": {
+          "message": "Aborted"
+        }
+      },
+      "permissionAskedSeen": false,
+      "modelResponseRequired": false,
+      "textDelta": ""
+    },
+    {
+      "name": "events.instance.summary",
+      "ok": true,
+      "at": "2026-05-06T16:25:19.361Z",
+      "summary": "{\"message.updated\":4,\"message.part.updated\":1,\"session.updated\":2,\"session.status\":4,\"session.diff\":1,\"session.error\":1,\"session.idle\":2}",
+      "data": {
+        "counts": {
+          "message.updated": 4,
+          "message.part.updated": 1,
+          "session.updated": 2,
+          "session.status": 4,
+          "session.diff": 1,
+          "session.error": 1,
+          "session.idle": 2
+        },
+        "textDelta": "",
+        "partTypes": [
+          "text"
+        ],
+        "toolEvents": [],
+        "toolStatusCounts": {},
+        "permissionRequests": [],
+        "statusEvents": [
+          {
+            "type": "session.status",
+            "status": {
+              "type": "busy"
+            }
+          },
+          {
+            "type": "session.status",
+            "status": {
+              "type": "busy"
+            }
+          },
+          {
+            "type": "session.status",
+            "status": {
+              "type": "idle"
+            }
+          },
+          {
+            "type": "session.idle"
+          },
+          {
+            "type": "session.status",
+            "status": {
+              "type": "idle"
+            }
+          },
+          {
+            "type": "session.idle"
+          }
+        ],
+        "total": 15,
+        "errors": []
+      }
+    },
+    {
+      "name": "events.global.summary",
+      "ok": true,
+      "at": "2026-05-06T16:25:19.362Z",
+      "summary": "{\"message.updated\":4,\"message.part.updated\":1,\"session.updated\":2,\"session.status\":4,\"session.diff\":1,\"session.error\":1,\"session.idle\":2}",
+      "data": {
+        "counts": {
+          "message.updated": 4,
+          "message.part.updated": 1,
+          "session.updated": 2,
+          "session.status": 4,
+          "session.diff": 1,
+          "session.error": 1,
+          "session.idle": 2
+        },
+        "textDelta": "",
+        "partTypes": [
+          "text"
+        ],
+        "toolEvents": [],
+        "toolStatusCounts": {},
+        "permissionRequests": [],
+        "statusEvents": [
+          {
+            "type": "session.status",
+            "status": {
+              "type": "busy"
+            }
+          },
+          {
+            "type": "session.status",
+            "status": {
+              "type": "busy"
+            }
+          },
+          {
+            "type": "session.status",
+            "status": {
+              "type": "idle"
+            }
+          },
+          {
+            "type": "session.idle"
+          },
+          {
+            "type": "session.status",
+            "status": {
+              "type": "idle"
+            }
+          },
+          {
+            "type": "session.idle"
+          }
+        ],
+        "total": 15,
+        "errors": []
+      }
+    },
+    {
+      "name": "session.delete",
+      "ok": true,
+      "at": "2026-05-06T16:25:19.369Z",
+      "summary": "deleted=true"
+    }
+  ]
+}

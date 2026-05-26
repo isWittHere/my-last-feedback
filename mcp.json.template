@@ -3,36 +3,67 @@
     "my-last-feedback": {
       "command": "node",
       "args": [
-        "/path/to/my-last-feedback/server.mjs"
+        "/path/to/my-last-feedback/mcp/mlfb/index.mjs"
       ],
       "timeout": 600
     },
     "my-last-feedback-dev": {
       "command": "node",
       "args": [
-        "/path/to/my-last-feedback/server.mjs"
+        "/path/to/my-last-feedback/mcp/mlfb/index.mjs"
       ],
       "env": {
         "MLF_DEV": "1"
       },
       "timeout": 600
     },
-    "my-long-running-agent": {
+
+    "mlra-ceo": {
       "command": "node",
       "args": [
-        "/path/to/my-last-feedback/mlra-server/server.mjs"
+        "/path/to/my-last-feedback/mcp/mlra/servers/mcp-ceo.mjs"
       ],
-      "timeout": 600
+      "timeout": 86400
     },
-    "my-long-running-agent-dev": {
+    "mlra-expert": {
       "command": "node",
       "args": [
-        "/path/to/my-last-feedback/mlra-server/server.mjs"
+        "/path/to/my-last-feedback/mcp/mlra/servers/mcp-expert.mjs"
       ],
-      "env": {
-        "MLRA_DEV": "1"
-      },
-      "timeout": 600
+      "timeout": 86400
+    },
+    "mlra-inspector": {
+      "command": "node",
+      "args": [
+        "/path/to/my-last-feedback/mcp/mlra/servers/mcp-inspector.mjs"
+      ],
+      "timeout": 86400
+    },
+
+    "mlra-ceo-dev": {
+      "command": "node",
+      "args": [
+        "/path/to/my-last-feedback/mcp/mlra/servers/mcp-ceo.mjs"
+      ],
+      "env": { "MLRA_DEV": "1" },
+      "timeout": 86400
+    },
+    "mlra-expert-dev": {
+      "command": "node",
+      "args": [
+        "/path/to/my-last-feedback/mcp/mlra/servers/mcp-expert.mjs"
+      ],
+      "env": { "MLRA_DEV": "1" },
+      "timeout": 86400
+    },
+    "mlra-inspector-dev": {
+      "command": "node",
+      "args": [
+        "/path/to/my-last-feedback/mcp/mlra/servers/mcp-inspector.mjs"
+      ],
+      "env": { "MLRA_DEV": "1" },
+      "timeout": 86400
     }
   }
 }
+

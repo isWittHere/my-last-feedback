@@ -1,12 +1,74 @@
-import { forwardRef, useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { forwardRef, useCallback, useEffect, useMemo, useRef, useState, type CSSProperties } from "react";
 import { createPortal } from "react-dom";
 import { useTranslation } from "react-i18next";
 import { useFeedbackStore } from "../store/feedbackStore";
-import type { GitActionType } from "../store/feedbackStore";
+import type { DockColumnId, DockTabId, GitActionType, MlcAttachment, WebAttachment } from "../store/feedbackStore";
 import { useShallow } from "zustand/react/shallow";
-import { Icon } from "./Icons";
+import { Icon, MlcLogoIcon } from "./Icons";
 import { useActiveCallerSession } from "./useActiveCallerSession";
 import { readText as readClipboardText } from "@tauri-apps/plugin-clipboard-manager";
+import { webAttachmentLabel } from "../browser/webAttachmentFormat";
+import { collectSubmittedResourceLinks, type SubmittedResourceLink } from "../composer/submittedFeedback";
+import { GIT_OPERATION_SETTINGS_EVENT, getGitOperationSettings, getTimedGitReminderProgress, shouldInjectTimedGitReminder } from "../gitOperationSettings";
+import { cleanDisplayPath, sameWorkspacePath } from "../workspace/workspacePaths";
+import { CatppuccinResourceIcon } from "./CatppuccinResourceIcon";
+
+const DOCK_COLUMN_IDS: DockColumnId[] = ["leftSidebar", "leftPage", "rightPage", "rightSidebar"];
+export const GIT_ACTION_TYPES: GitActionType[] = ["commit-before", "commit", "commit-push", "create-branch"];
+
+export function gitActionLabelKey(type: GitActionType) {
+  if (type === "commit-before") return "commitBefore";
+  if (type === "commit-push") return "commitPush";
+  if (type === "create-branch") return "createBranch";
+  return "commit";
+}
+
+export function GitActionOptionIcon({ type, size = 12 }: { type: GitActionType; size?: number }) {
+  const iconPairs: Record<GitActionType, [string, string]> = {
+    "commit-before": ["git-commit", "arrow-right"],
+    commit: ["clock", "git-commit"],
+    "commit-push": ["git-commit", "arrow-up"],
+    "create-branch": ["git-branch", "arrow-right"],
+  };
+  const [primaryIcon, secondaryIcon] = iconPairs[type];
+  return (
+    <span className="git-action-icon-pair" aria-hidden="true">
+      <Icon name={primaryIcon} size={size} />
+      <Icon name={secondaryIcon} size={Math.max(9, size - 2)} />
+    </span>
+  );
+}
+
+function clampFloatingValue(value: number, min: number, max: number) {
+  return Math.min(Math.max(value, min), max);
+}
+
+function overlapsRect(left: number, top: number, width: number, height: number, rect: DOMRect, margin = 8) {
+  return left < rect.right + margin
+    && left + width > rect.left - margin
+    && top < rect.bottom + margin
+    && top + height > rect.top - margin;
+}
+
+function placeFloatingPreview(anchorRect: DOMRect, width: number, height: number) {
+  const viewportPadding = 4;
+  const maxLeft = window.innerWidth - width - viewportPadding;
+  const maxTop = window.innerHeight - height - viewportPadding;
+  const clamp = (position: { top: number; left: number }) => ({
+    top: clampFloatingValue(position.top, viewportPadding, Math.max(viewportPadding, maxTop)),
+    left: clampFloatingValue(position.left, viewportPadding, Math.max(viewportPadding, maxLeft)),
+  });
+  const candidates = [
+    clamp({ top: anchorRect.top - height - 2, left: anchorRect.left }),
+    clamp({ top: anchorRect.bottom + 2, left: anchorRect.left }),
+    clamp({ top: anchorRect.top, left: anchorRect.right + 8 }),
+    clamp({ top: anchorRect.top, left: anchorRect.left - width - 8 }),
+  ];
+  const webviewRects = Array.from(document.querySelectorAll<HTMLElement>(".preview-browser-webview-mount"))
+    .map((element) => element.getBoundingClientRect())
+    .filter((rect) => rect.width > 0 && rect.height > 0);
+  return candidates.find((position) => !webviewRects.some((rect) => overlapsRect(position.left, position.top, width, height, rect))) || candidates[0];
+}
 
 /** Attachment tag bar: images + test log + git actions as compact tags */
 export function AttachmentTagBar({
@@ -18,6 +80,7 @@ export function AttachmentTagBar({
   callerColor,
   showGitPanel,
   setShowGitPanel,
+  queuedCallerId,
 }: {
   controls: React.ReactNode;
   fileInput: React.ReactNode;
@@ -27,31 +90,109 @@ export function AttachmentTagBar({
   testLogRef: React.RefObject<HTMLTextAreaElement | null>;
   showGitPanel: boolean;
   setShowGitPanel: (fn: (v: boolean) => boolean) => void;
+  queuedCallerId?: string;
 }) {
   const { t } = useTranslation();
-  const { session: activeSession } = useActiveCallerSession();
+  const { session: activeSession, caller } = useActiveCallerSession();
+  const queuedDraft = useFeedbackStore((s) => queuedCallerId ? s.queuedDraftsByCallerId[queuedCallerId] : null);
   const removeSessionImage = useFeedbackStore((s) => s.removeSessionImage);
   const clearSessionImages = useFeedbackStore((s) => s.clearSessionImages);
   const updateSessionField = useFeedbackStore((s) => s.updateSessionField);
   const setSessionGitAction = useFeedbackStore((s) => s.setSessionGitAction);
   const updateSessionGitBranchName = useFeedbackStore((s) => s.updateSessionGitBranchName);
-  const images = activeSession?.images || [];
-  const hasTestLog = !!(activeSession?.testLogText?.trim());
-  const hasGitAction = !!activeSession?.gitAction;
-  const hasTags = images.length > 0 || hasTestLog || showTestLog || hasGitAction;
+  const removeQueuedDraftImage = useFeedbackStore((s) => s.removeQueuedDraftImage);
+  const clearQueuedDraftImages = useFeedbackStore((s) => s.clearQueuedDraftImages);
+  const updateQueuedDraftField = useFeedbackStore((s) => s.updateQueuedDraftField);
+  const setQueuedDraftGitAction = useFeedbackStore((s) => s.setQueuedDraftGitAction);
+  const updateQueuedDraftGitBranchName = useFeedbackStore((s) => s.updateQueuedDraftGitBranchName);
+  const removeSessionMlcAttachment = useFeedbackStore((s) => s.removeSessionMlcAttachment);
+  const removeQueuedDraftMlcAttachment = useFeedbackStore((s) => s.removeQueuedDraftMlcAttachment);
+  const clearSessionMlcAttachments = useFeedbackStore((s) => s.clearSessionMlcAttachments);
+  const clearQueuedDraftMlcAttachments = useFeedbackStore((s) => s.clearQueuedDraftMlcAttachments);
+  const removeSessionWebAttachment = useFeedbackStore((s) => s.removeSessionWebAttachment);
+  const removeQueuedDraftWebAttachment = useFeedbackStore((s) => s.removeQueuedDraftWebAttachment);
+  const setFocusedComposer = useFeedbackStore((s) => s.setFocusedComposer);
+  const mlcActiveWorkspacePath = useFeedbackStore((s) => s.mlcActiveWorkspacePath);
+  const dockLayout = useFeedbackStore((s) => s.dockLayout);
+  const setDockActiveTab = useFeedbackStore((s) => s.setDockActiveTab);
+  const setDockColumnCollapsed = useFeedbackStore((s) => s.setDockColumnCollapsed);
+  const moveDockTabToColumn = useFeedbackStore((s) => s.moveDockTabToColumn);
+  const setMlcActiveWorkspacePath = useFeedbackStore((s) => s.setMlcActiveWorkspacePath);
+  const targetImages = queuedCallerId ? (queuedDraft?.images || []) : (activeSession?.images || []);
+  const targetTestLogText = queuedCallerId ? (queuedDraft?.testLogText || "") : (activeSession?.testLogText || "");
+  const targetGitAction = queuedCallerId ? (queuedDraft?.gitAction || null) : (activeSession?.gitAction || null);
+  const targetMlcAttachments = queuedCallerId ? (queuedDraft?.mlcAttachments || []) : (activeSession?.mlcAttachments || []);
+  const targetWebAttachments = queuedCallerId ? (queuedDraft?.webAttachments || []) : (activeSession?.webAttachments || []);
+  const images = targetImages;
+  const hasTestLog = !!targetTestLogText.trim();
+  const hasGitAction = !!targetGitAction;
+  const hasMlcAttachments = targetMlcAttachments.length > 0;
+  const findDockColumnForTab = (tabId: DockTabId): DockColumnId | null => DOCK_COLUMN_IDS.find((columnId) => dockLayout.columns[columnId].tabIds.includes(tabId)) || null;
+  const mlcDockColumnId = findDockColumnForTab("mlc");
+  const resourcesDockColumnId = findDockColumnForTab("resources");
+  const previewDockColumnId = findDockColumnForTab("previewBrowser");
+  const previewInfoDockColumnId = findDockColumnForTab("previewInfo");
+  const isMlcButtonActive = !!mlcDockColumnId && !dockLayout.columns[mlcDockColumnId].collapsed && dockLayout.columns[mlcDockColumnId].activeTabId === "mlc" && !!activeSession?.projectDirectory && sameWorkspacePath(mlcActiveWorkspacePath, activeSession.projectDirectory);
+  const isResourceButtonActive = !!resourcesDockColumnId && !dockLayout.columns[resourcesDockColumnId].collapsed && dockLayout.columns[resourcesDockColumnId].activeTabId === "resources" && !!activeSession?.projectDirectory && sameWorkspacePath(mlcActiveWorkspacePath, activeSession.projectDirectory);
+  const isPreviewButtonActive = !!previewDockColumnId && !dockLayout.columns[previewDockColumnId].collapsed && dockLayout.columns[previewDockColumnId].activeTabId === "previewBrowser";
+  const hasWebAttachments = targetWebAttachments.length > 0;
+  const [gitReminderTick, setGitReminderTick] = useState(0);
+  const gitOperationSettings = useMemo(() => getGitOperationSettings(), [gitReminderTick]);
+  const timedGitReady = useMemo(() => {
+    if (queuedCallerId || hasGitAction || !activeSession || activeSession.status !== "pending") return false;
+    return shouldInjectTimedGitReminder(activeSession.projectDirectory, Date.now(), gitOperationSettings);
+  }, [activeSession, gitOperationSettings, hasGitAction, queuedCallerId]);
+  const gitReminderProgress = useMemo(() => {
+    const projectDirectory = activeSession?.projectDirectory;
+    if (!projectDirectory) return null;
+    return getTimedGitReminderProgress(projectDirectory, Date.now(), gitOperationSettings);
+  }, [activeSession?.projectDirectory, gitOperationSettings]);
+  const refreshGitReminderCountdown = useCallback(() => setGitReminderTick((value) => value + 1), []);
+  const activeWorkspaceDisplayPath = activeSession?.projectDirectory ? cleanDisplayPath(activeSession.projectDirectory) : "";
+  const gitActionButtonTitle = useMemo(() => {
+    const baseTitle = !gitReminderProgress?.enabled
+      ? t("gitAction.buttonTooltipNoTimer", "Git Action")
+      : gitReminderProgress.ready
+        ? t("gitAction.buttonTooltipTimedReady", "Timed Git reminder ready now")
+        : t("gitAction.buttonTooltipNextTimed", "Next timed Git reminder in {{count}} min", { count: gitReminderProgress.minutesUntil ?? 0 });
+    if (!activeWorkspaceDisplayPath) return baseTitle;
+    return `${baseTitle}\n${t("gitAction.buttonTooltipWorkspace", "Workspace: {{path}}", { path: activeWorkspaceDisplayPath })}`;
+  }, [activeWorkspaceDisplayPath, gitReminderProgress, t]);
+  const isGitReminderReady = gitReminderProgress?.ready === true;
+  const showGitCountdownBorder = gitReminderProgress?.enabled === true && !showGitPanel;
+  const gitReminderThemeColor = gitOperationSettings.timedReminderTheme === "caller" ? callerColor : "var(--color-git-countdown)";
+  const gitActiveBackground = isGitReminderReady ? gitReminderThemeColor : callerColor;
+  const gitActionCountdownStyle = showGitCountdownBorder ? {
+    "--git-countdown-angle": `${Math.round(gitReminderProgress.progress * 360)}deg`,
+    "--git-countdown-color": gitReminderThemeColor,
+    "--git-countdown-fill": "var(--color-bg-elevated)",
+    "--git-countdown-track": "var(--color-border)",
+  } as CSSProperties : undefined;
+  const hasTags = images.length > 0 || hasTestLog || showTestLog || hasGitAction || timedGitReady || hasMlcAttachments || hasWebAttachments;
   const tagAreaRef = useRef<HTMLDivElement>(null);
   const branchInputRef = useRef<HTMLInputElement>(null);
+
+  useEffect(() => {
+    const refresh = () => setGitReminderTick((value) => value + 1);
+    const intervalId = window.setInterval(refresh, 30_000);
+    window.addEventListener(GIT_OPERATION_SETTINGS_EVENT, refresh as EventListener);
+    return () => {
+      window.clearInterval(intervalId);
+      window.removeEventListener(GIT_OPERATION_SETTINGS_EVENT, refresh as EventListener);
+    };
+  }, []);
 
   const handleAttachLogClick = async () => {
     const wasHidden = !showTestLog;
     setShowTestLog((v) => !v);
-    if (wasHidden && activeSession) {
+    if (wasHidden && (activeSession || queuedCallerId)) {
       // Auto-paste clipboard text if > 50 chars and test log is empty
-      if (!activeSession.testLogText?.trim()) {
+      if (!targetTestLogText.trim()) {
         try {
           const text = await readClipboardText();
           if (text && text.length > 50) {
-            updateSessionField(activeSession.id, "testLogText", text);
+            if (queuedCallerId) updateQueuedDraftField(queuedCallerId, "testLogText", text);
+            else if (activeSession) updateSessionField(activeSession.id, "testLogText", text);
           }
         } catch { /* clipboard access denied or empty */ }
       }
@@ -59,10 +200,100 @@ export function AttachmentTagBar({
     }
   };
 
+  const handleResourceClick = () => {
+    if (isResourceButtonActive) {
+      if (resourcesDockColumnId) setDockColumnCollapsed(resourcesDockColumnId, true);
+      return;
+    }
+    const projectDirectory = activeSession?.projectDirectory || "";
+    if (!projectDirectory || !caller) return;
+    setFocusedComposer({
+      callerId: queuedCallerId || caller.id,
+      sessionId: queuedCallerId ? undefined : activeSession?.id,
+      projectDirectory,
+      kind: queuedCallerId ? "queuedDraft" : "feedback",
+      focusedAt: new Date().toISOString(),
+    });
+    setMlcActiveWorkspacePath(projectDirectory);
+    const targetColumnId = resourcesDockColumnId || "rightSidebar";
+    if (!resourcesDockColumnId) moveDockTabToColumn("resources", targetColumnId);
+    setDockColumnCollapsed(targetColumnId, false);
+    setDockActiveTab(targetColumnId, "resources");
+  };
+
+  const handleMlcClick = () => {
+    if (isMlcButtonActive) {
+      if (mlcDockColumnId) setDockColumnCollapsed(mlcDockColumnId, true);
+      return;
+    }
+    if (queuedCallerId) {
+      if (!caller) return;
+      setFocusedComposer({
+        callerId: queuedCallerId,
+        projectDirectory: activeSession?.projectDirectory || "",
+        kind: "queuedDraft",
+        focusedAt: new Date().toISOString(),
+      });
+      setMlcActiveWorkspacePath(activeSession?.projectDirectory || null);
+      const targetColumnId = mlcDockColumnId || "rightSidebar";
+      if (!mlcDockColumnId) moveDockTabToColumn("mlc", targetColumnId);
+      setDockColumnCollapsed(targetColumnId, false);
+      setDockActiveTab(targetColumnId, "mlc");
+      return;
+    }
+    if (!activeSession || activeSession.status !== "pending" || !caller) return;
+    setFocusedComposer({
+      callerId: caller.id,
+      sessionId: activeSession.id,
+      projectDirectory: activeSession.projectDirectory,
+      kind: "feedback",
+      focusedAt: new Date().toISOString(),
+    });
+    setMlcActiveWorkspacePath(activeSession.projectDirectory);
+    const targetColumnId = mlcDockColumnId || "rightSidebar";
+    if (!mlcDockColumnId) moveDockTabToColumn("mlc", targetColumnId);
+    setDockColumnCollapsed(targetColumnId, false);
+    setDockActiveTab(targetColumnId, "mlc");
+  };
+
+  const handlePreviewClick = () => {
+    if (isPreviewButtonActive) {
+      if (previewDockColumnId) setDockColumnCollapsed(previewDockColumnId, true);
+      if (previewInfoDockColumnId && previewInfoDockColumnId !== previewDockColumnId) setDockColumnCollapsed(previewInfoDockColumnId, true);
+      return;
+    }
+    if (queuedCallerId) {
+      if (caller) {
+        setFocusedComposer({
+          callerId: queuedCallerId,
+          projectDirectory: activeSession?.projectDirectory || "",
+          kind: "queuedDraft",
+          focusedAt: new Date().toISOString(),
+        });
+      }
+    } else if (activeSession && activeSession.status === "pending" && caller) {
+      setFocusedComposer({
+        callerId: caller.id,
+        sessionId: activeSession.id,
+        projectDirectory: activeSession.projectDirectory,
+        kind: "feedback",
+        focusedAt: new Date().toISOString(),
+      });
+    }
+    const targetColumnId = previewDockColumnId && previewDockColumnId !== previewInfoDockColumnId ? previewDockColumnId : "leftPage";
+    if (previewDockColumnId !== targetColumnId) moveDockTabToColumn("previewBrowser", targetColumnId);
+    const infoTargetColumnId = previewInfoDockColumnId && previewInfoDockColumnId !== targetColumnId ? previewInfoDockColumnId : "rightSidebar";
+    if (previewInfoDockColumnId !== infoTargetColumnId) moveDockTabToColumn("previewInfo", infoTargetColumnId);
+    setDockColumnCollapsed(targetColumnId, false);
+    setDockColumnCollapsed(infoTargetColumnId, false);
+    setDockActiveTab(targetColumnId, "previewBrowser");
+    if (infoTargetColumnId !== targetColumnId) setDockActiveTab(infoTargetColumnId, "previewInfo");
+  };
+
   return (
     <div className="shrink-0">
       {/* Button row */}
-      <div className="flex items-center gap-1.5 px-3 pt-1.5 pb-0.5">
+      <div className="attachment-action-row px-3 pt-1.5 pb-0.5">
         {controls}
         <button
           className="btn"
@@ -76,10 +307,64 @@ export function AttachmentTagBar({
           onClick={handleAttachLogClick}
         >
           <Icon name="terminal" size={12} />
-          {t("testLog.attach", "附加日志")}
-          {(activeSession?.testLogText?.length ?? 0) > 0 && (
-            <span style={{ color: showTestLog ? "rgba(255,255,255,0.7)" : "var(--color-text-muted)", marginLeft: 2 }}>
-              {activeSession!.testLogText!.length}
+          <span className="attachment-action-label">{t("testLog.attach", "Attach Log")}</span>
+          {targetTestLogText.length > 0 && (
+            <span className="attachment-action-meta" style={{ color: showTestLog ? "rgba(255,255,255,0.7)" : "var(--color-text-muted)" }}>
+              {targetTestLogText.length}
+            </span>
+          )}
+        </button>
+        <button
+          className={`btn${showGitCountdownBorder ? " git-action-countdown-btn" : ""}${showGitCountdownBorder && isGitReminderReady ? " git-action-countdown-ready" : ""}`}
+          style={{
+            fontSize: 11,
+            padding: "3px 10px",
+            background: showGitPanel ? gitActiveBackground : undefined,
+            borderColor: showGitPanel ? gitActiveBackground : undefined,
+            color: showGitPanel ? "#fff" : undefined,
+            ...gitActionCountdownStyle,
+          }}
+          onClick={() => setShowGitPanel((v) => !v)}
+          onMouseEnter={refreshGitReminderCountdown}
+          title={gitActionButtonTitle}
+        >
+          <Icon name="git-commit" size={12} />
+          <span className="attachment-action-label">{t("gitAction.button", "Git Action")}</span>
+        </button>
+        <button
+          className="btn"
+          style={{
+            fontSize: 11,
+            padding: "3px 10px",
+            background: isResourceButtonActive ? callerColor : undefined,
+            borderColor: isResourceButtonActive ? callerColor : undefined,
+            color: isResourceButtonActive ? "#fff" : undefined,
+          }}
+          disabled={!queuedCallerId && (!activeSession || activeSession.status !== "pending")}
+          onClick={handleResourceClick}
+          title={t("resources.openPanel", "Open project resources")}
+        >
+          <Icon name="folder" size={12} />
+          <span className="attachment-action-label">{t("resources.button", "Resources")}</span>
+        </button>
+        <button
+          className="btn"
+          style={{
+            fontSize: 11,
+            padding: "3px 10px",
+            background: isPreviewButtonActive ? callerColor : undefined,
+            borderColor: isPreviewButtonActive ? callerColor : undefined,
+            color: isPreviewButtonActive ? "#fff" : undefined,
+          }}
+          disabled={!queuedCallerId && (!activeSession || activeSession.status !== "pending")}
+          onClick={handlePreviewClick}
+          title={t("previewBrowser.openPanel", "Open preview browser")}
+        >
+          <Icon name="globe" size={12} />
+          <span className="attachment-action-label">{t("previewBrowser.button", "Preview")}</span>
+          {hasWebAttachments && (
+            <span className="attachment-action-meta" style={{ color: isPreviewButtonActive ? "rgba(255,255,255,0.7)" : "var(--color-text-muted)" }}>
+              {targetWebAttachments.length}
             </span>
           )}
         </button>
@@ -88,14 +373,21 @@ export function AttachmentTagBar({
           style={{
             fontSize: 11,
             padding: "3px 10px",
-            background: showGitPanel ? callerColor : undefined,
-            borderColor: showGitPanel ? callerColor : undefined,
-            color: showGitPanel ? "#fff" : undefined,
+            background: isMlcButtonActive ? callerColor : undefined,
+            borderColor: isMlcButtonActive ? callerColor : undefined,
+            color: isMlcButtonActive ? "#fff" : undefined,
           }}
-          onClick={() => setShowGitPanel((v) => !v)}
+          disabled={!queuedCallerId && (!activeSession || activeSession.status !== "pending")}
+          onClick={handleMlcClick}
+          title={t("mlc.openPanel", "Open My Last Chat references")}
         >
-          <Icon name="git-branch" size={12} />
-          {t("gitAction.button", "Git 操作")}
+          <MlcLogoIcon size={12} />
+          <span className="attachment-action-label">{t("mlc.button", "MLC")}</span>
+          {hasMlcAttachments && (
+            <span className="attachment-action-meta" style={{ color: isMlcButtonActive ? "rgba(255,255,255,0.7)" : "var(--color-text-muted)" }}>
+              {targetMlcAttachments.length}
+            </span>
+          )}
         </button>
         {fileInput}
       </div>
@@ -104,13 +396,13 @@ export function AttachmentTagBar({
       {hasTags && (
         <div
           ref={tagAreaRef}
-          className="flex flex-wrap gap-1 px-3 pb-1 overflow-y-auto"
+          className="attachment-tag-row flex flex-wrap gap-1 px-3 pb-1 overflow-y-auto"
           style={{ maxHeight: 78 /* ~3 lines of tags */ }}
         >
           {images.length > 0 && (
             <div
               className="attachment-tag attachment-tag-danger"
-              onClick={() => activeSession && clearSessionImages(activeSession.id)}
+              onClick={() => queuedCallerId ? clearQueuedDraftImages(queuedCallerId) : activeSession && clearSessionImages(activeSession.id)}
               title={t("images.clearAll")}
             >
               <Icon name="trash" size={10} />
@@ -121,7 +413,7 @@ export function AttachmentTagBar({
             <ImageTag
               key={img.path}
               img={img}
-              onRemove={() => activeSession && removeSessionImage(activeSession.id, img.path)}
+              onRemove={() => queuedCallerId ? removeQueuedDraftImage(queuedCallerId, img.path) : activeSession && removeSessionImage(activeSession.id, img.path)}
             />
           ))}
           {(hasTestLog || showTestLog) && (
@@ -129,19 +421,54 @@ export function AttachmentTagBar({
               showTestLog={showTestLog}
               setShowTestLog={setShowTestLog}
               testLogRef={testLogRef}
-              testLogText={activeSession?.testLogText || ""}
+              testLogText={targetTestLogText}
               callerColor={callerColor}
             />
           )}
           {hasGitAction && (
             <GitActionTag
-              gitAction={activeSession!.gitAction!}
+              gitAction={targetGitAction!}
               showGitPanel={showGitPanel}
               setShowGitPanel={setShowGitPanel}
               callerColor={callerColor}
-              onRemove={() => activeSession && setSessionGitAction(activeSession.id, null)}
+              onRemove={() => queuedCallerId ? setQueuedDraftGitAction(queuedCallerId, null) : activeSession && setSessionGitAction(activeSession.id, null)}
             />
           )}
+          {timedGitReady && (
+            <div className="attachment-tag attachment-tag-git-ready" style={{ "--git-ready-color": gitReminderThemeColor } as CSSProperties} title={t("gitAction.timedReadyDesc", "A timed Git backup reminder is ready and will be injected when you submit, unless you choose a manual Git Action.")}>
+              <Icon name="clock" size={10} />
+              <Icon name="git-commit" size={10} />
+              <span>{t("gitAction.timedReady", "Timed Git ready")}</span>
+            </div>
+          )}
+          {hasMlcAttachments && (
+            <div
+              className="attachment-tag attachment-tag-danger"
+              onClick={() => queuedCallerId ? clearQueuedDraftMlcAttachments(queuedCallerId) : activeSession && clearSessionMlcAttachments(activeSession.id)}
+              title={t("mlc.clearAll", "Clear all MLC")}
+            >
+              <Icon name="trash" size={10} />
+              <MlcLogoIcon size={10} />
+            </div>
+          )}
+          {targetMlcAttachments.map((attachment) => (
+            <MlcAttachmentTag
+              key={attachment.filePath}
+              attachment={attachment}
+              onRemove={() => queuedCallerId
+                ? removeQueuedDraftMlcAttachment(queuedCallerId, attachment.filePath)
+                : activeSession && removeSessionMlcAttachment(activeSession.id, attachment.filePath)}
+            />
+          ))}
+          {targetWebAttachments.map((attachment) => (
+            <WebAttachmentTag
+              key={attachment.id}
+              attachment={attachment}
+              onRemove={() => queuedCallerId
+                ? removeQueuedDraftWebAttachment(queuedCallerId, attachment.id)
+                : activeSession && removeSessionWebAttachment(activeSession.id, attachment.id)}
+            />
+          ))}
         </div>
       )}
 
@@ -154,12 +481,12 @@ export function AttachmentTagBar({
             className="rounded-lg"
             style={{
               border: "1px solid var(--color-border)",
-              background: "var(--color-bg-input)",
+              background: "var(--color-bg-input-raised)",
               maxHeight: 125,
               overflowY: "auto",
             }}
           >
-            <TestLogInput ref={testLogRef} />
+              <TestLogInput ref={testLogRef} queuedCallerId={queuedCallerId} />
           </div>
         </div>
       )}
@@ -171,11 +498,11 @@ export function AttachmentTagBar({
             className="rounded-lg flex flex-wrap items-center gap-1.5 p-2"
             style={{
               border: "1px solid var(--color-border)",
-              background: "var(--color-bg-input)",
+              background: "var(--color-bg-input-raised)",
             }}
           >
-            {(["commit", "commit-push", "create-branch"] as GitActionType[]).map((type) => {
-              const isSelected = activeSession?.gitAction?.type === type;
+            {GIT_ACTION_TYPES.map((type) => {
+              const isSelected = targetGitAction?.type === type;
               return (
                 <button
                   key={type}
@@ -188,28 +515,32 @@ export function AttachmentTagBar({
                     color: isSelected ? "#fff" : undefined,
                   }}
                   onClick={() => {
-                    if (!activeSession) return;
+                    if (!activeSession && !queuedCallerId) return;
                     if (isSelected) {
-                      setSessionGitAction(activeSession.id, null);
+                      if (queuedCallerId) setQueuedDraftGitAction(queuedCallerId, null);
+                      else if (activeSession) setSessionGitAction(activeSession.id, null);
                     } else {
-                      setSessionGitAction(activeSession.id, { type, branchName: type === "create-branch" ? "" : undefined });
+                      const action = { type, branchName: type === "create-branch" ? "" : undefined };
+                      if (queuedCallerId) setQueuedDraftGitAction(queuedCallerId, action);
+                      else if (activeSession) setSessionGitAction(activeSession.id, action);
                       if (type === "create-branch") {
                         setTimeout(() => branchInputRef.current?.focus(), 50);
                       }
                     }
                   }}
                 >
-                  {t(`gitAction.${type === "commit" ? "commit" : type === "commit-push" ? "commitPush" : "createBranch"}`)}
+                  <GitActionOptionIcon type={type} />
+                  {t(`gitAction.${gitActionLabelKey(type)}`)}
                 </button>
               );
             })}
-            {activeSession?.gitAction?.type === "create-branch" && (
+            {targetGitAction?.type === "create-branch" && (
               <input
                 ref={branchInputRef}
                 type="text"
-                value={activeSession.gitAction.branchName || ""}
-                onChange={(e) => activeSession && updateSessionGitBranchName(activeSession.id, e.target.value)}
-                placeholder={t("gitAction.branchPlaceholder", "分支名称（可留空）")}
+                value={targetGitAction.branchName || ""}
+                onChange={(e) => queuedCallerId ? updateQueuedDraftGitBranchName(queuedCallerId, e.target.value) : activeSession && updateSessionGitBranchName(activeSession.id, e.target.value)}
+                placeholder={t("gitAction.branchPlaceholder", "Branch name (optional)")}
                 className="input-area"
                 style={{
                   fontSize: 11,
@@ -219,7 +550,7 @@ export function AttachmentTagBar({
                   maxWidth: 200,
                   borderRadius: 6,
                   border: "1px solid var(--color-border)",
-                  background: "var(--color-bg-base)",
+                  background: "var(--color-bg-input-raised)",
                 }}
               />
             )}
@@ -231,11 +562,15 @@ export function AttachmentTagBar({
 }
 
 /** Image tag with hover preview */
-function ImageTag({ img, onRemove, readonly }: { img: import("../store/feedbackStore").ImageAttachment; onRemove: () => void; readonly?: boolean }) {
+export function ImageTag({ img, onRemove, readonly }: { img: import("../store/feedbackStore").ImageAttachment; onRemove: () => void; readonly?: boolean }) {
+  const { t } = useTranslation();
   const [showPreview, setShowPreview] = useState(false);
   const tagRef = useRef<HTMLDivElement>(null);
   const [previewPos, setPreviewPos] = useState<{ top: number; left: number } | null>(null);
-  const size = img.sizeKB >= 1024
+  const hasImageData = Boolean(img.dataUrl);
+  const size = img.sizeKB <= 0
+    ? t("images.stored", "stored")
+    : img.sizeKB >= 1024
     ? `${(img.sizeKB / 1024).toFixed(1)} MB`
     : `${img.sizeKB.toFixed(0)} KB`;
 
@@ -253,6 +588,7 @@ function ImageTag({ img, onRemove, readonly }: { img: import("../store/feedbackS
     <div
       ref={tagRef}
       className="attachment-tag group"
+      data-preview-overlay
       onMouseEnter={handleMouseEnter}
       onMouseLeave={() => setShowPreview(false)}
     >
@@ -265,11 +601,15 @@ function ImageTag({ img, onRemove, readonly }: { img: import("../store/feedbackS
           <Icon name="close-sm" size={10} />
         </button>
       )}
-      <img
-        src={img.dataUrl}
-        alt=""
-        style={{ width: 14, height: 14, objectFit: "cover", borderRadius: 2, flexShrink: 0 }}
-      />
+      {hasImageData ? (
+        <img
+          src={img.dataUrl}
+          alt=""
+          style={{ width: 14, height: 14, objectFit: "cover", borderRadius: 2, flexShrink: 0 }}
+        />
+      ) : (
+        <Icon name="image" size={12} />
+      )}
       <span className="truncate" style={{ maxWidth: 80 }}>{img.name}</span>
       <span style={{ fontSize: 9, color: "var(--color-text-muted)", flexShrink: 0 }}>{size}</span>
       {readonly && (
@@ -277,7 +617,11 @@ function ImageTag({ img, onRemove, readonly }: { img: import("../store/feedbackS
           className="attachment-tag-copy"
           onClick={(e) => {
             e.stopPropagation();
-            fetch(img.dataUrl!)
+            if (!img.dataUrl) {
+              navigator.clipboard.writeText(img.name);
+              return;
+            }
+            fetch(img.dataUrl)
               .then((r) => r.blob())
               .then((blob) => {
                 const item = new ClipboardItem({ [blob.type]: blob });
@@ -285,28 +629,25 @@ function ImageTag({ img, onRemove, readonly }: { img: import("../store/feedbackS
               })
               .catch(() => navigator.clipboard.writeText(img.name));
           }}
-          title="Copy image"
+          title={t("images.copy", "Copy image")}
         >
           <Icon name="copy" size={10} />
         </button>
       )}
 
       {/* Hover preview — fixed position to avoid overflow clipping */}
-      {showPreview && previewPos && createPortal(
+      {hasImageData && showPreview && previewPos && createPortal(
         <div
           className="attachment-preview"
+          data-preview-overlay
           ref={(el) => {
             if (!el || !tagRef.current) return;
             const rect = tagRef.current.getBoundingClientRect();
             const ph = el.offsetHeight;
             const pw = el.offsetWidth;
-            let top = rect.top - ph - 2;
-            let left = rect.left;
-            if (top < 4) top = rect.bottom + 2;
-            if (left + pw > window.innerWidth - 4) left = window.innerWidth - pw - 4;
-            if (left < 4) left = 4;
-            el.style.top = `${top}px`;
-            el.style.left = `${left}px`;
+            const position = placeFloatingPreview(rect, pw, ph);
+            el.style.top = `${position.top}px`;
+            el.style.left = `${position.left}px`;
           }}
           style={{
             position: "fixed",
@@ -334,7 +675,7 @@ function ImageTag({ img, onRemove, readonly }: { img: import("../store/feedbackS
 }
 
 /** Test log tag with hover preview */
-function TestLogTag({
+export function TestLogTag({
   showTestLog, setShowTestLog, testLogRef, testLogText, callerColor,
 }: {
   showTestLog: boolean;
@@ -352,6 +693,7 @@ function TestLogTag({
     <button
       ref={tagRef}
       className="attachment-tag"
+      data-preview-overlay
       style={{
         background: showTestLog ? callerColor : undefined,
         borderColor: showTestLog ? callerColor : "var(--color-border)",
@@ -375,18 +717,15 @@ function TestLogTag({
       {/* Hover preview — fixed position via portal */}
       {showPreview && createPortal(
         <div
+          data-preview-overlay
           ref={(el) => {
             if (!el || !tagRef.current) return;
             const rect = tagRef.current.getBoundingClientRect();
             const ph = el.offsetHeight;
             const pw = el.offsetWidth;
-            let top = rect.top - ph - 2;
-            let left = rect.left;
-            if (top < 4) top = rect.bottom + 2;
-            if (left + pw > window.innerWidth - 4) left = window.innerWidth - pw - 4;
-            if (left < 4) left = 4;
-            el.style.top = `${top}px`;
-            el.style.left = `${left}px`;
+            const position = placeFloatingPreview(rect, pw, ph);
+            el.style.top = `${position.top}px`;
+            el.style.left = `${position.left}px`;
           }}
           style={{
             position: "fixed",
@@ -418,7 +757,7 @@ function TestLogTag({
 }
 
 /** Git action tag in the attachment tag area */
-function GitActionTag({
+export function GitActionTag({
   gitAction,
   showGitPanel,
   setShowGitPanel,
@@ -433,6 +772,7 @@ function GitActionTag({
 }) {
   const { t } = useTranslation();
   const labelMap: Record<string, string> = {
+    "commit-before": t("gitAction.commitBefore"),
     commit: t("gitAction.commit"),
     "commit-push": t("gitAction.commitPush"),
     "create-branch": t("gitAction.createBranch"),
@@ -445,6 +785,7 @@ function GitActionTag({
   return (
     <div
       className="attachment-tag"
+      data-preview-overlay
       style={{
         background: showGitPanel ? callerColor : undefined,
         borderColor: showGitPanel ? callerColor : "var(--color-border)",
@@ -463,8 +804,142 @@ function GitActionTag({
       >
         <Icon name="close-sm" size={10} />
       </button>
-      <Icon name="git-branch" size={10} />
+      <GitActionOptionIcon type={gitAction.type} size={11} />
       <span className="truncate" style={{ maxWidth: 140 }}>{label}{detail}</span>
+    </div>
+  );
+}
+
+export function MlcAttachmentTag({ attachment, onRemove, readonly }: { attachment: MlcAttachment; onRemove: () => void; readonly?: boolean }) {
+  const { t } = useTranslation();
+  const cleanPath = attachment.filePath.replace(/^\\\\\?\\UNC\\/i, "\\\\").replace(/^\\\\\?\\/i, "");
+  const tagRef = useRef<HTMLDivElement>(null);
+  const [showPreview, setShowPreview] = useState(false);
+  const [previewPos, setPreviewPos] = useState<{ top: number; left: number } | null>(null);
+  const title = attachment.title || cleanPath;
+
+  const handleMouseEnter = () => {
+    if (tagRef.current) {
+      const rect = tagRef.current.getBoundingClientRect();
+      setPreviewPos({ top: rect.top - 6, left: rect.left });
+    }
+    setShowPreview(true);
+  };
+
+  return (
+    <div
+      ref={tagRef}
+      className="attachment-tag"
+      data-preview-overlay
+      style={{ cursor: readonly ? "default" : "pointer" }}
+      onMouseEnter={handleMouseEnter}
+      onMouseLeave={() => setShowPreview(false)}
+    >
+      {!readonly && (
+        <button
+          className="attachment-tag-remove"
+          style={{ display: "inline-flex" }}
+          onClick={(e) => { e.stopPropagation(); onRemove(); }}
+        >
+          <Icon name="close-sm" size={10} />
+        </button>
+      )}
+      <Icon name="book" size={10} />
+      <span className="truncate" style={{ maxWidth: 160 }}>{title}</span>
+      {readonly && (
+        <button
+          className="attachment-tag-copy"
+          onClick={(e) => { e.stopPropagation(); navigator.clipboard.writeText(cleanPath); }}
+          title={t("mlc.copyPath", "Copy path")}
+        >
+          <Icon name="copy" size={10} />
+        </button>
+      )}
+      {showPreview && previewPos && createPortal(
+        <div
+          className="mlc-custom-tooltip"
+          data-preview-overlay
+          ref={(el) => {
+            if (!el || !tagRef.current) return;
+            const rect = tagRef.current.getBoundingClientRect();
+            const tooltipHeight = el.offsetHeight;
+            const tooltipWidth = el.offsetWidth;
+            const position = placeFloatingPreview(rect, tooltipWidth, tooltipHeight);
+            el.style.top = `${position.top}px`;
+            el.style.left = `${position.left}px`;
+          }}
+          style={{ top: previewPos.top, left: previewPos.left, zIndex: 9999 }}
+        >
+          <div className="mlc-tooltip-doc">
+            <div className="mlc-tooltip-title">{title}</div>
+            {attachment.description ? <div className="mlc-tooltip-desc">{attachment.description}</div> : null}
+            <div className="mlc-tooltip-path">{cleanPath}</div>
+          </div>
+        </div>,
+        document.body
+      )}
+    </div>
+  );
+}
+
+export function WebAttachmentTag({ attachment, onRemove, readonly }: { attachment: WebAttachment; onRemove: () => void; readonly?: boolean }) {
+  const title = webAttachmentLabel(attachment);
+  const detail = attachment.kind === "console"
+    ? `${attachment.consoleEntries?.length || 0} entries`
+    : attachment.element?.selector || attachment.sourceUrl;
+  const tagRef = useRef<HTMLDivElement>(null);
+  const [showPreview, setShowPreview] = useState(false);
+  const [previewPos, setPreviewPos] = useState<{ top: number; left: number } | null>(null);
+  const handleMouseEnter = () => {
+    if (tagRef.current) {
+      const rect = tagRef.current.getBoundingClientRect();
+      setPreviewPos({ top: rect.top - 6, left: rect.left });
+    }
+    setShowPreview(true);
+  };
+  return (
+    <div
+      ref={tagRef}
+      className="attachment-tag"
+      data-preview-overlay
+      style={{ cursor: readonly ? "default" : "pointer" }}
+      onMouseEnter={handleMouseEnter}
+      onMouseLeave={() => setShowPreview(false)}
+    >
+      {!readonly && (
+        <button
+          className="attachment-tag-remove"
+          style={{ display: "inline-flex" }}
+          onClick={(e) => { e.stopPropagation(); onRemove(); }}
+        >
+          <Icon name="close-sm" size={10} />
+        </button>
+      )}
+      <Icon name={attachment.kind === "console" ? "terminal" : "globe"} size={10} />
+      <span className="truncate" style={{ maxWidth: 160 }}>{title}</span>
+      {showPreview && previewPos && createPortal(
+        <div
+          className="mlc-custom-tooltip"
+          data-preview-overlay
+          ref={(el) => {
+            if (!el || !tagRef.current) return;
+            const rect = tagRef.current.getBoundingClientRect();
+            const tooltipHeight = el.offsetHeight;
+            const tooltipWidth = el.offsetWidth;
+            const position = placeFloatingPreview(rect, tooltipWidth, tooltipHeight);
+            el.style.top = `${position.top}px`;
+            el.style.left = `${position.left}px`;
+          }}
+          style={{ top: previewPos.top, left: previewPos.left, zIndex: 9999 }}
+        >
+          <div className="mlc-tooltip-doc">
+            <div className="mlc-tooltip-title">{title}</div>
+            <div className="mlc-tooltip-desc">{attachment.sourceUrl}</div>
+            <div className="mlc-tooltip-path">{detail}</div>
+          </div>
+        </div>,
+        document.body
+      )}
     </div>
   );
 }
@@ -473,16 +948,25 @@ function GitActionTag({
 export function ReadonlyTagBar({ session }: { session: import("../store/feedbackStore").Session }) {
   const { t } = useTranslation();
   const [showLog, setShowLog] = useState(false);
+  const [showCommandLogs, setShowCommandLogs] = useState(false);
   const hasLog = session.testLogText.trim().length > 0;
+  const hasCommandLogs = session.commandLogs.trim().length > 0;
   const hasGitAction = !!session.gitAction;
+  const mlcAttachments = session.mlcAttachments || [];
+  const webAttachments = session.webAttachments || [];
+  const resourceLinks = collectSubmittedResourceLinks(session.feedbackText, session.projectDirectory).filter((link) => link.kind !== "commit");
+  const hasTags = session.images.length > 0 || hasLog || hasCommandLogs || hasGitAction || mlcAttachments.length > 0 || webAttachments.length > 0 || resourceLinks.length > 0;
 
   const gitLabel = hasGitAction ? ({
+    "commit-before": t("gitAction.commitBefore"),
     commit: t("gitAction.commit"),
     "commit-push": t("gitAction.commitPush"),
     "create-branch": t("gitAction.createBranch"),
   } as Record<string, string>)[session.gitAction!.type] || session.gitAction!.type : "";
   const gitDetail = hasGitAction && session.gitAction!.type === "create-branch" && session.gitAction!.branchName
     ? `: ${session.gitAction!.branchName}` : "";
+
+  if (!hasTags) return null;
 
   return (
     <div className="shrink-0">
@@ -498,12 +982,28 @@ export function ReadonlyTagBar({ session }: { session: import("../store/feedback
             onToggle={() => setShowLog((v) => !v)}
           />
         )}
+        {hasCommandLogs && (
+          <ReadonlyCommandLogsTag
+            commandLogs={session.commandLogs}
+            expanded={showCommandLogs}
+            onToggle={() => setShowCommandLogs((v) => !v)}
+          />
+        )}
         {hasGitAction && (
-          <div className="attachment-tag" style={{ cursor: "default" }}>
-            <Icon name="git-branch" size={10} />
+          <div className="attachment-tag" data-preview-overlay style={{ cursor: "default" }}>
+            <GitActionOptionIcon type={session.gitAction!.type} size={11} />
             <span className="truncate" style={{ maxWidth: 140 }}>{gitLabel}{gitDetail}</span>
           </div>
         )}
+        {mlcAttachments.map((attachment) => (
+          <MlcAttachmentTag key={attachment.filePath} attachment={attachment} onRemove={() => {}} readonly />
+        ))}
+        {webAttachments.map((attachment) => (
+          <WebAttachmentTag key={attachment.id} attachment={attachment} onRemove={() => {}} readonly />
+        ))}
+        {resourceLinks.map((link) => (
+          <ResourceAttachmentTag key={`${link.kind}:${link.href}:${link.label}`} link={link} />
+        ))}
       </div>
       {/* Expanded test log readonly */}
       {showLog && hasLog && (
@@ -512,21 +1012,91 @@ export function ReadonlyTagBar({ session }: { session: import("../store/feedback
             className="rounded-lg"
             style={{
               border: "1px solid var(--color-border)",
-              background: "var(--color-bg-input)",
+              background: "var(--color-bg-readonly, var(--color-bg-input))",
               maxHeight: 200,
               overflowY: "auto",
             }}
           >
             <pre
               className="text-xs px-2 py-1.5 m-0"
-              style={{ color: "var(--color-text-secondary)", whiteSpace: "pre-wrap", wordBreak: "break-all", opacity: 0.7 }}
+              style={{ color: "var(--color-text-muted)", whiteSpace: "pre-wrap", wordBreak: "break-all", opacity: 0.9 }}
             >
               <RichText text={session.testLogText} />
             </pre>
           </div>
         </div>
       )}
+      {showCommandLogs && hasCommandLogs && (
+        <div className="px-3 pb-1">
+          <div
+            className="rounded-lg"
+            style={{
+              border: "1px solid var(--color-border)",
+              background: "var(--color-bg-readonly, var(--color-bg-input))",
+              maxHeight: 200,
+              overflowY: "auto",
+            }}
+          >
+            <pre
+              className="text-xs px-2 py-1.5 m-0"
+              style={{ color: "var(--color-text-muted)", whiteSpace: "pre-wrap", wordBreak: "break-all", opacity: 0.9 }}
+            >
+              <RichText text={session.commandLogs} />
+            </pre>
+          </div>
+        </div>
+      )}
     </div>
+  );
+}
+
+export function ResourceAttachmentTag({ link }: { link: SubmittedResourceLink }) {
+  const { t } = useTranslation();
+  const resourceIconTheme = useFeedbackStore((state) => state.resourceIconTheme);
+  const openResource = () => {
+    import("@tauri-apps/plugin-opener")
+      .then(({ openPath }) => openPath(link.href))
+      .catch(() => navigator.clipboard.writeText(link.href).catch(() => {}));
+  };
+  return (
+    <div
+      className="attachment-tag"
+      data-preview-overlay
+      style={{ cursor: "pointer" }}
+      title={link.href}
+      onClick={openResource}
+    >
+      {resourceIconTheme === "catppuccin" ? (
+        <CatppuccinResourceIcon entry={{ name: link.label, relativePath: link.href, kind: link.kind as "file" | "folder" }} size={12} className="attachment-resource-icon" />
+      ) : (
+        <Icon name={link.kind === "folder" ? "folder" : "file-text"} size={10} />
+      )}
+      <span className="truncate" style={{ maxWidth: 160 }}>{link.label}</span>
+      <button
+        className="attachment-tag-copy"
+        onClick={(event) => {
+          event.stopPropagation();
+          navigator.clipboard.writeText(link.href);
+        }}
+        title={t("resources.copyPath", "Copy path")}
+      >
+        <Icon name="copy" size={10} />
+      </button>
+    </div>
+  );
+}
+
+function ReadonlyCommandLogsTag({ commandLogs, expanded, onToggle }: { commandLogs: string; expanded: boolean; onToggle: () => void }) {
+  const { t } = useTranslation();
+  return (
+    <button className="attachment-tag" data-preview-overlay onClick={onToggle}>
+      <Icon name="terminal" size={10} />
+      {t("commandLogs.attach", "Command Logs")}
+      <span style={{ fontSize: 9, color: "var(--color-text-muted)" }}>
+        {commandLogs.length}
+      </span>
+      <Icon name="chevron-down" size={8} style={{ transform: expanded ? "rotate(180deg)" : undefined }} />
+    </button>
   );
 }
 
@@ -541,6 +1111,7 @@ function ReadonlyLogTag({ testLogText, expanded, onToggle }: { testLogText: stri
     <div
       ref={tagRef}
       className="attachment-tag"
+      data-preview-overlay
       style={{
         background: expanded ? "var(--color-bg-elevated)" : undefined,
         borderColor: expanded ? "var(--color-border-strong)" : "var(--color-border)",
@@ -558,25 +1129,22 @@ function ReadonlyLogTag({ testLogText, expanded, onToggle }: { testLogText: stri
       <button
         className="attachment-tag-copy"
         onClick={(e) => { e.stopPropagation(); navigator.clipboard.writeText(testLogText); }}
-        title="Copy log"
+        title={t("testLog.copy", "Copy log")}
       >
         <Icon name="copy" size={10} />
       </button>
 
       {showPreview && createPortal(
         <div
+          data-preview-overlay
           ref={(el) => {
             if (!el || !tagRef.current) return;
             const rect = tagRef.current.getBoundingClientRect();
             const ph = el.offsetHeight;
             const pw = el.offsetWidth;
-            let top = rect.top - ph - 2;
-            let left = rect.left;
-            if (top < 4) top = rect.bottom + 2;
-            if (left + pw > window.innerWidth - 4) left = window.innerWidth - pw - 4;
-            if (left < 4) left = 4;
-            el.style.top = `${top}px`;
-            el.style.left = `${left}px`;
+            const position = placeFloatingPreview(rect, pw, ph);
+            el.style.top = `${position.top}px`;
+            el.style.left = `${position.left}px`;
           }}
           style={{
             position: "fixed",
@@ -607,14 +1175,40 @@ function ReadonlyLogTag({ testLogText, expanded, onToggle }: { testLogText: stri
   );
 }
 
-/** Render text with clickable links and color swatches */
+type RichTextPart =
+  | { type: "text"; value: string }
+  | { type: "url"; value: string }
+  | { type: "color"; value: string }
+  | { type: "resourceLink"; label: string; href: string; kind: "file" | "folder" };
+
+function decodeResourceHref(value: string): string {
+  try { return decodeURIComponent(value); } catch { return value; }
+}
+
+function normalizeResourcePath(value: string): string {
+  return decodeResourceHref(value).replace(/\\/g, "/");
+}
+
+function isLocalResourceHref(value: string): boolean {
+  const normalized = normalizeResourcePath(value);
+  return /^[A-Za-z]:\//.test(normalized) || /^\//.test(normalized);
+}
+
+function resourceKind(label: string, href: string): "file" | "folder" {
+  const normalized = normalizeResourcePath(href);
+  return label.endsWith("/") || normalized.endsWith("/") ? "folder" : "file";
+}
+
+/** Render text with clickable links, color swatches and readonly resource tags */
 export function RichText({ text, style, className }: { text: string; style?: React.CSSProperties; className?: string }) {
+  const resourceIconTheme = useFeedbackStore((state) => state.resourceIconTheme);
   const parts = useMemo(() => {
+    const RESOURCE_LINK_RE = /\[([^\]\n]+)\]\(([^)\n]+)\)/g;
     const URL_RE = /https?:\/\/[^\s<>"')\]]+/g;
     const COLOR_RE = /#(?:[0-9a-fA-F]{3}){1,2}\b|rgba?\(\s*\d+\s*,\s*\d+\s*,\s*\d+\s*(?:,\s*[\d.]+\s*)?\)/g;
-    const COMBINED = new RegExp(`(${URL_RE.source})|(${COLOR_RE.source})`, "g");
+    const COMBINED = new RegExp(`(${RESOURCE_LINK_RE.source})|(${URL_RE.source})|(${COLOR_RE.source})`, "g");
 
-    const result: { type: "text" | "url" | "color"; value: string }[] = [];
+    const result: RichTextPart[] = [];
     let lastIndex = 0;
     let match: RegExpExecArray | null;
 
@@ -623,9 +1217,17 @@ export function RichText({ text, style, className }: { text: string; style?: Rea
         result.push({ type: "text", value: text.slice(lastIndex, match.index) });
       }
       if (match[1]) {
-        result.push({ type: "url", value: match[1] });
-      } else if (match[2]) {
-        result.push({ type: "color", value: match[2] });
+        const label = match[2];
+        const href = match[3];
+        if (isLocalResourceHref(href)) {
+          result.push({ type: "resourceLink", label, href: normalizeResourcePath(href), kind: resourceKind(label, href) });
+        } else {
+          result.push({ type: "text", value: match[1] });
+        }
+      } else if (match[4]) {
+        result.push({ type: "url", value: match[4] });
+      } else if (match[5]) {
+        result.push({ type: "color", value: match[5] });
       }
       lastIndex = match.index + match[0].length;
     }
@@ -684,6 +1286,33 @@ export function RichText({ text, style, className }: { text: string; style?: Rea
             </span>
           );
         }
+        if (part.type === "resourceLink") {
+          const copyPath = () => navigator.clipboard.writeText(part.href).catch(() => {});
+          return (
+            <span
+              key={i}
+              className="readonly-resource-tag"
+              role="button"
+              tabIndex={0}
+              data-tooltip={`${part.kind === "folder" ? "Folder" : "File"}\n${part.href}`}
+              data-tooltip-placement="top"
+              onClick={copyPath}
+              onKeyDown={(event) => {
+                if (event.key === "Enter" || event.key === " ") {
+                  event.preventDefault();
+                  copyPath();
+                }
+              }}
+            >
+              {resourceIconTheme === "catppuccin" ? (
+                <CatppuccinResourceIcon entry={{ name: part.label, relativePath: part.href, kind: part.kind }} size={12} className="readonly-resource-icon" />
+              ) : (
+                <Icon name={part.kind === "folder" ? "folder" : "file-text"} size={11} />
+              )}
+              <span>{part.label}</span>
+            </span>
+          );
+        }
         return <span key={i}>{part.value}</span>;
       })}
     </span>
@@ -691,16 +1320,20 @@ export function RichText({ text, style, className }: { text: string; style?: Rea
 }
 
 /** Test log textarea */
-const TestLogInput = forwardRef<HTMLTextAreaElement>(function TestLogInput(_props, forwardedRef) {
+const TestLogInput = forwardRef<HTMLTextAreaElement, { queuedCallerId?: string }>(function TestLogInput({ queuedCallerId }, forwardedRef) {
   const { t } = useTranslation();
-  const { session: activeSession } = useActiveCallerSession();
-  const { updateSessionField, addSessionImage } = useFeedbackStore(useShallow((s) => ({
+  const { session: activeSession, caller } = useActiveCallerSession();
+  const queuedDraft = useFeedbackStore((s) => queuedCallerId ? s.queuedDraftsByCallerId[queuedCallerId] : null);
+  const { updateSessionField, addSessionImage, updateQueuedDraftField, addQueuedDraftImage, setFocusedComposer } = useFeedbackStore(useShallow((s) => ({
     updateSessionField: s.updateSessionField,
     addSessionImage: s.addSessionImage,
+    updateQueuedDraftField: s.updateQueuedDraftField,
+    addQueuedDraftImage: s.addQueuedDraftImage,
+    setFocusedComposer: s.setFocusedComposer,
   })));
 
-  const value = activeSession?.testLogText || "";
-  const isReadonly = activeSession?.status === "responded" || activeSession?.status === "cancelled";
+  const value = queuedCallerId ? (queuedDraft?.testLogText || "") : (activeSession?.testLogText || "");
+  const isReadonly = !queuedCallerId && (activeSession?.status === "responded" || activeSession?.status === "cancelled");
   const internalRef = useRef<HTMLTextAreaElement>(null);
 
   const combinedRef = useCallback((el: HTMLTextAreaElement | null) => {
@@ -718,15 +1351,38 @@ const TestLogInput = forwardRef<HTMLTextAreaElement>(function TestLogInput(_prop
   }, [value]);
 
   const handleChange = (e: React.ChangeEvent<HTMLTextAreaElement>) => {
-    if (activeSession) {
+    if (queuedCallerId) {
+      updateQueuedDraftField(queuedCallerId, "testLogText", e.target.value);
+    } else if (activeSession) {
       updateSessionField(activeSession.id, "testLogText", e.target.value);
     }
   };
 
+  const handleFocus = useCallback(() => {
+    if (queuedCallerId) {
+      if (!caller) return;
+      setFocusedComposer({
+        callerId: queuedCallerId,
+        projectDirectory: activeSession?.projectDirectory || "",
+        kind: "queuedDraft",
+        focusedAt: new Date().toISOString(),
+      });
+      return;
+    }
+    if (!activeSession || activeSession.status !== "pending" || !caller) return;
+    setFocusedComposer({
+      callerId: caller.id,
+      sessionId: activeSession.id,
+      projectDirectory: activeSession.projectDirectory,
+      kind: "testLog",
+      focusedAt: new Date().toISOString(),
+    });
+  }, [activeSession, caller, queuedCallerId, setFocusedComposer]);
+
   const handlePaste = useCallback(
     (e: React.ClipboardEvent<HTMLTextAreaElement>) => {
       const items = e.clipboardData?.items;
-      if (!items || !activeSession) return;
+      if (!items || (!activeSession && !queuedCallerId)) return;
       for (const item of Array.from(items)) {
         if (item.type.startsWith("image/")) {
           const file = item.getAsFile();
@@ -734,12 +1390,14 @@ const TestLogInput = forwardRef<HTMLTextAreaElement>(function TestLogInput(_prop
             const namedFile = new File([file], `clipboard_${Date.now()}.png`, { type: file.type });
             const reader = new FileReader();
             reader.onload = (ev) => {
-              addSessionImage(activeSession.id, {
+              const img = {
                 path: `blob:clipboard:${Date.now()}`,
                 name: namedFile.name,
                 sizeKB: namedFile.size / 1024,
                 dataUrl: ev.target?.result as string,
-              });
+              };
+              if (queuedCallerId) addQueuedDraftImage(queuedCallerId, img);
+              else if (activeSession) addSessionImage(activeSession.id, img);
             };
             reader.readAsDataURL(namedFile);
             e.preventDefault();
@@ -747,7 +1405,7 @@ const TestLogInput = forwardRef<HTMLTextAreaElement>(function TestLogInput(_prop
         }
       }
     },
-    [activeSession, addSessionImage]
+    [activeSession, addSessionImage, queuedCallerId, addQueuedDraftImage]
   );
 
   return (
@@ -756,6 +1414,7 @@ const TestLogInput = forwardRef<HTMLTextAreaElement>(function TestLogInput(_prop
       value={value}
       onChange={handleChange}
       onPaste={handlePaste}
+      onFocus={handleFocus}
       readOnly={isReadonly}
       placeholder={t("testLog.placeholder")}
       className="input-area"

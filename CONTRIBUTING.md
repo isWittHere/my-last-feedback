@@ -256,7 +256,7 @@ git push origin v1.0.0
 
 ### 4. 发行包内容检查清单
 
-- [ ] `app.exe` / `app` — 可执行文件
+- [ ] `My Last Feedback.exe` / `app` — 可执行文件
 - [ ] `server.mjs` — MCP Server
 - [ ] `package.json` + `node_modules/` — Node 依赖
 - [ ] `mcp.json.template` — 配置模板

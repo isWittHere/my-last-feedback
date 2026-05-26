@@ -1,22 +1,31 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { createPortal } from "react-dom";
 import { useTranslation } from "react-i18next";
-import { useFeedbackStore } from "../store/feedbackStore";
-import { useShallow } from "zustand/react/shallow";
-import { SummaryPanel } from "./SummaryPanel";
-import { FeedbackInput } from "./FeedbackInput";
-import { ImageAttachmentWidget } from "./ImageAttachmentWidget";
-import { QuickActions } from "./QuickActions";
-import { PromptButtons } from "./PromptButtons";
+import { useFeedbackStore, type CallerColumnMode, type DockColumnId, type DockTabId } from "../store/feedbackStore";
 import { CallerTabs } from "./CallerTabs";
 import { CallerPanel } from "./CallerPanel";
 import { SettingsDialog } from "./SettingsDialog";
 import { WelcomeHome } from "./WelcomeHome";
+import { DockColumn } from "./DockColumn";
+import { SettingsSegmentedControl } from "./SettingsSegmentedControl";
+import { PreviewBrowserEventBridge } from "./PreviewBrowserEventBridge";
 import { MLRAView } from "./MLRAView";
-import { PhaseToggle } from "./PhaseToggle";
 import { MLRACallerTabs } from "./MLRACallerTabs";
-import { Icon } from "./Icons";
+import { Icon, MlcLogoIcon } from "./Icons";
+import { toggleTheme } from "../theme";
+import { useIsLightTheme } from "./useIsLightTheme";
+import i18n from "../i18n";
 import React from "react";
-import { useMLRAStore, ROLE_COLORS, type RoundRecord } from "../store/mlraStore";
+import { isAgentUiDisabled } from "../agent/agentUiFlags";
+import { isMlraUiDisabled } from "../mlra/mlraUiFlags";
+import {
+  ORCHESTRATION_PRESETS,
+  useMLRAStore,
+  ROLE_COLORS,
+  type OrchestrationPresetId,
+  type RoundRecord,
+  type StageBlueprint,
+} from "../store/mlraStore";
 
 /** Format milliseconds to MM:SS or H:MM:SS */
 function formatDuration(ms: number): string {
@@ -30,21 +39,134 @@ function formatDuration(ms: number): string {
 }
 
 const ROLE_LABEL_MAP: Record<string, string> = {
-  "planning-expert": "规划专家",
-  "planning-inspector": "规划监察",
-  "execution-expert": "执行专家",
-  "execution-inspector": "执行监察",
+  expert: "Expert",
+  inspector: "Inspector",
   ceo: "CEO",
   worker: "Worker",
 };
 
+function dockTabTitle(tabId: DockTabId, translate: (key: string, defaultValue: string) => string): string {
+  if (tabId === "mlc") return translate("mlc.title", "My Last Chat");
+  if (tabId === "mlcPreview") return translate("mlcPreview.title", "MLC Preview");
+  if (tabId === "previewBrowser") return translate("previewBrowser.title", "Preview Browser");
+  if (tabId === "previewInfo") return translate("previewBrowser.infoTitle", "Preview Info");
+  if (tabId === "agentConsole") return isAgentUiDisabled ? "" : translate("agentConsole.title", "Agent Console");
+  if (tabId === "terminal") return translate("terminal.title", "Terminal");
+  if (tabId === "git") return translate("git.title", "Git");
+  return translate("resources.title", "Project resources");
+}
+
+function dockTabDragIcon(tabId: DockTabId) {
+  if (tabId === "terminal") return "terminal";
+  if (tabId === "git") return "git-commit";
+  if (tabId === "agentConsole") return isAgentUiDisabled ? "folder" : "robot";
+  if (tabId === "mlcPreview") return "file-text";
+  if (tabId === "previewBrowser") return "globe";
+    if (tabId === "previewInfo") return "code";
+  return "folder";
+}
+
+function DockDragPreview() {
+  const { t } = useTranslation();
+  const draggingDockTab = useFeedbackStore((s) => s.draggingDockTab);
+  if (!draggingDockTab) return null;
+  const label = dockTabTitle(draggingDockTab.tabId, t);
+  return (
+    <div className="dock-tab-drag-preview" style={{ left: draggingDockTab.pointerX + 12, top: draggingDockTab.pointerY + 10 }}>
+      {draggingDockTab.tabId === "mlc" ? <MlcLogoIcon size={15} /> : <Icon name={dockTabDragIcon(draggingDockTab.tabId)} size={15} />}
+      <span>{label}</span>
+    </div>
+  );
+}
+
+function CallerSortModeIcon() {
+  return (
+    <span className="caller-sort-icon" aria-hidden="true">
+      <Icon name="sort" size={13} style={{ transform: "rotate(-90deg)" }} />
+    </span>
+  );
+}
+
+function StageFlowPopover({ stages, currentStageId }: { stages: StageBlueprint[]; currentStageId: string | null }) {
+  const { t } = useTranslation();
+  const currentIndex = stages.findIndex((stage) => stage.id === currentStageId);
+
+  if (stages.length === 0) {
+    return (
+      <div className="mlra-stage-flow-popover">
+        <div className="mlra-stage-flow-empty">{t("mlra.stage.noStages", "No stages")}</div>
+      </div>
+    );
+  }
+
+  return (
+    <div className="mlra-stage-flow-popover">
+      <div className="mlra-stage-flow-list">
+        {stages.map((stage, index) => {
+          const isCurrent = stage.id === currentStageId;
+          const isDone = currentIndex >= 0 && index < currentIndex;
+          return (
+            <React.Fragment key={stage.id}>
+              <div className={`mlra-stage-flow-item${isCurrent ? " current" : ""}${isDone ? " done" : ""}${stage.isClosing ? " closing" : ""}`}>
+                <span className="mlra-stage-flow-node">
+                  <Icon name={stage.icon || "flag"} size={12} />
+                </span>
+                <span className="mlra-stage-flow-copy">
+                  <span className="mlra-stage-flow-name">{stage.name || t("mlra.stage.fallbackName", "Stage {{index}}", { index: index + 1 })}</span>
+                  <span className="mlra-stage-flow-meta">
+                    {index + 1}/{stages.length}{stage.exitGateEnabled ? " · Gate" : ""}
+                  </span>
+                </span>
+              </div>
+              {index < stages.length - 1 ? <span className={`mlra-stage-flow-connector${isDone ? " done" : ""}`} /> : null}
+            </React.Fragment>
+          );
+        })}
+      </div>
+    </div>
+  );
+}
+
 /** Stats popover shown on timer hover */
-function TimerStatsPopover({ rounds }: { rounds: RoundRecord[] }) {
+function TimerStatsPopover({ rounds, stages, onRequestStop }: { rounds: RoundRecord[]; stages: StageBlueprint[]; onRequestStop: () => void }) {
+  const { t } = useTranslation();
+  const [stageFilter, setStageFilter] = useState<string>("all");
+  const roundDuration = (round: RoundRecord) => {
+    const end = round.endedAt ? new Date(round.endedAt).getTime() : Date.now();
+    return Math.max(0, end - new Date(round.startedAt).getTime());
+  };
+  const stageStats = stages.map((stage, index) => {
+    const stageRounds = rounds.filter((round) => round.stageId === stage.id);
+    return {
+      id: stage.id,
+      icon: stage.icon || "flag",
+      name: stage.name || t("mlra.stage.fallbackName", "Stage {{index}}", { index: index + 1 }),
+      index,
+      count: stageRounds.length,
+      totalMs: stageRounds.reduce((sum, round) => sum + roundDuration(round), 0),
+    };
+  });
+  const unassignedRounds = rounds.filter((round) => !round.stageId || !stages.some((stage) => stage.id === round.stageId));
+  if (unassignedRounds.length > 0) {
+    stageStats.push({
+      id: "__unassigned",
+      icon: "info",
+      name: t("mlra.timer.unassigned", "Unassigned"),
+      index: stageStats.length,
+      count: unassignedRounds.length,
+      totalMs: unassignedRounds.reduce((sum, round) => sum + roundDuration(round), 0),
+    });
+  }
+  const visibleRounds = stageFilter === "all"
+    ? rounds
+    : stageFilter === "__unassigned"
+      ? unassignedRounds
+      : rounds.filter((round) => round.stageId === stageFilter);
+
   // Aggregate per-role stats
   const roleStats: Record<string, { count: number; totalMs: number }> = {};
-  for (const r of rounds) {
-    const end = r.endedAt ? new Date(r.endedAt).getTime() : Date.now();
-    const dur = end - new Date(r.startedAt).getTime();
+  for (const r of visibleRounds) {
+    const dur = roundDuration(r);
     if (!roleStats[r.role]) roleStats[r.role] = { count: 0, totalMs: 0 };
     roleStats[r.role].count++;
     roleStats[r.role].totalMs += dur;
@@ -56,11 +178,11 @@ function TimerStatsPopover({ rounds }: { rounds: RoundRecord[] }) {
   const CANVAS_W = 300; // base canvas width
   const GAP_PX = 0; // no gap between merged segments
 
-  const starts = rounds.map((r) => new Date(r.startedAt).getTime());
-  const ends = rounds.map((r) => (r.endedAt ? new Date(r.endedAt).getTime() : Date.now()));
+  const starts = visibleRounds.map((r) => new Date(r.startedAt).getTime());
+  const ends = visibleRounds.map((r) => (r.endedAt ? new Date(r.endedAt).getTime() : Date.now()));
 
   // Build merged active segments (union of all round intervals)
-  const intervals = rounds.map((_r, i) => ({ s: starts[i], e: ends[i] }));
+  const intervals = visibleRounds.map((_r, i) => ({ s: starts[i], e: ends[i] }));
   intervals.sort((a, b) => a.s - b.s);
   const merged: { s: number; e: number }[] = [];
   for (const iv of intervals) {
@@ -73,7 +195,7 @@ function TimerStatsPopover({ rounds }: { rounds: RoundRecord[] }) {
 
   // Compact time mapping: total active ms determines canvas scale
   const totalActiveMs = merged.reduce((s, seg) => s + (seg.e - seg.s), 0) || 1;
-  const shortestDur = Math.max(1, Math.min(...rounds.map((_r, i) => ends[i] - starts[i])));
+  const shortestDur = visibleRounds.length > 0 ? Math.max(1, Math.min(...visibleRounds.map((_r, i) => ends[i] - starts[i]))) : 1;
   const totalGapPx = Math.max(0, (merged.length - 1) * GAP_PX);
   const pxPerMs = Math.max((CANVAS_W - totalGapPx) / totalActiveMs, MIN_BAR_W / shortestDur);
   const totalW = Math.ceil(totalActiveMs * pxPerMs + totalGapPx);
@@ -92,8 +214,8 @@ function TimerStatsPopover({ rounds }: { rounds: RoundRecord[] }) {
   };
 
   // Split into tracks & compute per-track average for dynamic height
-  const mainRounds = rounds.filter((r) => r.role !== "worker");
-  const workerRounds = rounds.filter((r) => r.role === "worker");
+  const mainRounds = visibleRounds.filter((r) => r.role !== "worker");
+  const workerRounds = visibleRounds.filter((r) => r.role === "worker");
 
   const avgDur = (arr: RoundRecord[]) => {
     if (arr.length === 0) return 1;
@@ -177,10 +299,30 @@ function TimerStatsPopover({ rounds }: { rounds: RoundRecord[] }) {
 
   return (
     <div className="timer-stats-popover">
+      {stageStats.length > 0 ? (
+        <div className="timer-stats-stage-strip">
+          <button className={`timer-stats-stage-chip${stageFilter === "all" ? " active" : ""}`} onClick={() => setStageFilter("all")}>
+            {t("previewBrowser.filterAll", "All")}
+            <span>{formatDuration(stageStats.reduce((sum, stage) => sum + stage.totalMs, 0))}</span>
+          </button>
+          {stageStats.map((stage) => (
+            <button
+              key={stage.id}
+              className={`timer-stats-stage-chip${stageFilter === stage.id ? " active" : ""}`}
+              onClick={() => setStageFilter(stage.id)}
+            >
+              <Icon name={stage.icon} size={10} />
+              <span className="timer-stats-stage-chip-name">{stage.index + 1}. {stage.name}</span>
+              <span>{formatDuration(stage.totalMs)}</span>
+            </button>
+          ))}
+        </div>
+      ) : null}
+
       {/* Dual-track Gantt timeline */}
       <div className="timer-stats-dual" ref={timelineRef} onWheel={onWheel}>
-        {rounds.length === 0 ? (
-          <div className="timer-stats-empty">暂无回合记录</div>
+        {visibleRounds.length === 0 ? (
+          <div className="timer-stats-empty">{t("mlra.timer.noRounds", "No round records")}</div>
         ) : (
           <div style={{ width: totalW, flexShrink: 0 }}>
             <div className="timer-stats-track timer-stats-track-main" style={{ height: MAX_H }}>
@@ -236,16 +378,22 @@ function TimerStatsPopover({ rounds }: { rounds: RoundRecord[] }) {
               <div key={role} className="timer-stats-row">
                 <span className="timer-stats-dot" style={{ background: (ROLE_COLORS as Record<string, string>)[role] || ROLE_COLORS.worker }} />
                 <span className="timer-stats-role">{ROLE_LABEL_MAP[role] || role}</span>
-                <span className="timer-stats-count">{stat.count} 轮</span>
+                <span className="timer-stats-count">{t("mlra.timer.roundCount", "{{count}} rounds", { count: stat.count })}</span>
                 <span className="timer-stats-pct">{pct}%</span>
                 <span className="timer-stats-time">{formatDuration(stat.totalMs)}</span>
               </div>
             );
           })}
           {Object.keys(roleStats).length === 0 && (
-            <div className="timer-stats-empty">暂无统计数据</div>
+            <div className="timer-stats-empty">{t("mlra.timer.noStats", "No statistics")}</div>
           )}
         </div>
+      </div>
+      <div className="timer-stats-danger-zone">
+        <button type="button" className="timer-stop-entry" onClick={onRequestStop}>
+          <Icon name="close" size={12} />
+          {t("mlra.timer.stop", "Stop current MLRA")}
+        </button>
       </div>
     </div>
   );
@@ -271,7 +419,7 @@ class MLRAErrorBoundary extends React.Component<
           <div style={{ color: "#999", fontSize: 11, maxWidth: 500, wordBreak: "break-all" }}>{this.state.error.message}</div>
           <div style={{ color: "#666", fontSize: 10, maxWidth: 500, wordBreak: "break-all" }}>{this.state.error.stack?.split("\n").slice(0, 5).join("\n")}</div>
           <button onClick={() => this.setState({ error: null })} style={{ marginTop: 12, padding: "4px 12px", background: "#333", color: "#ddd", border: "1px solid #555", borderRadius: 4, cursor: "pointer" }}>
-            重试
+            {i18n.t("common.retry", "Retry")}
           </button>
         </div>
       );
@@ -279,7 +427,6 @@ class MLRAErrorBoundary extends React.Component<
     return this.props.children;
   }
 }
-import { invoke } from "@tauri-apps/api/core";
 import { getCurrentWindow } from "@tauri-apps/api/window";
 
 const PANEL_MIN_WIDTH = 520;
@@ -287,8 +434,19 @@ const IS_MACOS = navigator.userAgent.includes('Macintosh');
 
 /** Running timer — counts up from startedAt, subtracting paused time */
 function RunningTimer() {
+  const { t } = useTranslation();
   const launcher = useMLRAStore((s) => s.getActiveLauncher());
+  const daemonCancelOrchestration = useMLRAStore((s) => s.daemonCancelOrchestration);
+  const pushNativeWebViewBlocker = useFeedbackStore((s) => s.pushNativeWebViewBlocker);
+  const popNativeWebViewBlocker = useFeedbackStore((s) => s.popNativeWebViewBlocker);
+  const [stopConfirmOpen, setStopConfirmOpen] = useState(false);
   const [elapsed, setElapsed] = useState(0);
+
+  useEffect(() => {
+    if (!stopConfirmOpen) return;
+    pushNativeWebViewBlocker("mlra-stop-confirm");
+    return () => popNativeWebViewBlocker("mlra-stop-confirm");
+  }, [popNativeWebViewBlocker, pushNativeWebViewBlocker, stopConfirmOpen]);
 
   useEffect(() => {
     if (!launcher?.startedAt) { setElapsed(0); return; }
@@ -312,57 +470,127 @@ function RunningTimer() {
   const rounds = launcher?.roundHistory ?? [];
 
   return (
-    <span className="mlra-timer-wrapper">
-      <span className="mlra-timer">
-        <Icon name="clock" size={10} />
-        {display}
+    <>
+      <span className="mlra-timer-wrapper">
+        <span className="mlra-timer">
+          <Icon name="clock" size={10} />
+          {display}
+        </span>
+        <TimerStatsPopover rounds={rounds} stages={launcher?.blueprint.stages ?? []} onRequestStop={() => setStopConfirmOpen(true)} />
       </span>
-      <TimerStatsPopover rounds={rounds} />
-    </span>
+      {stopConfirmOpen && (
+        <div className="timer-stop-overlay" onClick={() => setStopConfirmOpen(false)}>
+          <div className="timer-stop-dialog" onClick={(event) => event.stopPropagation()}>
+            <div className="timer-stop-dialog-header">
+              <span>{t("mlra.timer.stopConfirmTitle", "Stop current MLRA?")}</span>
+              <button type="button" className="settings-close-btn" onClick={() => setStopConfirmOpen(false)}>
+                <Icon name="win-close" size={10} />
+              </button>
+            </div>
+            <div className="timer-stop-dialog-body">{t("mlra.timer.stopConfirmBody", "The current orchestration will be cancelled and blocked role calls will be released.")}</div>
+            <div className="timer-stop-dialog-actions">
+              <button type="button" className="timer-stop-secondary" onClick={() => setStopConfirmOpen(false)}>
+                {t("sidebar.cancel", "Cancel")}
+              </button>
+              <button
+                type="button"
+                className="timer-stop-entry timer-stop-confirm-button"
+                onClick={() => {
+                  setStopConfirmOpen(false);
+                  daemonCancelOrchestration();
+                }}
+              >
+                <Icon name="close" size={12} />
+                {t("mlra.timer.stopConfirmAction", "Stop")}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+    </>
   );
 }
 
 /** MLRA title bar Row 2 */
 function MLRARow2() {
+  const { t } = useTranslation();
   const launcher = useMLRAStore((s) => s.getActiveLauncher());
-  const isActive = launcher?.status === "running" || launcher?.status === "paused";
-
-  const controlModes: Array<{ mode: import("../store/mlraStore").ControlMode; label: string }> = [
-    { mode: "autopilot", label: "全自动" },
-    { mode: "ceo-override", label: "接管CEO" },
-    { mode: "full-override", label: "全接管" },
-  ];
+  const isActive = launcher?.status === "running" || launcher?.status === "paused" || launcher?.status === "awaiting-user";
+  const runtime = launcher?.blueprintRuntime;
+  const fallbackStage = launcher?.blueprint.stages.find((stage) => stage.id === launcher.selectedStageId) ?? launcher?.blueprint.stages[0] ?? null;
+  const currentStage = runtime?.currentStage ?? fallbackStage;
+  const currentStageBlueprint = currentStage && launcher
+    ? launcher.blueprint.stages.find((stage) => stage.id === currentStage.id) ?? fallbackStage
+    : fallbackStage;
+  const currentStageIcon = currentStageBlueprint?.icon ?? "flag";
+  const currentStageIndex = runtime?.currentStage
+    ? runtime.currentStageIndex
+    : currentStage && launcher
+      ? launcher.blueprint.stages.findIndex((stage) => stage.id === currentStage.id)
+      : -1;
+  const totalStages = runtime?.totalStages || launcher?.blueprint.stages.length || 0;
+  const currentStageNo = totalStages > 0 && currentStageIndex >= 0 ? `${currentStageIndex + 1}/${totalStages}` : null;
 
   return (
     <div data-tauri-drag-region className="flex items-center gap-2 px-3" style={{ height: 26 }}>
-      <button
-        className="launcher-btn"
-        onClick={() => useMLRAStore.getState().toggleLauncherSidebar()}
-        title="Launcher 管理"
-      >
-        <Icon name="menu" size={14} />
-      </button>
-      {isActive && (
-        <MLRAErrorBoundary><PhaseToggle /></MLRAErrorBoundary>
-      )}
       {isActive && launcher && (
         <div className="mlra-control-mode-switcher">
-          {controlModes.map(({ mode, label }) => (
+          {ORCHESTRATION_PRESETS.map(({ id, label, description, icon, policy }) => (
             <button
-              key={mode}
-              className={`mlra-control-mode-btn${launcher.controlMode === mode ? " active" : ""}`}
+              key={id}
+              className={`mlra-control-mode-btn${launcher.orchestrationPolicy.preset === id ? " active" : ""}`}
               onClick={() => {
-                useMLRAStore.getState().setControlMode(launcher.id, mode);
-                useMLRAStore.getState().daemonSetControlMode(mode);
+                const nextPolicy = { ...policy, preset: id as OrchestrationPresetId };
+                useMLRAStore.getState().setOrchestrationPolicy(launcher.id, nextPolicy);
+                useMLRAStore.getState().daemonSetOrchestrationPolicy(nextPolicy);
               }}
-              title={label}
+              title={t(`mlra.orchestration.${id}.description`, description)}
             >
-              {label}
+              <Icon name={icon} size={11} />
+              {t(`mlra.orchestration.${id}.label`, label)}
             </button>
           ))}
         </div>
       )}
+      {isActive && launcher?.humanGate?.active && (
+        <span
+          style={{
+            fontSize: 11,
+            color: "#F59E0B",
+            border: "1px solid rgba(245, 158, 11, 0.35)",
+            borderRadius: 999,
+            padding: "2px 8px",
+            background: "rgba(245, 158, 11, 0.1)",
+          }}
+        >
+          {t("mlra.humanGate.blocked", "Blocked: {{title}}", { title: launcher.humanGate.title })}
+        </span>
+      )}
+      {isActive && launcher?.stageExitPending?.active && !launcher?.humanGate?.active && (
+        <span
+          style={{
+            fontSize: 11,
+            color: "#818CF8",
+            border: "1px solid rgba(129, 140, 248, 0.35)",
+            borderRadius: 999,
+            padding: "2px 8px",
+            background: "rgba(129, 140, 248, 0.1)",
+          }}
+        >
+          {t("mlra.humanGate.exitPending", "Exit certification pending")}
+        </span>
+      )}
       <div style={{ flex: 1 }} />
+      {isActive && currentStage && (
+        <span className="mlra-stage-indicator-wrapper">
+          <span className={`mlra-stage-indicator${currentStage.isClosing ? " closing" : ""}`}>
+            <Icon name={currentStageIcon} size={10} />
+            {currentStageNo ? <span className="mlra-stage-indicator-index">{currentStageNo}</span> : null}
+            <span className="mlra-stage-indicator-name">{currentStage.name}</span>
+          </span>
+          <StageFlowPopover stages={launcher?.blueprint.stages ?? []} currentStageId={currentStage.id} />
+        </span>
+      )}
       {isActive && <RunningTimer />}
     </div>
   );
@@ -370,49 +598,57 @@ function MLRARow2() {
 
 export function FeedbackApp() {
   const { t } = useTranslation();
-  const appMode = useFeedbackStore((s) => s.appMode);
-  const isPersistent = appMode === "persistent";
   const [appView, setAppView] = useState<"MLFB" | "MLRA">("MLFB");
   const callers = useFeedbackStore((s) => s.callers);
   const callerOrder = useFeedbackStore((s) => s.callerOrder);
   const hiddenCallerIds = useFeedbackStore((s) => s.hiddenCallerIds);
   const activeCallerId = useFeedbackStore((s) => s.activeCallerId);
+  const dockColumns = useFeedbackStore((s) => s.dockLayout.columns);
+  const leftSidebarColumn = dockColumns.leftSidebar;
+  const leftPageColumn = dockColumns.leftPage;
+  const rightPageColumn = dockColumns.rightPage;
+  const rightSidebarColumn = dockColumns.rightSidebar;
+  const setDockColumnCollapsed = useFeedbackStore((s) => s.setDockColumnCollapsed);
 
-  // Window width tracking for responsive multi-column layout
-  const [windowWidth, setWindowWidth] = useState(window.innerWidth);
+  // Caller workspace width tracking for responsive multi-column layout
+  const callerWorkspaceRef = useRef<HTMLDivElement>(null);
+  const [callerWorkspaceWidth, setCallerWorkspaceWidth] = useState(window.innerWidth);
   useEffect(() => {
-    const handler = () => setWindowWidth(window.innerWidth);
-    window.addEventListener("resize", handler);
-    return () => window.removeEventListener("resize", handler);
+    const node = callerWorkspaceRef.current;
+    if (!node) return;
+    const update = () => setCallerWorkspaceWidth(node.getBoundingClientRect().width || window.innerWidth);
+    update();
+    const observer = new ResizeObserver(update);
+    observer.observe(node);
+    return () => observer.disconnect();
   }, []);
 
   // Visible callers (excluding hidden ones)
   const visibleCallers = useMemo(() => callers.filter(c => !hiddenCallerIds.includes(c.id)), [callers, hiddenCallerIds]);
 
   // ── Layout mode: auto / 1 / 2 / 3 ──
-  const [layoutMode, setLayoutMode] = useState<"auto" | 1 | 2 | 3>("auto");
-  const layoutModes: Array<"auto" | 1 | 2 | 3> = ["auto", 1, 2, 3];
+  const callerColumnMode = useFeedbackStore((s) => s.callerColumnMode);
+  const setCallerColumnMode = useFeedbackStore((s) => s.setCallerColumnMode);
+  const layoutModes: CallerColumnMode[] = ["auto", 1, 2, 3];
   const cycleLayoutMode = useCallback(() => {
-    setLayoutMode(prev => {
-      const idx = layoutModes.indexOf(prev);
-      return layoutModes[(idx + 1) % layoutModes.length];
-    });
-  }, []);
+    const idx = layoutModes.indexOf(callerColumnMode);
+    setCallerColumnMode(layoutModes[(idx + 1) % layoutModes.length]);
+  }, [callerColumnMode, setCallerColumnMode]);
 
   // Dynamic parallel: how many columns can fit?
-  const autoMaxColumns = Math.max(1, Math.floor(windowWidth / PANEL_MIN_WIDTH));
-  const maxColumns = layoutMode === "auto" ? autoMaxColumns : layoutMode;
-  const canMultiColumn = isPersistent && visibleCallers.length > 1 && maxColumns >= 2;
+  const autoMaxColumns = Math.max(1, Math.floor(callerWorkspaceWidth / PANEL_MIN_WIDTH));
+  const maxColumns = callerColumnMode === "auto" ? autoMaxColumns : callerColumnMode;
+  const canMultiColumn = visibleCallers.length > 1 && maxColumns >= 2;
 
   // Column callers = first N from user-ordered list, excluding hidden ones
   const columnCallerIds = useMemo(() => {
-    if (!isPersistent || visibleCallers.length <= 1) return [] as string[];
+    if (visibleCallers.length <= 1) return [] as string[];
     const order = callerOrder.length > 0 ? callerOrder : callers.map(c => c.id);
     const visibleOrder = order.filter(id => !hiddenCallerIds.includes(id));
     return visibleOrder.slice(0, Math.min(visibleOrder.length, maxColumns));
-  }, [callers, callerOrder, hiddenCallerIds, isPersistent, maxColumns, visibleCallers.length]);
+  }, [callers, callerOrder, hiddenCallerIds, maxColumns, visibleCallers.length]);
 
-  const columnCount = isPersistent && visibleCallers.length > 1 ? Math.min(visibleCallers.length, maxColumns) : 0;
+  const columnCount = visibleCallers.length > 1 ? Math.min(visibleCallers.length, maxColumns) : 0;
   const useMultiColumn = canMultiColumn && columnCallerIds.length >= 2;
 
   // Sync columnCount to store so addSession can use it for auto-positioning
@@ -421,38 +657,7 @@ export function FeedbackApp() {
     setVisibleColumnCount(columnCount);
   }, [columnCount, setVisibleColumnCount]);
 
-  // ── Legacy mode fields ──
-  const {
-    requestName,
-    feedbackText,
-    testLogText,
-    images,
-    outputFile,
-    commandLogs,
-    isSubmitting,
-    isSubmitted,
-    setSubmitting,
-    setSubmitted,
-  } = useFeedbackStore(useShallow((s) => ({
-    requestName: s.requestName,
-    feedbackText: s.feedbackText,
-    testLogText: s.testLogText,
-    images: s.images,
-    outputFile: s.outputFile,
-    commandLogs: s.commandLogs,
-    isSubmitting: s.isSubmitting,
-    isSubmitted: s.isSubmitted,
-    setSubmitting: s.setSubmitting,
-    setSubmitted: s.setSubmitted,
-  })));
-
   const [alwaysOnTop, setAlwaysOnTop] = useState(true);
-
-  useEffect(() => {
-    if (!isPersistent) {
-      getCurrentWindow().setAlwaysOnTop(true);
-    }
-  }, [isPersistent]);
 
   const toggleAlwaysOnTop = useCallback(async () => {
     const next = !alwaysOnTop;
@@ -460,99 +665,60 @@ export function FeedbackApp() {
     setAlwaysOnTop(next);
   }, [alwaysOnTop]);
 
-  const [settingsOpen, setSettingsOpen] = useState(false);
+  const toggleDockColumn = useCallback((columnId: DockColumnId) => {
+    const column = dockColumns[columnId];
+    if (column.tabIds.length === 0) return;
+    setDockColumnCollapsed(columnId, !column.collapsed);
+  }, [dockColumns, setDockColumnCollapsed]);
 
-  // ── Legacy mode: panel resize ──
-  const containerRef = useRef<HTMLDivElement>(null);
-  const [panelSizes, setPanelSizes] = useState([0.4, 0.4, 0.2]);
-  const resizingRef = useRef<{ index: number; startY: number; startSizes: number[] } | null>(null);
+  const toggleDockSideFromShortcut = useCallback((side: "left" | "right") => {
+    const sidebarId: DockColumnId = side === "left" ? "leftSidebar" : "rightSidebar";
+    const pageId: DockColumnId = side === "left" ? "leftPage" : "rightPage";
+    const sidebarColumn = dockColumns[sidebarId];
+    const pageColumn = dockColumns[pageId];
+    const sidebarOpen = sidebarColumn.tabIds.length > 0 && !sidebarColumn.collapsed;
+    const pageOpen = pageColumn.tabIds.length > 0 && !pageColumn.collapsed;
 
-  const handleMouseDown = useCallback(
-    (index: number, e: React.MouseEvent) => {
-      e.preventDefault();
-      resizingRef.current = { index, startY: e.clientY, startSizes: [...panelSizes] };
-      const handleMouseMove = (ev: MouseEvent) => {
-        if (!resizingRef.current || !containerRef.current) return;
-        const { index: idx, startY, startSizes } = resizingRef.current;
-        const containerH = containerRef.current.getBoundingClientRect().height;
-        const delta = (ev.clientY - startY) / containerH;
-        const newSizes = [...startSizes];
-        const minSize = 0.08;
-        newSizes[idx] = Math.max(minSize, startSizes[idx] + delta);
-        newSizes[idx + 1] = Math.max(minSize, startSizes[idx + 1] - delta);
-        const total = newSizes.reduce((a, b) => a + b, 0);
-        setPanelSizes(newSizes.map((s) => s / total));
-      };
-      const handleMouseUp = () => {
-        resizingRef.current = null;
-        document.removeEventListener("mousemove", handleMouseMove);
-        document.removeEventListener("mouseup", handleMouseUp);
-        document.body.style.cursor = "";
-        document.body.style.userSelect = "";
-      };
-      document.body.style.cursor = "row-resize";
-      document.body.style.userSelect = "none";
-      document.addEventListener("mousemove", handleMouseMove);
-      document.addEventListener("mouseup", handleMouseUp);
-    },
-    [panelSizes]
-  );
+    if (sidebarOpen || pageOpen) {
+      if (sidebarColumn.tabIds.length > 0) setDockColumnCollapsed(sidebarId, true);
+      if (pageColumn.tabIds.length > 0) setDockColumnCollapsed(pageId, true);
+      return;
+    }
 
-  // ── Legacy submit handler ──
-  const handleSubmitLegacy = useCallback(
-    async (quickAction?: string) => {
-      if (isSubmitting || isSubmitted) return;
-      setSubmitting(true);
+    if (sidebarColumn.tabIds.length > 0) setDockColumnCollapsed(sidebarId, false);
+    if (pageColumn.tabIds.length > 0) setDockColumnCollapsed(pageId, true);
+  }, [dockColumns, setDockColumnCollapsed]);
 
-      const sections: string[] = [];
-      if (feedbackText.trim()) sections.push(`## User Feedback\n${feedbackText.trim()}`);
-      if (quickAction) sections.push(`## User Requirement\n${quickAction}`);
-      sections.push("## Reminder\nPlease use the interactive_feedback tool again after completing this operation.");
-      if (testLogText.trim()) sections.push(`## Attachment: Test Logs\n${testLogText.trim()}`);
-      const imageList = images.map((i) => ({ path: i.path, data_url: i.dataUrl }));
-      if (imageList.length > 0) sections.push(`## Attachment: Images\n${imageList.length} image(s) attached, please review the accompanying image content.`);
-      const finalFeedback = sections.join("\n\n");
-
-      try {
-        await invoke("submit_feedback", { outputFile, feedbackText: finalFeedback, commandLogs, images: imageList });
-        setSubmitted(true);
-      } catch (e) {
-        console.error("Submit failed:", e);
-        setSubmitting(false);
-      }
-    },
-    [feedbackText, testLogText, images, outputFile, commandLogs, isSubmitting, isSubmitted, setSubmitting, setSubmitted]
-  );
-
-  // Legacy keyboard shortcut
   useEffect(() => {
-    if (isPersistent) return;
-    const handler = (e: KeyboardEvent) => {
-      if (e.ctrlKey && e.key === "Enter") {
-        e.preventDefault();
-        handleSubmitLegacy();
+    const handleKeyDown = (event: KeyboardEvent) => {
+      if (event.defaultPrevented || event.key.toLowerCase() !== "b" || !event.ctrlKey || event.shiftKey || event.metaKey) return;
+      if (event.altKey) {
+        event.preventDefault();
+        toggleDockSideFromShortcut("right");
+        return;
       }
+      event.preventDefault();
+      toggleDockSideFromShortcut("left");
     };
-    window.addEventListener("keydown", handler);
-    return () => window.removeEventListener("keydown", handler);
-  }, [handleSubmitLegacy, isPersistent]);
 
-  // Legacy mode: show success screen after submit
-  if (!isPersistent && isSubmitted) {
-    return (
-      <div className="flex flex-col items-center justify-center h-screen gap-4" style={{ background: "var(--color-bg-base)" }}>
-        <svg width="48" height="48" viewBox="0 0 24 24" fill="none" stroke="var(--color-success)" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><circle cx="12" cy="12" r="10" /><polyline points="16 8.5 10.5 15 8 12" /></svg>
-        <span className="text-sm font-medium" style={{ color: "var(--color-text-secondary)" }}>
-          Feedback submitted successfully
-        </span>
-      </div>
-    );
-  }
+    window.addEventListener("keydown", handleKeyDown);
+    return () => window.removeEventListener("keydown", handleKeyDown);
+  }, [toggleDockSideFromShortcut]);
 
-  const displayRequestName = isPersistent ? "" : requestName;
+  const [settingsOpen, setSettingsOpen] = useState(false);
+  const pushNativeWebViewBlocker = useFeedbackStore((s) => s.pushNativeWebViewBlocker);
+  const popNativeWebViewBlocker = useFeedbackStore((s) => s.popNativeWebViewBlocker);
+  const isLightTheme = useIsLightTheme();
+
+  useEffect(() => {
+    if (!settingsOpen) return;
+    pushNativeWebViewBlocker("settings-dialog");
+    return () => popNativeWebViewBlocker("settings-dialog");
+  }, [popNativeWebViewBlocker, pushNativeWebViewBlocker, settingsOpen]);
 
   return (
     <div className="flex flex-col h-screen select-none" data-app-view={appView} style={{ background: "var(--color-bg-base)" }}>
+      <PreviewBrowserEventBridge />
       {/* Content wrapper – blurred when settings overlay is open */}
       <div className={`flex flex-col flex-1 min-h-0${settingsOpen ? " content-blurred" : ""}`}>
       {/* Custom title bar */}
@@ -576,16 +742,13 @@ export function FeedbackApp() {
             <g transform="matrix(1,0,0,1,1.4995,1)"><path d="M12.364,0L14.5,2.137L7.637,9L5.5,9L5.5,6.864L12.364,0ZM13.086,2.137L12.364,1.414L6.5,7.278L6.5,8L7.223,8L13.086,2.137Z"/></g>
             <g transform="matrix(6.12323e-17,-1,1,6.12323e-17,-2,15)"><path d="M6,4.487C6,4.218 5.782,4 5.513,4C5.513,4 5.512,4 5.512,4C5.229,4 5,4.229 5,4.512C5,6.126 5,11 5,11L6,11L6,4.487Z"/></g>
           </svg>
-          {displayRequestName ? (
-            <span data-tauri-drag-region className="text-xs font-semibold truncate" style={{ color: "var(--color-text-primary)" }} title={displayRequestName}>
-              {displayRequestName}
-            </span>
+          {isMlraUiDisabled ? (
+            <div className="text-sm font-medium text-[var(--color-text-primary)]">My Last Feedback</div>
           ) : (
             <div className="app-view-toggle">
               <button
                 className={`app-view-toggle-btn${appView === "MLFB" ? " app-view-toggle-active" : ""}`}
                 onClick={() => setAppView("MLFB")}
-                title="My Last Feedback"
               >
                 <Icon name="message" size={12} />
                 MLFB
@@ -593,25 +756,50 @@ export function FeedbackApp() {
               <button
                 className={`app-view-toggle-btn${appView === "MLRA" ? " app-view-toggle-active" : ""}`}
                 onClick={() => setAppView("MLRA")}
-                title="My Long Running Agents"
               >
                 <Icon name="clock" size={12} />
                 MLRA
               </button>
             </div>
           )}
+          {appView === "MLFB" && (leftSidebarColumn.tabIds.length > 0 || leftPageColumn.tabIds.length > 0) && (
+            <div className="titlebar-dock-group">
+              {leftSidebarColumn.tabIds.length > 0 && (
+                <button
+                  onClick={() => toggleDockColumn("leftSidebar")}
+                  className={`titlebar-btn titlebar-side-toggle titlebar-side-toggle-left${!leftSidebarColumn.collapsed ? " titlebar-btn-active" : ""}`}
+                  title={!leftSidebarColumn.collapsed ? t("dock.closeLeftSidebar", "Close left sidebar") : t("dock.openLeftSidebar", "Open left sidebar")}
+                >
+                  <Icon name="sidebar" size={13} />
+                </button>
+              )}
+              {leftPageColumn.tabIds.length > 0 && (
+                <button
+                  onClick={() => toggleDockColumn("leftPage")}
+                  className={`titlebar-btn titlebar-side-toggle titlebar-side-toggle-left-page${!leftPageColumn.collapsed ? " titlebar-btn-active" : ""}`}
+                  title={!leftPageColumn.collapsed ? t("dock.closeLeftPage", "Close left page panel") : t("dock.openLeftPage", "Open left page panel")}
+                >
+                  <Icon name="page-sidebar" size={13} />
+                </button>
+              )}
+            </div>
+          )}
         </div>
 
-        {/* Center: Caller tabs - always visible in persistent mode with multiple callers */}
-        {isPersistent && appView === "MLFB" && visibleCallers.length > 1 && (
+        {/* Center: Caller tabs */}
+        {appView === "MLFB" && visibleCallers.length > 1 && (
           <div className="absolute inset-0 flex items-center justify-center pointer-events-none" style={IS_MACOS ? { left: 70 } : undefined}>
-            <div className="pointer-events-auto">
+            <div className="pointer-events-auto caller-tabs-toolbar">
+              <button onClick={() => useFeedbackStore.getState().sortCallersByName()} className="titlebar-btn caller-tabs-side-btn" title={t("titlebar.sortByWorkspace")}>
+                <CallerSortModeIcon />
+              </button>
               <CallerTabs columnCount={columnCount} />
+              <LayoutModeButton layoutMode={callerColumnMode} onCycle={cycleLayoutMode} onSelect={setCallerColumnMode} />
             </div>
           </div>
         )}
         {/* Center: MLRA role tabs when in MLRA mode with active running launcher */}
-        {isPersistent && appView === "MLRA" && (
+        {!isMlraUiDisabled && appView === "MLRA" && (
           <MLRAErrorBoundary>
           <div className="absolute inset-0 flex items-center justify-center pointer-events-none" style={IS_MACOS ? { left: 70 } : undefined}>
             <div className="pointer-events-auto">
@@ -623,33 +811,54 @@ export function FeedbackApp() {
 
         {/* Right: controls */}
         <div className="flex items-center gap-1 shrink-0 z-10 ml-auto">
-          {isPersistent && visibleCallers.length > 1 && (
-            <>
-            <button onClick={() => useFeedbackStore.getState().sortCallersByName()} className="titlebar-btn" title={t("titlebar.sortByWorkspace")}>
-              <Icon name="sort" size={13} style={{ transform: "rotate(-90deg)" }} />
-            </button>
-            <LayoutModeButton layoutMode={layoutMode} onCycle={cycleLayoutMode} onSelect={setLayoutMode} />
-            </>
+          {appView === "MLFB" && (rightPageColumn.tabIds.length > 0 || rightSidebarColumn.tabIds.length > 0) && (
+            <div className="titlebar-dock-group">
+              {rightPageColumn.tabIds.length > 0 && (
+                <button
+                  onClick={() => toggleDockColumn("rightPage")}
+                  className={`titlebar-btn titlebar-side-toggle titlebar-side-toggle-right-page${!rightPageColumn.collapsed ? " titlebar-btn-active" : ""}`}
+                  title={!rightPageColumn.collapsed ? t("dock.closeRightPage", "Close right page panel") : t("dock.openRightPage", "Open right page panel")}
+                >
+                  <Icon name="page-sidebar" size={13} style={{ transform: "scaleX(-1)" }} />
+                </button>
+              )}
+              {rightSidebarColumn.tabIds.length > 0 && (
+                <button
+                  onClick={() => toggleDockColumn("rightSidebar")}
+                  className={`titlebar-btn titlebar-side-toggle titlebar-side-toggle-right${!rightSidebarColumn.collapsed ? " titlebar-btn-active" : ""}`}
+                  title={!rightSidebarColumn.collapsed ? t("dock.closeRightSidebar", "Close right sidebar") : t("dock.openRightSidebar", "Open right sidebar")}
+                >
+                  <Icon name="sidebar" size={13} />
+                </button>
+              )}
+            </div>
           )}
+          <button
+            onClick={() => toggleTheme()}
+            className="titlebar-btn"
+            title={isLightTheme ? t("titlebar.toggleDarkTheme") : t("titlebar.toggleLightTheme")}
+          >
+            <Icon name={isLightTheme ? "moon" : "sun-full"} size={13} />
+          </button>
           <button onClick={() => setSettingsOpen(true)} className="titlebar-btn" title={t("settings.title")}>
             <Icon name="gear" size={13} />
           </button>
           <button
             onClick={toggleAlwaysOnTop}
             className={`titlebar-btn${alwaysOnTop ? " titlebar-btn-active" : ""}`}
-            title={alwaysOnTop ? "Unpin" : "Pin on top"}
+            title={alwaysOnTop ? t("titlebar.unpin", "Unpin") : t("titlebar.pinOnTop", "Pin on top")}
           >
             <Icon name="pin" size={12} fill={alwaysOnTop ? "currentColor" : "none"} />
           </button>
           {!IS_MACOS && (
             <>
-          <button onClick={() => getCurrentWindow().minimize()} className="titlebar-btn" title="Minimize">
+          <button onClick={() => getCurrentWindow().minimize()} className="titlebar-btn" title={t("titlebar.minimize", "Minimize")}>
             <Icon name="win-minimize" size={10} />
           </button>
-          <button onClick={() => getCurrentWindow().toggleMaximize()} className="titlebar-btn" title="Maximize">
+          <button onClick={() => getCurrentWindow().toggleMaximize()} className="titlebar-btn" title={t("titlebar.maximize", "Maximize")}>
             <Icon name="win-maximize" size={10} />
           </button>
-          <button onClick={() => getCurrentWindow().close()} className="titlebar-btn titlebar-close" title="Close">
+          <button onClick={() => getCurrentWindow().close()} className="titlebar-btn titlebar-close" title={t("titlebar.close", "Close")}>
             <Icon name="win-close" size={10} />
           </button>
             </>
@@ -658,146 +867,159 @@ export function FeedbackApp() {
         </div>
         {/* Row 1 end */}
 
-        {/* Row 2: MLRA second bar — ☰ launcher + PhaseToggle + Pause/Resume + Timer */}
-        {appView === "MLRA" && isPersistent && (
+        {/* Row 2: MLRA second bar — ☰ launcher + Control Mode + Pause/Resume + Timer */}
+        {!isMlraUiDisabled && appView === "MLRA" && (
           <MLRARow2 />
         )}
       </div>
 
       {/* Body */}
       <div className="flex-1 flex min-h-0">
-        {appView === "MLRA" && isPersistent ? (
+        {!isMlraUiDisabled && appView === "MLRA" ? (
           /* MLRA view — wrapped in error boundary to prevent full app crash */
           <MLRAErrorBoundary>
             <MLRAView />
           </MLRAErrorBoundary>
-        ) : isPersistent ? (
-          useMultiColumn ? (
-            /* Multi-column: parallel CallerPanels for column callers */
-            columnCallerIds.map((id) => (
-              <CallerPanel key={id} callerId={id} />
-            ))
-          ) : columnCallerIds.length === 1 ? (
-            /* Single column with multiple callers: show first from callerOrder */
-            <CallerPanel key={columnCallerIds[0]} callerId={columnCallerIds[0]} />
-          ) : activeCallerId ? (
-            /* Single column: one CallerPanel for the active caller */
-            <CallerPanel key={activeCallerId} callerId={activeCallerId} />
-          ) : (
-            /* No callers yet — show welcome page with key settings */
-            <WelcomeHome />
-          )
         ) : (
-          /* Legacy mode */
           <>
-            <div className="sidebar" />
-            <div className="flex-1 flex flex-col min-h-0 min-w-0">
-              <div ref={containerRef} className="flex-1 flex flex-col min-h-0 min-w-0 overflow-hidden" style={{ gap: 0 }}>
-                <div className="overflow-hidden flex flex-col panel-card" style={{ flex: `1 1 ${panelSizes[0] * 100}%`, minHeight: 48 }}>
-                  <SummaryPanel />
-                </div>
-                <div className="resize-handle" onMouseDown={(e) => handleMouseDown(0, e)} />
-                <div className="flex flex-col panel-card panel-feedback" style={{ flex: `1 1 ${panelSizes[1] * 100}%`, minHeight: 48 }}>
-                  <FeedbackInput />
-                </div>
-                <div className="resize-handle" onMouseDown={(e) => handleMouseDown(1, e)} />
-                <div className="flex flex-col panel-card panel-testlog" style={{ flex: `1 1 ${panelSizes[2] * 100}%`, minHeight: 36 }}>
-                  <LegacyTestLogInput />
-                </div>
-              </div>
-              <div className="flex flex-col gap-2 px-3 pb-2 pt-1 shrink-0">
-                <ImageAttachmentWidget />
-                <PromptButtons />
-                <div className="flex items-center gap-2 flex-wrap">
-                  <QuickActions onAction={handleSubmitLegacy} />
-                  <div className="flex-1" />
-                  <button
-                    onClick={() => handleSubmitLegacy()}
-                    disabled={isSubmitting}
-                    className="btn btn-primary"
-                    style={{
-                      minHeight: 36, minWidth: 140, fontSize: 13,
-                      display: "inline-flex", alignItems: "center", justifyContent: "center", gap: 6,
-                      opacity: isSubmitting ? 0.65 : 1,
-                      cursor: isSubmitting ? "not-allowed" : "pointer",
-                    }}
-                  >
-                    {isSubmitting ? (
-                      <Icon name="spinner" size={14} style={{ animation: "spin 1s linear infinite" }} />
-                    ) : (
-                      <Icon name="send" size={14} />
-                    )}
-                    {isSubmitting ? t("feedback.submitting") : t("feedback.submit")}
-                  </button>
-                </div>
-              </div>
+            <DockColumn columnId="leftSidebar" />
+            <DockColumn columnId="leftPage" />
+            <div ref={callerWorkspaceRef} className="caller-workspace">
+              {useMultiColumn ? (
+                /* Multi-column: parallel CallerPanels for column callers */
+                columnCallerIds.map((id) => (
+                  <CallerPanel key={id} callerId={id} />
+                ))
+              ) : columnCallerIds.length === 1 ? (
+                /* Single column with multiple callers: show first from callerOrder */
+                <CallerPanel key={columnCallerIds[0]} callerId={columnCallerIds[0]} />
+              ) : activeCallerId ? (
+                /* Single column: one CallerPanel for the active caller */
+                <CallerPanel key={activeCallerId} callerId={activeCallerId} />
+              ) : (
+                /* No callers yet — show welcome page with key settings */
+                <WelcomeHome />
+              )}
             </div>
+            <DockColumn columnId="rightPage" />
+            <DockColumn columnId="rightSidebar" />
           </>
         )}
       </div>
       </div>{/* end content-blurred wrapper */}
 
+      <DockDragPreview />
       <SettingsDialog open={settingsOpen} onClose={() => setSettingsOpen(false)} />
     </div>
   );
 }
 
 /** Layout mode toggle button with click-to-cycle and hover dropdown */
-type LayoutMode = "auto" | 1 | 2 | 3;
-
 function LayoutModeButton({
   layoutMode,
   onCycle,
   onSelect,
 }: {
-  layoutMode: LayoutMode;
+  layoutMode: CallerColumnMode;
   onCycle: () => void;
-  onSelect: (mode: LayoutMode) => void;
+  onSelect: (mode: CallerColumnMode) => void;
 }) {
   const { t } = useTranslation();
+  const pushNativeWebViewBlocker = useFeedbackStore((s) => s.pushNativeWebViewBlocker);
+  const popNativeWebViewBlocker = useFeedbackStore((s) => s.popNativeWebViewBlocker);
   const [showDropdown, setShowDropdown] = useState(false);
+  const [dropdownPosition, setDropdownPosition] = useState<{ left: number; top: number } | null>(null);
+  const buttonRef = useRef<HTMLButtonElement>(null);
   const hideTimer = useRef<ReturnType<typeof setTimeout>>(undefined);
+
+  const updateDropdownPosition = useCallback(() => {
+    const button = buttonRef.current;
+    if (!button) return;
+    const rect = button.getBoundingClientRect();
+    const dropdownWidth = 140;
+    const dropdownHeight = 42;
+    setDropdownPosition({
+      left: Math.min(Math.max(8, rect.left + rect.width / 2 - dropdownWidth / 2), Math.max(8, window.innerWidth - dropdownWidth - 8)),
+      top: Math.min(rect.bottom + 6, Math.max(8, window.innerHeight - dropdownHeight - 8)),
+    });
+  }, []);
+
+  useEffect(() => {
+    if (!showDropdown) return;
+    pushNativeWebViewBlocker("layout-dropdown");
+    return () => popNativeWebViewBlocker("layout-dropdown");
+  }, [popNativeWebViewBlocker, pushNativeWebViewBlocker, showDropdown]);
+
+  useEffect(() => {
+    if (!showDropdown) return;
+    updateDropdownPosition();
+    window.addEventListener("resize", updateDropdownPosition);
+    return () => window.removeEventListener("resize", updateDropdownPosition);
+  }, [showDropdown, updateDropdownPosition]);
 
   const handleMouseEnter = () => {
     clearTimeout(hideTimer.current);
+    updateDropdownPosition();
     setShowDropdown(true);
   };
   const handleMouseLeave = () => {
     hideTimer.current = setTimeout(() => setShowDropdown(false), 200);
   };
 
-  const modeLabel = (m: LayoutMode) => {
+  const modeLabel = (m: CallerColumnMode) => {
     if (m === "auto") return t("titlebar.layoutAuto", "Auto");
     return `${m}`;
   };
 
-  const modeIcon = (m: LayoutMode) => {
-    // Simple column icons
+  const modeIcon = (m: CallerColumnMode) => {
     const cols = m === "auto" ? 0 : m;
     if (cols === 0) {
-      // Auto: "A" label
       return (
-        <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+        <svg className="caller-layout-icon" width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
           <rect x="3" y="3" width="18" height="18" rx="2" />
           <text x="12" y="16" textAnchor="middle" fill="currentColor" stroke="none" fontSize="11" fontWeight="bold" fontFamily="sans-serif">A</text>
         </svg>
       );
     }
-    // Draw column dividers inside a rectangle
     const dividers: React.ReactNode[] = [];
     for (let i = 1; i < cols; i++) {
       const x = 3 + (18 / cols) * i;
       dividers.push(<line key={i} x1={x} y1="3" x2={x} y2="21" />);
     }
     return (
-      <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+      <svg className="caller-layout-icon" width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
         <rect x="3" y="3" width="18" height="18" rx="2" />
         {dividers}
       </svg>
     );
   };
 
-  const allModes: LayoutMode[] = ["auto", 1, 2, 3];
+  const allModes: CallerColumnMode[] = ["auto", 1, 2, 3];
+  const dropdown = showDropdown && dropdownPosition ? createPortal(
+    <div
+      className="layout-dropdown"
+      data-preview-overlay
+      style={{ left: dropdownPosition.left, top: dropdownPosition.top }}
+      onMouseEnter={handleMouseEnter}
+      onMouseLeave={handleMouseLeave}
+      onMouseDown={(event) => event.stopPropagation()}
+    >
+      <SettingsSegmentedControl
+        ariaLabel={t("titlebar.layoutMode", "Layout: {{mode}}", { mode: modeLabel(layoutMode) })}
+        value={String(layoutMode)}
+        onChange={(value) => {
+          onSelect(value === "auto" ? "auto" : Number(value) as CallerColumnMode);
+          setShowDropdown(false);
+        }}
+        className="settings-segmented-icon-only settings-segmented-visual-options settings-caller-column-options"
+        options={allModes.map((mode) => {
+          const label = modeLabel(mode);
+          return { id: String(mode), label, icon: modeIcon(mode), ariaLabel: `${t("titlebar.layoutMode", "Layout: {{mode}}", { mode: label })}` };
+        })}
+      />
+    </div>,
+    document.body
+  ) : null;
 
   return (
     <div
@@ -806,45 +1028,15 @@ function LayoutModeButton({
       onMouseLeave={handleMouseLeave}
     >
       <button
+        ref={buttonRef}
         onClick={onCycle}
-        className={`titlebar-btn${layoutMode !== "auto" ? " titlebar-btn-active" : ""}`}
-        title={t("titlebar.layoutMode", "Layout: {{mode}}", { mode: modeLabel(layoutMode) })}
+        className={`titlebar-btn caller-tabs-side-btn${layoutMode !== "auto" ? " titlebar-btn-active" : ""}`}
+        aria-label={t("titlebar.layoutMode", "Layout: {{mode}}", { mode: modeLabel(layoutMode) })}
       >
         {modeIcon(layoutMode)}
       </button>
-      {showDropdown && (
-        <div className="layout-dropdown">
-          {allModes.map((m) => (
-            <button
-              key={String(m)}
-              className={`layout-dropdown-item${m === layoutMode ? " active" : ""}`}
-              onClick={() => { onSelect(m); setShowDropdown(false); }}
-            >
-              {modeIcon(m)}
-              <span>{modeLabel(m)}</span>
-            </button>
-          ))}
-        </div>
-      )}
+      {dropdown}
     </div>
   );
 }
 
-/** Legacy-only test log textarea */
-function LegacyTestLogInput() {
-  const { t } = useTranslation();
-  const { testLogText, setTestLogText } = useFeedbackStore(useShallow((s) => ({
-    testLogText: s.testLogText,
-    setTestLogText: s.setTestLogText,
-  })));
-
-  return (
-    <textarea
-      value={testLogText}
-      onChange={(e) => setTestLogText(e.target.value)}
-      placeholder={t("testLog.placeholder")}
-      className="input-area flex-1"
-      style={{ minHeight: 0, height: "100%" }}
-    />
-  );
-}

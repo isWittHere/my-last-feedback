@@ -1,10 +1,11 @@
 import { useState, useEffect, useCallback } from "react";
 import { useTranslation } from "react-i18next";
-import { invoke } from "@tauri-apps/api/core";
 import i18n from "../i18n";
+import { formatAutostartError, getAutostart, setAutostartEnabled } from "../autostartSettings";
 import { useFeedbackStore } from "../store/feedbackStore";
 import { PromptIcon } from "./PromptIcons";
 import { McpConfigHelper } from "./McpConfigHelper";
+import { SettingsSegmentedControl } from "./SettingsSegmentedControl";
 
 type Theme = "dark" | "light";
 
@@ -16,12 +17,13 @@ export function WelcomeHome() {
   const { t } = useTranslation();
   const [theme, setTheme] = useState<Theme>(getStoredTheme);
   const [autostart, setAutostart] = useState(false);
+  const [autostartMessage, setAutostartMessage] = useState<string | null>(null);
   const prompts = useFeedbackStore((s) => s.prompts);
   const disabledPrompts = useFeedbackStore((s) => s.disabledPrompts);
   const togglePromptDisabled = useFeedbackStore((s) => s.togglePromptDisabled);
 
   useEffect(() => {
-    invoke<boolean>("get_autostart").then(setAutostart).catch(() => {});
+    getAutostart().then(setAutostart).catch(() => {});
   }, []);
 
   const handleThemeChange = useCallback((t: Theme) => {
@@ -32,10 +34,11 @@ export function WelcomeHome() {
 
   const handleAutostartToggle = useCallback(() => {
     const newVal = !autostart;
-    invoke("set_autostart", { enabled: newVal })
+    setAutostartMessage(null);
+    setAutostartEnabled(newVal)
       .then(() => setAutostart(newVal))
-      .catch(() => {});
-  }, [autostart]);
+      .catch((error) => setAutostartMessage(formatAutostartError(t, error)));
+  }, [autostart, t]);
 
   return (
     <div className="welcome-home">
@@ -64,43 +67,34 @@ export function WelcomeHome() {
               <span className="settings-toggle-knob" />
             </button>
           </div>
+          {autostartMessage && <div className="welcome-settings-message">{autostartMessage}</div>}
 
           {/* Theme */}
           <div className="welcome-row">
             <span className="welcome-label">{t("settings.theme")}</span>
-            <div className="settings-btn-group">
-              <button
-                className={`settings-btn-option${theme === "dark" ? " active" : ""}`}
-                onClick={() => handleThemeChange("dark")}
-              >
-                {t("settings.themeDark")}
-              </button>
-              <button
-                className={`settings-btn-option${theme === "light" ? " active" : ""}`}
-                onClick={() => handleThemeChange("light")}
-              >
-                {t("settings.themeLight")}
-              </button>
-            </div>
+            <SettingsSegmentedControl
+              ariaLabel={t("settings.theme")}
+              value={theme}
+              onChange={(value) => handleThemeChange(value as Theme)}
+              options={[
+                { id: "dark", label: t("settings.themeDark") },
+                { id: "light", label: t("settings.themeLight") },
+              ]}
+            />
           </div>
 
           {/* Language */}
           <div className="welcome-row">
             <span className="welcome-label">{t("settings.language")}</span>
-            <div className="settings-btn-group">
-              <button
-                className={`settings-btn-option${i18n.language === "zh" ? " active" : ""}`}
-                onClick={() => { i18n.changeLanguage("zh"); localStorage.setItem("mlf-lang", "zh"); }}
-              >
-                中文
-              </button>
-              <button
-                className={`settings-btn-option${i18n.language === "en" ? " active" : ""}`}
-                onClick={() => { i18n.changeLanguage("en"); localStorage.setItem("mlf-lang", "en"); }}
-              >
-                EN
-              </button>
-            </div>
+            <SettingsSegmentedControl
+              ariaLabel={t("settings.language")}
+              value={i18n.language.startsWith("zh") ? "zh" : "en"}
+              onChange={(value) => { i18n.changeLanguage(value); localStorage.setItem("mlf-lang", value); }}
+              options={[
+                { id: "zh", label: "中文" },
+                { id: "en", label: "EN" },
+              ]}
+            />
           </div>
 
           {/* Prompts */}

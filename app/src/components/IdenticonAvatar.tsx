@@ -54,14 +54,22 @@ interface IdenticonAvatarProps {
   className?: string;
   /** Optional inline style */
   style?: React.CSSProperties;
+  /** Optional background/empty-cell color override */
+  emptyColor?: string;
+  /** Optional fixed 5×5 grid rendered through the same avatar template */
+  grid?: boolean[][];
 }
 
-export function IdenticonAvatar({ alias, color, size, className, style }: IdenticonAvatarProps) {
-  const grid = useMemo(() => generateGrid(alias), [alias]);
+interface PixelAvatarProps {
+  grid: boolean[][];
+  color: string;
+  size: number;
+  emptyColor: string;
+  className?: string;
+  style?: React.CSSProperties;
+}
 
-  // Use integer viewBox (5×5) to avoid subpixel gaps between cells
-  const emptyColor = `${color}26`;
-
+function PixelAvatar({ grid, color, size, emptyColor, className, style }: PixelAvatarProps) {
   return (
     <svg
       width={size}
@@ -71,23 +79,28 @@ export function IdenticonAvatar({ alias, color, size, className, style }: Identi
       style={{ borderRadius: 2, flexShrink: 0, display: "block", ...style }}
       shapeRendering="crispEdges"
     >
-      {/* Background */}
       <rect width={5} height={5} fill={emptyColor} rx={0.4} />
-      {/* Filled blocks */}
       {grid.map((row, rowIdx) =>
-        row.map((filled, colIdx) =>
-          filled ? (
-            <rect
-              key={`${rowIdx}-${colIdx}`}
-              x={colIdx}
-              y={rowIdx}
-              width={1}
-              height={1}
-              fill={color}
-            />
-          ) : null
-        )
+        row.map((filled, colIdx) => filled ? (
+          <rect
+            key={`${rowIdx}-${colIdx}`}
+            x={colIdx}
+            y={rowIdx}
+            width={1}
+            height={1}
+            fill={color}
+          />
+        ) : null)
       )}
     </svg>
   );
+}
+
+function defaultEmptyColor(color: string): string {
+  return /^#[0-9a-f]{6}$/i.test(color) ? `${color}26` : `color-mix(in srgb, ${color} 15%, transparent)`;
+}
+
+export function IdenticonAvatar({ alias, color, size, className, style, emptyColor, grid }: IdenticonAvatarProps) {
+  const generatedGrid = useMemo(() => generateGrid(alias), [alias]);
+  return <PixelAvatar grid={grid || generatedGrid} color={color} size={size} emptyColor={emptyColor || defaultEmptyColor(color)} className={className} style={style} />;
 }

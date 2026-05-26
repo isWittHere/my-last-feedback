@@ -1,56 +1,45 @@
 import { useRef, useState, useCallback } from "react";
-import { useMLRAStore, ROLE_COLORS } from "../store/mlraStore";
-import { IdenticonAvatar } from "./IdenticonAvatar";
+import { useMLRAStore, ROLE_COLORS, type RuntimeMainRole } from "../store/mlraStore";
+import { MLRARoleIcon } from "./MLRARoleIcon";
 
 interface MLRACallerTabsProps {
   columnCount?: number;
 }
 
 interface RoleTabDef {
-  id: string;
+  id: RuntimeMainRole;
   label: string;
   color: string;
 }
 
-const PLANNING_TABS: RoleTabDef[] = [
-  { id: "planning-expert", label: "规划专家", color: ROLE_COLORS["planning-expert"] },
-  { id: "planning-inspector", label: "规划监察", color: ROLE_COLORS["planning-inspector"] },
-  { id: "ceo", label: "CEO", color: ROLE_COLORS.ceo },
-  { id: "workers", label: "Worker Pool", color: ROLE_COLORS.worker },
-];
-
-const IMPLEMENTATION_TABS: RoleTabDef[] = [
-  { id: "execution-expert", label: "执行专家", color: ROLE_COLORS["execution-expert"] },
-  { id: "execution-inspector", label: "执行监察", color: ROLE_COLORS["execution-inspector"] },
-  { id: "ceo", label: "CEO", color: ROLE_COLORS.ceo },
-  { id: "workers", label: "Worker Pool", color: ROLE_COLORS.worker },
-];
-
 /**
  * MLRA role tabs — reuses CallerTabs drag-to-reorder pattern.
- * Shows 4 fixed role tabs for expert/inspector/ceo/workers.
+ * Shows 3 runtime role tabs for expert / inspector / ceo.
  */
 export function MLRACallerTabs({ columnCount }: MLRACallerTabsProps = {}) {
   const columnOrder = useMLRAStore((s) => s.columnOrder);
   const setColumnOrder = useMLRAStore((s) => s.setColumnOrder);
   const activeLauncher = useMLRAStore((s) => s.getActiveLauncher());
-  const phaseView = useMLRAStore((s) => s.phaseView);
 
   const [dropIndex, _setDropIndex] = useState<number | null>(null);
   const dropIndexRef = useRef<number | null>(null);
   const setDropIndex = (v: number | null) => { dropIndexRef.current = v; _setDropIndex(v); };
-  const [draggingId, setDraggingId] = useState<string | null>(null);
-  const [hoveredTabId, setHoveredTabId] = useState<string | null>(null);
+  const [draggingId, setDraggingId] = useState<RuntimeMainRole | null>(null);
+  const [hoveredTabId, setHoveredTabId] = useState<RuntimeMainRole | null>(null);
   const hoverTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
-  const dragSrcId = useRef<string | null>(null);
+  const dragSrcId = useRef<RuntimeMainRole | null>(null);
   const containerRef = useRef<HTMLDivElement>(null);
   const tabRectsRef = useRef<{ left: number; width: number }[]>([]);
   const didDragRef = useRef(false);
   const pointerStartX = useRef(0);
 
-  // Phase-specific tabs
-  const phaseTabs = phaseView === "planning" ? PLANNING_TABS : IMPLEMENTATION_TABS;
+  const phaseTabs: RoleTabDef[] = [
+    { id: "expert", label: "Expert", color: ROLE_COLORS.expert },
+    { id: "inspector", label: "Inspector", color: ROLE_COLORS.inspector },
+    { id: "ceo", label: "CEO", color: ROLE_COLORS.ceo },
+  ];
   const defaultOrder = phaseTabs.map((t) => t.id);
+  const isMainRole = (item: string): item is RuntimeMainRole => defaultOrder.includes(item as RuntimeMainRole);
 
   // ── Drag handlers (all hooks must be before any early return) ──
 
@@ -86,14 +75,16 @@ export function MLRACallerTabs({ columnCount }: MLRACallerTabsProps = {}) {
 
     if (!srcId || !wasDrag || currentDropIndex == null) return;
 
-    const currentOrder = [...(columnOrder.length > 0 ? columnOrder : defaultOrder)];
+    const baseOrder = columnOrder.length > 0 ? columnOrder : defaultOrder;
+    const currentOrder = [...baseOrder.filter(isMainRole)];
     const srcIdx = currentOrder.indexOf(srcId);
     if (srcIdx === -1) return;
 
     currentOrder.splice(srcIdx, 1);
     const adjustedIdx = currentDropIndex > srcIdx ? currentDropIndex - 1 : currentDropIndex;
     currentOrder.splice(adjustedIdx, 0, srcId);
-    setColumnOrder(currentOrder);
+    const nonRoleEntries = baseOrder.filter((item) => !isMainRole(item));
+    setColumnOrder([...currentOrder, ...nonRoleEntries]);
   }, [columnOrder, defaultOrder, setColumnOrder]);
 
   // ── Early return AFTER all hooks ──
@@ -112,15 +103,12 @@ export function MLRACallerTabs({ columnCount }: MLRACallerTabsProps = {}) {
   // Determine status for each role
   const getSlotStatus = (roleId: string): string | null => {
     if (!activeLauncher) return null;
-    if (roleId === "workers") {
-      if (phaseView === "planning") return "standby";
-      return activeLauncher.agents.workers.length > 0 ? "active" : "idle";
-    }
-    const slot = activeLauncher.agents[roleId as keyof typeof activeLauncher.agents];
-    return slot?.status ?? null;
+    const slot = activeLauncher.agents[roleId as "expert" | "inspector" | "ceo"];
+    if (!slot) return null;
+    return slot.status ?? null;
   };
 
-  const handlePointerDown = (e: React.PointerEvent, tabId: string) => {
+  const handlePointerDown = (e: React.PointerEvent, tabId: RuntimeMainRole) => {
     if (e.button !== 0) return;
     e.preventDefault();
     e.stopPropagation();
@@ -202,7 +190,7 @@ export function MLRACallerTabs({ columnCount }: MLRACallerTabsProps = {}) {
           zIndex: isDragging ? 10 : isHovered ? 20 : 1,
         }}
       >
-        <IdenticonAvatar alias={tab.label} color={tab.color} size={16} />
+        <MLRARoleIcon role={tab.id} color={tab.color} size={16} />
         {isHovered && (
           <div className="caller-tab-tooltip">
             <div className="caller-tab-tooltip-name" style={{ color: tab.color }}>{tab.label}</div>

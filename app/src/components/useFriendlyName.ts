@@ -1,10 +1,10 @@
 import { useCallback } from "react";
 import { useTranslation } from "react-i18next";
-import { getFriendlyName } from "./friendlyName";
+import { agentIdentityLanguage, agentNickname } from "../identity/agentIdentity";
 
-/** Convenience hook — wraps getFriendlyName with the current i18n locale. */
+/** Convenience hook for legacy callers that only need the generated agent nickname. */
 export function useFriendlyName() {
   const { i18n } = useTranslation();
-  const lang = i18n.language === "zh" ? "zh" : "en";
-  return useCallback((alias: string) => getFriendlyName(alias, lang), [lang]);
+  const lang = agentIdentityLanguage(i18n.language);
+  return useCallback((alias: string) => agentNickname(alias, lang), [lang]);
 }

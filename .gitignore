@@ -31,7 +31,7 @@ nul
 ref-repos/
 
 # Personal notes
-#.myLastChat/
+# .myLastChat/
 
 # Test artifacts
 test-ipc-result.txt

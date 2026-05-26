@@ -2,16 +2,15 @@ import { useRef, useState, useCallback } from "react";
 import { useFeedbackStore } from "../store/feedbackStore";
 import { useShallow } from "zustand/react/shallow";
 import { useTranslation } from "react-i18next";
+import { agentIdentityLanguage, resolveAgentGlyphIdentity } from "../identity/agentIdentity";
 import { IdenticonAvatar } from "./IdenticonAvatar";
-import { useFriendlyName } from "./useFriendlyName";
 
 interface CallerTabsProps {
   columnCount?: number;
 }
 
 export function CallerTabs({ columnCount }: CallerTabsProps = {}) {
-  const { t } = useTranslation();
-  const friendlyName = useFriendlyName();
+  const { t, i18n } = useTranslation();
   const { callers, callerOrder, activeCallerId, setActiveCaller, setCallerOrder, blinkingCallerIds, sessions, hiddenCallerIds } = useFeedbackStore(useShallow((s) => ({
     callers: s.callers,
     callerOrder: s.callerOrder,
@@ -158,7 +157,8 @@ export function CallerTabs({ columnCount }: CallerTabsProps = {}) {
     }
 
         const isColumn = columnCount ? index < columnCount : caller.id === activeCallerId;
-    const aliasKey = caller.alias || caller.name;
+    const callerGlyph = resolveAgentGlyphIdentity({ agentName: caller.alias, id: caller.id }, agentIdentityLanguage(i18n.language));
+    const aliasKey = callerGlyph.avatarSeed;
     const isDragging = draggingId === caller.id;
     const tx = getTranslateX(index);
     const isHovered = hoveredCallerId === caller.id;
@@ -197,7 +197,7 @@ export function CallerTabs({ columnCount }: CallerTabsProps = {}) {
           transform: `translateX(${tx}px)`,
           transition: draggingId ? "transform 0.2s ease, opacity 0.15s" : "none",
           margin: "0 1.5px",
-          zIndex: isDragging ? 10 : isHovered ? 20 : 1,
+          zIndex: isDragging ? 120 : isHovered ? 120 : 1,
         }}
       >
         <IdenticonAvatar alias={aliasKey} color={caller.color} size={16} />
@@ -214,13 +214,11 @@ export function CallerTabs({ columnCount }: CallerTabsProps = {}) {
         )}
         {isHovered && (
           <div className="caller-tab-tooltip">
-            <div className="caller-tab-tooltip-name" style={{ color: caller.color }}>{caller.alias ? friendlyName(caller.alias) : caller.name}</div>
-            {caller.alias && (
-              <div className="caller-tab-tooltip-row">
-                <span className="caller-tab-tooltip-label">{t("tooltip.alias")}</span>
-                <span>{friendlyName(caller.alias)} ({caller.alias})</span>
-              </div>
-            )}
+            <div className="caller-tab-tooltip-name" style={{ color: caller.color }}>{callerGlyph.nickname}</div>
+            <div className="caller-tab-tooltip-row">
+              <span className="caller-tab-tooltip-label">{t("tooltip.alias")}</span>
+              <span>{callerGlyph.nickname} ({callerGlyph.agentName})</span>
+            </div>
             {caller.clientName && (
               <div className="caller-tab-tooltip-row">
                 <span className="caller-tab-tooltip-label">{t("tooltip.client")}</span>

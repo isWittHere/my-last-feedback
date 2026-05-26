@@ -43,7 +43,7 @@ Windows 上还需要安装 [Visual Studio Build Tools](https://visualstudio.micr
 
 ```
 my-last-feedback/
-├── server.mjs              # MCP Server（Node.js，stdio 传输）
+├── mcp/                    # MCP Server（Node.js，stdio 传输）
 ├── package.json            # MCP Server 依赖（@modelcontextprotocol/sdk）
 ├── mcp.json.template       # MCP 配置模板
 ├── mcp_prompts/            # 自定义 Prompt 按钮模板
@@ -163,7 +163,7 @@ bash scripts/package-win.sh
 脚本流程：
 1. `npx tauri build --no-bundle` — 编译 release 二进制
 2. 清理并创建 `dist/win-x64/my-last-feedback/` 目录
-3. 复制 `app.exe`、`server.mjs`、`package.json`、`mcp.json.template`、`SETUP.md`、`prompt.instructions.md`
+3. 复制 GUI 可执行文件为 `My Last Feedback.exe`，并复制 `mcp/`、`package.json`、`mcp.json.template`、`SETUP.md`、`prompt.instructions.md`
 4. 复制 `mcp_prompts/*.prompt.md`
 5. `npm install --omit=dev` — 安装生产依赖（仅 `@modelcontextprotocol/sdk`）
 
@@ -186,8 +186,8 @@ cd app && npx tauri build --no-bundle && cd ..
 mkdir -p dist/win-x64/my-last-feedback/mcp_prompts
 
 # 3. 复制文件
-cp app/src-tauri/target/release/app.exe  dist/win-x64/my-last-feedback/
-cp server.mjs                            dist/win-x64/my-last-feedback/
+cp app/src-tauri/target/release/app.exe  "dist/win-x64/my-last-feedback/My Last Feedback.exe"
+cp -R mcp                                dist/win-x64/my-last-feedback/
 cp package.json                          dist/win-x64/my-last-feedback/
 cp mcp.json.template                     dist/win-x64/my-last-feedback/
 cp dist/SETUP.md                         dist/win-x64/my-last-feedback/
@@ -225,7 +225,8 @@ tar -czf my-last-feedback-mac-arm64.tar.gz my-last-feedback/
 
 ```
 my-last-feedback/
-├── app.exe (或 app)           # GUI 应用程序 (~11 MB)
+├── My Last Feedback.exe       # Windows GUI 应用程序 (~11 MB)
+├── app                        # macOS/Linux GUI 应用程序（对应平台包）
 ├── server.mjs                 # MCP Server (Node.js)
 ├── package.json               # Node.js 项目配置
 ├── package-lock.json          # 依赖锁定文件
@@ -241,7 +242,7 @@ my-last-feedback/
 
 | 项目 | 大小 |
 |------|------|
-| `app.exe` | ~11 MB |
+| `My Last Feedback.exe` | ~11 MB |
 | `node_modules/` | ~21 MB |
 | 其他文件 | < 1 MB |
 | **总计** | ~32 MB |
