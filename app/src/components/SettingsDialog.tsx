@@ -284,6 +284,9 @@ export function SettingsDialog({ open, onClose }: { open: boolean; onClose: () =
     setTheme(t);
     applyTheme(t);
   }, []);
+  const handleHeaderThemeToggle = useCallback(() => {
+    handleThemeChange(theme === "light" ? "dark" : "light");
+  }, [handleThemeChange, theme]);
 
   useEffect(() => {
     if (tab !== "general") return;
@@ -1123,9 +1126,18 @@ export function SettingsDialog({ open, onClose }: { open: boolean; onClose: () =
         {/* Header */}
         <div className="settings-header">
           <span className="settings-header-title">{t("settings.title")}</span>
-          <button className="settings-close-btn" onClick={onClose}>
-            <Icon name="win-close" size={10} />
-          </button>
+          <div className="flex items-center gap-1">
+            <button
+              className="titlebar-btn"
+              onClick={handleHeaderThemeToggle}
+              title={theme === "light" ? t("titlebar.toggleDarkTheme") : t("titlebar.toggleLightTheme")}
+            >
+              <Icon name={theme === "light" ? "moon" : "sun-full"} size={13} />
+            </button>
+            <button className="settings-close-btn" onClick={onClose}>
+              <Icon name="win-close" size={10} />
+            </button>
+          </div>
         </div>
 
         <div className="settings-body">

@@ -10,12 +10,14 @@ import { cleanDisplayPath, sameWorkspacePath, workspaceBasename, workspacePathKe
 import { CatppuccinResourceIcon } from "./CatppuccinResourceIcon";
 import { Icon } from "./Icons";
 import { IdenticonAvatar } from "./IdenticonAvatar";
+import { type AgentUiDiffFile } from "./agent/AgentDiffViewer";
 
 interface ProjectResourceEntry {
   name: string;
   absolutePath: string;
   relativePath: string;
   kind: "file" | "folder";
+  ignored?: boolean;
 }
 
 function ensureTrailingSlash(value: string): string {
@@ -69,6 +71,12 @@ function workspaceDisplayName(workspacePath: string): string {
   const normalized = workspacePath.replace(/\\/g, "/").replace(/\/+$/, "");
   const segments = normalized.split("/");
   return segments[segments.length - 1] || normalized;
+}
+
+type ResourceDiffStatus = "added" | "modified" | null;
+
+function normalizeResourceRelativePath(value: string): string {
+  return value.replace(/\\/g, "/").replace(/^\.?\//, "").replace(/\/+$/, "");
 }
 
 function toResourceSelectedDocument(entry: ProjectResourceEntry, workspacePath: string): SelectedMlcDocument {
@@ -147,6 +155,7 @@ export function ProjectResourcePanel() {
   const [expanded, setExpanded] = useState<Set<string>>(() => new Set());
   const [loadingByPath, setLoadingByPath] = useState<Set<string>>(() => new Set());
   const [error, setError] = useState<string | null>(null);
+  const [diffStatusByPath, setDiffStatusByPath] = useState<Record<string, ResourceDiffStatus>>({});
 
   const targetWorkspacePath = focusedComposer?.projectDirectory || "";
   const workspaceColorCandidates = useMemo<WorkspaceColorCandidate[]>(() => workspaceColorCandidatesKey
@@ -235,12 +244,49 @@ export function ProjectResourcePanel() {
     void Promise.all(paths.map((directoryPath) => loadDirectory(directoryPath)));
   }, [loadDirectory, loadedDirectoryPaths, workspacePath]);
 
+  const loadDiffStatus = useCallback(async () => {
+    if (!workspacePath) {
+      setDiffStatusByPath({});
+      return;
+    }
+    try {
+      const files = await invoke<AgentUiDiffFile[]>("git_diff", { projectDirectory: workspacePath });
+      const next: Record<string, ResourceDiffStatus> = {};
+      for (const file of files || []) {
+        const rawStatus = (file.status || "").toLowerCase();
+        const fileStatus: ResourceDiffStatus =
+          rawStatus === "added" || rawStatus === "create" || rawStatus === "a"
+            ? "added"
+            : rawStatus === "modified" || rawStatus === "edit" || rawStatus === "m"
+              ? "modified"
+              : null;
+        if (!fileStatus) continue;
+        const normalizedPath = normalizeResourceRelativePath(file.path || "");
+        if (!normalizedPath) continue;
+        next[normalizedPath] = fileStatus;
+        const parts = normalizedPath.split("/").filter(Boolean);
+        for (let i = 1; i < parts.length; i++) {
+          const folderPath = parts.slice(0, i).join("/");
+          const current = next[folderPath];
+          if (fileStatus === "added") next[folderPath] = "added";
+          else if (!current) next[folderPath] = "modified";
+        }
+      }
+      setDiffStatusByPath(next);
+    } catch {
+      setDiffStatusByPath({});
+    }
+  }, [workspacePath]);
+
   useEffect(() => {
     setChildrenByPath({});
     setExpanded(new Set());
     setError(null);
-    if (workspacePath) loadDirectory(workspacePath);
-  }, [loadDirectory, workspacePath]);
+    if (workspacePath) {
+      loadDirectory(workspacePath);
+      loadDiffStatus();
+    }
+  }, [loadDirectory, loadDiffStatus, workspacePath]);
 
   useEffect(() => {
     const refreshWhenVisible = () => {
@@ -286,16 +332,21 @@ export function ProjectResourcePanel() {
     insertResourceLink(formatMarkdownLink(entry));
   }, [previewMarkdownEntry, toggleFolder]);
 
-  const renderRows = (entries: ProjectResourceEntry[], depth = 0): ReactNode => entries.map((entry) => {
+  const renderRows = (entries: ProjectResourceEntry[], depth = 0, inheritedIgnored = false): ReactNode => entries.map((entry) => {
     const key = workspacePathKey(entry.absolutePath);
     const isFolder = entry.kind === "folder";
     const isExpanded = expanded.has(key);
     const children = childrenByPath[key] || [];
     const isLoading = loadingByPath.has(entry.absolutePath);
+    const normalizedEntryPath = normalizeResourceRelativePath(entry.relativePath || entry.absolutePath);
+    const diffStatus = diffStatusByPath[normalizedEntryPath] || null;
+    const diffClassName = diffStatus ? `resource-tree-row-diff-${diffStatus}` : "";
+    const effectiveIgnored = inheritedIgnored || Boolean(entry.ignored);
+    const ignoredClassName = effectiveIgnored ? "resource-tree-row-ignored" : "";
     const rowStyle = resourceTreeRowStyle(depth);
     return (
       <div key={entry.absolutePath}>
-        <div className="resource-tree-row" style={rowStyle}>
+        <div className={`resource-tree-row ${diffClassName} ${ignoredClassName}`.trim()} style={rowStyle}>
           <button
             type="button"
             className="resource-tree-disclosure"
@@ -305,23 +356,26 @@ export function ProjectResourcePanel() {
           >
             {isFolder ? <Icon name={isExpanded ? "chevron-down" : "chevron-right"} size={14} /> : null}
           </button>
-          {resourceIconTheme === "catppuccin" ? (
-            <CatppuccinResourceIcon entry={entry} expanded={isExpanded} size={14} className="resource-tree-icon" />
-          ) : (
-            <Icon name={isFolder ? (isExpanded ? "folder-open" : "folder") : "file-text"} size={14} className="resource-tree-icon" />
-          )}
+          <span className="resource-tree-icon-shell">
+            {resourceIconTheme === "catppuccin" ? (
+              <CatppuccinResourceIcon entry={entry} expanded={isExpanded} size={14} className="resource-tree-icon" />
+            ) : (
+              <Icon name={isFolder ? (isExpanded ? "folder-open" : "folder") : "file-text"} size={14} className="resource-tree-icon" />
+            )}
+            {diffStatus ? <span className={`resource-tree-diff-dot resource-tree-diff-dot-${diffStatus}`} /> : null}
+          </span>
           <button type="button" className="resource-tree-name" onClick={() => handleEntryActivate(entry)}>
             {entry.name}
           </button>
           {isLoading ? <Icon name="spinner" size={12} className="animate-spin" /> : null}
-          <button type="button" className="resource-tree-insert" onClick={() => insertResourceLink(formatMarkdownLink(entry))} title={t("resources.insert", "Insert link")}> 
+          <button type="button" className="resource-tree-insert" onClick={() => insertResourceLink(formatMarkdownLink(entry))} title={t("resources.insert", "Insert link")}>
             <Icon name="arrow-bend-down-right" size={12} />
           </button>
         </div>
         {isFolder && isExpanded && children.length > 0 ? (
           <div className="resource-tree-children" style={resourceTreeChildrenStyle(depth)}>
             <div className="resource-tree-children-content" style={resourceTreeChildrenContentStyle(depth)}>
-              {renderRows(children, depth + 1)}
+              {renderRows(children, depth + 1, effectiveIgnored)}
             </div>
           </div>
         ) : null}
@@ -348,7 +402,7 @@ export function ProjectResourcePanel() {
             <span>{workspace.name}</span>
           </button>
         ))}
-        <button type="button" onClick={refreshLoadedDirectories} disabled={!workspacePath || isRefreshing} data-tooltip={t("resources.refresh", "Refresh resources")} aria-label={t("resources.refresh", "Refresh resources")}>
+        <button type="button" onClick={() => { refreshLoadedDirectories(); loadDiffStatus(); }} disabled={!workspacePath || isRefreshing} data-tooltip={t("resources.refresh", "Refresh resources")} aria-label={t("resources.refresh", "Refresh resources")}>
           <Icon name={isRefreshing ? "spinner" : "refresh"} size={11} className={isRefreshing ? "animate-spin" : undefined} />
         </button>
       </div>
