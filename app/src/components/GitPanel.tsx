@@ -8,6 +8,7 @@ import {
   getTimedGitReminderProgress,
   GIT_OPERATION_SETTINGS_EVENT,
 } from "../gitOperationSettings";
+import { useGitPanelSettings } from "../gitPanelSettings";
 import { resolveWorkspaceIdentity } from "../identity/workspaceIdentity";
 import { type AgentUiDiffFile } from "./agent/AgentDiffViewer";
 
@@ -108,6 +109,13 @@ function statusLetter(status: string | undefined): string {
   return STATUS_LETTER[status ?? ""] ?? "?";
 }
 
+function displayDiffPath(path: string, mode: "fullPath" | "fileName"): string {
+  if (mode === "fullPath") return path;
+  const normalized = path.replace(/\\/g, "/");
+  const segments = normalized.split("/").filter(Boolean);
+  return segments[segments.length - 1] || path;
+}
+
 export function GitPanel() {
   const { t } = useTranslation();
   const sessions = useFeedbackStore((s) => s.sessions);
@@ -119,6 +127,7 @@ export function GitPanel() {
     (s) => s.mlcActiveWorkspacePath,
   );
   const callers = useFeedbackStore((s) => s.callers);
+  const gitPanelSettings = useGitPanelSettings();
 
   const workspacePath =
     mlcActiveWorkspacePath ||
@@ -722,7 +731,10 @@ export function GitPanel() {
                           }
                         }}
                       >
-                        {file.path}
+                        {displayDiffPath(
+                          file.path,
+                          gitPanelSettings.diffPathDisplayMode,
+                        )}
                       </span>
                       <span className="git-diff-file-meter">
                         {buildGitDiffSegments(
