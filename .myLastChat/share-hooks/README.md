@@ -2,7 +2,7 @@
 
 A VS Code agent hook for [my-last-feedback](https://github.com/Aftersix/my-last-feedback).
 
-Automatically generates a deterministic 4-character `agent_name` from the current Copilot session ID and injects it into every conversation.
+Automatically generates a deterministic 4-character `agent_name` from the current Copilot session ID and injects it into every conversation. No need to call `register_agent` manually.
 
 ## How It Works
 

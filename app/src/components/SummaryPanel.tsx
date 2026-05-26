@@ -1,16 +1,153 @@
-import { useCallback, useEffect, useMemo, useRef, useState, type ReactNode } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState, type ComponentProps } from "react";
+import ReactMarkdown from "react-markdown";
+import remarkGfm from "remark-gfm";
+import remarkBreaks from "remark-breaks";
+import { PrismLight as SyntaxHighlighter } from "react-syntax-highlighter";
+import { oneDark } from "react-syntax-highlighter/dist/esm/styles/prism";
+import { oneLight } from "react-syntax-highlighter/dist/esm/styles/prism";
+import typescript from "react-syntax-highlighter/dist/esm/languages/prism/typescript";
+import javascript from "react-syntax-highlighter/dist/esm/languages/prism/javascript";
+import python from "react-syntax-highlighter/dist/esm/languages/prism/python";
+import bash from "react-syntax-highlighter/dist/esm/languages/prism/bash";
+import json from "react-syntax-highlighter/dist/esm/languages/prism/json";
+import css from "react-syntax-highlighter/dist/esm/languages/prism/css";
+import markdown from "react-syntax-highlighter/dist/esm/languages/prism/markdown";
+import rust from "react-syntax-highlighter/dist/esm/languages/prism/rust";
+import yaml from "react-syntax-highlighter/dist/esm/languages/prism/yaml";
+import jsx from "react-syntax-highlighter/dist/esm/languages/prism/jsx";
+import tsx from "react-syntax-highlighter/dist/esm/languages/prism/tsx";
 import { useTranslation } from "react-i18next";
 import { useFeedbackStore } from "../store/feedbackStore";
-import { agentIdentityLanguage, resolveAgentGlyphIdentity } from "../identity/agentIdentity";
 import { Icon } from "./Icons";
 import { useActiveCallerSession } from "./useActiveCallerSession";
 import { IdenticonAvatar } from "./IdenticonAvatar";
 import { useCopyToClipboard } from "./useCopyToClipboard";
 import { useFriendlyName } from "./useFriendlyName";
 import { useIsLightTheme } from "./useIsLightTheme";
-import { MarkdownContent } from "./MarkdownContent";
-import { MarkdownHeadingNav, parseMarkdownHeadings } from "./MarkdownHeadingNav";
 import type { QuestionItem } from "../store/feedbackStore";
+
+SyntaxHighlighter.registerLanguage("typescript", typescript);
+SyntaxHighlighter.registerLanguage("ts", typescript);
+SyntaxHighlighter.registerLanguage("javascript", javascript);
+SyntaxHighlighter.registerLanguage("js", javascript);
+SyntaxHighlighter.registerLanguage("python", python);
+SyntaxHighlighter.registerLanguage("py", python);
+SyntaxHighlighter.registerLanguage("bash", bash);
+SyntaxHighlighter.registerLanguage("sh", bash);
+SyntaxHighlighter.registerLanguage("shell", bash);
+SyntaxHighlighter.registerLanguage("json", json);
+SyntaxHighlighter.registerLanguage("css", css);
+SyntaxHighlighter.registerLanguage("markdown", markdown);
+SyntaxHighlighter.registerLanguage("md", markdown);
+SyntaxHighlighter.registerLanguage("rust", rust);
+SyntaxHighlighter.registerLanguage("rs", rust);
+SyntaxHighlighter.registerLanguage("yaml", yaml);
+SyntaxHighlighter.registerLanguage("yml", yaml);
+SyntaxHighlighter.registerLanguage("jsx", jsx);
+SyntaxHighlighter.registerLanguage("tsx", tsx);
+
+/** Copy-to-clipboard button inside code blocks */
+function CopyButton({ text }: { text: string }) {
+  const { copied, copy } = useCopyToClipboard(1800);
+  return (
+    <button onClick={() => copy(text)} className="code-copy-btn" title="Copy">
+      {copied ? <Icon name="check" size={14} /> : <Icon name="copy" size={14} />}
+    </button>
+  );
+}
+
+/** Custom code renderer with syntax highlighting */
+function CodeBlock({
+  className,
+  children,
+  ...rest
+}: ComponentProps<"code"> & { node?: unknown }) {
+  const { node: _node, ...filteredRest } = rest as Record<string, unknown>;
+  const match = /language-(\w+)/.exec(className || "");
+  const codeStr = String(children).replace(/\n$/, "");
+  const isLight = useIsLightTheme();
+
+  if (match) {
+    return (
+      <div className="code-block-wrapper">
+        <div className="code-block-header">
+          <span className="code-block-lang">{match[1]}</span>
+          <CopyButton text={codeStr} />
+        </div>
+        <SyntaxHighlighter
+          style={isLight ? oneLight : oneDark}
+          language={match[1]}
+          PreTag="div"
+          customStyle={{
+            margin: 0,
+            borderRadius: "0 0 4px 4px",
+            fontSize: "0.85em",
+            background: isLight ? "#fafafa" : "#181818",
+            whiteSpace: "pre-wrap",
+            wordBreak: "break-all",
+          }}
+        >
+          {codeStr}
+        </SyntaxHighlighter>
+      </div>
+    );
+  }
+
+  return (
+    <code className={className} {...filteredRest}>
+      {children}
+    </code>
+  );
+}
+
+/** Custom link renderer: web links open in browser, local paths open in file explorer / VS Code */
+function LinkRenderer({
+  href,
+  children,
+  projectDirectory,
+  ...rest
+}: ComponentProps<"a"> & { node?: unknown; projectDirectory?: string }) {
+  const { node: _node, ...filteredRest } = rest as Record<string, unknown>;
+
+  const handleClick = useCallback(
+    (e: React.MouseEvent<HTMLAnchorElement>) => {
+      if (!href) return;
+      e.preventDefault();
+
+      const isWeb = href.startsWith("http://") || href.startsWith("https://");
+      const isFileUrl = href.startsWith("file://");
+      // Windows absolute path (C:\...) or Unix absolute path (/...)
+      const isAbsolutePath = /^[a-zA-Z]:[/\\]/.test(href) || href.startsWith("/");
+
+      if (isWeb) {
+        import("@tauri-apps/plugin-opener")
+          .then(({ openUrl }) => openUrl(href))
+          .catch(() => window.open(href, "_blank", "noopener,noreferrer"));
+      } else if (isFileUrl || isAbsolutePath) {
+        const path = isFileUrl
+          ? decodeURIComponent(href.replace(/^file:\/\/\/?/, ""))
+          : href;
+        import("@tauri-apps/plugin-opener")
+          .then(({ openPath }) => openPath(path))
+          .catch(() => window.open(href, "_blank", "noopener,noreferrer"));
+      } else {
+        // Relative path — try to resolve against projectDirectory
+        const base = projectDirectory || "";
+        const resolved = base ? `${base}/${href}`.replace(/\\/g, "/") : href;
+        import("@tauri-apps/plugin-opener")
+          .then(({ openPath }) => openPath(resolved))
+          .catch(() => window.open(href, "_blank", "noopener,noreferrer"));
+      }
+    },
+    [href, projectDirectory],
+  );
+
+  return (
+    <a href={href} onClick={handleClick} style={{ cursor: "pointer" }} {...filteredRest}>
+      {children}
+    </a>
+  );
+}
 
 /** Questions form rendered at the bottom of the summary panel */
 function QuestionsForm({
@@ -46,7 +183,7 @@ function QuestionsForm({
           <>
             <IdenticonAvatar alias={callerAlias} color={callerColor || "#888"} size={22} />
             <span style={{ fontSize: 14, lineHeight: "22px", color: "var(--color-text-muted)" }}>
-              <span style={{ fontWeight: 400, color: callerColor || "var(--color-text-primary)" }}>{friendlyName(callerAlias)} ({callerAlias})</span>
+              <span style={{ fontWeight: 600, color: callerColor || "var(--color-text-primary)", fontFamily: "'Cascadia Code', 'Consolas', 'SF Mono', 'Monaco', monospace" }}>{friendlyName(callerAlias)} ({callerAlias})</span>
               {" "}{t("questions.titleWithAlias_suffix", "asks you:")}
             </span>
           </>
@@ -93,34 +230,27 @@ function QuestionsForm({
                       </button>
                     );
                   })}
-                  {isReadonly && (q.selectedOptions || []).length === 0 && (
-                    <span className="questions-no-selection">
-                      {t("questions.noSelection", "Not selected")}
-                    </span>
-                  )}
                 </div>
               )}
             </div>
             {/* Row 2: answer textarea (full width, auto-resizing) */}
-            {(!isReadonly || q.answer.trim()) && (
-              <textarea
-                className="questions-input"
-                value={q.answer}
-                readOnly={isReadonly}
-                rows={1}
-                placeholder={isReadonly ? "" : t("questions.inputPlaceholder", { label: q.label })}
-                onChange={(e) => {
-                  if (!isReadonly) {
-                    onAnswerChange(sessionId, i, e.target.value);
-                  }
-                }}
-                onInput={(e) => {
-                  const el = e.currentTarget;
-                  el.style.height = "auto";
-                  el.style.height = Math.max(el.scrollHeight, 28) + "px";
-                }}
-              />
-            )}
+            <textarea
+              className="questions-input"
+              value={q.answer}
+              readOnly={isReadonly}
+              rows={1}
+              placeholder={isReadonly ? "" : t("questions.inputPlaceholder", { label: q.label })}
+              onChange={(e) => {
+                if (!isReadonly) {
+                  onAnswerChange(sessionId, i, e.target.value);
+                }
+              }}
+              onInput={(e) => {
+                const el = e.currentTarget;
+                el.style.height = "auto";
+                el.style.height = Math.max(el.scrollHeight, 28) + "px";
+              }}
+            />
           </div>
         ))}
       </div>
@@ -128,18 +258,93 @@ function QuestionsForm({
   );
 }
 
-export function SummaryPanel({ topbarSlot }: { topbarSlot?: ReactNode }) {
-  const { t, i18n } = useTranslation();
+/** Parse headings from raw markdown text */
+interface HeadingEntry { level: number; text: string; index: number; }
+
+function parseHeadings(md: string): HeadingEntry[] {
+  const result: HeadingEntry[] = [];
+  const lines = md.split("\n");
+  let inCodeBlock = false;
+  let idx = 0;
+  for (const line of lines) {
+    // Toggle code block state on fenced code markers
+    if (/^\s*(`{3,}|~{3,})/.test(line)) {
+      inCodeBlock = !inCodeBlock;
+      continue;
+    }
+    if (inCodeBlock) continue;
+    const m = /^(#{1,4})\s+(.+)$/.exec(line);
+    if (m) {
+      result.push({ level: m[1].length, text: m[2].trim(), index: idx++ });
+    }
+  }
+  return result;
+}
+
+/** Minimap-style heading navigation bar (lines only, no text) */
+function HeadingNavBar({
+  headings,
+  scrollContainerRef,
+  activeIndex,
+}: {
+  headings: HeadingEntry[];
+  scrollContainerRef: React.RefObject<HTMLDivElement | null>;
+  activeIndex: number;
+}) {
+  if (headings.length === 0) return null;
+
+  const handleClick = (h: HeadingEntry) => {
+    const container = scrollContainerRef.current;
+    if (!container) return;
+    // Find the matching heading element inside the prose
+    const allHeadings = container.querySelectorAll("h1, h2, h3, h4");
+    const target = allHeadings[h.index] as HTMLElement | undefined;
+    if (target) {
+      target.scrollIntoView({ behavior: "smooth", block: "start" });
+    }
+  };
+
+  // Width based on heading level: h1=100%, h2=70%, h3=45%, h4=25%
+  const widthMap: Record<number, string> = { 1: "100%", 2: "70%", 3: "45%", 4: "25%" };
+  const thicknessMap: Record<number, number> = { 1: 3, 2: 2, 3: 2, 4: 1 };
+
+  return (
+    <div className="heading-nav-bar">
+      {headings.map((h, i) => (
+        <button
+          key={i}
+          className={`heading-nav-line${i === activeIndex ? " active" : ""}`}
+          style={{
+            width: widthMap[h.level] || "25%",
+            height: thicknessMap[h.level] || 1,
+          }}
+          title={h.text}
+          onClick={() => handleClick(h)}
+        />
+      ))}
+    </div>
+  );
+}
+
+export function SummaryPanel() {
+  const { t } = useTranslation();
+  const friendlyName = useFriendlyName();
+  const appMode = useFeedbackStore((s) => s.appMode);
+  const legacySummary = useFeedbackStore((s) => s.summary);
   const { session: activeSession, caller } = useActiveCallerSession();
-  const callerGlyph = useMemo(() => caller
-    ? resolveAgentGlyphIdentity({ agentName: caller.alias, id: caller.id }, agentIdentityLanguage(i18n.language))
-    : null, [caller, i18n.language]);
   const updateSessionAnswer = useFeedbackStore((s) => s.updateSessionAnswer);
   const toggleSessionOption = useFeedbackStore((s) => s.toggleSessionOption);
   const updateSessionField = useFeedbackStore((s) => s.updateSessionField);
 
-  const summary = activeSession?.summary || "";
-  const projectDirectory = activeSession?.projectDirectory || "";
+  const legacyProjectDirectory = useFeedbackStore((s) => s.projectDirectory);
+
+  const summary = appMode === "persistent"
+    ? (activeSession?.summary || "")
+    : legacySummary;
+
+  const projectDirectory = appMode === "persistent"
+    ? (activeSession?.projectDirectory || "")
+    : legacyProjectDirectory;
 
   const questions = activeSession?.questions || [];
   const isReadonly = activeSession?.status === "responded" || activeSession?.status === "cancelled";
@@ -156,7 +361,7 @@ export function SummaryPanel({ topbarSlot }: { topbarSlot?: ReactNode }) {
   const scrollRef = useRef<HTMLDivElement>(null);
   const [activeHeadingIdx, setActiveHeadingIdx] = useState(0);
 
-  const headings = useMemo(() => parseMarkdownHeadings(summary), [summary]);
+  const headings = useMemo(() => parseHeadings(summary), [summary]);
 
   // Track which heading is currently in view
   useEffect(() => {
@@ -186,6 +391,15 @@ export function SummaryPanel({ topbarSlot }: { topbarSlot?: ReactNode }) {
     if (summary) copyMarkdown(summary);
   }, [summary, copyMarkdown]);
 
+  // Memoised link renderer that carries the current projectDirectory context
+  const LinkRendererWithDir = useMemo(
+    () =>
+      (props: ComponentProps<"a"> & { node?: unknown }) => (
+        <LinkRenderer {...props} projectDirectory={projectDirectory} />
+      ),
+    [projectDirectory],
+  );
+
   return (
     <div
       className="group/summary relative flex flex-col h-full min-h-0 min-w-0"
@@ -195,55 +409,55 @@ export function SummaryPanel({ topbarSlot }: { topbarSlot?: ReactNode }) {
       } as React.CSSProperties}
     >
       {/* Content — user-select enabled for text selection */}
-      <div ref={scrollRef} className="flex-1 overflow-y-auto pt-1 pb-12 min-w-0" style={{ userSelect: "text" }}>
-        {topbarSlot && (
-          <div className="summary-topbar-overlay">
-            {topbarSlot}
+      <div ref={scrollRef} className="flex-1 overflow-y-auto px-3 pt-1 pb-12 min-w-0" style={{ userSelect: "text" }}>
+        {summary ? (
+          <>
+            {/* Agent identity header */}
+            {appMode === "persistent" && caller && (
+              <div style={{ display: "flex", alignItems: "center", gap: 6, padding: "6px 0 4px" }}>
+                <IdenticonAvatar alias={caller.alias || caller.name} color={caller.color} size={22} />
+                <span style={{ fontSize: 14, lineHeight: "22px", color: "var(--color-text-muted)" }}>
+                  <span style={{ fontWeight: 600, color: caller.color }}>{caller.alias ? friendlyName(caller.alias) : caller.name.charAt(0).toUpperCase()}</span>
+                  {" "}{t("summary.says", "says:")}
+                </span>
+              </div>
+            )}
+            <div className="prose" style={{ userSelect: "text" }}>
+              <ReactMarkdown
+                remarkPlugins={[remarkGfm, remarkBreaks]}
+                components={{ code: CodeBlock, a: LinkRendererWithDir }}
+              >
+                {summary}
+              </ReactMarkdown>
+            </div>
+          </>
+        ) : (
+          <div
+            className="flex items-center justify-center h-full"
+            style={{ color: "var(--color-text-muted)" }}
+          >
+            <span className="text-xs italic">{t("summary.empty")}</span>
           </div>
         )}
-        <div className="summary-scroll-content px-3">
-          {summary ? (
-            <>
-              {/* Agent identity header */}
-              {caller && (
-                <div className="summary-caller-header" style={{ display: "flex", alignItems: "center", gap: 6, padding: "6px 0 4px" }}>
-                  <IdenticonAvatar alias={callerGlyph?.avatarSeed || "agent"} color={caller.color} size={22} />
-                  <span style={{ fontSize: 14, lineHeight: "22px", color: "var(--color-text-muted)" }}>
-                    <span style={{ fontWeight: 600, color: caller.color }}>{callerGlyph?.nickname || callerGlyph?.agentName || ""}</span>
-                    {" "}{t("summary.says", "says:")}
-                  </span>
-                </div>
-              )}
-              <MarkdownContent markdown={summary} projectDirectory={projectDirectory} />
-            </>
-          ) : (
-            <div
-              className="flex items-center justify-center h-full"
-              style={{ color: "var(--color-text-muted)" }}
-            >
-              <span className="text-xs italic">{t("summary.empty")}</span>
-            </div>
-          )}
 
-          {/* Agent Questions Form */}
-          {questions.length > 0 && (
-            <QuestionsForm
-              questions={questions}
-              sessionId={activeSession?.id || ""}
-              isReadonly={isReadonly}
-              callerColor={activeCallerColor}
-              callerAlias={caller?.alias || ""}
-              onAnswerChange={updateSessionAnswer}
-              onToggleOption={toggleSessionOption}
-              onFillTemplate={handleFillTemplate}
-            />
-          )}
-        </div>
+        {/* Agent Questions Form */}
+        {questions.length > 0 && (
+          <QuestionsForm
+            questions={questions}
+            sessionId={activeSession?.id || ""}
+            isReadonly={isReadonly}
+            callerColor={activeCallerColor}
+            callerAlias={caller?.alias || ""}
+            onAnswerChange={updateSessionAnswer}
+            onToggleOption={toggleSessionOption}
+            onFillTemplate={handleFillTemplate}
+          />
+        )}
       </div>
 
       {/* Heading minimap nav bar — right side */}
       {summary && headings.length > 0 && (
-        <MarkdownHeadingNav
+        <HeadingNavBar
           headings={headings}
           scrollContainerRef={scrollRef}
           activeIndex={activeHeadingIdx}

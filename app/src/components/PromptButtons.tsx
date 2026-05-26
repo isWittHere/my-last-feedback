@@ -1,31 +1,28 @@
 import { useFeedbackStore } from "../store/feedbackStore";
-import { promptCommandId } from "../composer/promptCommands";
 import { PromptIcon } from "./PromptIcons";
 
 interface PromptButtonsProps {
-  onAction?: (commandText: string) => void;
+  onAction?: (content: string) => void;
 }
 
 export function PromptButtons({ onAction }: PromptButtonsProps) {
   const prompts = useFeedbackStore((s) => s.prompts);
   const disabledPrompts = useFeedbackStore((s) => s.disabledPrompts);
 
-  const visible = prompts
-    .map((prompt) => ({ prompt, commandId: promptCommandId(prompt) }))
-    .filter(({ prompt, commandId }) => commandId && !disabledPrompts.includes(prompt.name));
+  const visible = prompts.filter((p) => !disabledPrompts.includes(p.name));
   if (visible.length === 0) return null;
 
   return (
     <div className="flex items-center gap-1.5 flex-wrap">
-      {visible.map(({ prompt, commandId }) => (
+      {visible.map((p) => (
         <button
-          key={prompt.name}
+          key={p.name}
           className="btn btn-prompt"
-          title={prompt.description || prompt.name}
-          onClick={() => onAction?.(`/${commandId} `)}
+          title={p.description || p.name}
+          onClick={() => onAction?.(p.content)}
         >
-          {prompt.icon && <PromptIcon name={prompt.icon} />}
-          {prompt.name}
+          {p.icon && <PromptIcon name={p.icon} />}
+          {p.name}
         </button>
       ))}
     </div>

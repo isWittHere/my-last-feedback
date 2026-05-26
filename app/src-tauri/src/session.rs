@@ -40,54 +40,7 @@ fn hsl_to_hex(h: f64, s: f64, l: f64) -> String {
     )
 }
 
-fn normalize_workspace_path(value: &str) -> String {
-    let mut path = value.trim().to_string();
-    if let Some(rest) = path.strip_prefix(r"\\?\UNC\") {
-        path = format!(r"\\{}", rest);
-    } else if let Some(rest) = path.strip_prefix(r"\\?\") {
-        path = rest.to_string();
-    } else if let Some(rest) = path.strip_prefix("//?/UNC/") {
-        path = format!("//{}", rest);
-    } else if let Some(rest) = path.strip_prefix("//?/") {
-        path = rest.to_string();
-    }
-    path = path.replace('\\', "/");
-    while path.len() > 1 && path.ends_with('/') && !is_windows_drive_root(&path) {
-        path.pop();
-    }
-    if path.len() >= 2 {
-        let bytes = path.as_bytes();
-        if bytes[1] == b':' && bytes[0].is_ascii_alphabetic() {
-            let drive = (bytes[0] as char).to_ascii_uppercase().to_string();
-            path.replace_range(0..1, &drive);
-        }
-    }
-    path
-}
-
-fn is_windows_drive_root(path: &str) -> bool {
-    let bytes = path.as_bytes();
-    bytes.len() == 3 && bytes[1] == b':' && bytes[2] == b'/' && bytes[0].is_ascii_alphabetic()
-}
-
-fn normalize_workspace_path_key(value: &str) -> String {
-    normalize_workspace_path(value).to_lowercase()
-}
-
-fn workspace_color_key(project_directory: &str, fallback_name: &str) -> String {
-    let key = normalize_workspace_path_key(project_directory);
-    if !key.is_empty() {
-        return key;
-    }
-    normalize_workspace_path_key(fallback_name)
-}
-
 const MAX_HISTORY_SESSIONS: usize = 200;
-const DEFAULT_REQUEST_TYPE: &str = "analysis";
-
-fn default_request_type() -> String {
-    DEFAULT_REQUEST_TYPE.to_string()
-}
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(rename_all = "lowercase")]
@@ -105,17 +58,9 @@ pub struct CallerInfo {
     pub version: String,
     pub color: String,
     #[serde(default)]
-    pub workspace_key: String,
-    #[serde(default)]
     pub client_name: String,
     #[serde(default)]
     pub alias: String,
-}
-
-#[derive(Debug, Clone, Serialize, Deserialize)]
-pub struct WorkspaceColorInfo {
-    pub path: String,
-    pub color: String,
 }
 
 /// Serializable session summary for frontend
@@ -124,8 +69,6 @@ pub struct SessionSummary {
     pub id: String,
     pub caller_id: String,
     pub request_name: String,
-    #[serde(default = "default_request_type")]
-    pub request_type: String,
     pub status: SessionStatus,
     pub created_at: DateTime<Utc>,
 }
@@ -136,8 +79,6 @@ pub struct SessionDetail {
     pub id: String,
     pub caller_id: String,
     pub request_name: String,
-    #[serde(default = "default_request_type")]
-    pub request_type: String,
     pub summary: String,
     pub project_directory: String,
     pub status: SessionStatus,
@@ -146,19 +87,7 @@ pub struct SessionDetail {
     pub command_logs: Option<String>,
     pub images: Vec<serde_json::Value>,
     #[serde(default)]
-    pub mlc_attachments: Vec<MlcAttachment>,
-    #[serde(default)]
-    pub web_attachments: Vec<serde_json::Value>,
-    #[serde(default)]
     pub questions: Vec<serde_json::Value>,
-}
-
-#[derive(Debug, Clone, Serialize, Deserialize)]
-pub struct MlcAttachment {
-    #[serde(alias = "filePath")]
-    pub file_path: String,
-    pub title: String,
-    pub description: String,
 }
 
 /// Feedback payload submitted by user
@@ -170,11 +99,6 @@ pub struct FeedbackPayload {
     /// Set by backend when responding — the current caller alias (may differ from original after merge)
     #[serde(default, skip_deserializing)]
     pub caller_alias: Option<String>,
-    /// One-shot alias override requested by the UI for this submission only.
-    /// Takes priority over `caller_alias` in the MCP [System] notice.
-    /// Does NOT mutate the persistent caller record — unlike merge.
-    #[serde(default)]
-    pub transfer_to_alias: Option<String>,
 }
 
 // ── Persistence types ──
@@ -186,8 +110,6 @@ struct PersistedHistory {
     color_index: usize,
     #[serde(default)]
     caller_order: Vec<String>,
-    #[serde(default)]
-    workspace_colors: HashMap<String, WorkspaceColorInfo>,
 }
 
 #[derive(Serialize, Deserialize)]
@@ -195,8 +117,6 @@ struct PersistedSession {
     id: String,
     caller_id: String,
     request_name: String,
-    #[serde(default = "default_request_type")]
-    request_type: String,
     summary: String,
     project_directory: String,
     status: SessionStatus,
@@ -205,10 +125,6 @@ struct PersistedSession {
     command_logs: Option<String>,
     image_refs: Vec<ImageRef>,
     #[serde(default)]
-    mlc_attachments: Vec<MlcAttachment>,
-    #[serde(default)]
-    web_attachments: Vec<serde_json::Value>,
-    #[serde(default)]
     questions: Vec<serde_json::Value>,
 }
 
@@ -216,10 +132,6 @@ struct PersistedSession {
 struct ImageRef {
     file_name: String,
     mime_type: String,
-    #[serde(default)]
-    original_name: Option<String>,
-    #[serde(default)]
-    original_path: Option<String>,
 }
 
 /// Internal session with response channel
@@ -231,7 +143,6 @@ pub struct SessionEntry {
 /// Central session manager — shared across IPC and Tauri commands
 pub struct SessionManager {
     pub callers: HashMap<String, CallerInfo>,
-    pub workspace_colors: HashMap<String, WorkspaceColorInfo>,
     pub caller_order: Vec<String>,
     pub sessions: Vec<SessionEntry>,
     color_index: usize,
@@ -240,101 +151,35 @@ pub struct SessionManager {
 
 impl SessionManager {
     pub fn new(data_dir: PathBuf) -> Self {
-        let (callers, sessions, color_index, caller_order, workspace_colors) = Self::load_from_disk(&data_dir);
-        let mut mgr = Self {
-            callers,
-            workspace_colors,
-            caller_order,
-            sessions,
-            color_index,
-            data_dir,
-        };
-        mgr.reconcile_workspace_colors_from_history();
-        mgr.normalize_caller_order();
-        mgr.persist();
-        mgr
-    }
-
-    fn latest_workspace_path_for_caller(&self, caller_id: &str) -> Option<String> {
-        self.sessions
-            .iter()
-            .rev()
-            .find(|entry| entry.detail.caller_id == caller_id && !entry.detail.project_directory.trim().is_empty())
-            .map(|entry| normalize_workspace_path(&entry.detail.project_directory))
-    }
-
-    fn workspace_key_for_caller_id(&self, caller_id: &str) -> Option<String> {
-        self.latest_workspace_path_for_caller(caller_id)
-            .map(|path| normalize_workspace_path_key(&path))
-            .filter(|key| !key.is_empty())
-    }
-
-    fn effective_workspace_key_for_caller(&self, caller_id: &str, caller: &CallerInfo) -> String {
-        if !caller.workspace_key.trim().is_empty() {
-            return normalize_workspace_path_key(&caller.workspace_key);
-        }
-        self.workspace_key_for_caller_id(caller_id)
-            .unwrap_or_else(|| workspace_color_key("", &caller.name))
-    }
-
-    fn ensure_workspace_color(&mut self, workspace_key: &str, workspace_path: &str, fallback_path: &str, legacy_color: Option<String>) -> String {
-        let normalized_workspace_path = normalize_workspace_path(workspace_path);
-        if let Some(existing) = self.workspace_colors.get_mut(workspace_key) {
-            if !normalized_workspace_path.trim().is_empty() && existing.path != normalized_workspace_path {
-                existing.path = normalized_workspace_path;
-            }
-            return existing.color.clone();
-        }
-
-        let color = legacy_color
-            .filter(|value| !value.trim().is_empty())
-            .unwrap_or_else(|| {
-                let color = generate_color(self.color_index);
-                self.color_index += 1;
-                color
-            });
-        self.workspace_colors.insert(workspace_key.to_string(), WorkspaceColorInfo {
-            path: if normalized_workspace_path.trim().is_empty() { fallback_path.to_string() } else { normalized_workspace_path },
-            color: color.clone(),
-        });
-        color
-    }
-
-    fn reconcile_workspace_colors_from_history(&mut self) {
-        let mut sorted_ids: Vec<String> = self.callers.keys().cloned().collect();
+        let (mut callers, sessions, _old_color_index, caller_order) = Self::load_from_disk(&data_dir);
+        // Reassign colors using golden-angle HSL for better separation
+        let mut ws_index: HashMap<String, usize> = HashMap::new();
+        let mut idx: usize = 0;
+        let mut sorted_ids: Vec<_> = callers.keys().cloned().collect();
         sorted_ids.sort();
-
-        for caller_id in &sorted_ids {
-            let caller = match self.callers.get(caller_id) {
-                Some(caller) => caller.clone(),
-                None => continue,
-            };
-            let workspace_path = self.latest_workspace_path_for_caller(caller_id).unwrap_or_default();
-            let workspace_key = if !caller.workspace_key.trim().is_empty() {
-                normalize_workspace_path_key(&caller.workspace_key)
-            } else {
-                workspace_color_key(&workspace_path, &caller.name)
-            };
-            if workspace_key.is_empty() {
-                continue;
-            }
-            self.ensure_workspace_color(&workspace_key, &workspace_path, &caller.name, Some(caller.color));
-        }
-
-        let caller_ids: Vec<String> = self.callers.keys().cloned().collect();
-        for caller_id in caller_ids {
-            let workspace_key = match self.callers.get(&caller_id) {
-                Some(caller) => self.effective_workspace_key_for_caller(&caller_id, caller),
-                None => continue,
-            };
-            if let Some(workspace) = self.workspace_colors.get(&workspace_key) {
-                if let Some(caller) = self.callers.get_mut(&caller_id) {
-                    caller.workspace_key = workspace_key;
-                    caller.color = workspace.color.clone();
+        for id in &sorted_ids {
+            if let Some(c) = callers.get(id) {
+                if !ws_index.contains_key(&c.name) {
+                    ws_index.insert(c.name.clone(), idx);
+                    idx += 1;
                 }
             }
         }
-        self.color_index = self.workspace_colors.len().max(self.color_index);
+        for caller in callers.values_mut() {
+            if let Some(&i) = ws_index.get(&caller.name) {
+                caller.color = generate_color(i);
+            }
+        }
+        let mut mgr = Self {
+            callers,
+            caller_order,
+            sessions,
+            color_index: idx,
+            data_dir,
+        };
+        mgr.normalize_caller_order();
+        mgr.persist();
+        mgr
     }
 
     fn normalize_caller_order(&mut self) {
@@ -370,54 +215,43 @@ impl SessionManager {
     /// Register or get a caller. Assigns a color from the pool on first sight.
     /// The `alias` parameter is used to distinguish different agents within the same workspace.
     /// Color is assigned per workspace name, so agents in the same workspace share color.
-    pub fn ensure_caller(&mut self, name: &str, version: &str, client_name: &str, alias: &str, project_directory: &str) -> CallerInfo {
-        let normalized_project_directory = normalize_workspace_path(project_directory);
+    pub fn ensure_caller(&mut self, name: &str, version: &str, client_name: &str, alias: &str) -> CallerInfo {
         // Caller ID includes alias so different agents are separate callers
         let id_input = if alias.is_empty() { name.to_string() } else { format!("{}:{}", name, alias) };
         let id = format!("caller_{:x}", md5_simple(&id_input));
-        let workspace_key = workspace_color_key(&normalized_project_directory, name);
-        if let Some(existing) = self.callers.get(&id).cloned() {
-            let color = self.ensure_workspace_color(&workspace_key, &normalized_project_directory, name, Some(existing.color.clone()));
-            let mut result = existing;
-            let mut changed = false;
-            if let Some(caller) = self.callers.get_mut(&id) {
-                if caller.client_name.is_empty() && !client_name.is_empty() {
-                    caller.client_name = client_name.to_string();
-                    result.client_name = client_name.to_string();
-                    changed = true;
-                }
-                if caller.alias.is_empty() && !alias.is_empty() {
-                    caller.alias = alias.to_string();
-                    result.alias = alias.to_string();
-                    changed = true;
-                }
-                if caller.workspace_key != workspace_key {
-                    caller.workspace_key = workspace_key.clone();
-                    result.workspace_key = workspace_key.clone();
-                    changed = true;
-                }
-                if caller.color != color {
-                    caller.color = color.clone();
-                    result.color = color.clone();
-                    changed = true;
-                }
+        if let Some(existing) = self.callers.get(&id) {
+            let mut result = existing.clone();
+            // Update client_name if it was previously empty
+            if result.client_name.is_empty() && !client_name.is_empty() {
+                self.callers.get_mut(&id).unwrap().client_name = client_name.to_string();
+                result.client_name = client_name.to_string();
+                self.persist();
+            }
+            // Update alias if it was previously empty
+            if result.alias.is_empty() && !alias.is_empty() {
+                self.callers.get_mut(&id).unwrap().alias = alias.to_string();
+                result.alias = alias.to_string();
+                self.persist();
             }
             if !self.caller_order.contains(&id) {
                 self.caller_order.push(id.clone());
-                changed = true;
-            }
-            if changed {
                 self.persist();
             }
             return result;
         }
-        let color = self.ensure_workspace_color(&workspace_key, &normalized_project_directory, name, None);
+        // Assign color: reuse existing workspace color, or generate new via golden-angle
+        let color = if let Some(existing_ws) = self.callers.values().find(|c| c.name == name) {
+            existing_ws.color.clone()
+        } else {
+            let c = generate_color(self.color_index);
+            self.color_index += 1;
+            c
+        };
         let caller = CallerInfo {
             id: id.clone(),
             name: name.to_string(),
             version: version.to_string(),
             color,
-            workspace_key,
             client_name: client_name.to_string(),
             alias: alias.to_string(),
         };
@@ -433,7 +267,6 @@ impl SessionManager {
         caller_id: String,
         session_id: String,
         request_name: String,
-        request_type: String,
         summary: String,
         project_directory: String,
         questions: Vec<serde_json::Value>,
@@ -443,16 +276,13 @@ impl SessionManager {
             id: session_id.clone(),
             caller_id,
             request_name,
-            request_type,
             summary,
-            project_directory: normalize_workspace_path(&project_directory),
+            project_directory,
             status: SessionStatus::Pending,
             created_at: Utc::now(),
             feedback_text: None,
             command_logs: None,
             images: Vec::new(),
-            mlc_attachments: Vec::new(),
-            web_attachments: Vec::new(),
             questions,
         };
         self.sessions.push(SessionEntry {
@@ -501,7 +331,6 @@ impl SessionManager {
                 id: s.detail.id.clone(),
                 caller_id: s.detail.caller_id.clone(),
                 request_name: s.detail.request_name.clone(),
-                request_type: s.detail.request_type.clone(),
                 status: s.detail.status,
                 created_at: s.detail.created_at,
             })
@@ -516,7 +345,6 @@ impl SessionManager {
                 id: s.detail.id.clone(),
                 caller_id: s.detail.caller_id.clone(),
                 request_name: s.detail.request_name.clone(),
-                request_type: s.detail.request_type.clone(),
                 status: s.detail.status,
                 created_at: s.detail.created_at,
             })
@@ -530,20 +358,10 @@ impl SessionManager {
             .iter()
             .map(|s| {
                 let mut detail = s.detail.clone();
-                detail.images = detail
-                    .images
-                    .iter()
-                    .enumerate()
-                    .map(|(index, img)| {
-                        serde_json::json!({
-                            "placeholder": true,
-                            "file": img.get("file").and_then(|v| v.as_str()).unwrap_or(""),
-                            "type": img.get("type").and_then(|v| v.as_str()).unwrap_or("image/png"),
-                            "name": img.get("name").and_then(|v| v.as_str()).unwrap_or(""),
-                            "path": img.get("path").and_then(|v| v.as_str()).unwrap_or(""),
-                            "index": index,
-                        })
-                    })
+                // Count images but don't load actual data
+                let count = detail.images.len();
+                detail.images = (0..count)
+                    .map(|_| serde_json::json!({ "placeholder": true }))
                     .collect();
                 detail
             })
@@ -569,13 +387,7 @@ impl SessionManager {
                                     .get("type")
                                     .and_then(|v| v.as_str())
                                     .unwrap_or("image/png");
-                                serde_json::json!({
-                                    "type": mime,
-                                    "data": data,
-                                    "file": file_name,
-                                    "name": img.get("name").and_then(|v| v.as_str()).unwrap_or(""),
-                                    "path": img.get("path").and_then(|v| v.as_str()).unwrap_or(""),
-                                })
+                                serde_json::json!({ "type": mime, "data": data })
                             } else {
                                 img.clone()
                             }
@@ -593,8 +405,6 @@ impl SessionManager {
         &mut self,
         session_id: &str,
         payload: FeedbackPayload,
-        mlc_attachments: Vec<MlcAttachment>,
-        web_attachments: Vec<serde_json::Value>,
     ) -> Result<(), String> {
         let images_dir = self.images_dir();
         let _ = std::fs::create_dir_all(&images_dir);
@@ -617,8 +427,6 @@ impl SessionManager {
         entry.detail.status = SessionStatus::Responded;
         entry.detail.feedback_text = Some(payload.interactive_feedback.clone());
         entry.detail.command_logs = Some(payload.command_logs.clone());
-        entry.detail.mlc_attachments = mlc_attachments;
-        entry.detail.web_attachments = web_attachments;
 
         // Save images to separate files; store file references in detail
         let mut image_refs = Vec::new();
@@ -634,8 +442,6 @@ impl SessionManager {
                 image_refs.push(serde_json::json!({
                     "type": mime,
                     "file": file_name,
-                    "name": img.get("name").and_then(|v| v.as_str()).unwrap_or(""),
-                    "path": img.get("path").and_then(|v| v.as_str()).unwrap_or(""),
                 }));
             }
         }
@@ -711,34 +517,9 @@ impl SessionManager {
     pub fn update_caller_color(&mut self, caller_id: &str, color: String) -> Result<(), String> {
         let caller = self
             .callers
-            .get(caller_id)
+            .get_mut(caller_id)
             .ok_or_else(|| format!("Caller not found: {}", caller_id))?;
-        let workspace_key = self.effective_workspace_key_for_caller(caller_id, caller);
-        let workspace_path = self.latest_workspace_path_for_caller(caller_id).unwrap_or_else(|| caller.name.clone());
-
-        if let Some(workspace) = self.workspace_colors.get_mut(&workspace_key) {
-            workspace.color = color.clone();
-            if workspace.path.trim().is_empty() {
-                workspace.path = workspace_path.clone();
-            }
-        } else {
-            self.workspace_colors.insert(workspace_key.clone(), WorkspaceColorInfo { path: normalize_workspace_path(&workspace_path), color: color.clone() });
-        }
-
-        let caller_ids: Vec<String> = self
-            .callers
-            .iter()
-            .filter_map(|(id, caller)| {
-                (self.effective_workspace_key_for_caller(id, caller) == workspace_key).then(|| id.clone())
-            })
-            .collect();
-
-        for id in caller_ids {
-            if let Some(caller) = self.callers.get_mut(&id) {
-                caller.workspace_key = workspace_key.clone();
-                caller.color = color.clone();
-            }
-        }
+        caller.color = color;
         self.persist();
         Ok(())
     }
@@ -951,16 +732,6 @@ impl SessionManager {
                                 .and_then(|v| v.as_str())
                                 .unwrap_or("image/png")
                                 .to_string(),
-                            original_name: img
-                                .get("name")
-                                .and_then(|v| v.as_str())
-                                .filter(|value| !value.trim().is_empty())
-                                .map(|value| value.to_string()),
-                            original_path: img
-                                .get("path")
-                                .and_then(|v| v.as_str())
-                                .filter(|value| !value.trim().is_empty())
-                                .map(|value| value.to_string()),
                         })
                     })
                     .collect();
@@ -969,7 +740,6 @@ impl SessionManager {
                     id: entry.detail.id.clone(),
                     caller_id: entry.detail.caller_id.clone(),
                     request_name: entry.detail.request_name.clone(),
-                    request_type: entry.detail.request_type.clone(),
                     summary: entry.detail.summary.clone(),
                     project_directory: entry.detail.project_directory.clone(),
                     status: entry.detail.status,
@@ -977,8 +747,6 @@ impl SessionManager {
                     feedback_text: entry.detail.feedback_text.clone(),
                     command_logs: entry.detail.command_logs.clone(),
                     image_refs,
-                    mlc_attachments: entry.detail.mlc_attachments.clone(),
-                    web_attachments: entry.detail.web_attachments.clone(),
                     questions: entry.detail.questions.clone(),
                 }
             })
@@ -989,7 +757,6 @@ impl SessionManager {
             sessions: persisted_sessions,
             color_index: self.color_index,
             caller_order: self.caller_order.clone(),
-            workspace_colors: self.workspace_colors.clone(),
         };
 
         if let Ok(json) = serde_json::to_string_pretty(&history) {
@@ -1002,17 +769,17 @@ impl SessionManager {
     /// Load callers + sessions from disk
     fn load_from_disk(
         data_dir: &Path,
-    ) -> (HashMap<String, CallerInfo>, Vec<SessionEntry>, usize, Vec<String>, HashMap<String, WorkspaceColorInfo>) {
+    ) -> (HashMap<String, CallerInfo>, Vec<SessionEntry>, usize, Vec<String>) {
         let history_path = data_dir.join("history.json");
         if !history_path.exists() {
-            return (HashMap::new(), Vec::new(), 0, Vec::new(), HashMap::new());
+            return (HashMap::new(), Vec::new(), 0, Vec::new());
         }
 
         let content = match std::fs::read_to_string(&history_path) {
             Ok(c) => c,
             Err(e) => {
                 eprintln!("[Persist] Failed to read history: {}", e);
-                return (HashMap::new(), Vec::new(), 0, Vec::new(), HashMap::new());
+                return (HashMap::new(), Vec::new(), 0, Vec::new());
             }
         };
 
@@ -1020,11 +787,11 @@ impl SessionManager {
             Ok(h) => h,
             Err(e) => {
                 eprintln!("[Persist] Failed to parse history: {}", e);
-                return (HashMap::new(), Vec::new(), 0, Vec::new(), HashMap::new());
+                return (HashMap::new(), Vec::new(), 0, Vec::new());
             }
         };
 
-        let sessions: Vec<SessionEntry> = history
+        let sessions = history
             .sessions
             .into_iter()
             .map(|ps| {
@@ -1035,8 +802,6 @@ impl SessionManager {
                         serde_json::json!({
                             "type": r.mime_type,
                             "file": r.file_name,
-                            "name": r.original_name.clone().unwrap_or_default(),
-                            "path": r.original_path.clone().unwrap_or_default(),
                         })
                     })
                     .collect();
@@ -1046,16 +811,13 @@ impl SessionManager {
                         id: ps.id,
                         caller_id: ps.caller_id,
                         request_name: ps.request_name,
-                        request_type: ps.request_type,
                         summary: ps.summary,
-                        project_directory: normalize_workspace_path(&ps.project_directory),
+                        project_directory: ps.project_directory,
                         status: ps.status,
                         created_at: ps.created_at,
                         feedback_text: ps.feedback_text,
                         command_logs: ps.command_logs,
                         images,
-                        mlc_attachments: ps.mlc_attachments,
-                        web_attachments: ps.web_attachments,
                         questions: ps.questions,
                     },
                     response_tx: None,
@@ -1063,32 +825,13 @@ impl SessionManager {
             })
             .collect();
 
-        let callers: HashMap<String, CallerInfo> = history
-            .callers
-            .into_iter()
-            .map(|(id, mut caller)| {
-                caller.workspace_key = normalize_workspace_path_key(&caller.workspace_key);
-                (id, caller)
-            })
-            .collect();
-        let workspace_colors: HashMap<String, WorkspaceColorInfo> = history
-            .workspace_colors
-            .into_iter()
-            .map(|(key, mut workspace)| {
-                let normalized_key = normalize_workspace_path_key(&key);
-                workspace.path = normalize_workspace_path(&workspace.path);
-                (normalized_key, workspace)
-            })
-            .filter(|(key, _)| !key.is_empty())
-            .collect();
-
         eprintln!(
             "[Persist] Loaded {} callers, {} sessions",
-            callers.len(),
-            sessions.len()
+            history.callers.len(),
+            history.color_index
         );
 
-        (callers, sessions, history.color_index, history.caller_order, workspace_colors)
+        (history.callers, sessions, history.color_index, history.caller_order)
     }
 }
 

@@ -1,150 +1,174 @@
-# My Last Feedback — Setup Guide (Latest)
+# My Last Feedback — Setup Guide
 
-A lightweight MCP feedback GUI for AI-assisted development tools.
-
-This guide includes complete Codex usage steps:
-- Streamable HTTP MCP setup (`tool_timeout_sec` supported)
-- User-compatible hooks package installation
-- Optional desktop quick launch and auto-start
+A lightweight MCP feedback GUI for AI-assisted development tools (Cursor, VS Code Copilot, Cline, Windsurf).
 
 ---
 
 ## Prerequisites
 
-- **Node.js 18+** — https://nodejs.org
+- **Node.js 18+** — [https://nodejs.org](https://nodejs.org)
 
 ---
 
-## 1) Install Dependencies
+## Quick Start
 
-Run in repository root:
+### 1. Install Dependencies
+
+Open a terminal in this directory and run:
 
 ```bash
 npm install
 ```
 
----
+### 2. Configure Your AI Tool
 
-## 2) Start MCP Server (Recommended)
+#### Cursor
 
-Use Streamable HTTP entry:
-
-```bash
-npm run start:http
-```
-
-Default endpoint:
-
-- `http://127.0.0.1:3838/mcp`
-
----
-
-## 3) Codex MCP Configuration
-
-Edit `~/.codex/config.toml` and add/update:
-
-```toml
-[mcp_servers."my-last-feedback"]
-type = "sse"
-url = "http://127.0.0.1:3838/mcp"
-tool_timeout_sec = 64800
-
-[mcp_servers."my-last-feedback".tools.interactive_feedback]
-approval_mode = "approve"
-```
-
-`64800` seconds = 18 hours.
-
----
-
-## 4) Codex Hooks Configuration
-
-Use packaged files in `dist/codex-hooks/`:
-
-- `hooks.json` (generic template)
-- `hooks.local.example.json` (local example)
-- `scripts/inject-agent-name.mjs`
-- `README.md` (install instructions)
-
-Recommended install:
-
-1. Copy `dist/codex-hooks/scripts/inject-agent-name.mjs` to:
-   `C:\Users\<YOUR_USER>\.codex\hooks\scripts\inject-agent-name.mjs`
-2. Copy `dist/codex-hooks/hooks.json` to:
-   `C:\Users\<YOUR_USER>\.codex\hooks.json`
-3. Replace `<YOUR_USER>` in `hooks.json`.
-
-If only for local machine, you can use `hooks.local.example.json` directly as `hooks.json`.
-
----
-
-## 5) Agent Instructions
-
-Use `dist/prompt.instructions.md` as Codex instruction source.
-
----
-
-## 6) Optional: Desktop Quick Launch
-
-You can create launchers for users:
-
-- Visible launch via `.cmd`
-- Silent launch via `.vbs`
-
-Typical silent launch command:
-
-```powershell
-Start-Process -WindowStyle Hidden -FilePath npm.cmd -ArgumentList 'run','start:http' -WorkingDirectory 'E:\Dev\my-last-feedback'
-```
-
----
-
-## 7) Optional: Auto-Start on Login (Windows)
-
-If Scheduled Task is unavailable due to permission limits, use:
-
-- `HKCU\Software\Microsoft\Windows\CurrentVersion\Run`
-
-Register a hidden startup command that executes `npm run start:http`.
-
----
-
-## Legacy STDIO Mode (Compatibility)
-
-If your client only supports process-based MCP:
+Add to `~/.cursor/mcp.json` (global) or `<project>/.cursor/mcp.json` (per-project):
 
 ```json
 {
   "mcpServers": {
     "my-last-feedback": {
       "command": "node",
-      "args": ["/path/to/my-last-feedback/mcp/mlfb/index.mjs"]
+      "args": [
+        "C:/path/to/my-last-feedback/server.mjs"
+      ],
+      "timeout": 600,
+      "autoApprove": [
+        "interactive_feedback"
+      ]
     }
   }
 }
 ```
+
+#### VS Code (Copilot)
+
+Add to `<project>/.vscode/mcp.json`:
+
+```json
+{
+  "servers": {
+    "my-last-feedback": {
+      "command": "node",
+      "args": [
+        "C:/path/to/my-last-feedback/server.mjs"
+      ],
+      "timeout": 600
+    }
+  }
+}
+```
+
+#### Cline / Windsurf
+
+Use the same `command` / `args` pattern in the respective tool's MCP settings.
+
+> **Important**: Replace `C:/path/to/my-last-feedback` with the actual path where you placed this folder.
+
+See `mcp.json.template` for a ready-to-use template.
+
+### 3. Add Agent Instructions
+
+Copy `prompt.instructions.md` to your AI tool's instruction directory:
+
+| Tool | Location |
+|------|----------|
+| Cursor | `<project>/.cursor/rules/interactive_feedback.instructions.md` |
+| VS Code | `<project>/.github/copilot-instructions.md` or `.vscode/` prompts |
+| Cline | Custom instructions in settings |
+
+This tells the AI agent to call `interactive_feedback` before completing requests.
+
+### 4. Done!
+
+The agent will now open a feedback window whenever it needs your confirmation.
+
+---
+
+## Directory Structure
+
+```
+my-last-feedback/
+├── app.exe / app          # GUI application (Windows / macOS)
+├── server.mjs             # MCP server (Node.js)
+├── package.json           # Node dependencies
+├── node_modules/          # (created after npm install)
+├── mcp.json.template      # MCP config template
+├── prompt.instructions.md # Agent instruction rules
+├── SETUP.md               # This file
+└── mcp_prompts/           # Custom prompt buttons
+    ├── compact.prompt.md
+    └── knowledge_maker.prompt.md
+```
+
+---
+
+## Custom Prompt Buttons
+
+Place `.prompt.md` files in the `mcp_prompts/` folder. Each file uses YAML front matter:
+
+```markdown
+---
+name: "Button Label"
+description: "Tooltip text"
+icon: "book"
+---
+Your prompt content here...
+```
+
+### Available Icons
+
+> book, file, file-text, edit, code, terminal, search, message, chat, brain, lightbulb, star, folder, settings, database, link, list, check, play, zap, compass, layers, globe, target, shield, clock, tag, tool, box, hash, wand, sparkles, clipboard, rocket, bug, summary, knowledge, magic, refresh, send, download, upload, alert, info
+
+Buttons appear at the bottom of the feedback window. Clicking a button sends its content as feedback.
+
+Prompts reload automatically when the window regains focus — no restart needed.
+
+You can enable/disable individual prompts in **Settings → Prompts**.
+
+---
+
+## Settings
+
+Click the ⚙ gear icon in the title bar to access:
+
+- **Display**: Theme (Dark/Light) and Language (English/中文)
+- **Prompts**: Enable/disable individual prompt buttons
+- **About**: Version info
+
+---
+
+## Image Attachments
+
+| Method | How |
+|--------|-----|
+| File picker | Click **📎 Attach** |
+| Clipboard | **Ctrl+V** in the text area |
+| Drag & drop | Drag files onto the window |
+
+Limits: 5 images max, 5 MB each, 20 MB total. Formats: PNG, JPG, GIF, WEBP, BMP.
 
 ---
 
 ## Troubleshooting
 
 | Issue | Solution |
-|---|---|
-| `EADDRINUSE 127.0.0.1:3838` | Another instance is running. Stop old process or change port using `MLFB_MCP_PORT`. |
-| Tool call timeout | Verify `tool_timeout_sec` is configured on `my-last-feedback` MCP server entry. |
-| Hook not triggered | Check `~/.codex/hooks.json` path and script command path. |
-| GUI not showing | Ensure desktop app binary is available and MCP server can launch/connect to it. |
+|-------|----------|
+| Window doesn't appear | Check that `app.exe` (or `app`) is in the same directory as `server.mjs` |
+| "Cannot find module" error | Run `npm install` in this directory |
+| Agent doesn't call the tool | Ensure `prompt.instructions.md` is added to your agent instructions |
+| Port conflict | The app uses ports 19850–19860 for IPC |
 
 ---
 
 ## Environment Variables
 
-| Variable | Description | Default |
-|---|---|---|
-| `MLFB_MCP_HOST` | HTTP bind host | `127.0.0.1` |
-| `MLFB_MCP_PORT` | HTTP bind port | `3838` |
-| `MLF_APP_PATH` | Override GUI binary path | auto-detect |
-| `MLF_CALLER_NAME` | Caller display name | `codex` |
+| Variable | Description |
+|----------|-------------|
+| `MLF_APP_PATH` | Override the GUI binary path |
+| `MLF_CALLER_NAME` | Set caller display name |
 
 ---
 

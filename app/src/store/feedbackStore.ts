@@ -1,8 +1,5 @@
 import { create } from "zustand";
 import { invoke } from "@tauri-apps/api/core";
-import { readSessionListMode, readShowSessionNavigationAttachmentDots, readUseSessionNavigationColorCards, saveSessionListMode, saveShowSessionNavigationAttachmentDots, saveUseSessionNavigationColorCards, type SessionListMode } from "../sessionNavigationSettings";
-import { isAgentUiDisabled } from "../agent/agentUiFlags";
-import { normalizeWorkspacePath, sameWorkspacePath, workspacePathKey } from "../workspace/workspacePaths";
 
 export interface ImageAttachment {
   path: string;
@@ -18,26 +15,9 @@ export interface PromptItem {
   icon: string;
 }
 
-export type CallerColumnMode = "auto" | 1 | 2 | 3;
-
 // ── Multi-session types ──
 
 export type SessionStatus = "pending" | "responded" | "cancelled";
-
-export const REQUEST_TYPES = [
-  "analysis",
-  "completion",
-  "planning",
-  "document",
-] as const;
-
-export type RequestType = typeof REQUEST_TYPES[number] | "default";
-
-export function normalizeRequestType(value: unknown): RequestType {
-  if (typeof value === "string" && (REQUEST_TYPES as readonly string[]).includes(value)) return value as RequestType;
-  if (value === "default") return "default";
-  return "default";
-}
 
 export interface QuestionItem {
   label: string;
@@ -51,194 +31,22 @@ export interface Caller {
   name: string;
   version: string;
   color: string;
-  workspaceKey?: string;
   pendingCount: number;
   clientName?: string;
   alias?: string;
 }
 
-export type GitActionType = "commit-before" | "commit" | "commit-push" | "create-branch";
+export type GitActionType = "commit" | "commit-push" | "create-branch";
 
 export interface GitAction {
   type: GitActionType;
   branchName?: string;
 }
 
-export interface MlcAttachment {
-  filePath: string;
-  title: string;
-  description: string;
-}
-
-export interface LocatorCandidate {
-  kind: "css" | "playwright-role" | "playwright-label" | "playwright-text" | "testid" | "xpath";
-  value: string;
-  confidence: "high" | "medium" | "low";
-  reason: string;
-}
-
-export interface PickedElement {
-  sourceUrl: string;
-  frameUrl?: string;
-  tagName: string;
-  text: string;
-  role?: string;
-  ariaLabel?: string;
-  title?: string;
-  href?: string;
-  src?: string;
-  id?: string;
-  className?: string;
-  name?: string;
-  placeholder?: string;
-  inputType?: string;
-  selector: string;
-  selectorType: "id" | "testid" | "data-testid" | "data-test" | "data-cy" | "aria-label" | "name" | "placeholder" | "class" | "role" | "aria" | "css" | "nth";
-  locatorCandidates: LocatorCandidate[];
-  attributes?: Record<string, string>;
-  domPath?: string;
-  xpath?: string;
-  styleSummary?: Record<string, string>;
-  rect?: {
-    x: number;
-    y: number;
-    width: number;
-    height: number;
-  };
-  viewport?: {
-    width: number;
-    height: number;
-  };
-  screenshot?: ElementScreenshotRef;
-  htmlSnippet?: string;
-  capturedAt: string;
-}
-
-export interface ElementScreenshotRef {
-  id: string;
-  kind: "element" | "context";
-  fileName?: string;
-  filePath?: string;
-  dataUrl?: string;
-  mimeType: "image/png" | "image/jpeg";
-  width: number;
-  height: number;
-  sizeKB?: number;
-  sizeKb?: number;
-  devicePixelRatio: number;
-  rect: {
-    x: number;
-    y: number;
-    width: number;
-    height: number;
-  };
-  capturedAt: string;
-  status: "ready" | "failed";
-  error?: string;
-}
-
-export interface WebConsoleEntry {
-  id: string;
-  level: "log" | "info" | "warn" | "error" | "debug";
-  message: string;
-  args: string[];
-  sourceUrl: string;
-  line?: number;
-  column?: number;
-  stack?: string;
-  timestamp: string;
-}
-
-export interface WebAttachment {
-  id: string;
-  kind: "element" | "console";
-  sourceUrl: string;
-  pageTitle: string;
-  capturedAt: string;
-  element?: PickedElement;
-  consoleEntries?: WebConsoleEntry[];
-}
-
-export type ComposerFocusKind = "feedback" | "testLog" | "question" | "queuedDraft" | "agent";
-
-export interface FocusedComposer {
-  callerId: string;
-  sessionId?: string;
-  projectDirectory: string;
-  workspaceKey?: string;
-  kind: ComposerFocusKind;
-  focusedAt: string;
-}
-
-export type MlcPanelPosition = "left" | "right";
-export type SidePanelTab = "mlc" | "resources" | "mlcPreview" | "previewBrowser" | "previewInfo" | "agentConsole" | "agentSessions" | "terminal" | "git" | "subscriptions";
-export type DockColumnId = "leftSidebar" | "leftPage" | "rightPage" | "rightSidebar";
-export type DockTabId = SidePanelTab;
-export type DockTabBarPosition = "top" | "bottom";
-
-export type SelectedMlcDocumentSource = "mlc" | "resource";
-
-export interface SelectedMlcDocument {
-  filePath: string;
-  fileName: string;
-  title: string;
-  description: string;
-  project: string;
-  type: string;
-  updatedAt: string;
-  workspaceName: string;
-  workspacePath: string;
-  folderName?: string | null;
-  folderPath?: string | null;
-  source?: SelectedMlcDocumentSource;
-}
-
-export interface DockColumnState {
-  tabIds: DockTabId[];
-  activeTabId: DockTabId | null;
-  width: number;
-  tabBarPosition: DockTabBarPosition;
-  collapsed: boolean;
-}
-
-export interface DockLayoutState {
-  columns: Record<DockColumnId, DockColumnState>;
-}
-
-export interface DraggingDockTabState {
-  tabId: DockTabId;
-  sourceColumnId: DockColumnId;
-  pointerX: number;
-  pointerY: number;
-  targetColumnId: DockColumnId | null;
-}
-
-export type NewRequestAttentionMode = "interrupt" | "passive";
-
-export interface AddSessionOptions {
-  attentionMode?: NewRequestAttentionMode;
-  applyQueuedDraft?: boolean;
-}
-
-export interface FeedbackDraft {
-  feedbackText: string;
-  testLogText: string;
-  images: ImageAttachment[];
-  gitAction: GitAction | null;
-  mlcAttachments: MlcAttachment[];
-  webAttachments: WebAttachment[];
-  updatedAt: string;
-}
-
-export type SessionDraftField = "feedbackText" | "testLogText" | "commandLogs";
-
-export type SessionTextDraft = Pick<Session, SessionDraftField>;
-
 export interface Session {
   id: string;
   callerId: string;
   requestName: string;
-  requestType: RequestType;
   summary: string;
   projectDirectory: string;
   status: SessionStatus;
@@ -248,36 +56,52 @@ export interface Session {
   testLogText: string;
   images: ImageAttachment[];
   commandLogs: string;
-  mlcAttachments: MlcAttachment[];
-  webAttachments: WebAttachment[];
   // Agent questions
   questions: QuestionItem[];
   // Git action
   gitAction: GitAction | null;
 }
 
-export interface FeedbackState {
-  prompts: PromptItem[];
+export type AppMode = "legacy" | "persistent";
 
+export interface FeedbackState {
+  // App mode
+  appMode: AppMode;
+  setAppMode: (mode: AppMode) => void;
+
+  // ── Legacy mode fields (backward compatible) ──
+  summary: string;
+  requestName: string;
+  projectDirectory: string;
+  outputFile: string;
+  feedbackText: string;
+  testLogText: string;
+  images: ImageAttachment[];
+  commandLogs: string;
+  enableEnhancement: boolean;
+  prompts: PromptItem[];
+  isSubmitting: boolean;
+  isSubmitted: boolean;
+
+  // Legacy actions
+  setSummary: (summary: string) => void;
+  setRequestName: (name: string) => void;
+  setProjectDirectory: (dir: string) => void;
+  setOutputFile: (file: string) => void;
+  setFeedbackText: (text: string) => void;
+  setTestLogText: (text: string) => void;
+  addImage: (img: ImageAttachment) => void;
+  removeImage: (path: string) => void;
+  clearImages: () => void;
+  setCommandLogs: (logs: string) => void;
+  setEnableEnhancement: (value: boolean) => void;
   setPrompts: (prompts: PromptItem[]) => void;
+  setSubmitting: (value: boolean) => void;
+  setSubmitted: (value: boolean) => void;
 
   // Prompt visibility
   disabledPrompts: string[];
-  showPromptButtons: boolean;
-  showTransferSubmitUi: boolean;
-  resourceIconTheme: ResourceIconTheme;
-  mlcPreviewShowYaml: boolean;
-  sessionListMode: SessionListMode;
-  showSessionNavigationAttachmentDots: boolean;
-  useSessionNavigationColorCards: boolean;
   setDisabledPrompts: (names: string[]) => void;
-  setShowPromptButtons: (value: boolean) => void;
-  setShowTransferSubmitUi: (value: boolean) => void;
-  setResourceIconTheme: (theme: ResourceIconTheme) => void;
-  setMlcPreviewShowYaml: (value: boolean) => void;
-  setSessionListMode: (mode: SessionListMode) => void;
-  setShowSessionNavigationAttachmentDots: (value: boolean) => void;
-  setUseSessionNavigationColorCards: (value: boolean) => void;
   togglePromptDisabled: (name: string) => void;
 
   // ── Persistent mode fields ──
@@ -285,20 +109,10 @@ export interface FeedbackState {
   callerOrder: string[]; // user-controlled display order of caller IDs
   unreadCallerIds: string[]; // callers with unread new sessions
   hiddenCallerIds: string[]; // callers hidden from top bar tabs
-  callerColumnMode: CallerColumnMode;
   visibleColumnCount: number; // how many callers are visible in the window columns
   sessions: Session[];
-  sessionDraftsById: Record<string, SessionTextDraft>;
   activeCallerId: string | null;
   activeSessionId: string | null;
-  queuedDraftsByCallerId: Record<string, FeedbackDraft>;
-  messageHistoryByCallerId: Record<string, string[]>;
-  focusedComposer: FocusedComposer | null;
-  mlcActiveWorkspacePath: string | null;
-  selectedMlcDocument: SelectedMlcDocument | null;
-  dockLayout: DockLayoutState;
-  draggingDockTab: DraggingDockTabState | null;
-  nativeWebViewBlockers: Record<string, number>;
 
   // Persistent mode actions
   addCaller: (caller: Caller) => void;
@@ -309,21 +123,14 @@ export interface FeedbackState {
   renameCaller: (callerId: string, newName: string) => Promise<void>;
   mergeCallers: (sourceId: string, targetId: string) => Promise<void>;
   clearAllHistory: () => Promise<void>;
-  addSession: (session: Session, options?: AddSessionOptions) => void;
+  addSession: (session: Session) => void;
   setActiveSession: (id: string) => void;
-  updateSessionField: (sessionId: string, field: SessionDraftField, value: string) => void;
+  updateSessionField: (sessionId: string, field: keyof Pick<Session, "feedbackText" | "testLogText" | "commandLogs">, value: string) => void;
   addSessionImage: (sessionId: string, img: ImageAttachment) => void;
   removeSessionImage: (sessionId: string, path: string) => void;
   clearSessionImages: (sessionId: string) => void;
-  addSessionMlcAttachment: (sessionId: string, attachment: MlcAttachment) => void;
-  removeSessionMlcAttachment: (sessionId: string, filePath: string) => void;
-  clearSessionMlcAttachments: (sessionId: string) => void;
-  addSessionWebAttachment: (sessionId: string, attachment: WebAttachment) => void;
-  removeSessionWebAttachment: (sessionId: string, attachmentId: string) => void;
-  clearSessionWebAttachments: (sessionId: string) => void;
   setSessionGitAction: (sessionId: string, action: GitAction | null) => void;
   updateSessionGitBranchName: (sessionId: string, branchName: string) => void;
-  completeSessionWithSubmittedFeedback: (sessionId: string, feedbackText: string) => void;
   markSessionResponded: (sessionId: string) => void;
   markSessionCancelled: (sessionId: string) => void;
   removeSession: (sessionId: string) => void;
@@ -343,42 +150,7 @@ export interface FeedbackState {
   toggleCallerHidden: (callerId: string) => void;
   unhideCaller: (callerId: string) => void;
   trimCallerSessions: (callerId: string) => Promise<void>;
-  setCallerColumnMode: (mode: CallerColumnMode) => void;
   setVisibleColumnCount: (count: number) => void;
-  setQueuedDrafts: (drafts: Record<string, FeedbackDraft>) => void;
-  getQueuedDraft: (callerId: string) => FeedbackDraft;
-  updateQueuedDraftField: (callerId: string, field: "feedbackText" | "testLogText", value: string) => void;
-  addQueuedDraftImage: (callerId: string, img: ImageAttachment) => void;
-  removeQueuedDraftImage: (callerId: string, path: string) => void;
-  clearQueuedDraftImages: (callerId: string) => void;
-  addQueuedDraftMlcAttachment: (callerId: string, attachment: MlcAttachment) => void;
-  removeQueuedDraftMlcAttachment: (callerId: string, filePath: string) => void;
-  clearQueuedDraftMlcAttachments: (callerId: string) => void;
-  addQueuedDraftWebAttachment: (callerId: string, attachment: WebAttachment) => void;
-  removeQueuedDraftWebAttachment: (callerId: string, attachmentId: string) => void;
-  clearQueuedDraftWebAttachments: (callerId: string) => void;
-  setQueuedDraftGitAction: (callerId: string, action: GitAction | null) => void;
-  updateQueuedDraftGitBranchName: (callerId: string, branchName: string) => void;
-  clearQueuedDraft: (callerId: string) => void;
-  applyQueuedDraftToSession: (callerId: string, sessionId: string) => void;
-  pushMessageHistory: (callerId: string, text: string) => void;
-  getMessageHistory: (callerId: string) => string[];
-  clearMessageHistory: (callerId?: string) => void;
-  setFocusedComposer: (focus: FocusedComposer) => void;
-  clearFocusedComposer: (sessionId?: string) => void;
-  setMlcActiveWorkspacePath: (path: string | null) => void;
-  setSelectedMlcDocument: (document: SelectedMlcDocument | null) => void;
-  setDockColumnWidth: (columnId: DockColumnId, width: number) => void;
-  setDockColumnCollapsed: (columnId: DockColumnId, collapsed: boolean) => void;
-  setDockColumnTabBarPosition: (columnId: DockColumnId, position: DockTabBarPosition) => void;
-  setDockActiveTab: (columnId: DockColumnId, tabId: DockTabId | null) => void;
-  moveDockTabToColumn: (tabId: DockTabId, targetColumnId: DockColumnId, targetIndex?: number) => void;
-  openDockTab: (tabId: DockTabId, preferredColumnId: DockColumnId) => void;
-  startDraggingDockTab: (tabId: DockTabId, sourceColumnId: DockColumnId, pointerX: number, pointerY: number, targetColumnId?: DockColumnId | null) => void;
-  updateDraggingDockTab: (pointerX: number, pointerY: number, targetColumnId: DockColumnId | null) => void;
-  finishDraggingDockTab: () => void;
-  pushNativeWebViewBlocker: (key: string) => void;
-  popNativeWebViewBlocker: (key: string) => void;
 
   // Derived getters
   getActiveCaller: () => Caller | null;
@@ -389,319 +161,57 @@ export interface FeedbackState {
 const IMAGE_MAX_COUNT = 5;
 const IMAGE_MAX_SIZE_MB = 5;
 const IMAGE_MAX_TOTAL_MB = 20;
-const MESSAGE_HISTORY_MAX = 50;
-const MLC_PANEL_DEFAULT_WIDTH = 320;
-const MLC_PANEL_MIN_WIDTH = 240;
-const MLC_PANEL_MAX_WIDTH = 520;
-const MLC_PAGE_PANEL_MAX_WIDTH = 720;
-const DOCK_LAYOUT_STORAGE_KEY = "mlfb-dock-layout-v1";
-const CALLER_COLUMN_MODE_STORAGE_KEY = "mlf-caller-column-mode";
-
-export type ResourceIconTheme = "default" | "catppuccin";
-
-function parseCallerColumnMode(value: string | null): CallerColumnMode {
-  if (value === "1") return 1;
-  if (value === "2") return 2;
-  if (value === "3") return 3;
-  return "auto";
-}
-
-function loadCallerColumnMode(): CallerColumnMode {
-  try { return parseCallerColumnMode(localStorage.getItem(CALLER_COLUMN_MODE_STORAGE_KEY)); } catch { return "auto"; }
-}
-
-function loadResourceIconTheme(): ResourceIconTheme {
-  try {
-    const stored = localStorage.getItem("mlfb-resource-icon-theme");
-    if (stored === "catppuccin" || stored === "catppuccin-mocha") return "catppuccin";
-    return "default";
-  } catch { return "default"; }
-}
-
-function normalizeProjectDirectory(value?: string | null): string {
-  return normalizeWorkspacePath(value) || "";
-}
-
-function normalizeCallerWorkspaceKey(value?: string | null): string {
-  return workspacePathKey(value);
-}
-
-function normalizeCallerInfo(caller: Caller): Caller {
-  return {
-    ...caller,
-    workspaceKey: normalizeCallerWorkspaceKey(caller.workspaceKey),
-  };
-}
-
-function normalizeSessionWorkspace(session: Session): Session {
-  return {
-    ...session,
-    projectDirectory: normalizeProjectDirectory(session.projectDirectory),
-  };
-}
-
-function normalizeFocusedComposer(focus: FocusedComposer): FocusedComposer {
-  const projectDirectory = normalizeProjectDirectory(focus.projectDirectory);
-  return {
-    ...focus,
-    projectDirectory,
-    workspaceKey: workspacePathKey(focus.workspaceKey) || workspacePathKey(projectDirectory),
-  };
-}
-
-function latestWorkspaceKeyForCaller(callerId: string, sessions: Session[]): string {
-  for (let index = sessions.length - 1; index >= 0; index -= 1) {
-    const session = sessions[index];
-    if (session.callerId !== callerId) continue;
-    const key = workspacePathKey(session.projectDirectory);
-    if (key) return key;
-  }
-  return "";
-}
-
-function callerWorkspaceKey(caller: Caller, sessions: Session[]): string {
-  return workspacePathKey(caller.workspaceKey) || latestWorkspaceKeyForCaller(caller.id, sessions);
-}
-
-function syncCallerWorkspaceColors(
-  callers: Caller[],
-  sessions: Session[],
-  preferred?: { workspaceKey?: string | null; color?: string | null },
-): Caller[] {
-  const colorByWorkspace = new Map<string, string>();
-  const preferredKey = workspacePathKey(preferred?.workspaceKey);
-  const preferredColor = preferred?.color?.trim();
-  if (preferredKey && preferredColor) colorByWorkspace.set(preferredKey, preferredColor);
-  for (const caller of callers) {
-    const key = callerWorkspaceKey(caller, sessions);
-    const color = caller.color?.trim();
-    if (key && color && !colorByWorkspace.has(key)) colorByWorkspace.set(key, color);
-  }
-  return callers.map((caller) => {
-    const key = callerWorkspaceKey(caller, sessions);
-    const color = key ? colorByWorkspace.get(key) : undefined;
-    return {
-      ...caller,
-      workspaceKey: key || caller.workspaceKey,
-      color: color || caller.color,
-    };
-  });
-}
-
-const DOCK_COLUMN_IDS: DockColumnId[] = ["leftSidebar", "leftPage", "rightPage", "rightSidebar"];
-const AGENT_DOCK_TABS: DockTabId[] = ["agentConsole", "agentSessions"];
-const CORE_DOCK_TABS: DockTabId[] = ["mlc", "resources", "mlcPreview", "previewBrowser", "previewInfo", "terminal", "git", "subscriptions"];
-const KNOWN_DOCK_TABS: DockTabId[] = isAgentUiDisabled
-  ? CORE_DOCK_TABS
-  : [...CORE_DOCK_TABS, ...AGENT_DOCK_TABS];
-const DEFAULT_DOCK_TABS: DockTabId[] = isAgentUiDisabled
-  ? ["mlc", "mlcPreview", "resources", "previewBrowser", "previewInfo", "terminal", "git", "subscriptions"]
-  : ["mlc", "mlcPreview", "resources", "previewBrowser", "previewInfo", "agentConsole", "agentSessions", "terminal", "git", "subscriptions"];
-
-function isDockTabId(value: unknown): value is DockTabId {
-  return typeof value === "string" && KNOWN_DOCK_TABS.includes(value as DockTabId);
-}
-
-function isAgentDockTab(tabId: DockTabId): boolean {
-  return tabId === "agentConsole" || tabId === "agentSessions";
-}
-
-function dockColumnMaxWidth(columnId?: DockColumnId): number {
-  return columnId === "leftPage" || columnId === "rightPage"
-    ? MLC_PAGE_PANEL_MAX_WIDTH
-    : MLC_PANEL_MAX_WIDTH;
-}
-
-function clampDockWidth(width: number, columnId?: DockColumnId): number {
-  return Math.min(dockColumnMaxWidth(columnId), Math.max(MLC_PANEL_MIN_WIDTH, width));
-}
-
-function createDockColumn(overrides: Partial<DockColumnState> = {}): DockColumnState {
-  return {
-    tabIds: [],
-    activeTabId: null,
-    width: MLC_PANEL_DEFAULT_WIDTH,
-    tabBarPosition: "top",
-    collapsed: false,
-    ...overrides,
-  };
-}
-
-function normalizeDockColumn(columnId: DockColumnId, value: Partial<DockColumnState> | null | undefined): DockColumnState {
-  const tabIds = Array.isArray(value?.tabIds)
-    ? value.tabIds.filter(isDockTabId)
-    : [];
-  const activeTabId = value?.activeTabId && tabIds.includes(value.activeTabId) ? value.activeTabId : tabIds[0] || null;
-  return createDockColumn({
-    tabIds,
-    activeTabId,
-    width: clampDockWidth(Number(value?.width) || MLC_PANEL_DEFAULT_WIDTH, columnId),
-    tabBarPosition: value?.tabBarPosition === "bottom" ? "bottom" : "top",
-    collapsed: Boolean(value?.collapsed),
-  });
-}
-
-function persistDockLayout(layout: DockLayoutState): void {
-  try { localStorage.setItem(DOCK_LAYOUT_STORAGE_KEY, JSON.stringify(layout)); } catch {}
-}
-
-function migrateLegacyDockLayout(): DockLayoutState {
-  let legacyPosition: MlcPanelPosition = "right";
-  let legacyVisible = false;
-  let legacyWidth = MLC_PANEL_DEFAULT_WIDTH;
-  let legacyActiveTab: DockTabId = "mlc";
-  let legacyTabBarPosition: DockTabBarPosition = "top";
-  try {
-    legacyPosition = localStorage.getItem("mlfb-mlc-panel-position") === "left" ? "left" : "right";
-    legacyVisible = localStorage.getItem("mlfb-mlc-panel-visible") === "true";
-    const storedWidth = Number(localStorage.getItem("mlfb-mlc-panel-width"));
-    if (Number.isFinite(storedWidth) && storedWidth > 0) legacyWidth = clampDockWidth(storedWidth);
-    legacyActiveTab = localStorage.getItem("mlfb-side-panel-active-tab") === "resources" ? "resources" : "mlc";
-    legacyTabBarPosition = localStorage.getItem("mlfb-mlc-tab-bar-position") === "bottom" ? "bottom" : "top";
-  } catch {}
-
-  const targetColumnId: DockColumnId = legacyPosition === "left" ? "leftSidebar" : "rightSidebar";
-  const columns: DockLayoutState["columns"] = {
-    leftSidebar: createDockColumn(),
-    leftPage: createDockColumn(),
-    rightPage: createDockColumn(),
-    rightSidebar: createDockColumn(),
-  };
-  columns[targetColumnId] = createDockColumn({
-    tabIds: ["mlc", "mlcPreview", "resources", "previewBrowser", "previewInfo"],
-    activeTabId: legacyActiveTab,
-    width: legacyWidth,
-    tabBarPosition: legacyTabBarPosition,
-    collapsed: !legacyVisible,
-  });
-  columns.rightPage = createDockColumn({
-    tabIds: isAgentUiDisabled ? ["terminal"] : ["agentConsole", "agentSessions", "terminal"],
-    activeTabId: isAgentUiDisabled ? "terminal" : "agentConsole",
-    width: legacyWidth,
-    tabBarPosition: legacyTabBarPosition,
-    collapsed: false,
-  });
-  for (const columnId of DOCK_COLUMN_IDS) columns[columnId].tabBarPosition = legacyTabBarPosition;
-  return { columns };
-}
-
-function loadDockLayout(): DockLayoutState {
-  try {
-    const stored = localStorage.getItem(DOCK_LAYOUT_STORAGE_KEY);
-    if (stored) {
-      const parsed = JSON.parse(stored) as Partial<DockLayoutState>;
-      const columns: DockLayoutState["columns"] = {
-        leftSidebar: normalizeDockColumn("leftSidebar", parsed.columns?.leftSidebar),
-        leftPage: normalizeDockColumn("leftPage", parsed.columns?.leftPage),
-        rightPage: normalizeDockColumn("rightPage", parsed.columns?.rightPage),
-        rightSidebar: normalizeDockColumn("rightSidebar", parsed.columns?.rightSidebar),
-      };
-      const seen = new Set<DockTabId>();
-      for (const columnId of DOCK_COLUMN_IDS) {
-        const column = columns[columnId];
-        column.tabIds = column.tabIds.filter((tabId) => {
-          if (seen.has(tabId)) return false;
-          seen.add(tabId);
-          return true;
-        });
-        if (column.activeTabId && !column.tabIds.includes(column.activeTabId)) column.activeTabId = column.tabIds[0] || null;
-      }
-      for (const tabId of DEFAULT_DOCK_TABS) {
-        if (seen.has(tabId)) continue;
-        const fallbackColumnId = tabId === "terminal" || tabId === "agentConsole" || tabId === "agentSessions"
-          ? "rightPage"
-          : tabId === "mlcPreview" || tabId === "previewBrowser"
-          ? DOCK_COLUMN_IDS.find((columnId) => columns[columnId].tabIds.includes("mlc")) || "rightSidebar"
-          : tabId === "previewInfo"
-            ? "rightSidebar"
-          : "rightSidebar";
-        columns[fallbackColumnId].tabIds.push(tabId);
-      }
-      for (const columnId of DOCK_COLUMN_IDS) {
-        const column = columns[columnId];
-        if (!column.activeTabId || !column.tabIds.includes(column.activeTabId)) column.activeTabId = column.tabIds[0] || null;
-      }
-      const tabBarPosition: DockTabBarPosition = DOCK_COLUMN_IDS.some((columnId) => columns[columnId].tabBarPosition === "bottom")
-        ? "bottom"
-        : "top";
-      for (const columnId of DOCK_COLUMN_IDS) columns[columnId].tabBarPosition = tabBarPosition;
-      return { columns };
-    }
-  } catch {}
-  return migrateLegacyDockLayout();
-}
-
-function emptyDraft(): FeedbackDraft {
-  return {
-    feedbackText: "",
-    testLogText: "",
-    images: [],
-    gitAction: null,
-    mlcAttachments: [],
-    webAttachments: [],
-    updatedAt: new Date().toISOString(),
-  };
-}
-
-function normalizeDraft(draft: Partial<FeedbackDraft> | null | undefined): FeedbackDraft {
-  return {
-    ...emptyDraft(),
-    ...(draft || {}),
-    images: draft?.images || [],
-    mlcAttachments: draft?.mlcAttachments || [],
-    webAttachments: draft?.webAttachments || [],
-  };
-}
-
-function isDraftEmpty(draft: FeedbackDraft): boolean {
-  return !draft.feedbackText.trim()
-    && !draft.testLogText.trim()
-    && draft.images.length === 0
-    && draft.mlcAttachments.length === 0
-    && draft.webAttachments.length === 0
-    && !draft.gitAction;
-}
-
-export function applySessionTextDraft(session: Session, draft: SessionTextDraft | null | undefined): Session {
-  return draft ? { ...session, ...draft } : session;
-}
-
-function removeSessionTextDraft(drafts: Record<string, SessionTextDraft>, sessionId: string): Record<string, SessionTextDraft> {
-  if (!drafts[sessionId]) return drafts;
-  const next = { ...drafts };
-  delete next[sessionId];
-  return next;
-}
-
-function createSessionTextDraft(session: Session): SessionTextDraft {
-  return {
-    feedbackText: session.feedbackText,
-    testLogText: session.testLogText,
-    commandLogs: session.commandLogs,
-  };
-}
-
-function loadMessageHistory(): Record<string, string[]> {
-  try {
-    const raw = localStorage.getItem("mlf-message-history-by-caller");
-    return raw ? JSON.parse(raw) : {};
-  } catch { return {}; }
-}
-
-function saveMessageHistory(history: Record<string, string[]>) {
-  try { localStorage.setItem("mlf-message-history-by-caller", JSON.stringify(history)); } catch {}
-}
-
-function persistQueuedDrafts(drafts: Record<string, FeedbackDraft>) {
-  invoke("save_queued_drafts", { drafts }).catch((e: unknown) =>
-    console.error("Failed to persist queued drafts:", e)
-  );
-}
 
 export const useFeedbackStore = create<FeedbackState>((set, get) => ({
-  // Prompt templates
+  // App mode
+  appMode: "legacy",
+  setAppMode: (mode) => set({ appMode: mode }),
+
+  // ── Legacy mode defaults ──
+  summary: "",
+  requestName: "",
+  projectDirectory: "",
+  outputFile: "",
+  feedbackText: "",
+  testLogText: "",
+  images: [],
+  commandLogs: "",
+  enableEnhancement: true,
   prompts: [],
+  isSubmitting: false,
+  isSubmitted: false,
+
+  setSummary: (summary) => set({ summary }),
+  setRequestName: (name) => set({ requestName: name }),
+  setProjectDirectory: (dir) => set({ projectDirectory: dir }),
+  setOutputFile: (file) => set({ outputFile: file }),
+  setFeedbackText: (text) => set({ feedbackText: text }),
+  setTestLogText: (text) => set({ testLogText: text }),
+
+  addImage: (img) => {
+    const { images } = get();
+    if (images.length >= IMAGE_MAX_COUNT) return;
+    if (img.sizeKB / 1024 > IMAGE_MAX_SIZE_MB) return;
+    const totalMB = images.reduce((acc, i) => acc + i.sizeKB / 1024, 0);
+    if (totalMB + img.sizeKB / 1024 > IMAGE_MAX_TOTAL_MB) return;
+    if (images.find((i) => i.path === img.path)) return;
+    set({ images: [...images, img] });
+  },
+
+  removeImage: (path) =>
+    set((state) => ({ images: state.images.filter((i) => i.path !== path) })),
+
+  clearImages: () => set({ images: [] }),
+
+  setCommandLogs: (logs) => set({ commandLogs: logs }),
+  setEnableEnhancement: (value) => {
+    set({ enableEnhancement: value });
+    try { localStorage.setItem("mlf-enhancement", String(value)); } catch {}
+  },
   setPrompts: (prompts) => set({ prompts }),
+
+  setSubmitting: (value) => set({ isSubmitting: value }),
+  setSubmitted: (value) => set({ isSubmitted: value }),
 
   // Prompt visibility
   disabledPrompts: (() => {
@@ -710,58 +220,9 @@ export const useFeedbackStore = create<FeedbackState>((set, get) => ({
       return stored ? JSON.parse(stored) : [];
     } catch { return []; }
   })(),
-  showPromptButtons: (() => {
-    try {
-      return localStorage.getItem("mlf-show-prompt-buttons") === "true";
-    } catch { return false; }
-  })(),
-  showTransferSubmitUi: (() => {
-    try {
-      const stored = localStorage.getItem("mlf-show-transfer-submit-ui");
-      return stored == null ? true : stored === "true";
-    } catch { return true; }
-  })(),
-  resourceIconTheme: loadResourceIconTheme(),
-  mlcPreviewShowYaml: (() => {
-    try {
-      const stored = localStorage.getItem("mlf-mlc-preview-show-yaml");
-      return stored == null ? true : stored === "true";
-    } catch { return true; }
-  })(),
-  sessionListMode: readSessionListMode(),
-  showSessionNavigationAttachmentDots: readShowSessionNavigationAttachmentDots(),
-  useSessionNavigationColorCards: readUseSessionNavigationColorCards(),
   setDisabledPrompts: (names) => {
     set({ disabledPrompts: names });
     try { localStorage.setItem("mlf-disabled-prompts", JSON.stringify(names)); } catch {}
-  },
-  setShowPromptButtons: (value) => {
-    set({ showPromptButtons: value });
-    try { localStorage.setItem("mlf-show-prompt-buttons", String(value)); } catch {}
-  },
-  setShowTransferSubmitUi: (value) => {
-    set({ showTransferSubmitUi: value });
-    try { localStorage.setItem("mlf-show-transfer-submit-ui", String(value)); } catch {}
-  },
-  setResourceIconTheme: (theme) => {
-    set({ resourceIconTheme: theme });
-    try { localStorage.setItem("mlfb-resource-icon-theme", theme); } catch {}
-  },
-  setMlcPreviewShowYaml: (value) => {
-    set({ mlcPreviewShowYaml: value });
-    try { localStorage.setItem("mlf-mlc-preview-show-yaml", String(value)); } catch {}
-  },
-  setSessionListMode: (mode) => {
-    set({ sessionListMode: mode });
-    saveSessionListMode(mode);
-  },
-  setShowSessionNavigationAttachmentDots: (value) => {
-    set({ showSessionNavigationAttachmentDots: value });
-    saveShowSessionNavigationAttachmentDots(value);
-  },
-  setUseSessionNavigationColorCards: (value) => {
-    set({ useSessionNavigationColorCards: value });
-    saveUseSessionNavigationColorCards(value);
   },
   togglePromptDisabled: (name) => {
     const { disabledPrompts } = get();
@@ -776,7 +237,6 @@ export const useFeedbackStore = create<FeedbackState>((set, get) => ({
   callers: [],
   callerOrder: [],
   unreadCallerIds: [],
-  callerColumnMode: loadCallerColumnMode(),
   visibleColumnCount: 0,
   hiddenCallerIds: (() => {
     try {
@@ -803,54 +263,35 @@ export const useFeedbackStore = create<FeedbackState>((set, get) => ({
     } catch { return 18; }
   })(),
   sessions: [],
-  sessionDraftsById: {},
   activeCallerId: null,
   activeSessionId: null,
-  queuedDraftsByCallerId: {},
-  messageHistoryByCallerId: loadMessageHistory(),
-  focusedComposer: null,
-  mlcActiveWorkspacePath: null,
-  selectedMlcDocument: null,
-  dockLayout: loadDockLayout(),
-  draggingDockTab: null,
-  nativeWebViewBlockers: {},
 
   addCaller: (caller) => {
-    const normalizedCaller = normalizeCallerInfo(caller);
-    const { callers, callerOrder, sessions } = get();
-    const existing = callers.find((c) => c.id === normalizedCaller.id);
+    const { callers, callerOrder } = get();
+    const existing = callers.find((c) => c.id === caller.id);
     if (existing) {
-      // Update caller metadata that may arrive after the initial registration.
-      const needsUpdate = (!existing.clientName && normalizedCaller.clientName)
-        || (!existing.alias && normalizedCaller.alias)
-        || (!!normalizedCaller.color && existing.color !== normalizedCaller.color)
-        || (!!normalizedCaller.workspaceKey && existing.workspaceKey !== normalizedCaller.workspaceKey);
+      // Update clientName or alias if previously missing
+      const needsUpdate = (!existing.clientName && caller.clientName) || (!existing.alias && caller.alias);
       if (needsUpdate) {
-        const nextCallers = callers.map((c) => c.id === normalizedCaller.id ? {
+        set({ callers: callers.map((c) => c.id === caller.id ? {
           ...c,
-          clientName: c.clientName || normalizedCaller.clientName,
-          alias: c.alias || normalizedCaller.alias,
-          workspaceKey: normalizedCaller.workspaceKey || c.workspaceKey,
-          color: normalizedCaller.color || c.color,
-        } : c);
-        set({ callers: syncCallerWorkspaceColors(nextCallers, sessions, { workspaceKey: normalizedCaller.workspaceKey || existing.workspaceKey, color: normalizedCaller.color || existing.color }) });
+          clientName: c.clientName || caller.clientName,
+          alias: c.alias || caller.alias,
+        } : c) });
       }
       return;
     }
-    const nextOrder = callerOrder.includes(normalizedCaller.id)
+    const nextOrder = callerOrder.includes(caller.id)
       ? callerOrder
-      : [...callerOrder, normalizedCaller.id];
-    set({ callers: syncCallerWorkspaceColors([...callers, normalizedCaller], sessions, { workspaceKey: normalizedCaller.workspaceKey, color: normalizedCaller.color }), callerOrder: nextOrder });
+      : [...callerOrder, caller.id];
+    set({ callers: [...callers, caller], callerOrder: nextOrder });
   },
 
   updateCallerColor: (id, color) => {
     set((state) => ({
-      callers: (() => {
-        const target = state.callers.find((caller) => caller.id === id);
-        const workspaceKey = target ? callerWorkspaceKey(target, state.sessions) : "";
-        const updated = state.callers.map((caller) => caller.id === id ? { ...caller, color } : caller);
-        return syncCallerWorkspaceColors(updated, state.sessions, { workspaceKey, color });
-      })(),
+      callers: state.callers.map((c) =>
+        c.id === id ? { ...c, color } : c
+      ),
     }));
   },
 
@@ -907,7 +348,7 @@ export const useFeedbackStore = create<FeedbackState>((set, get) => ({
 
   mergeCallers: async (sourceId, targetId) => {
     await invoke("merge_callers", { sourceId, targetId });
-    const { callers, callerOrder, hiddenCallerIds, sessions, activeCallerId, activeSessionId, queuedDraftsByCallerId } = get();
+    const { callers, callerOrder, hiddenCallerIds, sessions, activeCallerId, activeSessionId } = get();
     const targetCaller = callers.find((c) => c.id === targetId);
     const targetAlias = targetCaller?.alias || "";
     // Move all sessions from source to target; inject [System] notice into pending sessions
@@ -926,26 +367,6 @@ export const useFeedbackStore = create<FeedbackState>((set, get) => ({
     try { localStorage.setItem("mlf-hidden-callers", JSON.stringify(newHiddenCallerIds)); } catch {}
     const newActiveCallerId = activeCallerId === sourceId ? targetId : activeCallerId;
     let newActiveSessionId = activeSessionId;
-    const newQueuedDrafts = { ...queuedDraftsByCallerId };
-    const sourceDraft = newQueuedDrafts[sourceId];
-    if (sourceDraft) {
-      const targetDraft = newQueuedDrafts[targetId];
-      if (targetDraft) {
-        newQueuedDrafts[targetId] = {
-          feedbackText: [targetDraft.feedbackText.trim(), sourceDraft.feedbackText.trim()].filter(Boolean).join("\n\n"),
-          testLogText: [targetDraft.testLogText.trim(), sourceDraft.testLogText.trim()].filter(Boolean).join("\n\n"),
-          images: [...targetDraft.images, ...sourceDraft.images].slice(0, IMAGE_MAX_COUNT),
-          gitAction: targetDraft.gitAction || sourceDraft.gitAction,
-          mlcAttachments: [...(targetDraft.mlcAttachments || []), ...(sourceDraft.mlcAttachments || [])],
-          webAttachments: [...(targetDraft.webAttachments || []), ...(sourceDraft.webAttachments || [])],
-          updatedAt: new Date().toISOString(),
-        };
-      } else {
-        newQueuedDrafts[targetId] = sourceDraft;
-      }
-      delete newQueuedDrafts[sourceId];
-    }
-    persistQueuedDrafts(newQueuedDrafts);
     // If active session belonged to source, keep it (it's now under target)
     set({
       callers: newCallers,
@@ -954,7 +375,6 @@ export const useFeedbackStore = create<FeedbackState>((set, get) => ({
       sessions: updatedSessions,
       activeCallerId: newActiveCallerId,
       activeSessionId: newActiveSessionId,
-      queuedDraftsByCallerId: newQueuedDrafts,
     });
   },
 
@@ -962,66 +382,37 @@ export const useFeedbackStore = create<FeedbackState>((set, get) => ({
     const { invoke } = await import("@tauri-apps/api/core");
     await invoke("clear_all_history");
     try { localStorage.removeItem("mlf-hidden-callers"); } catch {}
-    saveMessageHistory({});
-    persistQueuedDrafts({});
     set({
       callers: [],
       callerOrder: [],
       hiddenCallerIds: [],
       sessions: [],
-      sessionDraftsById: {},
       activeCallerId: null,
       activeSessionId: null,
       unreadCallerIds: [],
-      queuedDraftsByCallerId: {},
-      messageHistoryByCallerId: {},
-      focusedComposer: null,
     });
   },
 
-  addSession: (session, options) => {
-    const normalizedSession = normalizeSessionWorkspace({
-      ...session,
-      requestType: normalizeRequestType(session.requestType),
-      mlcAttachments: session.mlcAttachments || [],
-      webAttachments: session.webAttachments || [],
-    });
-    const attentionMode = options?.attentionMode ?? "interrupt";
-    const shouldInterrupt = attentionMode !== "passive";
-    const wasHidden = get().hiddenCallerIds.includes(normalizedSession.callerId);
-    let inserted = false;
-    set((state) => {
-      // Idempotent upsert: if a session with the same id already exists,
-      // replace it (covers StrictMode double-invoke of load_history and any
-      // other duplicate-add path). Otherwise append.
-      const idx = state.sessions.findIndex((s) => s.id === normalizedSession.id);
-      if (idx >= 0) {
-        const next = state.sessions.slice();
-        next[idx] = normalizedSession;
-        return { sessions: next, callers: syncCallerWorkspaceColors(state.callers, next) };
-      }
-      inserted = true;
-      const next = [...state.sessions, normalizedSession];
-      return { sessions: next, callers: syncCallerWorkspaceColors(state.callers, next) };
-    });
-    if (inserted && normalizedSession.status === "pending" && options?.applyQueuedDraft !== false) {
-      get().applyQueuedDraftToSession(normalizedSession.callerId, normalizedSession.id);
-    }
+  addSession: (session) => {
+    const wasHidden = get().hiddenCallerIds.includes(session.callerId);
+    set((state) => ({
+      sessions: [...state.sessions, session],
+    }));
     // Auto-unhide caller when a new pending session arrives
-    if (shouldInterrupt && normalizedSession.status === "pending") {
-      get().unhideCaller(normalizedSession.callerId);
+    if (session.status === "pending") {
+      get().unhideCaller(session.callerId);
     }
     // Move caller to visible columns' last position if it was outside the visible window
-    if (shouldInterrupt && normalizedSession.status === "pending") {
+    if (session.status === "pending") {
       const { callerOrder, hiddenCallerIds, visibleColumnCount, callers } = get();
       if (visibleColumnCount > 0) {
         const order = callerOrder.length > 0 ? callerOrder : callers.map(c => c.id);
         const visibleOrder = order.filter(id => !hiddenCallerIds.includes(id));
-        const posInVisible = visibleOrder.indexOf(normalizedSession.callerId);
+        const posInVisible = visibleOrder.indexOf(session.callerId);
         // Only move if caller exists and is outside the visible columns
         if (posInVisible >= visibleColumnCount || (wasHidden && posInVisible === -1)) {
           // Remove from current position and insert at the last visible column position
-          const newOrder = order.filter(id => id !== normalizedSession.callerId);
+          const newOrder = order.filter(id => id !== session.callerId);
           // Find the index in newOrder where the (visibleColumnCount-1)th visible caller is
           let visibleSeen = 0;
           let insertAfterIdx = -1;
@@ -1036,18 +427,18 @@ export const useFeedbackStore = create<FeedbackState>((set, get) => ({
           }
           if (insertAfterIdx === -1) {
             // Less visible callers than columnCount, just append
-            newOrder.push(normalizedSession.callerId);
+            newOrder.push(session.callerId);
           } else {
-            newOrder.splice(insertAfterIdx, 0, normalizedSession.callerId);
+            newOrder.splice(insertAfterIdx, 0, session.callerId);
           }
           get().setCallerOrder(newOrder);
         }
       }
     }
     // Update pending count for the caller
-    get().updateCallerPendingCount(normalizedSession.callerId);
+    get().updateCallerPendingCount(session.callerId);
     // Auto-trim sessions per caller if limit is set
-    get().trimCallerSessions(normalizedSession.callerId);
+    get().trimCallerSessions(session.callerId);
     // Auto-remove empty callers if enabled
     if (get().autoRemoveEmptyCallers) {
       get().removeEmptyCallers();
@@ -1059,17 +450,13 @@ export const useFeedbackStore = create<FeedbackState>((set, get) => ({
   setActiveSession: (id) => set({ activeSessionId: id }),
 
   updateSessionField: (sessionId, field, value) => {
-    set((state) => {
-      const session = state.sessions.find((s) => s.id === sessionId);
-      if (!session || session.status !== "pending") return {};
-      const currentDraft = state.sessionDraftsById[sessionId] || createSessionTextDraft(session);
-      return {
-        sessionDraftsById: {
-          ...state.sessionDraftsById,
-          [sessionId]: { ...currentDraft, [field]: value },
-        },
-      };
-    });
+    set((state) => ({
+      sessions: state.sessions.map((s) =>
+        s.id === sessionId && s.status === "pending"
+          ? { ...s, [field]: value }
+          : s
+      ),
+    }));
   },
 
   addSessionImage: (sessionId, img) => {
@@ -1108,73 +495,6 @@ export const useFeedbackStore = create<FeedbackState>((set, get) => ({
     }));
   },
 
-  addSessionMlcAttachment: (sessionId, attachment) => {
-    const session = get().sessions.find((s) => s.id === sessionId);
-    if (!session || session.status !== "pending") return;
-    const normalized = {
-      filePath: attachment.filePath,
-      title: attachment.title || attachment.filePath,
-      description: attachment.description || "",
-    };
-    if (!normalized.filePath || (session.mlcAttachments || []).some((item) => item.filePath === normalized.filePath)) return;
-    set((state) => ({
-      sessions: state.sessions.map((s) =>
-        s.id === sessionId
-          ? { ...s, mlcAttachments: [...(s.mlcAttachments || []), normalized] }
-          : s
-      ),
-    }));
-  },
-
-  removeSessionMlcAttachment: (sessionId, filePath) => {
-    set((state) => ({
-      sessions: state.sessions.map((s) =>
-        s.id === sessionId && s.status === "pending"
-          ? { ...s, mlcAttachments: (s.mlcAttachments || []).filter((item) => item.filePath !== filePath) }
-          : s
-      ),
-    }));
-  },
-
-  clearSessionMlcAttachments: (sessionId) => {
-    set((state) => ({
-      sessions: state.sessions.map((s) =>
-        s.id === sessionId && s.status === "pending" ? { ...s, mlcAttachments: [] } : s
-      ),
-    }));
-  },
-
-  addSessionWebAttachment: (sessionId, attachment) => {
-    const session = get().sessions.find((s) => s.id === sessionId);
-    if (!session || session.status !== "pending") return;
-    if ((session.webAttachments || []).some((item) => item.id === attachment.id)) return;
-    set((state) => ({
-      sessions: state.sessions.map((s) =>
-        s.id === sessionId
-          ? { ...s, webAttachments: [...(s.webAttachments || []), attachment] }
-          : s
-      ),
-    }));
-  },
-
-  removeSessionWebAttachment: (sessionId, attachmentId) => {
-    set((state) => ({
-      sessions: state.sessions.map((s) =>
-        s.id === sessionId && s.status === "pending"
-          ? { ...s, webAttachments: (s.webAttachments || []).filter((item) => item.id !== attachmentId) }
-          : s
-      ),
-    }));
-  },
-
-  clearSessionWebAttachments: (sessionId) => {
-    set((state) => ({
-      sessions: state.sessions.map((s) =>
-        s.id === sessionId && s.status === "pending" ? { ...s, webAttachments: [] } : s
-      ),
-    }));
-  },
-
   setSessionGitAction: (sessionId, action) => {
     set((state) => ({
       sessions: state.sessions.map((s) =>
@@ -1195,27 +515,11 @@ export const useFeedbackStore = create<FeedbackState>((set, get) => ({
     }));
   },
 
-  completeSessionWithSubmittedFeedback: (sessionId, feedbackText) => {
-    set((state) => ({
-      sessions: state.sessions.map((s) =>
-        s.id === sessionId ? { ...applySessionTextDraft(s, state.sessionDraftsById[sessionId]), feedbackText, status: "responded" as const } : s
-      ),
-      sessionDraftsById: removeSessionTextDraft(state.sessionDraftsById, sessionId),
-      focusedComposer: state.focusedComposer?.sessionId === sessionId ? null : state.focusedComposer,
-    }));
-    const session = get().sessions.find((s) => s.id === sessionId);
-    if (session) {
-      get().updateCallerPendingCount(session.callerId);
-    }
-  },
-
   markSessionResponded: (sessionId) => {
     set((state) => ({
       sessions: state.sessions.map((s) =>
-        s.id === sessionId ? { ...applySessionTextDraft(s, state.sessionDraftsById[sessionId]), status: "responded" as const } : s
+        s.id === sessionId ? { ...s, status: "responded" as const } : s
       ),
-      sessionDraftsById: removeSessionTextDraft(state.sessionDraftsById, sessionId),
-      focusedComposer: state.focusedComposer?.sessionId === sessionId ? null : state.focusedComposer,
     }));
     // Find the caller and update pending count
     const session = get().sessions.find((s) => s.id === sessionId);
@@ -1229,8 +533,6 @@ export const useFeedbackStore = create<FeedbackState>((set, get) => ({
       sessions: state.sessions.map((s) =>
         s.id === sessionId ? { ...s, status: "cancelled" as const } : s
       ),
-      sessionDraftsById: removeSessionTextDraft(state.sessionDraftsById, sessionId),
-      focusedComposer: state.focusedComposer?.sessionId === sessionId ? null : state.focusedComposer,
     }));
     invoke("cancel_session", { sessionId }).catch((e: unknown) =>
       console.error("Failed to persist cancelled session:", e)
@@ -1279,11 +581,7 @@ export const useFeedbackStore = create<FeedbackState>((set, get) => ({
     const session = sessions.find((s) => s.id === sessionId);
     if (!session) return;
     const remaining = sessions.filter((s) => s.id !== sessionId);
-    set((state) => ({
-      sessions: remaining,
-      sessionDraftsById: removeSessionTextDraft(state.sessionDraftsById, sessionId),
-      focusedComposer: state.focusedComposer?.sessionId === sessionId ? null : state.focusedComposer,
-    }));
+    set({ sessions: remaining });
     // If we removed the active session, select another one from the same caller
     if (activeSessionId === sessionId) {
       const callerSessions = remaining.filter((s) => s.callerId === session.callerId);
@@ -1311,14 +609,11 @@ export const useFeedbackStore = create<FeedbackState>((set, get) => ({
           ? nextCallerSessions[nextCallerSessions.length - 1].id
           : null;
       }
-      const newQueuedDrafts = Object.fromEntries(Object.entries(get().queuedDraftsByCallerId).filter(([id]) => id !== session.callerId));
-      persistQueuedDrafts(newQueuedDrafts);
       set({
         callers: newCallers,
         callerOrder: newCallerOrder,
         activeCallerId: newActiveCallerId,
         activeSessionId: newActiveSessionId,
-        queuedDraftsByCallerId: newQueuedDrafts,
       });
     } else {
       // Update pending count
@@ -1379,7 +674,7 @@ export const useFeedbackStore = create<FeedbackState>((set, get) => ({
 
   removeCaller: async (callerId) => {
     await invoke("remove_caller", { callerId });
-    const { callers, callerOrder, hiddenCallerIds, sessions, activeCallerId, queuedDraftsByCallerId, messageHistoryByCallerId } = get();
+    const { callers, callerOrder, hiddenCallerIds, sessions, activeCallerId } = get();
     const remaining = sessions.filter((s) => s.callerId !== callerId);
     const newCallers = callers.filter((c) => c.id !== callerId);
     const newCallerOrder = callerOrder.filter((id) => id !== callerId);
@@ -1398,8 +693,6 @@ export const useFeedbackStore = create<FeedbackState>((set, get) => ({
     } else if (wasActive) {
       newActiveSessionId = null;
     }
-    const newQueuedDrafts = Object.fromEntries(Object.entries(queuedDraftsByCallerId).filter(([id]) => id !== callerId));
-    persistQueuedDrafts(newQueuedDrafts);
     set({
       callers: newCallers,
       callerOrder: newCallerOrder,
@@ -1407,17 +700,13 @@ export const useFeedbackStore = create<FeedbackState>((set, get) => ({
       sessions: remaining,
       activeCallerId: newActiveCallerId,
       activeSessionId: newActiveSessionId,
-      queuedDraftsByCallerId: newQueuedDrafts,
-      messageHistoryByCallerId: Object.fromEntries(Object.entries(messageHistoryByCallerId).filter(([id]) => id !== callerId)),
-      focusedComposer: get().focusedComposer?.callerId === callerId ? null : get().focusedComposer,
     });
-    saveMessageHistory(get().messageHistoryByCallerId);
   },
 
   removeEmptyCallers: async () => {
     const removedIds: string[] = await invoke("remove_empty_callers");
     if (removedIds.length === 0) return removedIds;
-    const { callers, callerOrder, hiddenCallerIds, activeCallerId, queuedDraftsByCallerId, messageHistoryByCallerId } = get();
+    const { callers, callerOrder, hiddenCallerIds, activeCallerId } = get();
     const removedSet = new Set(removedIds);
     const newCallers = callers.filter((c) => !removedSet.has(c.id));
     const newCallerOrder = callerOrder.filter((id) => !removedSet.has(id));
@@ -1426,18 +715,12 @@ export const useFeedbackStore = create<FeedbackState>((set, get) => ({
     const newActiveCallerId = activeCallerId && removedSet.has(activeCallerId)
       ? (newCallerOrder.length > 0 ? newCallerOrder[0] : null)
       : activeCallerId;
-    const newQueuedDrafts = Object.fromEntries(Object.entries(queuedDraftsByCallerId).filter(([id]) => !removedSet.has(id)));
-    persistQueuedDrafts(newQueuedDrafts);
     set({
       callers: newCallers,
       callerOrder: newCallerOrder,
       hiddenCallerIds: newHiddenCallerIds,
       activeCallerId: newActiveCallerId,
-      queuedDraftsByCallerId: newQueuedDrafts,
-      messageHistoryByCallerId: Object.fromEntries(Object.entries(messageHistoryByCallerId).filter(([id]) => !removedSet.has(id))),
-      focusedComposer: get().focusedComposer && removedSet.has(get().focusedComposer!.callerId) ? null : get().focusedComposer,
     });
-    saveMessageHistory(get().messageHistoryByCallerId);
     return removedIds;
   },
 
@@ -1499,423 +782,7 @@ export const useFeedbackStore = create<FeedbackState>((set, get) => ({
     }
   },
 
-  setCallerColumnMode: (mode) => {
-    set({ callerColumnMode: mode });
-    try { localStorage.setItem(CALLER_COLUMN_MODE_STORAGE_KEY, String(mode)); } catch {}
-  },
-
   setVisibleColumnCount: (count) => set({ visibleColumnCount: count }),
-
-  setQueuedDrafts: (drafts) => set({
-    queuedDraftsByCallerId: Object.fromEntries(
-      Object.entries(drafts || {}).map(([callerId, draft]) => [callerId, normalizeDraft(draft)])
-    ),
-  }),
-
-  getQueuedDraft: (callerId) => normalizeDraft(get().queuedDraftsByCallerId[callerId]),
-
-  updateQueuedDraftField: (callerId, field, value) => {
-    set((state) => {
-      const draft = state.queuedDraftsByCallerId[callerId] || emptyDraft();
-      const next = {
-        queuedDraftsByCallerId: {
-          ...state.queuedDraftsByCallerId,
-          [callerId]: { ...draft, [field]: value, updatedAt: new Date().toISOString() },
-        },
-      };
-      persistQueuedDrafts(next.queuedDraftsByCallerId);
-      return next;
-    });
-  },
-
-  addQueuedDraftImage: (callerId, img) => {
-    const draft = get().getQueuedDraft(callerId);
-    if (draft.images.length >= IMAGE_MAX_COUNT) return;
-    if (img.sizeKB / 1024 > IMAGE_MAX_SIZE_MB) return;
-    const totalMB = draft.images.reduce((acc, i) => acc + i.sizeKB / 1024, 0);
-    if (totalMB + img.sizeKB / 1024 > IMAGE_MAX_TOTAL_MB) return;
-    if (draft.images.find((i) => i.path === img.path)) return;
-    set((state) => {
-      const next = {
-        ...state.queuedDraftsByCallerId,
-        [callerId]: { ...draft, images: [...draft.images, img], updatedAt: new Date().toISOString() },
-      };
-      persistQueuedDrafts(next);
-      return { queuedDraftsByCallerId: next };
-    });
-  },
-
-  removeQueuedDraftImage: (callerId, path) => {
-    const draft = get().getQueuedDraft(callerId);
-    set((state) => {
-      const next = {
-        ...state.queuedDraftsByCallerId,
-        [callerId]: { ...draft, images: draft.images.filter((i) => i.path !== path), updatedAt: new Date().toISOString() },
-      };
-      persistQueuedDrafts(next);
-      return { queuedDraftsByCallerId: next };
-    });
-  },
-
-  clearQueuedDraftImages: (callerId) => {
-    const draft = get().getQueuedDraft(callerId);
-    set((state) => {
-      const next = {
-        ...state.queuedDraftsByCallerId,
-        [callerId]: { ...draft, images: [], updatedAt: new Date().toISOString() },
-      };
-      persistQueuedDrafts(next);
-      return { queuedDraftsByCallerId: next };
-    });
-  },
-
-  addQueuedDraftMlcAttachment: (callerId, attachment) => {
-    const draft = get().getQueuedDraft(callerId);
-    if (draft.mlcAttachments.find((item) => item.filePath === attachment.filePath)) return;
-    set((state) => {
-      const next = {
-        ...state.queuedDraftsByCallerId,
-        [callerId]: { ...draft, mlcAttachments: [...draft.mlcAttachments, attachment], updatedAt: new Date().toISOString() },
-      };
-      persistQueuedDrafts(next);
-      return { queuedDraftsByCallerId: next };
-    });
-  },
-
-  removeQueuedDraftMlcAttachment: (callerId, filePath) => {
-    const draft = get().getQueuedDraft(callerId);
-    set((state) => {
-      const next = {
-        ...state.queuedDraftsByCallerId,
-        [callerId]: { ...draft, mlcAttachments: draft.mlcAttachments.filter((item) => item.filePath !== filePath), updatedAt: new Date().toISOString() },
-      };
-      persistQueuedDrafts(next);
-      return { queuedDraftsByCallerId: next };
-    });
-  },
-
-  clearQueuedDraftMlcAttachments: (callerId) => {
-    const draft = get().getQueuedDraft(callerId);
-    set((state) => {
-      const next = {
-        ...state.queuedDraftsByCallerId,
-        [callerId]: { ...draft, mlcAttachments: [], updatedAt: new Date().toISOString() },
-      };
-      persistQueuedDrafts(next);
-      return { queuedDraftsByCallerId: next };
-    });
-  },
-
-  addQueuedDraftWebAttachment: (callerId, attachment) => {
-    const draft = get().getQueuedDraft(callerId);
-    if (draft.webAttachments.find((item) => item.id === attachment.id)) return;
-    set((state) => {
-      const next = {
-        ...state.queuedDraftsByCallerId,
-        [callerId]: { ...draft, webAttachments: [...draft.webAttachments, attachment], updatedAt: new Date().toISOString() },
-      };
-      persistQueuedDrafts(next);
-      return { queuedDraftsByCallerId: next };
-    });
-  },
-
-  removeQueuedDraftWebAttachment: (callerId, attachmentId) => {
-    const draft = get().getQueuedDraft(callerId);
-    set((state) => {
-      const next = {
-        ...state.queuedDraftsByCallerId,
-        [callerId]: { ...draft, webAttachments: draft.webAttachments.filter((item) => item.id !== attachmentId), updatedAt: new Date().toISOString() },
-      };
-      persistQueuedDrafts(next);
-      return { queuedDraftsByCallerId: next };
-    });
-  },
-
-  clearQueuedDraftWebAttachments: (callerId) => {
-    const draft = get().getQueuedDraft(callerId);
-    set((state) => {
-      const next = {
-        ...state.queuedDraftsByCallerId,
-        [callerId]: { ...draft, webAttachments: [], updatedAt: new Date().toISOString() },
-      };
-      persistQueuedDrafts(next);
-      return { queuedDraftsByCallerId: next };
-    });
-  },
-
-  setQueuedDraftGitAction: (callerId, action) => {
-    const draft = get().getQueuedDraft(callerId);
-    set((state) => {
-      const next = {
-        ...state.queuedDraftsByCallerId,
-        [callerId]: { ...draft, gitAction: action, updatedAt: new Date().toISOString() },
-      };
-      persistQueuedDrafts(next);
-      return { queuedDraftsByCallerId: next };
-    });
-  },
-
-  updateQueuedDraftGitBranchName: (callerId, branchName) => {
-    const draft = get().getQueuedDraft(callerId);
-    if (draft.gitAction?.type !== "create-branch") return;
-    set((state) => {
-      const next = {
-        ...state.queuedDraftsByCallerId,
-        [callerId]: { ...draft, gitAction: { ...draft.gitAction!, branchName }, updatedAt: new Date().toISOString() },
-      };
-      persistQueuedDrafts(next);
-      return { queuedDraftsByCallerId: next };
-    });
-  },
-
-  clearQueuedDraft: (callerId) => {
-    set((state) => {
-      const next = { ...state.queuedDraftsByCallerId };
-      delete next[callerId];
-      persistQueuedDrafts(next);
-      return { queuedDraftsByCallerId: next };
-    });
-  },
-
-  applyQueuedDraftToSession: (callerId, sessionId) => {
-    const rawDraft = get().queuedDraftsByCallerId[callerId];
-    const draft = normalizeDraft(rawDraft);
-    if (!draft || isDraftEmpty(draft)) return;
-    set((state) => ({
-      sessions: state.sessions.map((s) =>
-        s.id === sessionId && s.status === "pending"
-          ? {
-              ...s,
-              feedbackText: draft.feedbackText,
-              testLogText: draft.testLogText,
-              images: draft.images,
-              gitAction: draft.gitAction,
-              mlcAttachments: draft.mlcAttachments,
-              webAttachments: draft.webAttachments,
-            }
-          : s
-      ),
-    }));
-    get().clearQueuedDraft(callerId);
-  },
-
-  pushMessageHistory: (callerId, text) => {
-    const trimmed = text.trim();
-    if (!trimmed) return;
-    set((state) => {
-      const current = state.messageHistoryByCallerId[callerId] || [];
-      const withoutSame = current.filter((item) => item !== trimmed);
-      const nextForCaller = [...withoutSame, trimmed].slice(-MESSAGE_HISTORY_MAX);
-      const next = { ...state.messageHistoryByCallerId, [callerId]: nextForCaller };
-      saveMessageHistory(next);
-      return { messageHistoryByCallerId: next };
-    });
-  },
-
-  getMessageHistory: (callerId) => get().messageHistoryByCallerId[callerId] || [],
-
-  clearMessageHistory: (callerId) => {
-    set((state) => {
-      const next = { ...state.messageHistoryByCallerId };
-      if (callerId) delete next[callerId];
-      else for (const key of Object.keys(next)) delete next[key];
-      saveMessageHistory(next);
-      return { messageHistoryByCallerId: next };
-    });
-  },
-
-  setFocusedComposer: (focus) => {
-    const normalizedFocus = normalizeFocusedComposer(focus);
-    const current = get().focusedComposer;
-    const sameTarget = current
-      && current.callerId === normalizedFocus.callerId
-      && current.sessionId === normalizedFocus.sessionId
-      && sameWorkspacePath(current.projectDirectory, normalizedFocus.projectDirectory)
-      && current.kind === normalizedFocus.kind;
-    if (sameTarget) return;
-    // Keep workspace selection independent from composer focus.
-    set({ focusedComposer: normalizedFocus });
-  },
-
-  clearFocusedComposer: (sessionId) => {
-    set((state) => ({
-      focusedComposer: !sessionId || state.focusedComposer?.sessionId === sessionId ? null : state.focusedComposer,
-    }));
-  },
-
-  setMlcActiveWorkspacePath: (path) => set({ mlcActiveWorkspacePath: normalizeWorkspacePath(path) }),
-
-  setSelectedMlcDocument: (document) => set({ selectedMlcDocument: document }),
-
-  setDockColumnWidth: (columnId, width) => {
-    set((state) => {
-      const dockLayout: DockLayoutState = {
-        columns: {
-          ...state.dockLayout.columns,
-          [columnId]: {
-            ...state.dockLayout.columns[columnId],
-            width: clampDockWidth(width, columnId),
-          },
-        },
-      };
-      persistDockLayout(dockLayout);
-      return { dockLayout };
-    });
-  },
-
-  setDockColumnCollapsed: (columnId, collapsed) => {
-    set((state) => {
-      const dockLayout: DockLayoutState = {
-        columns: {
-          ...state.dockLayout.columns,
-          [columnId]: {
-            ...state.dockLayout.columns[columnId],
-            collapsed,
-          },
-        },
-      };
-      persistDockLayout(dockLayout);
-      return { dockLayout };
-    });
-  },
-
-  setDockColumnTabBarPosition: (columnId, position) => {
-    set((state) => {
-      void columnId;
-      const dockLayout: DockLayoutState = {
-        columns: {
-          leftSidebar: {
-            ...state.dockLayout.columns.leftSidebar,
-            tabBarPosition: position,
-          },
-          leftPage: {
-            ...state.dockLayout.columns.leftPage,
-            tabBarPosition: position,
-          },
-          rightPage: {
-            ...state.dockLayout.columns.rightPage,
-            tabBarPosition: position,
-          },
-          rightSidebar: {
-            ...state.dockLayout.columns.rightSidebar,
-            tabBarPosition: position,
-          },
-        },
-      };
-      persistDockLayout(dockLayout);
-      return { dockLayout };
-    });
-  },
-
-  setDockActiveTab: (columnId, tabId) => {
-    set((state) => {
-      if (isAgentUiDisabled && tabId && isAgentDockTab(tabId)) return {};
-      const column = state.dockLayout.columns[columnId];
-      const activeTabId = tabId && column.tabIds.includes(tabId) ? tabId : column.tabIds[0] || null;
-      const dockLayout: DockLayoutState = {
-        columns: {
-          ...state.dockLayout.columns,
-          [columnId]: { ...column, activeTabId },
-        },
-      };
-      persistDockLayout(dockLayout);
-      return { dockLayout };
-    });
-  },
-
-  moveDockTabToColumn: (tabId, targetColumnId, targetIndex) => {
-    set((state) => {
-      if (isAgentUiDisabled && isAgentDockTab(tabId)) return {};
-      const nextColumns: DockLayoutState["columns"] = {
-        leftSidebar: { ...state.dockLayout.columns.leftSidebar, tabIds: [...state.dockLayout.columns.leftSidebar.tabIds] },
-        leftPage: { ...state.dockLayout.columns.leftPage, tabIds: [...state.dockLayout.columns.leftPage.tabIds] },
-        rightPage: { ...state.dockLayout.columns.rightPage, tabIds: [...state.dockLayout.columns.rightPage.tabIds] },
-        rightSidebar: { ...state.dockLayout.columns.rightSidebar, tabIds: [...state.dockLayout.columns.rightSidebar.tabIds] },
-      };
-
-      let sourceColumnId: DockColumnId | null = null;
-      let sourceIndex = -1;
-
-      for (const columnId of DOCK_COLUMN_IDS) {
-        const column = nextColumns[columnId];
-        const existingIndex = column.tabIds.indexOf(tabId);
-        if (existingIndex === -1) continue;
-        sourceColumnId = columnId;
-        sourceIndex = existingIndex;
-        column.tabIds.splice(existingIndex, 1);
-        if (column.activeTabId === tabId) {
-          column.activeTabId = column.tabIds[existingIndex] || column.tabIds[existingIndex - 1] || column.tabIds[0] || null;
-        }
-      }
-
-      const targetColumn = nextColumns[targetColumnId];
-      let insertIndex = typeof targetIndex === "number" ? targetIndex : targetColumn.tabIds.length;
-      if (sourceColumnId === targetColumnId && sourceIndex !== -1 && insertIndex > sourceIndex) insertIndex -= 1;
-      insertIndex = Math.max(0, Math.min(insertIndex, targetColumn.tabIds.length));
-      targetColumn.tabIds.splice(insertIndex, 0, tabId);
-      targetColumn.activeTabId = tabId;
-      targetColumn.collapsed = false;
-
-      const dockLayout = { columns: nextColumns };
-      persistDockLayout(dockLayout);
-      return {
-        dockLayout,
-      };
-    });
-  },
-
-  openDockTab: (tabId, preferredColumnId) => {
-    set((state) => {
-      if (isAgentUiDisabled && isAgentDockTab(tabId)) return {};
-      const nextColumns: DockLayoutState["columns"] = {
-        leftSidebar: { ...state.dockLayout.columns.leftSidebar, tabIds: [...state.dockLayout.columns.leftSidebar.tabIds] },
-        leftPage: { ...state.dockLayout.columns.leftPage, tabIds: [...state.dockLayout.columns.leftPage.tabIds] },
-        rightPage: { ...state.dockLayout.columns.rightPage, tabIds: [...state.dockLayout.columns.rightPage.tabIds] },
-        rightSidebar: { ...state.dockLayout.columns.rightSidebar, tabIds: [...state.dockLayout.columns.rightSidebar.tabIds] },
-      };
-      let targetColumnId: DockColumnId | null = null;
-      for (const columnId of DOCK_COLUMN_IDS) {
-        if (nextColumns[columnId].tabIds.includes(tabId)) {
-          targetColumnId = columnId;
-          break;
-        }
-      }
-      targetColumnId ||= preferredColumnId;
-      const targetColumn = nextColumns[targetColumnId];
-      if (!targetColumn.tabIds.includes(tabId)) targetColumn.tabIds.push(tabId);
-      targetColumn.activeTabId = tabId;
-      targetColumn.collapsed = false;
-      const dockLayout = { columns: nextColumns };
-      persistDockLayout(dockLayout);
-      return { dockLayout };
-    });
-  },
-
-  startDraggingDockTab: (tabId, sourceColumnId, pointerX, pointerY, targetColumnId = null) => {
-    if (isAgentUiDisabled && isAgentDockTab(tabId)) return;
-    set({ draggingDockTab: { tabId, sourceColumnId, pointerX, pointerY, targetColumnId } });
-  },
-  updateDraggingDockTab: (pointerX, pointerY, targetColumnId) => set((state) => state.draggingDockTab
-    ? { draggingDockTab: { ...state.draggingDockTab, pointerX, pointerY, targetColumnId } }
-    : {}),
-  finishDraggingDockTab: () => set({ draggingDockTab: null }),
-
-  pushNativeWebViewBlocker: (key) => set((state) => ({
-    nativeWebViewBlockers: {
-      ...state.nativeWebViewBlockers,
-      [key]: (state.nativeWebViewBlockers[key] || 0) + 1,
-    },
-  })),
-
-  popNativeWebViewBlocker: (key) => set((state) => {
-    const current = state.nativeWebViewBlockers[key] || 0;
-    if (current <= 1) {
-      const nativeWebViewBlockers = { ...state.nativeWebViewBlockers };
-      delete nativeWebViewBlockers[key];
-      return { nativeWebViewBlockers };
-    }
-    return { nativeWebViewBlockers: { ...state.nativeWebViewBlockers, [key]: current - 1 } };
-  }),
 
   // Derived getters
   getActiveCaller: () => {

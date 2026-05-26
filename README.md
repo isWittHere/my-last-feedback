@@ -120,19 +120,11 @@ Whenever you're about to complete a user request, call the interactive_feedback 
 - Call interactive_feedback when user confirmation is needed (testing, terminal commands, reports, questions)
 - Call interactive_feedback before completing any user request
 - Keep calling interactive_feedback until the user's feedback is empty, then end the request
-- Every interactive_feedback call MUST include request_type.
 
 ## Agent Identity (agent_name)
-- agent_name is required. Use the 4-character identifier assigned by the feedback response or hook context.
-- Do not invent or replace agent_name. If it is unknown, obtain the assigned identifier before calling interactive_feedback.
+- On your first call, leave agent_name empty or omit it.
+- The response will assign you an agent identifier (e.g. "B780").
 - On ALL subsequent calls, you MUST pass that identifier back as agent_name.
-
-## Request Type (request_type)
-- request_type is required in every call.
-- Allowed values: analysis, completion, planning, document, default.
-- Values outside this list are treated as default; old type names are not compatibility-mapped.
-- request_type is metadata for categorization and visual display only; it does not change tool behavior, permissions, routing, or available capabilities.
-- Use analysis for analysis or reports, completion for finished work, planning for plans, document for document-related work, and default for everything else.
 
 ## Questions Feature
 - When you need the user to supplement information or choose from options, use the questions parameter.
@@ -155,8 +147,7 @@ The agent will now pop up a feedback window whenever it needs your confirmation.
 | `project_directory` | `string` | Yes | Full path to the project directory |
 | `summary` | `string` | Yes | Work summary in Markdown format |
 | `request_name` | `string` | Yes | Concise task title (5–10 words), shown in the title bar |
-| `request_type` | `string` | Yes | One of `analysis`, `completion`, `planning`, `document`, `default`; other values become `default` |
-| `agent_name` | `string` | Yes | 4-character agent identifier. Pass the assigned ID on subsequent calls |
+| `agent_name` | `string` | No | Agent identifier. Leave empty on first call; pass assigned ID on subsequent calls |
 | `questions` | `array` | No | Structured questions: `[{ label: string, options?: string[] }]` |
 
 #### Return Value

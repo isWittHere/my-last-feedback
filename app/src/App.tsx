@@ -2,39 +2,18 @@ import { useEffect } from "react";
 import { invoke } from "@tauri-apps/api/core";
 import { listen } from "@tauri-apps/api/event";
 import { getCurrentWindow } from "@tauri-apps/api/window";
-import { normalizeRequestType, useFeedbackStore } from "./store/feedbackStore";
+import { useFeedbackStore } from "./store/feedbackStore";
 import { useMLRAStore } from "./store/mlraStore";
 import { FeedbackApp } from "./components/FeedbackApp";
-import { AppTooltipProvider } from "./components/AppTooltip";
-import { TerminalEventBridge } from "./components/TerminalEventBridge";
-import { AgentProcessEventBridge } from "./components/agent/AgentProcessEventBridge";
-import { isAgentUiDisabled } from "./agent/agentUiFlags";
-import { isMlraUiDisabled } from "./mlra/mlraUiFlags";
-import type { ImageAttachment, Session } from "./store/feedbackStore";
-import { getNotificationSettings, hasStoredNotificationSettings, saveNotificationSettings, syncAutoFocusNewRequest } from "./notificationSettings";
-import type { FeedbackDraft } from "./store/feedbackStore";
+import type { Session } from "./store/feedbackStore";
 
-function basename(value: string): string {
-  return value.replace(/\\/g, "/").split("/").filter(Boolean).pop() || value;
-}
-
-function mapHistoryImage(value: unknown, index: number): ImageAttachment | null {
-  if (!value || typeof value !== "object") return null;
-  const image = value as Record<string, unknown>;
-  const file = typeof image.file === "string" ? image.file : "";
-  const originalPath = typeof image.path === "string" ? image.path : "";
-  const originalName = typeof image.name === "string" ? image.name : "";
-  const path = originalPath || file;
-  const type = typeof image.type === "string" ? image.type : "image/png";
-  const data = typeof image.data === "string" ? image.data : "";
-  const placeholder = image.placeholder === true;
-  const name = originalName || (originalPath ? basename(originalPath) : placeholder ? `Image ${index + 1}` : basename(file || `image-${index + 1}`));
-  return {
-    path: path || name,
-    name,
-    sizeKB: typeof image.sizeKB === "number" ? image.sizeKB : 0,
-    dataUrl: data ? `data:${type};base64,${data}` : undefined,
-  };
+/** Read notification settings from localStorage */
+function getNotificationSettings() {
+  try {
+    const raw = localStorage.getItem("mlf-notification-settings");
+    if (raw) return JSON.parse(raw) as { taskbarFlash?: boolean; systemNotification?: boolean; persistentUnread?: boolean };
+  } catch {}
+  return { taskbarFlash: true, systemNotification: true, persistentUnread: true };
 }
 
 /** Fire taskbar flash + system notification for a new session */
@@ -69,11 +48,9 @@ interface NewSessionEvent {
   caller_id: string;
   caller_name: string;
   caller_color: string;
-  caller_workspace_key?: string;
   caller_client_name: string;
   caller_alias: string;
   request_name: string;
-  request_type?: string;
   summary: string;
   project_directory: string;
   questions: Array<{ label: string; options?: string[] }>;
@@ -81,80 +58,94 @@ interface NewSessionEvent {
 
 function App() {
   useEffect(() => {
-    if (hasStoredNotificationSettings()) {
-      syncAutoFocusNewRequest(getNotificationSettings().autoFocusNewRequest);
-    } else {
-      invoke<boolean>("get_auto_focus_new_request")
-        .then((enabled) => saveNotificationSettings({ ...getNotificationSettings(), autoFocusNewRequest: enabled }))
-        .catch(() => syncAutoFocusNewRequest(getNotificationSettings().autoFocusNewRequest));
-    }
-    invoke<Record<string, FeedbackDraft>>("load_queued_drafts")
-      .then((drafts) => useFeedbackStore.getState().setQueuedDrafts(drafts || {}))
-      .catch(() => {});
+    const store = useFeedbackStore.getState();
 
-    invoke<{
-      callers: Array<{ id: string; name: string; version: string; color: string; workspace_key?: string; client_name?: string; alias?: string }>;
-      sessions: Array<{
-        id: string;
-        caller_id: string;
-        request_name: string;
-        request_type?: string;
-        summary: string;
-        project_directory: string;
-        status: string;
-        created_at: string;
-        feedback_text: string | null;
-        command_logs: string | null;
-        images: unknown[];
-        mlc_attachments?: Array<{ file_path: string; title: string; description: string }>;
-        web_attachments?: Session["webAttachments"];
-        questions?: Array<{ label: string; options?: string[] }>;
-      }>;
-    }>("load_history")
-      .then((history) => {
-        const s = useFeedbackStore.getState();
-        for (const c of history.callers) {
-          s.addCaller({ ...c, pendingCount: 0, workspaceKey: c.workspace_key || "", clientName: c.client_name || "", alias: c.alias || "" });
-        }
-        for (const sess of history.sessions) {
-          s.addSession({
-            id: sess.id,
-            callerId: sess.caller_id,
-            requestName: sess.request_name,
-            requestType: normalizeRequestType(sess.request_type),
-            summary: sess.summary,
-            projectDirectory: sess.project_directory,
-            status: (sess.status === "pending" ? "pending" : sess.status === "cancelled" ? "cancelled" : "responded") as Session["status"],
-            createdAt: sess.created_at,
-            feedbackText: sess.feedback_text || "",
-            testLogText: "",
-            images: (sess.images || []).map(mapHistoryImage).filter(Boolean) as ImageAttachment[],
-            commandLogs: sess.command_logs || "",
-            mlcAttachments: (sess.mlc_attachments || []).map((item) => ({
-              filePath: item.file_path,
-              title: item.title,
-              description: item.description,
-            })),
-            webAttachments: sess.web_attachments || [],
-            questions: (sess.questions || []).map((q: any) => ({
-              label: q.label,
-              options: q.options,
-              selectedOptions: q.selectedOptions || [],
-              answer: q.answer || "",
-            })),
-            gitAction: null,
-          }, { attentionMode: "passive", applyQueuedDraft: false });
-        }
-        for (const c of history.callers) {
-          s.updateCallerPendingCount(c.id);
-        }
-        if (history.callers.length > 0) {
-          s.setActiveCaller(history.callers[0].id);
+    // Determine app mode from Rust backend
+    invoke<string>("get_app_mode")
+      .then((mode) => {
+        store.setAppMode(mode as "legacy" | "persistent");
+
+        if (mode === "legacy") {
+          invoke<{
+            summary: string;
+            request_name: string;
+            project_directory: string;
+            output_file: string;
+            command_logs: string;
+          }>("get_app_args")
+            .then((args) => {
+              const s = useFeedbackStore.getState();
+              s.setSummary(args.summary || "");
+              s.setRequestName(args.request_name || "");
+              s.setProjectDirectory(args.project_directory || "");
+              s.setOutputFile(args.output_file || "");
+              s.setCommandLogs(args.command_logs || "");
+            })
+            .catch((e) => console.error("Failed to get app args:", e));
+        } else {
+          // Persistent mode: load persisted history (callers + sessions)
+          invoke<{
+            callers: Array<{ id: string; name: string; version: string; color: string; client_name?: string; alias?: string }>;
+            sessions: Array<{
+              id: string;
+              caller_id: string;
+              request_name: string;
+              summary: string;
+              project_directory: string;
+              status: string;
+              created_at: string;
+              feedback_text: string | null;
+              command_logs: string | null;
+              images: unknown[];
+              questions?: Array<{ label: string; options?: string[] }>;
+            }>;
+          }>("load_history")
+            .then((history) => {
+              const s = useFeedbackStore.getState();
+              for (const c of history.callers) {
+                s.addCaller({ ...c, pendingCount: 0, clientName: c.client_name || "", alias: c.alias || "" });
+              }
+              for (const sess of history.sessions) {
+                s.addSession({
+                  id: sess.id,
+                  callerId: sess.caller_id,
+                  requestName: sess.request_name,
+                  summary: sess.summary,
+                  projectDirectory: sess.project_directory,
+                  status: (sess.status === "pending" ? "pending" : sess.status === "cancelled" ? "cancelled" : "responded") as Session["status"],
+                  createdAt: sess.created_at,
+                  feedbackText: sess.feedback_text || "",
+                  testLogText: "",
+                  images: [],
+                  commandLogs: sess.command_logs || "",
+                  questions: (sess.questions || []).map((q: any) => ({
+                    label: q.label,
+                    options: q.options,
+                    selectedOptions: q.selectedOptions || [],
+                    answer: q.answer || "",
+                  })),
+                  gitAction: null,
+                });
+              }
+              // Update pending counts for each caller
+              for (const c of history.callers) {
+                s.updateCallerPendingCount(c.id);
+              }
+              // Auto-select first caller and its latest session
+              if (history.callers.length > 0) {
+                const firstCallerId = history.callers[0].id;
+                s.setActiveCaller(firstCallerId);
+              }
+            })
+            .catch((e) => console.error("Failed to load history:", e));
         }
       })
-      .catch((e) => console.error("Failed to load history:", e));
+      .catch((e) => {
+        console.error("Failed to get app mode:", e);
+        useFeedbackStore.getState().setAppMode("legacy");
+      });
 
-    // Load prompt templates
+    // Load prompt templates (both modes)
     const reloadPrompts = () => {
       invoke<Array<{ name: string; description: string; content: string; icon: string }>>("load_prompts")
         .then((prompts) => useFeedbackStore.getState().setPrompts(prompts || []))
@@ -175,7 +166,6 @@ function App() {
         name: data.caller_name,
         version: "",
         color: data.caller_color,
-        workspaceKey: data.caller_workspace_key || "",
         pendingCount: 0,
         clientName: data.caller_client_name || "",
         alias: data.caller_alias || "",
@@ -185,7 +175,6 @@ function App() {
         id: data.session_id,
         callerId: data.caller_id,
         requestName: data.request_name,
-        requestType: normalizeRequestType(data.request_type),
         summary: data.summary,
         projectDirectory: data.project_directory,
         status: "pending",
@@ -194,8 +183,6 @@ function App() {
         testLogText: "",
         images: [],
         commandLogs: "",
-        mlcAttachments: [],
-        webAttachments: [],
         questions: (data.questions || []).map((q) => ({
           label: q.label,
           options: q.options,
@@ -204,12 +191,9 @@ function App() {
         })),
         gitAction: null,
       };
-      const attentionMode = getNotificationSettings().autoFocusNewRequest ? "interrupt" : "passive";
-      s.addSession(session, { attentionMode });
-      if (attentionMode === "interrupt") {
-        s.setActiveCaller(data.caller_id);
-        s.setActiveSession(data.session_id);
-      }
+      s.addSession(session);
+      s.setActiveCaller(data.caller_id);
+      s.setActiveSession(data.session_id);
 
       // Notify user of new session
       notifyNewSession(data.request_name, data.caller_name);
@@ -221,18 +205,14 @@ function App() {
       s.markSessionCancelled(event.payload.session_id);
     });
 
-    // Listen for MLRA daemon messages only when MLRA UI is enabled.
-    const unlistenMlra = isMlraUiDisabled
-      ? Promise.resolve(() => {})
-      : listen<string>("mlra-message", (event) => {
-        useMLRAStore.getState().handleDaemonMessage(event.payload);
-      });
+    // Listen for MLRA daemon messages
+    const unlistenMlra = listen<string>("mlra-message", (event) => {
+      useMLRAStore.getState().handleDaemonMessage(event.payload);
+    });
 
-    const unlistenMlraDisconnect = isMlraUiDisabled
-      ? Promise.resolve(() => {})
-      : listen("mlra-disconnected", () => {
-        console.log("[MLRA] Daemon disconnected");
-      });
+    const unlistenMlraDisconnect = listen("mlra-disconnected", () => {
+      console.log("[MLRA] Daemon disconnected");
+    });
 
     return () => {
       unlisten.then((fn) => fn());
@@ -243,13 +223,7 @@ function App() {
     };
   }, []);
 
-  return (
-    <AppTooltipProvider>
-      <TerminalEventBridge />
-      {!isAgentUiDisabled && <AgentProcessEventBridge />}
-      <FeedbackApp />
-    </AppTooltipProvider>
-  );
+  return <FeedbackApp />;
 }
 
 export default App;

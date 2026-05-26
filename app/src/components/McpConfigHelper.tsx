@@ -3,27 +3,12 @@ import { useTranslation } from "react-i18next";
 import { invoke } from "@tauri-apps/api/core";
 import { writeText } from "@tauri-apps/plugin-clipboard-manager";
 import { Icon } from "./Icons";
-import { SettingsSegmentedControl } from "./SettingsSegmentedControl";
 
-type Client = "cursor" | "vscode" | "cline" | "codex";
+type Client = "cursor" | "vscode" | "cline";
 type Format = "json" | "args";
 
 function generateConfig(client: Client, format: Format, serverPath: string): string {
   const escaped = serverPath.replace(/\\/g, "/");
-
-  if (client === "codex") {
-    return [
-      "[mcp_servers.\"my-last-feedback\"]",
-      "type = \"sse\"",
-      "url = \"http://127.0.0.1:3838/mcp\"",
-      "tool_timeout_sec = 64800",
-      "",
-      "",
-      "[mcp_servers.\"my-last-feedback\".tools.interactive_feedback]",
-      "approval_mode = \"approve\"",
-      "",
-    ].join("\n");
-  }
 
   if (format === "args") {
     return `node ${escaped}`;
@@ -70,7 +55,6 @@ function clientLabel(c: Client): string {
     case "cursor": return "Cursor";
     case "vscode": return "VS Code";
     case "cline": return "Cline";
-    case "codex": return "Codex";
   }
 }
 
@@ -79,7 +63,6 @@ function configFilePath(c: Client): string {
     case "cursor": return "~/.cursor/mcp.json";
     case "vscode": return ".vscode/mcp.json";
     case "cline": return "MCP Settings";
-    case "codex": return "~/.codex/config.toml";
   }
 }
 
@@ -115,29 +98,37 @@ export function McpConfigHelper({ compact }: { compact?: boolean }) {
       {/* Client selector */}
       <div className="mcp-config-row">
         <span className="mcp-config-label">{t("mcpConfig.client", "Client")}</span>
-        <SettingsSegmentedControl
-          ariaLabel={t("mcpConfig.client", "Client")}
-          value={client}
-          onChange={(value) => setClient(value as Client)}
-          options={(["cursor", "vscode", "cline", "codex"] as Client[]).map((c) => ({ id: c, label: clientLabel(c) }))}
-        />
+        <div className="settings-btn-group">
+          {(["cursor", "vscode", "cline"] as Client[]).map((c) => (
+            <button
+              key={c}
+              className={`settings-btn-option${client === c ? " active" : ""}`}
+              onClick={() => setClient(c)}
+            >
+              {clientLabel(c)}
+            </button>
+          ))}
+        </div>
       </div>
 
       {/* Format selector */}
-      {client !== "codex" && (
-        <div className="mcp-config-row">
-          <span className="mcp-config-label">{t("mcpConfig.format", "Format")}</span>
-          <SettingsSegmentedControl
-            ariaLabel={t("mcpConfig.format", "Format")}
-            value={format}
-            onChange={(value) => setFormat(value as Format)}
-            options={[
-              { id: "json", label: "JSON" },
-              { id: "args", label: t("mcpConfig.cmdArgs", "Cmd+Args") },
-            ]}
-          />
+      <div className="mcp-config-row">
+        <span className="mcp-config-label">{t("mcpConfig.format", "Format")}</span>
+        <div className="settings-btn-group">
+          <button
+            className={`settings-btn-option${format === "json" ? " active" : ""}`}
+            onClick={() => setFormat("json")}
+          >
+            JSON
+          </button>
+          <button
+            className={`settings-btn-option${format === "args" ? " active" : ""}`}
+            onClick={() => setFormat("args")}
+          >
+            {t("mcpConfig.cmdArgs", "Cmd+Args")}
+          </button>
         </div>
-      )}
+      </div>
 
       {/* Config file hint */}
       {format === "json" && (

@@ -22,20 +22,6 @@ const PORT_START: u16 = 19850;
 #[cfg(not(debug_assertions))]
 const PORT_END: u16 = 19860;
 
-fn default_request_type() -> String {
-    "analysis".to_string()
-}
-
-fn normalize_request_type(value: &str) -> String {
-    match value {
-        "analysis" | "explanation" | "question" | "analysis_report" | "default" => "analysis".to_string(),
-        "planning" => "planning".to_string(),
-        "completion" | "verification_completed" => "completion".to_string(),
-        "document" | "document_completed" => "document".to_string(),
-        _ => default_request_type(),
-    }
-}
-
 /// Lock file path to store the active port
 /// Debug builds use a different file to avoid conflicting with installed release builds.
 fn lock_file_path() -> std::path::PathBuf {
@@ -50,7 +36,6 @@ fn lock_file_path() -> std::path::PathBuf {
 struct IpcRequest {
     #[serde(rename = "type")]
     msg_type: String,
-    #[serde(default)]
     session_id: String,
     #[serde(default)]
     caller: Option<CallerField>,
@@ -74,8 +59,6 @@ struct RequestPayload {
     summary: String,
     #[serde(default)]
     request_name: String,
-    #[serde(default = "default_request_type")]
-    request_type: String,
     #[serde(default)]
     project_directory: String,
     #[serde(default)]
@@ -105,11 +88,9 @@ pub struct NewSessionEvent {
     pub caller_id: String,
     pub caller_name: String,
     pub caller_color: String,
-    pub caller_workspace_key: String,
     pub caller_client_name: String,
     pub caller_alias: String,
     pub request_name: String,
-    pub request_type: String,
     pub summary: String,
     pub project_directory: String,
     pub questions: Vec<QuestionField>,
@@ -245,7 +226,6 @@ async fn handle_connection(
                 };
 
                 let session_id = request.session_id.clone();
-                let request_type = normalize_request_type(&payload_field.request_type);
 
                 // Create oneshot channel for response
                 let (tx, rx) = oneshot::channel::<FeedbackPayload>();
@@ -253,7 +233,7 @@ async fn handle_connection(
                 // Register caller and session
                 let event = {
                     let mut mgr = session_mgr.lock().await;
-                    let caller = mgr.ensure_caller(&caller_field.name, &caller_field.version, &caller_field.client_name, &caller_field.alias, &payload_field.project_directory);
+                    let caller = mgr.ensure_caller(&caller_field.name, &caller_field.version, &caller_field.client_name, &caller_field.alias);
                     let questions_json: Vec<serde_json::Value> = payload_field.questions.iter().map(|q| {
                         serde_json::json!({
                             "label": q.label,
@@ -264,7 +244,6 @@ async fn handle_connection(
                         caller.id.clone(),
                         session_id.clone(),
                         payload_field.request_name.clone(),
-                        request_type.clone(),
                         payload_field.summary.clone(),
                         payload_field.project_directory.clone(),
                         questions_json,
@@ -275,11 +254,9 @@ async fn handle_connection(
                         caller_id: caller.id.clone(),
                         caller_name: caller.name.clone(),
                         caller_color: caller.color.clone(),
-                        caller_workspace_key: caller.workspace_key.clone(),
                         caller_client_name: caller.client_name.clone(),
                         caller_alias: caller.alias.clone(),
                         request_name: payload_field.request_name,
-                        request_type,
                         summary: payload_field.summary,
                         project_directory: payload_field.project_directory,
                         questions: payload_field.questions,
@@ -293,16 +270,10 @@ async fn handle_connection(
                     eprintln!("[IPC] Failed to emit event: {}", e);
                 }
 
-                let should_focus = app_handle
-                    .try_state::<crate::AppState>()
-                    .and_then(|state| state.auto_focus_new_request.lock().ok().map(|value| *value))
-                    .unwrap_or(true);
-
-                if should_focus {
-                    if let Some(window) = app_handle.get_webview_window("main") {
-                        let _ = window.show();
-                        let _ = window.set_focus();
-                    }
+                // Show and focus window
+                if let Some(window) = app_handle.get_webview_window("main") {
+                    let _ = window.show();
+                    let _ = window.set_focus();
                 }
 
                 // Wait for EITHER user response OR TCP disconnect.

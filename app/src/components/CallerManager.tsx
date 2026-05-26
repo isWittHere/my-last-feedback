@@ -2,41 +2,24 @@ import { useCallback, useMemo, useRef, useState } from "react";
 import { useTranslation } from "react-i18next";
 import { useFeedbackStore } from "../store/feedbackStore";
 import { useShallow } from "zustand/react/shallow";
-import { agentIdentityLanguage, resolveAgentGlyphIdentity } from "../identity/agentIdentity";
 import { IdenticonAvatar } from "./IdenticonAvatar";
+import { useFriendlyName } from "./useFriendlyName";
 import { Icon } from "./Icons";
-import { SettingsSegmentedControl } from "./SettingsSegmentedControl";
 
 interface WorkspaceGroup {
   name: string;
   callerIds: string[];
 }
 
-const callerColumnModes = ["auto", 1, 2, 3] as const;
-type CallerColumnModeOption = typeof callerColumnModes[number];
-
-function renderCallerColumnModeIcon(mode: CallerColumnModeOption) {
-  const columnCount = mode === "auto" ? 2 : mode;
-  return (
-    <span className={`cm-column-mode-icon cm-column-mode-icon-${String(mode)}`} aria-hidden="true">
-      {Array.from({ length: columnCount }, (_, columnIndex) => (
-        <span key={columnIndex} className="cm-column-mode-cell" />
-      ))}
-      {mode === "auto" ? <span className="cm-column-mode-auto-mark">A</span> : null}
-    </span>
-  );
-}
-
 export function CallerManager() {
-  const { t, i18n } = useTranslation();
+  const { t } = useTranslation();
+  const friendlyName = useFriendlyName();
   const {
     callers, sessions, renameCaller, mergeCallers, hiddenCallerIds, toggleCallerHidden,
     removeCaller, removeEmptyCallers,
-    clearAllHistory,
     maxSessionsPerCaller, setMaxSessionsPerCaller,
     autoRemoveEmptyCallers, setAutoRemoveEmptyCallers,
     autoHideInactiveHours, setAutoHideInactiveHours,
-    callerColumnMode, setCallerColumnMode,
   } = useFeedbackStore(
     useShallow((s) => ({
       callers: s.callers,
@@ -47,15 +30,12 @@ export function CallerManager() {
       toggleCallerHidden: s.toggleCallerHidden,
       removeCaller: s.removeCaller,
       removeEmptyCallers: s.removeEmptyCallers,
-      clearAllHistory: s.clearAllHistory,
       maxSessionsPerCaller: s.maxSessionsPerCaller,
       setMaxSessionsPerCaller: s.setMaxSessionsPerCaller,
       autoRemoveEmptyCallers: s.autoRemoveEmptyCallers,
       setAutoRemoveEmptyCallers: s.setAutoRemoveEmptyCallers,
       autoHideInactiveHours: s.autoHideInactiveHours,
       setAutoHideInactiveHours: s.setAutoHideInactiveHours,
-      callerColumnMode: s.callerColumnMode,
-      setCallerColumnMode: s.setCallerColumnMode,
     }))
   );
 
@@ -143,7 +123,6 @@ export function CallerManager() {
 
   // Remove caller state
   const [removeConfirmId, setRemoveConfirmId] = useState<string | null>(null);
-  const [confirmClearHistory, setConfirmClearHistory] = useState(false);
   const [cleanMessage, setCleanMessage] = useState<string | null>(null);
 
   const handleRemoveCaller = useCallback(async () => {
@@ -241,26 +220,10 @@ export function CallerManager() {
           </div>
           <div className="settings-row">
             <div className="settings-row-info">
-              <span className="settings-label">{t("callerManager.callerColumns")}</span>
-              <span className="settings-sublabel">{t("callerManager.callerColumnsHint")}</span>
-            </div>
-            <SettingsSegmentedControl
-              ariaLabel={t("callerManager.callerColumns")}
-              value={String(callerColumnMode)}
-              onChange={(value) => setCallerColumnMode(value === "auto" ? "auto" : Number(value) as CallerColumnModeOption)}
-              className="settings-segmented-icon-only settings-segmented-visual-options settings-caller-column-options"
-              options={callerColumnModes.map((mode) => {
-                const label = mode === "auto" ? t("callerManager.callerColumnsAuto") : `${mode}`;
-                return { id: String(mode), label, icon: renderCallerColumnModeIcon(mode), ariaLabel: `${t("callerManager.callerColumns")}: ${label}` };
-              })}
-            />
-          </div>
-          <div className="settings-row">
-            <div className="settings-row-info">
               <span className="settings-label">{t("callerManager.autoHideInactive")}</span>
               <span className="settings-sublabel">{t("callerManager.autoHideInactiveHint")}</span>
             </div>
-            <div className="cm-number-with-unit">
+            <div style={{ display: "flex", alignItems: "center", gap: 4 }}>
               <input
                 type="number"
                 min={0}
@@ -269,7 +232,7 @@ export function CallerManager() {
                 onChange={(e) => setAutoHideInactiveHours(Math.max(0, parseInt(e.target.value) || 0))}
                 className="cm-number-input"
               />
-              <span className="cm-number-unit">{t("callerManager.hours")}</span>
+              <span style={{ fontSize: 11, color: "var(--color-text-secondary)" }}>{t("callerManager.hours")}</span>
             </div>
           </div>
           <div className="settings-row">
@@ -288,41 +251,9 @@ export function CallerManager() {
             <div className="settings-row-info">
               <span className="settings-label">{t("callerManager.cleanEmpty")}</span>
             </div>
-            <button className="settings-command-button" onClick={handleCleanEmpty}>
+            <button className="settings-btn-option" style={{ fontSize: 10, padding: "2px 8px" }} onClick={handleCleanEmpty}>
               {t("callerManager.cleanEmptyBtn")}
             </button>
-          </div>
-          <div className="settings-row">
-            <div className="settings-row-info">
-              <span className="settings-label">{t("settings.clearHistory")}</span>
-              <span className="settings-sublabel">{t("settings.clearHistoryDesc")}</span>
-            </div>
-            {!confirmClearHistory ? (
-              <button
-                className="settings-command-button danger"
-                onClick={() => setConfirmClearHistory(true)}
-              >
-                {t("settings.clearHistoryBtn")}
-              </button>
-            ) : (
-              <div className="settings-command-actions">
-                <button
-                  className="settings-command-button danger active"
-                  onClick={async () => {
-                    await clearAllHistory();
-                    setConfirmClearHistory(false);
-                  }}
-                >
-                  {t("settings.clearHistoryConfirm")}
-                </button>
-                <button
-                  className="settings-command-button"
-                  onClick={() => setConfirmClearHistory(false)}
-                >
-                  {t("settings.clearHistoryCancel")}
-                </button>
-              </div>
-            )}
           </div>
           {cleanMessage && <span style={{ fontSize: 10, color: "var(--color-text-secondary)", padding: "2px 0" }}>{cleanMessage}</span>}
         </div>
@@ -336,7 +267,7 @@ export function CallerManager() {
           <span style={{ fontSize: 11, color: "var(--color-text-secondary)" }}>
             {t("callerManager.mergeSelectTarget")}
           </span>
-          <button className="settings-command-button" onClick={() => { setMergeSource(null); setMergeTarget(null); setMergeConfirm(false); }}>
+          <button className="settings-btn-option" onClick={() => { setMergeSource(null); setMergeTarget(null); setMergeConfirm(false); }}>
             {t("callerManager.cancel")}
           </button>
         </div>
@@ -352,10 +283,10 @@ export function CallerManager() {
             })}
           </span>
           <div style={{ display: "flex", gap: 6, marginTop: 6 }}>
-            <button className="settings-command-button danger active" onClick={handleMerge}>
+            <button className="settings-btn-option danger active" style={{ border: "1px solid var(--color-border)", borderRadius: 4 }} onClick={handleMerge}>
               {t("callerManager.mergeConfirm")}
             </button>
-            <button className="settings-command-button" onClick={() => { setMergeSource(null); setMergeTarget(null); setMergeConfirm(false); }}>
+            <button className="settings-btn-option" style={{ border: "1px solid var(--color-border)", borderRadius: 4 }} onClick={() => { setMergeSource(null); setMergeTarget(null); setMergeConfirm(false); }}>
               {t("callerManager.cancel")}
             </button>
           </div>
@@ -375,10 +306,10 @@ export function CallerManager() {
               })}
             </span>
             <div style={{ display: "flex", gap: 6, marginTop: 6 }}>
-              <button className="settings-command-button danger active" onClick={handleRemoveCaller}>
+              <button className="settings-btn-option danger active" style={{ border: "1px solid var(--color-border)", borderRadius: 4 }} onClick={handleRemoveCaller}>
                 {t("callerManager.removeConfirm")}
               </button>
-              <button className="settings-command-button" onClick={() => setRemoveConfirmId(null)}>
+              <button className="settings-btn-option" style={{ border: "1px solid var(--color-border)", borderRadius: 4 }} onClick={() => setRemoveConfirmId(null)}>
                 {t("callerManager.cancel")}
               </button>
             </div>
@@ -427,7 +358,6 @@ export function CallerManager() {
               const isMergeSource = mergeSource === cid;
               const isMergeSelectable = mergeSource && mergeSource !== cid && !mergeConfirm;
               const isDragging = dragCallerId === cid;
-              const callerGlyph = resolveAgentGlyphIdentity({ agentName: caller.alias, id: caller.id }, agentIdentityLanguage(i18n.language));
 
               return (
                 <div
@@ -457,16 +387,18 @@ export function CallerManager() {
 
                   {/* Avatar */}
                   <div className="cm-col-avatar">
-                    <IdenticonAvatar alias={callerGlyph.avatarSeed} color={caller.color} size={20} />
+                    <IdenticonAvatar alias={caller.alias || caller.id} color={caller.color} size={20} />
                   </div>
 
                   {/* Alias + Sessions + Client stacked */}
                   <div className="cm-col-info">
                     <div className="cm-row-alias-line">
                       <span className="cm-row-alias" style={{ color: caller.color }}>
-                        {callerGlyph.nickname}
+                        {caller.alias
+                          ? friendlyName(caller.alias)
+                          : "—"}
                       </span>
-                      <span style={{ fontSize: 11, color: "var(--color-text-muted)" }}>({callerGlyph.agentName})</span>
+                      {caller.alias && <span style={{ fontSize: 11, color: "var(--color-text-muted)" }}>({caller.alias})</span>}
                       {counts.pending > 0 && <span className="cm-badge-pending" style={{ background: caller.color }}>
                         <Icon name="message" size={9} strokeWidth={2.5} />
                         {counts.pending}

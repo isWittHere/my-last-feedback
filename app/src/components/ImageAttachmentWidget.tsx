@@ -46,38 +46,39 @@ interface RenderParts {
   };
 }
 
-export function ImageAttachmentWidget({ children, renderLayout, queuedCallerId }: {
+export function ImageAttachmentWidget({ children, renderLayout }: {
   children?: React.ReactNode;
   renderLayout?: (parts: RenderParts) => React.ReactNode;
-  queuedCallerId?: string;
 }) {
   const { t } = useTranslation();
+  const appMode = useFeedbackStore((s) => s.appMode);
   const { session: activeSession } = useActiveCallerSession();
-  const queuedDraft = useFeedbackStore((s) => queuedCallerId ? s.queuedDraftsByCallerId[queuedCallerId] : null);
-  const { addSessionImage, removeSessionImage, addQueuedDraftImage, removeQueuedDraftImage } = useFeedbackStore(useShallow((s) => ({
+  const { images: legacyImages, addImage, removeImage, addSessionImage, removeSessionImage } = useFeedbackStore(useShallow((s) => ({
+    images: s.images,
+    addImage: s.addImage,
+    removeImage: s.removeImage,
     addSessionImage: s.addSessionImage,
     removeSessionImage: s.removeSessionImage,
-    addQueuedDraftImage: s.addQueuedDraftImage,
-    removeQueuedDraftImage: s.removeQueuedDraftImage,
   })));
   const fileInputRef = useRef<HTMLInputElement>(null);
   const [dragOver, setDragOver] = useState(false);
 
-  const images = queuedCallerId ? (queuedDraft?.images || []) : (activeSession?.images || []);
+  const isPersistent = appMode === "persistent";
+  const images = isPersistent ? (activeSession?.images || []) : legacyImages;
 
   const handleRemove = (path: string) => {
-    if (queuedCallerId) {
-      removeQueuedDraftImage(queuedCallerId, path);
-    } else if (activeSession) {
+    if (isPersistent && activeSession) {
       removeSessionImage(activeSession.id, path);
+    } else {
+      removeImage(path);
     }
   };
 
   const handleAdd = (img: ImageAttachment) => {
-    if (queuedCallerId) {
-      addQueuedDraftImage(queuedCallerId, img);
-    } else if (activeSession) {
+    if (isPersistent && activeSession) {
       addSessionImage(activeSession.id, img);
+    } else {
+      addImage(img);
     }
   };
 
@@ -149,7 +150,7 @@ export function ImageAttachmentWidget({ children, renderLayout, queuedCallerId }
 
   const controlsNode = (
     <div
-      className="attachment-control-group"
+      className="flex items-center gap-2"
     >
       <button
         onClick={() => fileInputRef.current?.click()}
@@ -163,10 +164,10 @@ export function ImageAttachmentWidget({ children, renderLayout, queuedCallerId }
         }}
         title={t("images.dropHint", { max: IMAGE_MAX_COUNT })}
       >
-        <Icon name="image" size={12} />
-        <span className="attachment-action-label">{t("images.attach")}</span>
+        <Icon name="image" size={12} style={{ display: "inline", verticalAlign: "middle", marginRight: 3 }} />
+        {t("images.attach")}
         {images.length > 0 && (
-          <span className="attachment-action-meta" style={{ color: "var(--color-text-muted)" }}>
+          <span style={{ color: "var(--color-text-muted)", marginLeft: 2 }}>
             {images.length}/{IMAGE_MAX_COUNT} · {sizeLabel}
           </span>
         )}
@@ -258,7 +259,6 @@ export function ImageAttachmentWidget({ children, renderLayout, queuedCallerId }
 }
 
 function ImageThumb({ img, onRemove }: { img: ImageAttachment; onRemove: (path: string) => void }) {
-  const { t } = useTranslation();
   const size = img.sizeKB >= 1024
     ? `${(img.sizeKB / 1024).toFixed(1)} MB`
     : `${img.sizeKB.toFixed(0)} KB`;
@@ -296,7 +296,7 @@ function ImageThumb({ img, onRemove }: { img: ImageAttachment; onRemove: (path: 
             cursor: "pointer",
             lineHeight: 1,
           }}
-          title={t("images.remove", "Remove")}
+          title="Remove"
         >
           <Icon name="close" size={8} color="#fff" strokeWidth={3} />
         </button>

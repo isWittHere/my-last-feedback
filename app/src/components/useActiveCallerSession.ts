@@ -1,4 +1,4 @@
-import { applySessionTextDraft, useFeedbackStore } from "../store/feedbackStore";
+import { useFeedbackStore } from "../store/feedbackStore";
 import { useCallerOverride } from "./CallerContext";
 import type { Session, Caller } from "../store/feedbackStore";
 
@@ -10,15 +10,19 @@ export function useActiveCallerSession() {
   const override = useCallerOverride();
   const storeCallerId = useFeedbackStore((s) => s.activeCallerId);
   const storeSessionId = useFeedbackStore((s) => s.activeSessionId);
+  const callers = useFeedbackStore((s) => s.callers);
+  const sessions = useFeedbackStore((s) => s.sessions);
 
   const callerId = override ? override.callerId : storeCallerId;
   const sessionId = override ? override.sessionId : storeSessionId;
 
-  const caller: Caller | null = useFeedbackStore((s) => callerId ? s.callers.find((c) => c.id === callerId) || null : null);
-  const baseSession: Session | null = useFeedbackStore((s) => sessionId ? s.sessions.find((item) => item.id === sessionId) || null : null);
-  const sessionDraft = useFeedbackStore((s) => sessionId ? s.sessionDraftsById[sessionId] || null : null);
+  const caller: Caller | null = callerId
+    ? callers.find((c) => c.id === callerId) || null
+    : null;
 
-  const session: Session | null = baseSession ? applySessionTextDraft(baseSession, sessionDraft) : null;
+  const session: Session | null = sessionId
+    ? sessions.find((s) => s.id === sessionId) || null
+    : null;
 
   return { callerId, sessionId, caller, session };
 }
