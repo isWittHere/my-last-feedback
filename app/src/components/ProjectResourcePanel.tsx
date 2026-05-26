@@ -11,6 +11,7 @@ import { CatppuccinResourceIcon } from "./CatppuccinResourceIcon";
 import { Icon } from "./Icons";
 import { IdenticonAvatar } from "./IdenticonAvatar";
 import { type AgentUiDiffFile } from "./agent/AgentDiffViewer";
+const RESOURCE_WORKSPACE_FILTER_MODE_STORAGE_KEY = "resource-workspace-filter-mode";
 
 interface ProjectResourceEntry {
   name: string;
@@ -150,7 +151,14 @@ export function ProjectResourcePanel() {
   const setActiveWorkspacePath = useFeedbackStore((state) => state.setMlcActiveWorkspacePath);
   const setSelectedMlcDocument = useFeedbackStore((state) => state.setSelectedMlcDocument);
   const openDockTab = useFeedbackStore((state) => state.openDockTab);
-  const [workspaceFilterMode, setWorkspaceFilterMode] = useState<"target" | "workspace">("target");
+  const [workspaceFilterMode, setWorkspaceFilterMode] = useState<"target" | "workspace">(() => {
+    try {
+      const saved = localStorage.getItem(RESOURCE_WORKSPACE_FILTER_MODE_STORAGE_KEY);
+      return saved === "workspace" ? "workspace" : "target";
+    } catch {
+      return "target";
+    }
+  });
   const [childrenByPath, setChildrenByPath] = useState<Record<string, ProjectResourceEntry[]>>({});
   const [expanded, setExpanded] = useState<Set<string>>(() => new Set());
   const [loadingByPath, setLoadingByPath] = useState<Set<string>>(() => new Set());
@@ -200,10 +208,14 @@ export function ProjectResourcePanel() {
   }, [activeWorkspacePath, targetWorkspacePath, workspaceFilterMode, workspaceOptions]);
 
   useEffect(() => {
-    if (focusedComposer?.projectDirectory && !activeWorkspacePath) {
+    try { localStorage.setItem(RESOURCE_WORKSPACE_FILTER_MODE_STORAGE_KEY, workspaceFilterMode); } catch {}
+  }, [workspaceFilterMode]);
+
+  useEffect(() => {
+    if (workspaceFilterMode === "target" && focusedComposer?.projectDirectory && !activeWorkspacePath) {
       setActiveWorkspacePath(focusedComposer.projectDirectory);
     }
-  }, [activeWorkspacePath, focusedComposer?.projectDirectory, setActiveWorkspacePath]);
+  }, [activeWorkspacePath, focusedComposer?.projectDirectory, setActiveWorkspacePath, workspaceFilterMode]);
 
   const loadDirectory = useCallback(async (directoryPath: string) => {
     if (!workspacePath) return;
