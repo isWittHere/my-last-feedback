@@ -5,9 +5,11 @@
   "type": "module",
   "main": "mcp/mlfb/index.mjs",
   "scripts": {
-    "start": "node mcp/mlfb/index.mjs"
+    "start": "node mcp/mlfb/index.mjs",
+    "start:http": "node mcp/mlfb/http-server.mjs"
   },
   "dependencies": {
     "@modelcontextprotocol/sdk": "^1.12.1"
   }
 }
+
