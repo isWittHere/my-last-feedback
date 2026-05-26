@@ -16,6 +16,7 @@ import { cleanDisplayPath, sameWorkspacePath, workspaceBasename, workspacePathKe
 type SortBy = "updated-desc" | "created-desc" | "created-asc" | "title-asc" | "title-desc";
 type ViewMode = "detail" | "compact";
 type TooltipPlacement = "auto" | "below" | "above";
+const WORKSPACE_FILTER_MODE_STORAGE_KEY = "mlc-workspace-filter-mode";
 
 interface MlcDocument {
   filePath: string;
@@ -145,7 +146,14 @@ export function MlcSidePanel() {
   const [sortBy, setSortBy] = useState<SortBy>("updated-desc");
   const [favoritesOnly, setFavoritesOnly] = useState(false);
   const [viewMode, setViewMode] = useState<ViewMode>("compact");
-  const [workspaceFilterMode, setWorkspaceFilterMode] = useState<"target" | "workspace">("target");
+  const [workspaceFilterMode, setWorkspaceFilterMode] = useState<"target" | "workspace">(() => {
+    try {
+      const saved = localStorage.getItem(WORKSPACE_FILTER_MODE_STORAGE_KEY);
+      return saved === "workspace" ? "workspace" : "target";
+    } catch {
+      return "target";
+    }
+  });
   const [documents, setDocuments] = useState<MlcDocument[]>([]);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -205,6 +213,10 @@ export function MlcSidePanel() {
   }, [activeWorkspacePath, targetWorkspacePath, workspaceFilterMode, workspaceOptions]);
 
   const workspacePathsKey = useMemo(() => workspaceOptions.map((option) => option.path).join("\n"), [workspaceOptions]);
+
+  useEffect(() => {
+    try { localStorage.setItem(WORKSPACE_FILTER_MODE_STORAGE_KEY, workspaceFilterMode); } catch {}
+  }, [workspaceFilterMode]);
 
   const loadDocuments = useCallback(() => {
     const workspacePaths = workspacePathsKey.split("\n").filter(Boolean);
