@@ -16155,8 +16155,8 @@ button.mlra-inspector-gate-pill {
 }
 .git-commit-dot-plain::after {
     content: "";
-    width: 9px;
-    height: 9px;
+    width: 8px;
+    height: 8px;
     border-radius: 50%;
     background: var(--git-workspace-color, var(--color-primary));
     opacity: 0.6;
@@ -16188,7 +16188,7 @@ button.mlra-inspector-gate-pill {
 .git-commit-dot-latest-ring {
     border-radius: 50%;
     background: transparent;
-    border: 1.5px solid var(--git-workspace-color, var(--color-primary));
+    border: 2px solid var(--git-workspace-color, var(--color-primary));
 }
 .git-commit-dot-latest-ring::after {
     content: "";
@@ -16207,6 +16207,10 @@ button.mlra-inspector-gate-pill {
     background: color-mix(in srgb, var(--git-workspace-color, var(--color-primary)) 45%, transparent);
     pointer-events: none;
     z-index: 2;
+}
+.git-commit-group-items .git-commit-item.git-commit-item-no-timeline::before,
+.git-commit-group-items .git-commit-item.git-commit-item-no-timeline::after {
+    display: none;
 }
 
 .git-commit-group-items .git-commit-item::before {
@@ -16244,6 +16248,9 @@ button.mlra-inspector-gate-pill {
     gap: 6px;
     font-size: 10px;
     color: var(--color-text-muted);
+}
+.git-commit-meta-hidden {
+    display: none;
 }
 
 .git-commit-hash {

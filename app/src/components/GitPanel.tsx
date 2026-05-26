@@ -680,7 +680,14 @@ export function GitPanel() {
                     const isQuickBackup = Boolean(backupTs);
                     const isLatest = latestCommitHash === commit.hash;
                     return (
-                      <div key={commit.hash} className="git-commit-item">
+                      <div
+                        key={commit.hash}
+                        className={`git-commit-item${
+                          gitPanelSettings.timelineStyle === "none"
+                            ? " git-commit-item-no-timeline"
+                            : ""
+                        }`}
+                      >
                         <button
                           className="git-commit-header"
                           onClick={() =>
@@ -713,7 +720,14 @@ export function GitPanel() {
                                   )
                                 : commit.message}
                             </div>
-                            <div className="git-commit-meta">
+                            <div
+                              className={`git-commit-meta${
+                                gitPanelSettings.listItemStyle === "compact" &&
+                                !isLatest
+                                  ? " git-commit-meta-hidden"
+                                  : ""
+                              }`}
+                            >
                               <span className="git-commit-hash">
                                 {shortHash(commit.hash)}
                               </span>
