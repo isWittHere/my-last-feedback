@@ -1019,6 +1019,7 @@
     "groupYesterday": "Yesterday",
     "groupPastWeek": "Past week",
     "groupEarlier": "Earlier",
+    "quickBackupItemTitle": "Quick backup {{timestamp}}",
     "branch": "Branch",
     "hash": "Hash",
     "author": "Author",
