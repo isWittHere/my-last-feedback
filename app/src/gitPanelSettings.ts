@@ -13,6 +13,7 @@ const STORAGE_KEY = "mlfb-git-panel-settings";
 const DEFAULT_SETTINGS: GitPanelSettings = {
   diffPathDisplayMode: "fullPath",
 };
+let cachedSettings: GitPanelSettings | null = null;
 
 function normalizeSettings(
   value: Partial<GitPanelSettings> | null | undefined,
@@ -24,17 +25,20 @@ function normalizeSettings(
 }
 
 export function getGitPanelSettings(): GitPanelSettings {
+  if (cachedSettings) return cachedSettings;
   try {
     const raw = localStorage.getItem(STORAGE_KEY);
-    if (!raw) return DEFAULT_SETTINGS;
-    return normalizeSettings(JSON.parse(raw));
+    cachedSettings = raw ? normalizeSettings(JSON.parse(raw)) : DEFAULT_SETTINGS;
+    return cachedSettings;
   } catch {
-    return DEFAULT_SETTINGS;
+    cachedSettings = DEFAULT_SETTINGS;
+    return cachedSettings;
   }
 }
 
 export function saveGitPanelSettings(settings: GitPanelSettings): GitPanelSettings {
   const normalized = normalizeSettings(settings);
+  cachedSettings = normalized;
   try { localStorage.setItem(STORAGE_KEY, JSON.stringify(normalized)); } catch {}
   try { window.dispatchEvent(new CustomEvent(GIT_PANEL_SETTINGS_EVENT, { detail: normalized })); } catch {}
   return normalized;
@@ -49,4 +53,3 @@ function subscribe(onStoreChange: () => void): () => void {
 export function useGitPanelSettings(): GitPanelSettings {
   return useSyncExternalStore(subscribe, getGitPanelSettings, () => DEFAULT_SETTINGS);
 }
-
