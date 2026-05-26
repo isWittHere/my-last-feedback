@@ -1,7 +1,8 @@
-import { useCallback, useEffect, useRef, useState } from "react";
+import { useCallback, useEffect, useLayoutEffect, useRef, useState } from "react";
 import { createPortal } from "react-dom";
 import { useTranslation } from "react-i18next";
 import { useSubscriptionStore, type SubscriptionGroupState, type SubscriptionGroupConfig } from "../store/subscriptionStore";
+import { type ChannelMonitor } from "../services/subscriptionScrapers";
 import { Icon } from "./Icons";
 
 function formatDuration(seconds: number): string {
@@ -196,6 +197,49 @@ function UsageDisplay({ group }: { group: SubscriptionGroupState }) {
   );
 }
 
+function channelWorstStatus(monitors: ChannelMonitor[] | null | undefined): "ok" | "degraded" | "failed" {
+  if (!monitors || monitors.length === 0) return "ok";
+  let worst: "ok" | "degraded" | "failed" = "ok";
+  for (const ch of monitors) {
+    const models = [ch.primaryStatus, ...(ch.extraModels ?? []).map((m) => m.status as string)];
+    for (const s of models) {
+      if (s === "failed") return "failed";
+      if (s === "degraded" || s === "error") worst = "degraded";
+    }
+  }
+  return worst;
+}
+
+function ChannelStatusTooltip({ monitors }: { monitors: ChannelMonitor[] }) {
+  return (
+    <div className="subscription-status-tooltip">
+      {monitors.map((ch) => (
+        <div key={ch.id} className="subscription-status-channel">
+          <div className="subscription-status-channel-name">{ch.name}</div>
+          {[
+            { model: ch.primaryModel, status: ch.primaryStatus, latency: ch.primaryLatencyMs },
+            ...(ch.extraModels ?? []).map((m) => ({ model: m.model, status: m.status, latency: m.latencyMs })),
+          ].map((m) => (
+            <div key={m.model} className="subscription-status-model">
+              {m.status === "failed" ? (
+                <Icon name="circle-x" size={10} style={{ color: "#ef4444" }} />
+              ) : m.status === "degraded" || m.status === "error" ? (
+                <Icon name="warning" size={10} style={{ color: "#f59e0b" }} />
+              ) : (
+                <Icon name="check" size={10} style={{ color: "var(--color-primary)" }} />
+              )}
+              <span className={`subscription-status-model-name${m.status !== "operational" ? ` subscription-status-model-name--${m.status}` : ""}`}>
+                {m.model}
+              </span>
+              <span className="subscription-status-model-latency">{m.latency}ms</span>
+            </div>
+          ))}
+        </div>
+      ))}
+    </div>
+  );
+}
+
 function SubscriptionGroupCard({
   group,
   onRefresh,
@@ -208,7 +252,28 @@ function SubscriptionGroupCard({
   const updateGroup = useSubscriptionStore((s) => s.updateGroup);
   const [editing, setEditing] = useState(false);
   const [collapsed, setCollapsed] = useState(!group.enabled);
+  const [showChanTooltip, setShowChanTooltip] = useState(false);
+  const [tooltipPos, setTooltipPos] = useState<{ left: number; top: number } | null>(null);
   const autoRefreshCleanupRef = useRef<(() => void) | null>(null);
+  const statusRef = useRef<HTMLSpanElement>(null);
+  const tooltipRef = useRef<HTMLDivElement>(null);
+
+  useLayoutEffect(() => {
+    if (!showChanTooltip || !statusRef.current || !tooltipRef.current) return;
+    const statusRect = statusRef.current.getBoundingClientRect();
+    const tipRect = tooltipRef.current.getBoundingClientRect();
+    const margin = 4;
+    let left = statusRect.right + 6;
+    let top = statusRect.top;
+    if (left + tipRect.width > window.innerWidth - margin) {
+      left = statusRect.left - tipRect.width - 6;
+    }
+    left = Math.max(margin, left);
+    if (top + tipRect.height > window.innerHeight - margin) {
+      top = Math.max(margin, window.innerHeight - tipRect.height - margin);
+    }
+    setTooltipPos({ left, top });
+  }, [showChanTooltip, group.channelMonitors]);
 
   const startAutoRefresh = useSubscriptionStore((s) => s.startAutoRefresh);
 
@@ -239,7 +304,8 @@ function SubscriptionGroupCard({
   };
 
   return (
-    <section className={`subscription-group${collapsed ? " collapsed" : ""}`}>
+    <>
+      <section className={`subscription-group${collapsed ? " collapsed" : ""}`}>
       <button type="button" className="subscription-group-header" onClick={() => setCollapsed((v) => !v)} aria-expanded={!collapsed}>
         <Icon name={collapsed ? "chevron-right" : "chevron-down"} size={12} className="subscription-group-caret" />
         <span className="subscription-group-name">{group.name || (group.type === "toioto" ? "Toioto" : "OpenCode Go")}</span>
@@ -261,11 +327,23 @@ function SubscriptionGroupCard({
             {formatBalance(group.toioto.balance)}
           </span>
         )}
-        <span className="subscription-group-status">
+        <span
+          ref={statusRef}
+          className="subscription-group-status"
+          onMouseEnter={() => group.type === "toioto" && group.channelMonitors && setShowChanTooltip(true)}
+          onMouseLeave={() => setShowChanTooltip(false)}
+        >
           {group.loading ? (
             <Icon name="spinner" size={12} className="animate-spin" />
           ) : group.error ? (
             <Icon name="circle-x" size={12} style={{ color: "var(--color-danger, #ef4444)" }} />
+          ) : group.type === "toioto" && group.channelMonitors ? (
+            (() => {
+              const worst = channelWorstStatus(group.channelMonitors);
+              if (worst === "failed") return <Icon name="circle-x" size={12} style={{ color: "#ef4444" }} />;
+              if (worst === "degraded") return <Icon name="warning" size={12} style={{ color: "#f59e0b" }} />;
+              return <Icon name="check" size={12} style={{ color: "var(--color-success, #22c55e)" }} />;
+            })()
           ) : group.lastFetched ? (
             <Icon name="check" size={12} style={{ color: "var(--color-success, #22c55e)" }} />
           ) : (
@@ -356,6 +434,18 @@ function SubscriptionGroupCard({
         </div>
       </div>
     </section>
+
+      {showChanTooltip && group.channelMonitors && createPortal(
+        <div
+          ref={tooltipRef}
+          className="subscription-status-tooltip-container"
+          style={tooltipPos ?? { left: -9999, top: 0 }}
+        >
+          <ChannelStatusTooltip monitors={group.channelMonitors} />
+        </div>,
+        document.body,
+      )}
+    </>
   );
 }
 
