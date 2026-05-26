@@ -939,9 +939,8 @@ body,
 }
 .titlebar-side-toggle {
     color: var(--color-text-muted);
-    background: color-mix(in srgb, var(--color-bg-elevated) 36%, transparent);
-    box-shadow: inset 0 0 0 1px
-        color-mix(in srgb, var(--color-border-subtle) 62%, transparent);
+    background: transparent;
+    box-shadow: none;
 }
 .titlebar-dock-group {
     display: inline-flex;
@@ -949,9 +948,9 @@ body,
     gap: 0;
     padding: 1px;
     border-radius: 6px;
-    background: color-mix(in srgb, var(--color-bg-elevated) 52%, transparent);
-    box-shadow: inset 0 0 0 1px
-        color-mix(in srgb, var(--color-border-subtle) 70%, transparent);
+    background: transparent;
+    border: 1px solid color-mix(in srgb, var(--color-border-subtle) 70%, transparent);
+    box-shadow: none;
 }
 .titlebar-dock-group .titlebar-btn {
     width: 22px;
@@ -974,7 +973,7 @@ body,
 }
 .titlebar-side-toggle:not(.titlebar-btn-active):hover {
     opacity: 1;
-    background: color-mix(in srgb, var(--color-bg-elevated) 72%, transparent);
+    background: transparent;
 }
 .titlebar-side-toggle-left svg {
     transform: scaleX(-1);
@@ -12053,9 +12052,9 @@ body,
 }
 /* MCP Config Helper */
 .mcp-config {
-    margin-top: 8px;
-    padding-top: 10px;
-    border-top: 1px solid var(--color-border-subtle);
+    margin-top: 0px;
+    padding-top: 0;
+    border-top: none;
     display: flex;
     flex-direction: column;
     gap: 8px;
