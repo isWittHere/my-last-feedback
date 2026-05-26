@@ -10077,9 +10077,17 @@ body,
     color: var(--color-text-primary);
 }
 .composer-token-chip-git {
-    border-color: color-mix(in srgb, var(--color-primary) 34%, transparent);
-    background: color-mix(in srgb, var(--color-primary) 12%, transparent);
-    color: var(--color-primary);
+    border-color: color-mix(
+        in srgb,
+        var(--caller-color, var(--color-primary)) 34%,
+        transparent
+    );
+    background: color-mix(
+        in srgb,
+        var(--caller-color, var(--color-primary)) 12%,
+        transparent
+    );
+    color: var(--caller-color, var(--color-primary));
 }
 .composer-token-chip-command {
     margin-right: 0;
@@ -16137,6 +16145,10 @@ button.mlra-inspector-gate-pill {
     font-size: 12px;
     transition: background 0.1s;
 }
+.git-commit-item.git-commit-item-compact .git-commit-header {
+    padding-top: 2px;
+    padding-bottom: 2px;
+}
 
 .git-commit-header:hover {
     background: var(--color-bg-elevated);
@@ -16212,15 +16224,32 @@ button.mlra-inspector-gate-pill {
 .git-commit-group-items .git-commit-item.git-commit-item-no-timeline::after {
     display: none;
 }
+.git-commit-item.git-commit-item-no-timeline .git-commit-dot {
+    display: none;
+}
 
 .git-commit-group-items .git-commit-item::before {
     top: 0;
-    bottom: calc(100% - 11px);
+    bottom: calc(100% - 10px);
 }
 
 .git-commit-group-items .git-commit-item::after {
     top: 30px;
     bottom: 0;
+}
+.git-commit-group-items .git-commit-item.git-commit-item-compact::before {
+    bottom: calc(100% - 6px);
+}
+.git-commit-group-items .git-commit-item.git-commit-item-compact::after {
+    top: 22px;
+}
+
+/* First item needs its own anchor in both modes. */
+.git-commit-group-items .git-commit-item:first-child::after {
+    top: 30px;
+}
+.git-commit-group-items .git-commit-item.git-commit-item-compact:first-child::after {
+    top: 28px;
 }
 
 .git-commit-group-items .git-commit-item:first-child::before {

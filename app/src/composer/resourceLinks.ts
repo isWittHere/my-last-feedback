@@ -14,6 +14,7 @@ export interface GitCommitLinkInfo {
   href: string;
   fullHash: string;
   message: string;
+  isLatest: boolean;
 }
 
 export function gitCommitLinkInfo(label: string, href: string): GitCommitLinkInfo | null {
@@ -22,10 +23,15 @@ export function gitCommitLinkInfo(label: string, href: string): GitCommitLinkInf
   const sep = rest.indexOf("|");
   const fullHash = sep >= 0 ? rest.slice(0, sep) : rest;
   try {
-    const message = sep >= 0 ? decodeURIComponent(rest.slice(sep + 1)) : "";
-    return { label, href, fullHash, message };
+    const tail = sep >= 0 ? rest.slice(sep + 1) : "";
+    const parts = tail ? tail.split("|") : [];
+    const message = parts[0] ? decodeURIComponent(parts[0]) : "";
+    const metaRaw = parts[1] || "";
+    const meta = new URLSearchParams(metaRaw);
+    const isLatest = meta.get("latest") === "1";
+    return { label, href, fullHash, message, isLatest };
   } catch {
-    return { label, href, fullHash, message: rest.slice(sep + 1) };
+    return { label, href, fullHash, message: rest.slice(sep + 1), isLatest: false };
   }
 }
 
