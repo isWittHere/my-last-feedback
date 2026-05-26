@@ -1,4 +1,5 @@
 use serde::Serialize;
+use std::collections::HashSet;
 use std::fs;
 use std::process::Command;
 
@@ -206,19 +207,35 @@ pub async fn git_diff(project_directory: String) -> Result<Vec<GitDiffFile>, Str
         return Err(String::from_utf8_lossy(&output.stderr).to_string());
     }
 
+    let staged_output = git_command()
+        .args(["diff", "--cached", "--no-color"])
+        .current_dir(&project_directory)
+        .output()
+        .map_err(|e| format!("Failed to run git diff --cached: {}", e))?;
+
+    if !staged_output.status.success() {
+        return Err(String::from_utf8_lossy(&staged_output.stderr).to_string());
+    }
+
     let stdout = String::from_utf8_lossy(&output.stdout);
+    let staged_stdout = String::from_utf8_lossy(&staged_output.stdout);
+
     let mut files = parse_diff_files(&stdout);
+    files.extend(parse_diff_files(&staged_stdout));
+    files = merge_git_diff_files(files);
 
     let untracked = git_command()
-        .args(["ls-files", "--others", "--exclude-standard"])
+        .args(["ls-files", "--others", "--exclude-standard", "-z"])
         .current_dir(&project_directory)
         .output()
         .map_err(|e| format!("Failed to run git ls-files: {}", e))?;
 
     if untracked.status.success() {
-        let untracked_stdout = String::from_utf8_lossy(&untracked.stdout);
-        for line in untracked_stdout.lines() {
-            let path = line.trim();
+        for raw_path in untracked.stdout.split(|b| *b == 0) {
+            if raw_path.is_empty() {
+                continue;
+            }
+            let path = String::from_utf8_lossy(raw_path).trim().to_string();
             if path.is_empty() {
                 continue;
             }
@@ -231,25 +248,66 @@ pub async fn git_diff(project_directory: String) -> Result<Vec<GitDiffFile>, Str
     Ok(files)
 }
 
-fn build_untracked_diff(path: &str, project_directory: &str) -> Option<GitDiffFile> {
+fn merge_git_diff_files(files: Vec<GitDiffFile>) -> Vec<GitDiffFile> {
+    let mut merged: Vec<GitDiffFile> = Vec::new();
+    let mut seen: HashSet<String> = HashSet::new();
+
+    for file in files {
+        if file.path.is_empty() {
+            continue;
+        }
+        if seen.insert(file.path.clone()) {
+            merged.push(file);
+            continue;
+        }
+        if let Some(existing) = merged.iter_mut().find(|f| f.path == file.path) {
+            existing.additions += file.additions;
+            existing.deletions += file.deletions;
+            if !file.patch.is_empty() {
+                if !existing.patch.is_empty() {
+                    existing.patch.push('\n');
+                }
+                existing.patch.push_str(&file.patch);
+            }
+            if existing.status != "deleted" && file.status == "deleted" {
+                existing.status = file.status;
+            } else if existing.status != "added" && file.status == "added" {
+                existing.status = file.status;
+            }
+        }
+    }
+
+    merged
+}
+
+fn build_untracked_diff(path: String, project_directory: &str) -> Option<GitDiffFile> {
     let full_path = format!("{}/{}", project_directory, path);
-    let content = fs::read_to_string(&full_path).ok()?;
-    let line_count = content.lines().count();
     let mut patch = String::new();
     patch.push_str(&format!("diff --git a/{} b/{}\n", path, path));
     patch.push_str("new file mode 100644\n");
     patch.push_str("index 0000000..0000000\n");
     patch.push_str("--- /dev/null\n");
     patch.push_str(&format!("+++ b/{}\n", path));
-    patch.push_str(&format!("@@ -0,0 +1,{} @@\n", line_count));
-    for line in content.lines() {
-        patch.push('+');
-        patch.push_str(line);
-        patch.push('\n');
-    }
-    let additions = content.lines().count();
+    let additions = match fs::read_to_string(&full_path) {
+        Ok(content) => {
+            let line_count = content.lines().count();
+            patch.push_str(&format!("@@ -0,0 +1,{} @@\n", line_count));
+            for line in content.lines() {
+                patch.push('+');
+                patch.push_str(line);
+                patch.push('\n');
+            }
+            line_count
+        }
+        Err(_) => {
+            let bytes = fs::read(&full_path).ok()?;
+            patch.push_str("@@ -0,0 +1,1 @@\n");
+            patch.push_str(&format!("+<binary file: {} bytes>\n", bytes.len()));
+            1
+        }
+    };
     Some(GitDiffFile {
-        path: path.to_string(),
+        path,
         status: String::from("added"),
         patch,
         additions,
@@ -281,13 +339,13 @@ fn parse_diff_files(output: &str) -> Vec<GitDiffFile> {
             }
             in_file = true;
             status = String::from("modified");
-            if let Some(b_path) = line.split(" b/").nth(1) {
-                path = b_path.to_string();
-            }
+            path = extract_diff_header_path(line);
         } else if line.starts_with("new file mode") {
             status = String::from("added");
         } else if line.starts_with("deleted file mode") {
             status = String::from("deleted");
+        } else if line.starts_with("+++ b/") {
+            path = line.trim_start_matches("+++ b/").to_string();
         }
 
         if in_file {
@@ -312,6 +370,17 @@ fn parse_diff_files(output: &str) -> Vec<GitDiffFile> {
     }
 
     files
+}
+
+fn extract_diff_header_path(line: &str) -> String {
+    if !line.starts_with("diff --git ") {
+        return String::new();
+    }
+    let rest = line.trim_start_matches("diff --git ").trim();
+    if let Some((_, right)) = rest.split_once(" b/") {
+        return right.trim_matches('"').to_string();
+    }
+    String::new()
 }
 
 #[tauri::command]

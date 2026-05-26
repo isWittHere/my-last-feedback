@@ -307,13 +307,19 @@ export function ProjectResourcePanel() {
     const handleVisibilityChange = () => {
       if (document.visibilityState === "visible") refreshLoadedDirectories();
     };
+    const handleGitUpdated = () => {
+      refreshLoadedDirectories();
+      loadDiffStatus();
+    };
     window.addEventListener("focus", refreshWhenVisible);
+    window.addEventListener("mlfb-git-updated", handleGitUpdated as EventListener);
     document.addEventListener("visibilitychange", handleVisibilityChange);
     return () => {
       window.removeEventListener("focus", refreshWhenVisible);
+      window.removeEventListener("mlfb-git-updated", handleGitUpdated as EventListener);
       document.removeEventListener("visibilitychange", handleVisibilityChange);
     };
-  }, [refreshLoadedDirectories]);
+  }, [loadDiffStatus, refreshLoadedDirectories]);
 
   const toggleFolder = useCallback((entry: ProjectResourceEntry) => {
     const key = workspacePathKey(entry.absolutePath);

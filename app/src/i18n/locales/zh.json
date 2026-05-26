@@ -1006,6 +1006,7 @@
   },
   "git": {
     "title": "Git",
+    "backup": "快速备份",
     "refresh": "刷新",
     "loading": "加载中...",
     "noCommits": "暂无提交记录",
