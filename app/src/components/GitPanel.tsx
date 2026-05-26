@@ -672,8 +672,13 @@ export function GitPanel() {
               } as React.CSSProperties
             }
           >
-            {groupedCommits.map(([label, items]) => (
-              <section key={label} className="git-commit-group">
+            {groupedCommits.map(([label, items], groupIndex) => (
+              <section
+                key={label}
+                className={`git-commit-group${
+                  groupIndex === 0 ? " git-commit-group-latest" : ""
+                }`}
+              >
                 <div className="git-commit-group-header">
                   <span className="git-commit-group-label">{label}</span>
                   <span className="git-commit-group-count">({items.length})</span>
@@ -702,7 +707,6 @@ export function GitPanel() {
                           onClick={() =>
                             setExpandedCommit(isExpanded ? null : commit.hash)
                           }
-                          {...tooltipProps(commit)}
                         >
                           <div
                             className={`git-commit-dot${
@@ -719,8 +723,13 @@ export function GitPanel() {
                           >
                             {isQuickBackup ? <Icon name="database" size={9} /> : null}
                           </div>
-                          <div className="git-commit-info">
-                            <div className="git-commit-message truncate">
+                          <div
+                            className="git-commit-info"
+                            {...tooltipProps(commit)}
+                          >
+                            <div
+                              className="git-commit-message truncate"
+                            >
                               {isQuickBackup
                                 ? t(
                                     "git.quickBackupItemTitle",
