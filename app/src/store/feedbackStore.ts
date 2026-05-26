@@ -1727,14 +1727,14 @@ export const useFeedbackStore = create<FeedbackState>((set, get) => ({
   setFocusedComposer: (focus) => {
     const normalizedFocus = normalizeFocusedComposer(focus);
     const current = get().focusedComposer;
-    const nextWorkspacePath = normalizedFocus.projectDirectory || null;
     const sameTarget = current
       && current.callerId === normalizedFocus.callerId
       && current.sessionId === normalizedFocus.sessionId
       && sameWorkspacePath(current.projectDirectory, normalizedFocus.projectDirectory)
       && current.kind === normalizedFocus.kind;
-    if (sameTarget && sameWorkspacePath(get().mlcActiveWorkspacePath, nextWorkspacePath)) return;
-    set({ focusedComposer: normalizedFocus, mlcActiveWorkspacePath: nextWorkspacePath });
+    if (sameTarget) return;
+    // Keep workspace selection independent from composer focus.
+    set({ focusedComposer: normalizedFocus });
   },
 
   clearFocusedComposer: (sessionId) => {
