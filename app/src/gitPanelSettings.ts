@@ -1,9 +1,13 @@
 import { useSyncExternalStore } from "react";
 
 export type GitDiffPathDisplayMode = "fullPath" | "fileName";
+export type GitTimelineStyle = "timeline" | "none";
+export type GitListItemStyle = "compact" | "detailed";
 
 export interface GitPanelSettings {
   diffPathDisplayMode: GitDiffPathDisplayMode;
+  timelineStyle: GitTimelineStyle;
+  listItemStyle: GitListItemStyle;
 }
 
 export const GIT_PANEL_SETTINGS_EVENT = "mlfb-git-panel-settings-changed";
@@ -12,6 +16,8 @@ const STORAGE_KEY = "mlfb-git-panel-settings";
 
 const DEFAULT_SETTINGS: GitPanelSettings = {
   diffPathDisplayMode: "fullPath",
+  timelineStyle: "timeline",
+  listItemStyle: "compact",
 };
 let cachedSettings: GitPanelSettings | null = null;
 
@@ -21,6 +27,8 @@ function normalizeSettings(
   return {
     diffPathDisplayMode:
       value?.diffPathDisplayMode === "fileName" ? "fileName" : "fullPath",
+    timelineStyle: value?.timelineStyle === "none" ? "none" : "timeline",
+    listItemStyle: value?.listItemStyle === "detailed" ? "detailed" : "compact",
   };
 }
 

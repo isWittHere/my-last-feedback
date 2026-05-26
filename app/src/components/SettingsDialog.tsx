@@ -18,7 +18,7 @@ import { getSubmittedViewSettings, saveSubmittedViewSettings, SUBMITTED_VIEW_SEC
 import { getTerminalSettings, saveTerminalSettings, type TerminalSettings, type TerminalShellId } from "../terminalSettings";
 import { getComposerSettings, saveComposerSettings, type ComposerSettings } from "../composerSettings";
 import { formatGitFolderBlacklistText, getGitOperationSettings, GIT_TIMED_REMINDER_MAX_MINUTES, GIT_TIMED_REMINDER_MIN_MINUTES, GIT_TIMED_REMINDER_STEP_MINUTES, parseGitFolderBlacklistText, saveGitOperationSettings, type GitOperationSettings } from "../gitOperationSettings";
-import { getGitPanelSettings, saveGitPanelSettings, type GitDiffPathDisplayMode, type GitPanelSettings } from "../gitPanelSettings";
+import { getGitPanelSettings, saveGitPanelSettings, type GitDiffPathDisplayMode, type GitListItemStyle, type GitPanelSettings, type GitTimelineStyle } from "../gitPanelSettings";
 import { AGENT_DIFF_COLOR_PRESETS, getAgentConsoleSettings, saveAgentConsoleSettings, type AgentApprovalDisplayMode, type AgentConsoleSettings, type AgentDiffColorPresetId, type AgentNavigationGroupBackgroundMode, type AgentNavigationIndicatorOrder, type AgentNavigationVisualizationMode, type AgentProcessStepDefaultMode, type AgentTaskPanelTemplateStyle, type AgentTimelineStreamingStepMode, type AgentTodoUpdateDisplayMode, type AgentTopbarIndicatorMode } from "../agentConsoleSettings";
 import { getOpenCodePermissionPresetAction, getOpenCodePermissionPresetId, getOpenCodeSettings, OPEN_CODE_PERMISSION_DEFINITIONS, OPEN_CODE_PERMISSION_PRESETS, setOpenCodeDefaultPermissionAction, setOpenCodeDefaultPermissionPreset, setOpenCodeModelEnabled, setOpenCodePreferredModel, type OpenCodePermissionPresetId, type OpenCodePermissionSettingAction, type OpenCodeSettings } from "../openCodeSettings";
 import { SESSION_LIST_MODE_OPTIONS } from "../sessionNavigationSettings";
@@ -617,6 +617,16 @@ export function SettingsDialog({ open, onClose }: { open: boolean; onClose: () =
       saveGitPanelSettings({ ...current, diffPathDisplayMode: mode }),
     );
   }, []);
+  const handleGitPanelTimelineStyleChange = useCallback((style: GitTimelineStyle) => {
+    setGitPanelSettings((current) =>
+      saveGitPanelSettings({ ...current, timelineStyle: style }),
+    );
+  }, []);
+  const handleGitPanelListItemStyleChange = useCallback((style: GitListItemStyle) => {
+    setGitPanelSettings((current) =>
+      saveGitPanelSettings({ ...current, listItemStyle: style }),
+    );
+  }, []);
 
   const handleGitReminderEnabledToggle = useCallback(() => {
     updateGitOperationSettings((current) => ({ ...current, timedReminderEnabled: !current.timedReminderEnabled }));
@@ -1173,13 +1183,13 @@ export function SettingsDialog({ open, onClose }: { open: boolean; onClose: () =
                 {renderSettingsNavItem("openCodePermissions", "checklist", t("settings.openCodeApprovalPermissions", "Approval permissions"), true)}
               </>
             ))}
-            {renderSettingsNavGroup("layout", t("settings.layout", "Layout"), ["layoutPanels", "terminal", "resources", "gitPanel", "markdownPreview"], (
+            {renderSettingsNavGroup("layout", t("settings.layout", "Layout"), ["layoutPanels", "markdownPreview", "resources", "terminal", "gitPanel"], (
               <>
                 {renderSettingsNavItem("layoutPanels", "page-sidebar", t("settings.panelManagement", "Panel management"), true)}
-                {renderSettingsNavItem("terminal", "terminal", t("settings.terminal", "Terminal"), true)}
-                {renderSettingsNavItem("resources", "folder", t("settings.resourceExplorer", "Resource explorer"), true)}
-                {renderSettingsNavItem("gitPanel", "git-commit", t("settings.gitPanel", "Git panel"), true)}
                 {renderSettingsNavItem("markdownPreview", "file-text", t("settings.markdownPreview", "Markdown preview"), true)}
+                {renderSettingsNavItem("resources", "folder", t("settings.resourceExplorer", "Resource explorer"), true)}
+                {renderSettingsNavItem("terminal", "terminal", t("settings.terminal", "Terminal"), true)}
+                {renderSettingsNavItem("gitPanel", "git-commit", t("settings.gitPanel", "Git panel"), true)}
               </>
             ))}
             {renderSettingsNavItem("notification", "bell", t("settings.notification"))}
@@ -1985,6 +1995,36 @@ export function SettingsDialog({ open, onClose }: { open: boolean; onClose: () =
                     options={[
                       { id: "fullPath", label: t("settings.gitDiffPathDisplayFull", "Full path"), icon: <Icon name="list-tree" size={12} /> },
                       { id: "fileName", label: t("settings.gitDiffPathDisplayNameOnly", "File name only"), icon: <Icon name="file-text" size={12} /> },
+                    ]}
+                  />
+                </div>
+                <div className="settings-row">
+                  <div className="settings-row-info" style={{ flex: 1 }}>
+                    <span className="settings-label">{t("settings.gitTimelineStyle", "Timeline style")}</span>
+                    <span className="settings-sublabel">{t("settings.gitTimelineStyleDesc", "Choose whether to show the commit timeline connector lines.")}</span>
+                  </div>
+                  <SettingsSegmentedControl
+                    ariaLabel={t("settings.gitTimelineStyle", "Timeline style")}
+                    value={gitPanelSettings.timelineStyle}
+                    onChange={(value) => handleGitPanelTimelineStyleChange(value as GitTimelineStyle)}
+                    options={[
+                      { id: "timeline", label: t("settings.gitTimelineStyleTimeline", "Timeline"), icon: <Icon name="list-tree" size={12} /> },
+                      { id: "none", label: t("settings.gitTimelineStyleNone", "Hide"), icon: <Icon name="minus" size={12} /> },
+                    ]}
+                  />
+                </div>
+                <div className="settings-row">
+                  <div className="settings-row-info" style={{ flex: 1 }}>
+                    <span className="settings-label">{t("settings.gitListItemStyle", "List item style")}</span>
+                    <span className="settings-sublabel">{t("settings.gitListItemStyleDesc", "Detailed shows metadata rows for all commits; compact shows metadata only for the latest commit.")}</span>
+                  </div>
+                  <SettingsSegmentedControl
+                    ariaLabel={t("settings.gitListItemStyle", "List item style")}
+                    value={gitPanelSettings.listItemStyle}
+                    onChange={(value) => handleGitPanelListItemStyleChange(value as GitListItemStyle)}
+                    options={[
+                      { id: "detailed", label: t("settings.gitListItemStyleDetailed", "Detailed"), icon: <Icon name="rows" size={12} /> },
+                      { id: "compact", label: t("settings.gitListItemStyleCompact", "Compact"), icon: <Icon name="list" size={12} /> },
                     ]}
                   />
                 </div>
