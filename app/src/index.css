@@ -3196,6 +3196,54 @@ body,
     white-space: nowrap;
 }
 
+.subscription-deepseek-display {
+    padding: 4px 8px 10px;
+    display: flex;
+    flex-direction: column;
+    gap: 8px;
+}
+
+.subscription-deepseek-balance-row {
+    display: flex;
+    flex-direction: column;
+    gap: 2px;
+}
+
+.subscription-deepseek-currency {
+    font-size: 10px;
+    font-weight: 600;
+    color: var(--color-text-muted);
+    text-transform: uppercase;
+}
+
+.subscription-deepseek-balance-details {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 6px 16px;
+}
+
+.subscription-deepseek-balance-item {
+    display: flex;
+    align-items: baseline;
+    gap: 4px;
+}
+
+.subscription-deepseek-balance-label {
+    font-size: 10px;
+    color: var(--color-text-muted);
+}
+
+.subscription-deepseek-balance-value {
+    font-size: 14px;
+    font-weight: 600;
+    color: var(--color-primary);
+}
+
+.subscription-deepseek-unavailable {
+    font-size: 11px;
+    color: var(--color-danger, #ef4444);
+}
+
 .subscription-group-actions {
     display: flex;
     align-items: center;

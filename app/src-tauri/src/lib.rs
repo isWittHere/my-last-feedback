@@ -838,6 +838,7 @@ pub fn run() {
             subscriptions::fetch_dashboard_html,
             subscriptions::fetch_toioto_me,
             subscriptions::fetch_toioto_api,
+            subscriptions::fetch_deepseek_balance,
             git::git_log,
             git::git_changes_count,
             git::git_changes_breakdown,

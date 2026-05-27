@@ -1,7 +1,7 @@
 import { create } from "zustand";
-import { fetchOpenCodeGoUsage, fetchToiotoUsage, fetchChannelMonitors, type NormalizedUsage, type ToiotoUsage, type ChannelMonitor } from "../services/subscriptionScrapers";
+import { fetchOpenCodeGoUsage, fetchToiotoUsage, fetchChannelMonitors, fetchDeepseekBalance, type NormalizedUsage, type ToiotoUsage, type ChannelMonitor, type DeepseekBalance } from "../services/subscriptionScrapers";
 
-export type SubscriptionGroupType = "opencode-go" | "toioto";
+export type SubscriptionGroupType = "opencode-go" | "toioto" | "deepseek";
 
 export interface SubscriptionGroupConfig {
   id: string;
@@ -24,6 +24,7 @@ export interface SubscriptionGroupState extends SubscriptionGroupConfig {
   monthly?: NormalizedUsage | null;
   toioto?: ToiotoUsage | null;
   channelMonitors?: ChannelMonitor[] | null;
+  deepseek?: DeepseekBalance | null;
 }
 
 interface SubscriptionStore {
@@ -43,7 +44,7 @@ function generateId(): string {
 const STORAGE_KEY = "mlfb-subscription-groups-v1";
 
 function persistGroups(groups: SubscriptionGroupState[]) {
-  const configs = groups.map(({ loading, error, lastFetched, rolling, weekly, monthly, toioto, channelMonitors, ...config }) => config);
+  const configs = groups.map(({ loading, error, lastFetched, rolling, weekly, monthly, toioto, channelMonitors, deepseek, ...config }) => config);
   try {
     localStorage.setItem(STORAGE_KEY, JSON.stringify(configs));
   } catch {}
@@ -64,6 +65,7 @@ function loadGroups(): SubscriptionGroupState[] {
       monthly: null,
       toioto: null,
       channelMonitors: null,
+      deepseek: null,
     }));
   } catch {
     return [];
@@ -85,6 +87,7 @@ export const useSubscriptionStore = create<SubscriptionStore>((set, get) => ({
       monthly: null,
       toioto: null,
       channelMonitors: null,
+      deepseek: null,
     };
     const groups = [...get().groups, group];
     set({ groups });
@@ -113,6 +116,8 @@ export const useSubscriptionStore = create<SubscriptionStore>((set, get) => ({
       if (!group.authCookie.trim()) missingFields.push("Auth Cookie");
     } else if (group.type === "toioto") {
       if (!group.authCookie.trim()) missingFields.push("JWT Token");
+    } else if (group.type === "deepseek") {
+      if (!group.authCookie.trim()) missingFields.push("API Key");
     }
 
     if (missingFields.length > 0) {
@@ -169,6 +174,29 @@ export const useSubscriptionStore = create<SubscriptionStore>((set, get) => ({
                   lastFetched: Date.now(),
                   toioto: result.data,
                   channelMonitors: monitorResult.success ? monitorResult.items : g.channelMonitors,
+                }
+              : g,
+          ),
+        });
+      } else {
+        set({
+          groups: get().groups.map((g) =>
+            g.id === id ? { ...g, loading: false, error: result.error, lastFetched: Date.now() } : g,
+          ),
+        });
+      }
+    } else if (group.type === "deepseek") {
+      const result = await fetchDeepseekBalance(group.authCookie);
+      if (result.success) {
+        set({
+          groups: get().groups.map((g) =>
+            g.id === id
+              ? {
+                  ...g,
+                  loading: false,
+                  error: null,
+                  lastFetched: Date.now(),
+                  deepseek: result.data,
                 }
               : g,
           ),

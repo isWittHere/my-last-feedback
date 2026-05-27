@@ -173,6 +173,43 @@ export async function fetchToiotoUsage(jwt: string): Promise<ToiotoResponse> {
   }
 }
 
+export interface DeepseekBalanceInfo {
+  currency: string;
+  totalBalance: string;
+  grantedBalance: string;
+  toppedUpBalance: string;
+}
+
+export interface DeepseekBalance {
+  isAvailable: boolean;
+  balanceInfos: DeepseekBalanceInfo[];
+}
+
+export type DeepseekResponse =
+  | { success: true; data: DeepseekBalance }
+  | { success: false; error: string };
+
+export async function fetchDeepseekBalance(apiKey: string): Promise<DeepseekResponse> {
+  try {
+    const text = await invoke<string>("fetch_deepseek_balance", { request: { apiKey } });
+    const parsed = JSON.parse(text);
+    return {
+      success: true,
+      data: {
+        isAvailable: parsed.is_available ?? false,
+        balanceInfos: (parsed.balance_infos ?? []).map((info: Record<string, unknown>) => ({
+          currency: info.currency as string,
+          totalBalance: info.total_balance as string,
+          grantedBalance: info.granted_balance as string,
+          toppedUpBalance: info.topped_up_balance as string,
+        })),
+      },
+    };
+  } catch (err) {
+    return { success: false, error: err instanceof Error ? err.message : String(err) };
+  }
+}
+
 export async function fetchChannelMonitors(jwt: string): Promise<ChannelMonitorsResponse> {
   try {
     const timezone = encodeURIComponent(

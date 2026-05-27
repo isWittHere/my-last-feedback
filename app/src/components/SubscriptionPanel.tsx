@@ -85,6 +85,48 @@ function GroupConfigForm({
   );
 }
 
+function DeepseekConfigForm({
+  group,
+  onSave,
+  onCancel,
+}: {
+  group: Pick<SubscriptionGroupState, "authCookie" | "refreshIntervalSeconds" | "name">;
+  onSave: (config: Pick<SubscriptionGroupConfig, "authCookie" | "refreshIntervalSeconds" | "name">) => void;
+  onCancel: () => void;
+}) {
+  const { t } = useTranslation();
+  const [apiKey, setApiKey] = useState(group.authCookie);
+  const [interval, setInterval] = useState(String(group.refreshIntervalSeconds));
+
+  const handleSave = () => {
+    const intervalSecs = Math.max(10, parseInt(interval, 10) || 60);
+    onSave({ authCookie: apiKey.trim(), refreshIntervalSeconds: intervalSecs, name: group.name || t("subscriptions.deepseek", "DeepSeek") });
+  };
+
+  return (
+    <div className="subscription-config-form">
+      <label className="subscription-config-field">
+        <span>{t("subscriptions.apiKey", "API Key")}</span>
+        <input type="password" value={apiKey} onChange={(e) => setApiKey(e.target.value)} placeholder="sk-..." />
+      </label>
+      <label className="subscription-config-field">
+        <span>{t("subscriptions.refreshInterval", "Refresh interval (s)")}</span>
+        <input type="number" min={10} value={interval} onChange={(e) => setInterval(e.target.value)} />
+      </label>
+      <div className="subscription-config-actions">
+        <button type="button" className="subscription-config-save" onClick={handleSave}>
+          <Icon name="check" size={12} />
+          {t("common.save", "Save")}
+        </button>
+        <button type="button" className="subscription-config-cancel" onClick={onCancel}>
+          <Icon name="close" size={12} />
+          {t("common.cancel", "Cancel")}
+        </button>
+      </div>
+    </div>
+  );
+}
+
 function ToiotoConfigForm({
   group,
   onSave,
@@ -155,6 +197,47 @@ function ToiotoDisplay({ group }: { group: SubscriptionGroupState }) {
           {t("subscriptions.totalRecharged", "Recharged")}: {formatBalance(data.totalRecharged)}
         </span>
       </div>
+    </div>
+  );
+}
+
+function DeepseekDisplay({ group }: { group: SubscriptionGroupState }) {
+  const { t } = useTranslation();
+  const data = group.deepseek;
+  if (!data) {
+    return (
+      <div className="subscription-usage-empty">
+        {group.lastFetched ? t("subscriptions.noData", "No usage data available") : ""}
+      </div>
+    );
+  }
+
+  return (
+    <div className="subscription-deepseek-display">
+      {data.balanceInfos.map((info) => (
+        <div key={info.currency} className="subscription-deepseek-balance-row">
+          <span className="subscription-deepseek-currency">{info.currency}</span>
+          <div className="subscription-deepseek-balance-details">
+            <div className="subscription-deepseek-balance-item">
+              <span className="subscription-deepseek-balance-label">{t("subscriptions.totalBalance", "Total")}</span>
+              <span className="subscription-deepseek-balance-value">{info.totalBalance}</span>
+            </div>
+            <div className="subscription-deepseek-balance-item">
+              <span className="subscription-deepseek-balance-label">{t("subscriptions.grantedBalance", "Granted")}</span>
+              <span className="subscription-deepseek-balance-value">{info.grantedBalance}</span>
+            </div>
+            <div className="subscription-deepseek-balance-item">
+              <span className="subscription-deepseek-balance-label">{t("subscriptions.toppedUpBalance", "Topped up")}</span>
+              <span className="subscription-deepseek-balance-value">{info.toppedUpBalance}</span>
+            </div>
+          </div>
+        </div>
+      ))}
+      {!data.isAvailable && (
+        <div className="subscription-deepseek-unavailable">
+          {t("subscriptions.balanceUnavailable", "No available balance")}
+        </div>
+      )}
     </div>
   );
 }
@@ -303,12 +386,17 @@ function SubscriptionGroupCard({
     setEditing(false);
   };
 
+  const handleSaveDeepseekConfig = (config: Pick<SubscriptionGroupConfig, "authCookie" | "refreshIntervalSeconds" | "name">) => {
+    updateGroup(group.id, config);
+    setEditing(false);
+  };
+
   return (
     <>
       <section className={`subscription-group${collapsed ? " collapsed" : ""}`}>
       <button type="button" className="subscription-group-header" onClick={() => setCollapsed((v) => !v)} aria-expanded={!collapsed}>
         <Icon name={collapsed ? "chevron-right" : "chevron-down"} size={12} className="subscription-group-caret" />
-        <span className="subscription-group-name">{group.name || (group.type === "toioto" ? "Toioto" : "OpenCode Go")}</span>
+        <span className="subscription-group-name">{group.name || (group.type === "toioto" ? "Toioto" : group.type === "deepseek" ? "DeepSeek" : "OpenCode Go")}</span>
         {group.type === "opencode-go" && (
           <div className="subscription-group-minibars">
             <div className="subscription-group-minibar">
@@ -325,6 +413,11 @@ function SubscriptionGroupCard({
         {group.type === "toioto" && group.toioto && (
           <span className={`subscription-group-balance${group.toioto.balance < 5 ? " low" : ""}`}>
             {formatBalance(group.toioto.balance)}
+          </span>
+        )}
+        {group.type === "deepseek" && group.deepseek && group.deepseek.balanceInfos[0] && (
+          <span className={`subscription-group-balance${Number(group.deepseek.balanceInfos[0].totalBalance) < 1 ? " low" : ""}`}>
+            {group.deepseek.balanceInfos[0].totalBalance}
           </span>
         )}
         <span
@@ -382,6 +475,12 @@ function SubscriptionGroupCard({
               onSave={handleSaveToiotoConfig}
               onCancel={() => setEditing(false)}
             />
+          ) : group.type === "deepseek" ? (
+            <DeepseekConfigForm
+              group={group}
+              onSave={handleSaveDeepseekConfig}
+              onCancel={() => setEditing(false)}
+            />
           ) : (
             <GroupConfigForm
               group={group}
@@ -391,6 +490,8 @@ function SubscriptionGroupCard({
           )
         ) : group.type === "toioto" ? (
           <ToiotoDisplay group={group} />
+        ) : group.type === "deepseek" ? (
+          <DeepseekDisplay group={group} />
         ) : (
           <UsageDisplay group={group} />
         )}
@@ -457,6 +558,7 @@ export function SubscriptionPanel() {
   const refreshAll = useSubscriptionStore((s) => s.refreshAll);
   const [showNewForm, setShowNewForm] = useState(false);
   const [showNewToiotoForm, setShowNewToiotoForm] = useState(false);
+  const [showNewDeepseekForm, setShowNewDeepseekForm] = useState(false);
   const [refreshing, setRefreshing] = useState(false);
   const [showDropdown, setShowDropdown] = useState(false);
   const addBtnRef = useRef<HTMLButtonElement>(null);
@@ -478,14 +580,17 @@ export function SubscriptionPanel() {
     return () => document.removeEventListener("mousedown", handler);
   }, [showDropdown]);
 
-  const openForm = (type: "opencode-go" | "toioto") => {
+  const openForm = (type: "opencode-go" | "toioto" | "deepseek") => {
     setShowDropdown(false);
+    setShowNewForm(false);
+    setShowNewToiotoForm(false);
+    setShowNewDeepseekForm(false);
     if (type === "opencode-go") {
-      setShowNewToiotoForm(false);
-      setShowNewForm((v) => !v);
+      setShowNewForm(true);
+    } else if (type === "toioto") {
+      setShowNewToiotoForm(true);
     } else {
-      setShowNewForm(false);
-      setShowNewToiotoForm((v) => !v);
+      setShowNewDeepseekForm(true);
     }
   };
 
@@ -516,6 +621,16 @@ export function SubscriptionPanel() {
       enabled: true,
     });
     setShowNewToiotoForm(false);
+  };
+
+  const handleAddDeepseekGroup = (config: Pick<SubscriptionGroupConfig, "authCookie" | "refreshIntervalSeconds" | "name">) => {
+    addGroup({
+      type: "deepseek",
+      workspaceId: "",
+      ...config,
+      enabled: true,
+    });
+    setShowNewDeepseekForm(false);
   };
 
   return (
@@ -565,8 +680,19 @@ export function SubscriptionPanel() {
         </div>
       )}
 
+      {showNewDeepseekForm && (
+        <div className="subscription-new-form">
+          <div className="subscription-new-form-header">{t("subscriptions.addDeepseek", "Add DeepSeek")}</div>
+          <DeepseekConfigForm
+            group={{ authCookie: "", refreshIntervalSeconds: 120, name: t("subscriptions.deepseek", "DeepSeek") }}
+            onSave={handleAddDeepseekGroup}
+            onCancel={() => setShowNewDeepseekForm(false)}
+          />
+        </div>
+      )}
+
       <div className="subscription-groups">
-        {groups.length === 0 && !showNewForm && !showNewToiotoForm ? (
+        {groups.length === 0 && !showNewForm && !showNewToiotoForm && !showNewDeepseekForm ? (
           <div className="subscription-empty">
             <Icon name="dollar-sign" size={24} />
             <div>{t("subscriptions.empty", "No subscriptions configured")}</div>
@@ -616,6 +742,18 @@ export function SubscriptionPanel() {
               <Icon name="dollar-sign" size={13} />
               <span className="app-select-option-text">
                 <span className="app-select-option-label">{t("subscriptions.toioto", "Toioto")}</span>
+              </span>
+            </button>
+            <button
+              type="button"
+              className="app-select-option"
+              role="option"
+              aria-selected={false}
+              onClick={() => openForm("deepseek")}
+            >
+              <Icon name="dollar-sign" size={13} />
+              <span className="app-select-option-text">
+                <span className="app-select-option-label">{t("subscriptions.deepseek", "DeepSeek")}</span>
               </span>
             </button>
           </div>,

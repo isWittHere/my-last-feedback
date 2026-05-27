@@ -1036,8 +1036,11 @@
     "addGroup": "添加订阅",
     "addOpenCodeGo": "添加 OpenCode Go",
     "addToioto": "添加 Toioto",
+    "addDeepseek": "添加 DeepSeek",
     "opencodeGo": "OpenCode Go",
     "toioto": "Toioto",
+    "deepseek": "DeepSeek",
+    "apiKey": "API 密钥",
     "workspaceId": "工作区 ID",
     "authCookie": "认证 Cookie",
     "jwt": "JWT 令牌",
@@ -1059,6 +1062,10 @@
     "empty": "尚未配置订阅",
     "balance": "余额",
     "concurrency": "并发数",
-    "totalRecharged": "累计充值"
+    "totalRecharged": "累计充值",
+    "totalBalance": "总额",
+    "grantedBalance": "赠金",
+    "toppedUpBalance": "充值",
+    "balanceUnavailable": "无可用的余额"
   }
 }

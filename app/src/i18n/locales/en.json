@@ -1036,8 +1036,11 @@
     "addGroup": "Add subscription",
     "addOpenCodeGo": "Add OpenCode Go",
     "addToioto": "Add Toioto",
+    "addDeepseek": "Add DeepSeek",
     "opencodeGo": "OpenCode Go",
     "toioto": "Toioto",
+    "deepseek": "DeepSeek",
+    "apiKey": "API Key",
     "workspaceId": "Workspace ID",
     "authCookie": "Auth Cookie",
     "jwt": "JWT Token",
@@ -1059,6 +1062,10 @@
     "empty": "No subscriptions configured",
     "balance": "Balance",
     "concurrency": "Concurrency",
-    "totalRecharged": "Recharged"
+    "totalRecharged": "Recharged",
+    "totalBalance": "Total",
+    "grantedBalance": "Granted",
+    "toppedUpBalance": "Topped up",
+    "balanceUnavailable": "No available balance"
   }
 }
