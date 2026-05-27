@@ -319,6 +319,64 @@ function ChannelStatusTooltip({ monitors }: { monitors: ChannelMonitor[] }) {
   );
 }
 
+function usageColor(pct: number): string {
+  if (pct >= 80) return "#ef4444";
+  if (pct >= 60) return "#f59e0b";
+  return "var(--color-primary)";
+}
+
+function UsageRing({ percent, size = 12 }: { percent: number; size?: number }) {
+  const r = (size / 2) - 1.5;
+  const circumference = 2 * Math.PI * r;
+  const pct = Math.min(100, Math.max(0, percent));
+  const offset = circumference - (pct / 100) * circumference;
+  return (
+    <svg width={size} height={size} viewBox={`0 0 ${size} ${size}`} style={{ flexShrink: 0 }}>
+      <circle cx={size / 2} cy={size / 2} r={r} fill="none" stroke="var(--color-bg-input)" strokeWidth="1.5" />
+      <circle
+        cx={size / 2} cy={size / 2} r={r}
+        fill="none" stroke={usageColor(pct)} strokeWidth="1.5"
+        strokeLinecap="round"
+        strokeDasharray={circumference}
+        strokeDashoffset={offset}
+        transform={`rotate(-90 ${size / 2} ${size / 2})`}
+      />
+    </svg>
+  );
+}
+
+function UsageOverviewTooltip({ group }: { group: SubscriptionGroupState }) {
+  const { t } = useTranslation();
+  const windows = [
+    { key: "rolling" as const, label: t("subscriptions.rolling", "Rolling") },
+    { key: "weekly" as const, label: t("subscriptions.weekly", "Weekly") },
+    { key: "monthly" as const, label: t("subscriptions.monthly", "Monthly") },
+  ];
+
+  return (
+    <div className="subscription-status-tooltip">
+      <div className="subscription-status-channel">
+      {windows.map(({ key, label }) => {
+        const data = group[key];
+        const pct = data ? Math.round(data.usagePercent) : 0;
+        return (
+          <div key={key} className="subscription-status-model">
+            <span className="subscription-status-model-name" style={{ minWidth: 48 }}>{label}</span>
+            <div className="subscription-usage-bar-track" style={{ flex: 1, height: 3, borderRadius: 2, background: "var(--color-bg-input)" }}>
+              <div
+                className="subscription-usage-bar-fill"
+                style={{ height: "100%", borderRadius: 2, background: usageColor(pct), width: `${Math.min(100, pct)}%` }}
+              />
+            </div>
+            <span className="subscription-status-model-latency" style={{ minWidth: 32, textAlign: "right" }}>{pct}%</span>
+          </div>
+        );
+      })}
+      </div>
+    </div>
+  );
+}
+
 function SubscriptionGroupCard({
   group,
   onRefresh,
@@ -333,9 +391,12 @@ function SubscriptionGroupCard({
   const [collapsed, setCollapsed] = useState(!group.enabled);
   const [showChanTooltip, setShowChanTooltip] = useState(false);
   const [tooltipPos, setTooltipPos] = useState<{ left: number; top: number } | null>(null);
+  const [showUsageTooltip, setShowUsageTooltip] = useState(false);
+  const [usageTooltipPos, setUsageTooltipPos] = useState<{ left: number; top: number } | null>(null);
   const autoRefreshCleanupRef = useRef<(() => void) | null>(null);
   const statusRef = useRef<HTMLSpanElement>(null);
   const tooltipRef = useRef<HTMLDivElement>(null);
+  const usageTooltipRef = useRef<HTMLDivElement>(null);
 
   useLayoutEffect(() => {
     if (!showChanTooltip || !statusRef.current || !tooltipRef.current) return;
@@ -353,6 +414,23 @@ function SubscriptionGroupCard({
     }
     setTooltipPos({ left, top });
   }, [showChanTooltip, group.channelMonitors]);
+
+  useLayoutEffect(() => {
+    if (!showUsageTooltip || !statusRef.current || !usageTooltipRef.current) return;
+    const statusRect = statusRef.current.getBoundingClientRect();
+    const tipRect = usageTooltipRef.current.getBoundingClientRect();
+    const margin = 4;
+    let left = statusRect.right + 6;
+    let top = statusRect.top;
+    if (left + tipRect.width > window.innerWidth - margin) {
+      left = statusRect.left - tipRect.width - 6;
+    }
+    left = Math.max(margin, left);
+    if (top + tipRect.height > window.innerHeight - margin) {
+      top = Math.max(margin, window.innerHeight - tipRect.height - margin);
+    }
+    setUsageTooltipPos({ left, top });
+  }, [showUsageTooltip, group.rolling, group.weekly, group.monthly]);
 
   const startAutoRefresh = useSubscriptionStore((s) => s.startAutoRefresh);
 
@@ -394,18 +472,10 @@ function SubscriptionGroupCard({
         <Icon name={collapsed ? "chevron-right" : "chevron-down"} size={12} className="subscription-group-caret" />
         <ProviderIcon provider={group.type} size={16} className="subscription-group-provider-icon" />
         <span className="subscription-group-name">{group.name || (group.type === "toioto" ? "Toioto" : group.type === "deepseek" ? "DeepSeek" : "OpenCode Go")}</span>
-        {group.type === "opencode-go" && (
-          <div className="subscription-group-minibars">
-            <div className="subscription-group-minibar">
-              <div className="subscription-group-minibar-fill" style={{ width: group.rolling ? usageBarPercent(group.rolling.usagePercent) : "0%" }} />
-            </div>
-            <div className="subscription-group-minibar">
-              <div className="subscription-group-minibar-fill" style={{ width: group.weekly ? usageBarPercent(group.weekly.usagePercent) : "0%" }} />
-            </div>
-            <div className="subscription-group-minibar">
-              <div className="subscription-group-minibar-fill" style={{ width: group.monthly ? usageBarPercent(group.monthly.usagePercent) : "0%" }} />
-            </div>
-          </div>
+        {group.type === "opencode-go" && group.monthly && (
+          <span className="subscription-group-monthly-pct">
+            已使用 <span style={{ fontWeight: 700, color: usageColor(group.monthly.usagePercent) }}>{Math.round(group.monthly.usagePercent)}%</span>
+          </span>
         )}
         {group.type === "toioto" && group.toioto && (
           <span className={`subscription-group-balance${group.toioto.balance < 5 ? " low" : ""}`}>
@@ -420,8 +490,11 @@ function SubscriptionGroupCard({
         <span
           ref={statusRef}
           className="subscription-group-status"
-          onMouseEnter={() => group.type === "toioto" && group.channelMonitors && setShowChanTooltip(true)}
-          onMouseLeave={() => setShowChanTooltip(false)}
+          onMouseEnter={() => {
+            if (group.type === "toioto" && group.channelMonitors) setShowChanTooltip(true);
+            if (group.type === "opencode-go" && (group.rolling || group.weekly || group.monthly)) setShowUsageTooltip(true);
+          }}
+          onMouseLeave={() => { setShowChanTooltip(false); setShowUsageTooltip(false); }}
         >
           {group.loading ? (
             <Icon name="spinner" size={12} className="animate-spin" />
@@ -434,6 +507,8 @@ function SubscriptionGroupCard({
               if (worst === "degraded") return <Icon name="warning" size={12} style={{ color: "#f59e0b" }} />;
               return <Icon name="check" size={12} style={{ color: "var(--color-success, #22c55e)" }} />;
             })()
+          ) : group.type === "opencode-go" && group.monthly ? (
+            <UsageRing percent={group.monthly.usagePercent} size={12} />
           ) : group.lastFetched ? (
             <Icon name="check" size={12} style={{ color: "var(--color-success, #22c55e)" }} />
           ) : (
@@ -540,6 +615,17 @@ function SubscriptionGroupCard({
           style={tooltipPos ?? { left: -9999, top: 0 }}
         >
           <ChannelStatusTooltip monitors={group.channelMonitors} />
+        </div>,
+        document.body,
+      )}
+
+      {showUsageTooltip && (group.rolling || group.weekly || group.monthly) && createPortal(
+        <div
+          ref={usageTooltipRef}
+          className="subscription-status-tooltip-container"
+          style={usageTooltipPos ?? { left: -9999, top: 0 }}
+        >
+          <UsageOverviewTooltip group={group} />
         </div>,
         document.body,
       )}
