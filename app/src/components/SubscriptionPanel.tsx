@@ -3,7 +3,7 @@ import { createPortal } from "react-dom";
 import { useTranslation } from "react-i18next";
 import { useSubscriptionStore, type SubscriptionGroupState, type SubscriptionGroupConfig } from "../store/subscriptionStore";
 import { type ChannelMonitor } from "../services/subscriptionScrapers";
-import { Icon } from "./Icons";
+import { Icon, ProviderIcon } from "./Icons";
 
 function formatDuration(seconds: number): string {
   if (seconds < 60) return `${seconds}s`;
@@ -212,27 +212,29 @@ function DeepseekDisplay({ group }: { group: SubscriptionGroupState }) {
     );
   }
 
+  const info = data.balanceInfos[0];
+  if (!info) {
+    return (
+      <div className="subscription-usage-empty">
+        {t("subscriptions.noData", "No usage data available")}
+      </div>
+    );
+  }
+
   return (
-    <div className="subscription-deepseek-display">
-      {data.balanceInfos.map((info) => (
-        <div key={info.currency} className="subscription-deepseek-balance-row">
-          <span className="subscription-deepseek-currency">{info.currency}</span>
-          <div className="subscription-deepseek-balance-details">
-            <div className="subscription-deepseek-balance-item">
-              <span className="subscription-deepseek-balance-label">{t("subscriptions.totalBalance", "Total")}</span>
-              <span className="subscription-deepseek-balance-value">{info.totalBalance}</span>
-            </div>
-            <div className="subscription-deepseek-balance-item">
-              <span className="subscription-deepseek-balance-label">{t("subscriptions.grantedBalance", "Granted")}</span>
-              <span className="subscription-deepseek-balance-value">{info.grantedBalance}</span>
-            </div>
-            <div className="subscription-deepseek-balance-item">
-              <span className="subscription-deepseek-balance-label">{t("subscriptions.toppedUpBalance", "Topped up")}</span>
-              <span className="subscription-deepseek-balance-value">{info.toppedUpBalance}</span>
-            </div>
-          </div>
-        </div>
-      ))}
+    <div className="subscription-toioto-display">
+      <div className="subscription-toioto-balance">
+        <span className="subscription-toioto-balance-amount">￥{info.totalBalance}</span>
+        <span className="subscription-toioto-balance-label">{t("subscriptions.balance", "Balance")}</span>
+      </div>
+      <div className="subscription-toioto-meta">
+        <span className="subscription-toioto-meta-item">
+          {t("subscriptions.grantedBalance", "Granted")}: ￥{info.grantedBalance}
+        </span>
+        <span className="subscription-toioto-meta-item">
+          {t("subscriptions.toppedUpBalance", "Topped up")}: ￥{info.toppedUpBalance}
+        </span>
+      </div>
       {!data.isAvailable && (
         <div className="subscription-deepseek-unavailable">
           {t("subscriptions.balanceUnavailable", "No available balance")}
@@ -258,17 +260,11 @@ function UsageDisplay({ group }: { group: SubscriptionGroupState }) {
         return (
           <div key={key} className="subscription-usage-window">
             <div className="subscription-usage-header">
-              <span className="subscription-usage-label">{label}</span>
+              <span className="subscription-usage-label">{label} <span className="subscription-usage-reset-inline">{t("subscriptions.resetsIn", "Resets in {{time}}").replace("{{time}}", formatDuration(data.resetInSec))}</span></span>
               <span className="subscription-usage-pct">{usageBarPercent(data.usagePercent)}</span>
-              <span className="subscription-usage-remaining">
-                {t("subscriptions.remaining", "{{pct}} remaining").replace("{{pct}}", usageBarPercent(data.percentRemaining))}
-              </span>
             </div>
             <div className="subscription-usage-bar-track">
               <div className="subscription-usage-bar-fill" style={{ width: usageBarPercent(data.usagePercent) }} />
-            </div>
-            <div className="subscription-usage-reset">
-              {t("subscriptions.resetsIn", "Resets in {{time}}").replace("{{time}}", formatDuration(data.resetInSec))}
             </div>
           </div>
         );
@@ -396,6 +392,7 @@ function SubscriptionGroupCard({
       <section className={`subscription-group${collapsed ? " collapsed" : ""}`}>
       <button type="button" className="subscription-group-header" onClick={() => setCollapsed((v) => !v)} aria-expanded={!collapsed}>
         <Icon name={collapsed ? "chevron-right" : "chevron-down"} size={12} className="subscription-group-caret" />
+        <ProviderIcon provider={group.type} size={16} className="subscription-group-provider-icon" />
         <span className="subscription-group-name">{group.name || (group.type === "toioto" ? "Toioto" : group.type === "deepseek" ? "DeepSeek" : "OpenCode Go")}</span>
         {group.type === "opencode-go" && (
           <div className="subscription-group-minibars">
@@ -417,7 +414,7 @@ function SubscriptionGroupCard({
         )}
         {group.type === "deepseek" && group.deepseek && group.deepseek.balanceInfos[0] && (
           <span className={`subscription-group-balance${Number(group.deepseek.balanceInfos[0].totalBalance) < 1 ? " low" : ""}`}>
-            {group.deepseek.balanceInfos[0].totalBalance}
+            ￥{group.deepseek.balanceInfos[0].totalBalance}
           </span>
         )}
         <span
@@ -660,7 +657,7 @@ export function SubscriptionPanel() {
 
       {showNewForm && (
         <div className="subscription-new-form">
-          <div className="subscription-new-form-header">{t("subscriptions.addOpenCodeGo", "Add OpenCode Go")}</div>
+          <div className="subscription-new-form-header"><ProviderIcon provider="opencode-go" size={16} /> {t("subscriptions.addOpenCodeGo", "Add OpenCode Go")}</div>
           <GroupConfigForm
             group={{ workspaceId: "", authCookie: "", refreshIntervalSeconds: 60, name: t("subscriptions.opencodeGo", "OpenCode Go") }}
             onSave={handleAddGroup}
@@ -682,7 +679,7 @@ export function SubscriptionPanel() {
 
       {showNewDeepseekForm && (
         <div className="subscription-new-form">
-          <div className="subscription-new-form-header">{t("subscriptions.addDeepseek", "Add DeepSeek")}</div>
+          <div className="subscription-new-form-header"><ProviderIcon provider="deepseek" size={16} /> {t("subscriptions.addDeepseek", "Add DeepSeek")}</div>
           <DeepseekConfigForm
             group={{ authCookie: "", refreshIntervalSeconds: 120, name: t("subscriptions.deepseek", "DeepSeek") }}
             onSave={handleAddDeepseekGroup}
@@ -727,7 +724,7 @@ export function SubscriptionPanel() {
               aria-selected={false}
               onClick={() => openForm("opencode-go")}
             >
-              <Icon name="dollar-sign" size={13} />
+              <ProviderIcon provider="opencode-go" size={13} />
               <span className="app-select-option-text">
                 <span className="app-select-option-label">{t("subscriptions.opencodeGo", "OpenCode Go")}</span>
               </span>
@@ -739,7 +736,7 @@ export function SubscriptionPanel() {
               aria-selected={false}
               onClick={() => openForm("toioto")}
             >
-              <Icon name="dollar-sign" size={13} />
+              <ProviderIcon provider="toioto" size={13} />
               <span className="app-select-option-text">
                 <span className="app-select-option-label">{t("subscriptions.toioto", "Toioto")}</span>
               </span>
@@ -751,7 +748,7 @@ export function SubscriptionPanel() {
               aria-selected={false}
               onClick={() => openForm("deepseek")}
             >
-              <Icon name="dollar-sign" size={13} />
+              <ProviderIcon provider="deepseek" size={13} />
               <span className="app-select-option-text">
                 <span className="app-select-option-label">{t("subscriptions.deepseek", "DeepSeek")}</span>
               </span>

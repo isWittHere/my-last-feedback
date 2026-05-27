@@ -1063,7 +1063,6 @@
     "balance": "Balance",
     "concurrency": "Concurrency",
     "totalRecharged": "Recharged",
-    "totalBalance": "Total",
     "grantedBalance": "Granted",
     "toppedUpBalance": "Topped up",
     "balanceUnavailable": "No available balance"

@@ -1,4 +1,6 @@
 import mlcLogoSvg from "../assets/my-last-chat.svg?raw";
+import opencodeLogoSvg from "../assets/provider-opencode.svg?raw";
+import deepseekLogoSvg from "../assets/provider-deepseek.svg?raw";
 
 /**
  * Unified SVG icon library for the entire UI.
@@ -334,6 +336,78 @@ export interface MlcLogoIconProps {
   color?: string;
   className?: string;
   style?: React.CSSProperties;
+}
+
+const PROVIDER_LOGOS: Record<string, string> = {
+  "opencode-go": opencodeLogoSvg,
+  opencode: opencodeLogoSvg,
+  deepseek: deepseekLogoSvg,
+};
+
+const FALLBACK_CHARS: Record<string, string> = {
+  toioto: "T",
+};
+
+function getProviderChar(provider: string): string {
+  if (FALLBACK_CHARS[provider]) return FALLBACK_CHARS[provider];
+  const match = provider.match(/^[a-zA-Z]/);
+  return match ? match[0].toUpperCase() : "?";
+}
+
+export interface ProviderIconProps {
+  provider: string;
+  size?: number;
+  color?: string;
+  className?: string;
+  style?: React.CSSProperties;
+}
+
+export function ProviderIcon({ provider, size = 16, color, className, style }: ProviderIconProps) {
+  const svg = PROVIDER_LOGOS[provider];
+
+  if (!svg) {
+    return (
+      <span
+        aria-hidden="true"
+        className={className}
+        style={{
+          width: size,
+          height: size,
+          color,
+          display: "inline-flex",
+          alignItems: "center",
+          justifyContent: "center",
+          flexShrink: 0,
+          borderRadius: Math.max(3, size * 0.2),
+          border: `1px solid ${color || "var(--color-border-subtle, rgba(128,128,128,0.2))"}`,
+          fontSize: size * 0.68,
+          fontWeight: 600,
+          lineHeight: 1,
+          ...style,
+        }}
+      >
+        {getProviderChar(provider)}
+      </span>
+    );
+  }
+
+  return (
+    <span
+      aria-hidden="true"
+      className={className}
+      style={{
+        width: size,
+        height: size,
+        color,
+        display: "inline-flex",
+        alignItems: "center",
+        justifyContent: "center",
+        flexShrink: 0,
+        ...style,
+      }}
+      dangerouslySetInnerHTML={{ __html: svg }}
+    />
+  );
 }
 
 export function MlcLogoIcon({ size = 16, color, className, style }: MlcLogoIconProps) {

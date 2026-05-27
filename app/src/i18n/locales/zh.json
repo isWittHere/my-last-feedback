@@ -1063,7 +1063,6 @@
     "balance": "余额",
     "concurrency": "并发数",
     "totalRecharged": "累计充值",
-    "totalBalance": "总额",
     "grantedBalance": "赠金",
     "toppedUpBalance": "充值",
     "balanceUnavailable": "无可用的余额"

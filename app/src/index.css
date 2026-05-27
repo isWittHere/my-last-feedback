@@ -2935,6 +2935,10 @@ body,
     transition: transform 0.12s;
 }
 
+.subscription-group-provider-icon {
+    flex: 0 0 auto;
+}
+
 .subscription-group.collapsed .subscription-group-caret {
     transform: rotate(-90deg);
 }
@@ -2989,7 +2993,7 @@ body,
 }
 
 .subscription-status-channel-name {
-    font-size: 10px;
+    font-size: 11px;
     font-weight: 600;
     color: var(--color-text-muted);
     text-transform: uppercase;
@@ -3021,7 +3025,7 @@ body,
 }
 
 .subscription-status-model-latency {
-    font-size: 10px;
+    font-size: 11px;
     color: var(--color-text-muted);
     white-space: nowrap;
 }
@@ -3045,7 +3049,7 @@ body,
     align-items: center;
     gap: 8px;
     padding: 4px 8px;
-    font-size: 10px;
+    font-size: 11px;
     color: var(--color-text-muted);
 }
 
@@ -3123,7 +3127,8 @@ body,
 }
 
 .subscription-usage-pct {
-    flex: 0 0 auto;
+    flex: 1;
+    text-align: right;
     font-weight: 600;
     color: var(--color-text-primary);
 }
@@ -3149,8 +3154,9 @@ body,
     transition: width 0.3s ease;
 }
 
-.subscription-usage-reset {
-    font-size: 10px;
+.subscription-usage-reset-inline {
+    font-size: 11px;
+    font-weight: 400;
     color: var(--color-text-muted);
 }
 
@@ -3196,49 +3202,6 @@ body,
     white-space: nowrap;
 }
 
-.subscription-deepseek-display {
-    padding: 4px 8px 10px;
-    display: flex;
-    flex-direction: column;
-    gap: 8px;
-}
-
-.subscription-deepseek-balance-row {
-    display: flex;
-    flex-direction: column;
-    gap: 2px;
-}
-
-.subscription-deepseek-currency {
-    font-size: 10px;
-    font-weight: 600;
-    color: var(--color-text-muted);
-    text-transform: uppercase;
-}
-
-.subscription-deepseek-balance-details {
-    display: flex;
-    flex-wrap: wrap;
-    gap: 6px 16px;
-}
-
-.subscription-deepseek-balance-item {
-    display: flex;
-    align-items: baseline;
-    gap: 4px;
-}
-
-.subscription-deepseek-balance-label {
-    font-size: 10px;
-    color: var(--color-text-muted);
-}
-
-.subscription-deepseek-balance-value {
-    font-size: 14px;
-    font-weight: 600;
-    color: var(--color-primary);
-}
-
 .subscription-deepseek-unavailable {
     font-size: 11px;
     color: var(--color-danger, #ef4444);
@@ -3261,7 +3224,7 @@ body,
     border-radius: 3px;
     background: transparent;
     color: var(--color-text-muted);
-    font-size: 10px;
+    font-size: 11px;
     cursor: pointer;
     transition: background 0.12s;
 }
@@ -3300,7 +3263,7 @@ body,
 }
 
 .subscription-config-field span {
-    font-size: 10px;
+    font-size: 11px;
     font-weight: 500;
     color: var(--color-text-secondary);
 }
