@@ -203,8 +203,8 @@ function channelWorstStatus(monitors: ChannelMonitor[] | null | undefined): "ok"
   for (const ch of monitors) {
     const models = [ch.primaryStatus, ...(ch.extraModels ?? []).map((m) => m.status as string)];
     for (const s of models) {
-      if (s === "failed") return "failed";
-      if (s === "degraded" || s === "error") worst = "degraded";
+      if (s === "failed" || s === "error") return "failed";
+      if (s === "degraded") worst = "degraded";
     }
   }
   return worst;
@@ -221,9 +221,9 @@ function ChannelStatusTooltip({ monitors }: { monitors: ChannelMonitor[] }) {
             ...(ch.extraModels ?? []).map((m) => ({ model: m.model, status: m.status, latency: m.latencyMs })),
           ].map((m) => (
             <div key={m.model} className="subscription-status-model">
-              {m.status === "failed" ? (
+              {m.status === "failed" || m.status === "error" ? (
                 <Icon name="circle-x" size={10} style={{ color: "#ef4444" }} />
-              ) : m.status === "degraded" || m.status === "error" ? (
+              ) : m.status === "degraded" ? (
                 <Icon name="warning" size={10} style={{ color: "#f59e0b" }} />
               ) : (
                 <Icon name="check" size={10} style={{ color: "var(--color-primary)" }} />

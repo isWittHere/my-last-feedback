@@ -3011,11 +3011,11 @@ body,
     white-space: nowrap;
 }
 
-.subscription-status-model-name--degraded,
-.subscription-status-model-name--error {
+.subscription-status-model-name--degraded {
     color: #f59e0b;
 }
 
+.subscription-status-model-name--error,
 .subscription-status-model-name--failed {
     color: #ef4444;
 }
