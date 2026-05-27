@@ -1065,6 +1065,9 @@
     "totalRecharged": "累计充值",
     "grantedBalance": "赠金",
     "toppedUpBalance": "充值",
-    "balanceUnavailable": "无可用的余额"
+    "balanceUnavailable": "无可用的余额",
+    "used": "已使用",
+    "showCollapsedBar": "折叠时显示卡片底部进度条",
+    "showCollapsedBarDesc": "折叠订阅卡片时在底部显示一条用量进度条"
   }
 }

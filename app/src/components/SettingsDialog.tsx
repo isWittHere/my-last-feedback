@@ -4,6 +4,7 @@ import i18n from "../i18n";
 import { getAgentSessionSettings, saveAgentSessionSettings, type AgentSessionSettings, type NewSessionWorkspacePathMode } from "../agentSessionSettings";
 import { useFeedbackStore, type DockColumnId, type DockTabId } from "../store/feedbackStore";
 import { useAgentStore } from "../store/agentStore";
+import { useSubscriptionStore } from "../store/subscriptionStore";
 import { PromptIcon } from "./PromptIcons";
 import { McpConfigHelper } from "./McpConfigHelper";
 import { CallerManager } from "./CallerManager";
@@ -28,7 +29,7 @@ import { AppSelect, type AppSelectOption } from "./AppSelect";
 import { SettingsSegmentedControl } from "./SettingsSegmentedControl";
 import { isAgentUiDisabled } from "../agent/agentUiFlags";
 
-type Tab = "general" | "display" | "callers" | "submitted" | "prompts" | "sessionNavigation" | "gitOperations" | "layoutPanels" | "agentConsole" | "agentStepDisplay" | "agentChat" | "agentSessionManager" | "openCode" | "openCodePermissions" | "terminal" | "resources" | "gitPanel" | "markdownPreview" | "notification" | "about";
+type Tab = "general" | "display" | "callers" | "submitted" | "prompts" | "sessionNavigation" | "gitOperations" | "layoutPanels" | "agentConsole" | "agentStepDisplay" | "agentChat" | "agentSessionManager" | "openCode" | "openCodePermissions" | "terminal" | "resources" | "gitPanel" | "markdownPreview" | "subscriptionPanel" | "notification" | "about";
 type SettingsGroupId = "mlfb" | "agent" | "layout";
 
 function renderStickyUserMessageText(text: string, mergeLines: boolean): ReactNode {
@@ -245,6 +246,8 @@ export function SettingsDialog({ open, onClose }: { open: boolean; onClose: () =
   const setShowTransferSubmitUi = useFeedbackStore((s) => s.setShowTransferSubmitUi);
   const setResourceIconTheme = useFeedbackStore((s) => s.setResourceIconTheme);
   const setMlcPreviewShowYaml = useFeedbackStore((s) => s.setMlcPreviewShowYaml);
+  const showCollapsedProgressBar = useSubscriptionStore((s) => s.showCollapsedProgressBar);
+  const setShowCollapsedProgressBar = useSubscriptionStore((s) => s.setShowCollapsedProgressBar);
   const setSessionListMode = useFeedbackStore((s) => s.setSessionListMode);
   const setShowSessionNavigationAttachmentDots = useFeedbackStore((s) => s.setShowSessionNavigationAttachmentDots);
   const setUseSessionNavigationColorCards = useFeedbackStore((s) => s.setUseSessionNavigationColorCards);
@@ -1170,13 +1173,14 @@ export function SettingsDialog({ open, onClose }: { open: boolean; onClose: () =
                 {renderSettingsNavItem("openCodePermissions", "checklist", t("settings.openCodeApprovalPermissions", "Approval permissions"), true)}
               </>
             ))}
-            {renderSettingsNavGroup("layout", t("settings.layout", "Layout"), ["layoutPanels", "markdownPreview", "resources", "terminal", "gitPanel"], (
+            {renderSettingsNavGroup("layout", t("settings.layout", "Layout"), ["layoutPanels", "markdownPreview", "resources", "terminal", "gitPanel", "subscriptionPanel"], (
               <>
                 {renderSettingsNavItem("layoutPanels", "page-sidebar", t("settings.panelManagement", "Panel management"), true)}
                 {renderSettingsNavItem("markdownPreview", "file-text", t("settings.markdownPreview", "Markdown preview"), true)}
                 {renderSettingsNavItem("resources", "folder", t("settings.resourceExplorer", "Resource explorer"), true)}
                 {renderSettingsNavItem("terminal", "terminal", t("settings.terminal", "Terminal"), true)}
                 {renderSettingsNavItem("gitPanel", "git-commit", t("settings.gitPanel", "Git panel"), true)}
+                {renderSettingsNavItem("subscriptionPanel", "dollar-sign", t("subscriptions.title", "Subscriptions"), true)}
               </>
             ))}
             {renderSettingsNavItem("notification", "bell", t("settings.notification"))}
@@ -1983,6 +1987,23 @@ export function SettingsDialog({ open, onClose }: { open: boolean; onClose: () =
                       { id: "compact", label: t("settings.gitListItemStyleCompact", "Compact"), icon: <Icon name="list" size={12} /> },
                     ]}
                   />
+                </div>
+              </div>
+            )}
+
+            {tab === "subscriptionPanel" && (
+              <div className="settings-section">
+                <div className="settings-row">
+                  <div className="settings-row-info">
+                    <span className="settings-label">{t("subscriptions.showCollapsedBar")}</span>
+                    <span className="settings-sublabel">{t("subscriptions.showCollapsedBarDesc")}</span>
+                  </div>
+                  <button
+                    className={`settings-toggle${showCollapsedProgressBar ? " settings-toggle-on" : ""}`}
+                    onClick={() => setShowCollapsedProgressBar(!showCollapsedProgressBar)}
+                  >
+                    <span className="settings-toggle-knob" />
+                  </button>
                 </div>
               </div>
             )}

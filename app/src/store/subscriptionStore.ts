@@ -29,6 +29,8 @@ export interface SubscriptionGroupState extends SubscriptionGroupConfig {
 
 interface SubscriptionStore {
   groups: SubscriptionGroupState[];
+  showCollapsedProgressBar: boolean;
+  setShowCollapsedProgressBar: (v: boolean) => void;
   addGroup: (config: SubscriptionGroupInput) => void;
   removeGroup: (id: string) => void;
   updateGroup: (id: string, patch: Partial<SubscriptionGroupConfig>) => void;
@@ -74,6 +76,9 @@ function loadGroups(): SubscriptionGroupState[] {
 
 export const useSubscriptionStore = create<SubscriptionStore>((set, get) => ({
   groups: loadGroups(),
+  showCollapsedProgressBar: true,
+
+  setShowCollapsedProgressBar: (v) => set({ showCollapsedProgressBar: v }),
 
   addGroup: (input) => {
     const group: SubscriptionGroupState = {

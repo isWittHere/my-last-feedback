@@ -1,6 +1,6 @@
 {
   "name": "my-last-feedback-mcp",
-  "version": "0.7.6",
+  "version": "0.7.7",
   "description": "MCP Server for My Last Feedback - bridges AI Agent and Tauri GUI",
   "type": "module",
   "main": "mcp/mlfb/index.mjs",

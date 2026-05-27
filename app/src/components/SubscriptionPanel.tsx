@@ -387,6 +387,7 @@ function SubscriptionGroupCard({
   const { t } = useTranslation();
   const removeGroup = useSubscriptionStore((s) => s.removeGroup);
   const updateGroup = useSubscriptionStore((s) => s.updateGroup);
+  const showCollapsedBar = useSubscriptionStore((s) => s.showCollapsedProgressBar);
   const [editing, setEditing] = useState(false);
   const [collapsed, setCollapsed] = useState(!group.enabled);
   const [showChanTooltip, setShowChanTooltip] = useState(false);
@@ -474,7 +475,7 @@ function SubscriptionGroupCard({
         <span className="subscription-group-name">{group.name || (group.type === "toioto" ? "Toioto" : group.type === "deepseek" ? "DeepSeek" : "OpenCode Go")}</span>
         {group.type === "opencode-go" && group.monthly && (
           <span className="subscription-group-monthly-pct">
-            已使用 <span style={{ fontWeight: 700, color: usageColor(group.monthly.usagePercent) }}>{Math.round(group.monthly.usagePercent)}%</span>
+            {t("subscriptions.used", "已使用")} <span style={{ fontWeight: 700, color: usageColor(group.monthly.usagePercent) }}>{Math.round(group.monthly.usagePercent)}%</span>
           </span>
         )}
         {group.type === "toioto" && group.toioto && (
@@ -515,6 +516,15 @@ function SubscriptionGroupCard({
             <Icon name="minus" size={12} style={{ color: "var(--color-text-muted)" }} />
           )}
         </span>
+        {showCollapsedBar && collapsed && group.type === "opencode-go" && group.monthly && (
+          <div
+            className="subscription-group-collapsed-bar"
+            style={{
+              width: `${Math.min(100, Math.max(0, group.monthly.usagePercent))}%`,
+              background: usageColor(group.monthly.usagePercent),
+            }}
+          />
+        )}
       </button>
       <div className="subscription-group-body" aria-hidden={collapsed}>
         {group.enabled && group.lastFetched ? (

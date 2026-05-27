@@ -1065,6 +1065,9 @@
     "totalRecharged": "Recharged",
     "grantedBalance": "Granted",
     "toppedUpBalance": "Topped up",
-    "balanceUnavailable": "No available balance"
+    "balanceUnavailable": "No available balance",
+    "used": "Used",
+    "showCollapsedBar": "Show bottom progress bar when collapsed",
+    "showCollapsedBarDesc": "Display a thin usage progress bar at the bottom of subscription cards when collapsed"
   }
 }
