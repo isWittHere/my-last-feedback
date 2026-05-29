@@ -165,10 +165,16 @@ export function GitPanel() {
   const gitPanelSettings = useGitPanelSettings();
 
   const workspacePath =
-    focusedComposer?.projectDirectory ||
     mlcActiveWorkspacePath ||
+    focusedComposer?.projectDirectory ||
     projectDirectory ||
     "";
+
+  const focusedCallerColor = useMemo(() => {
+    if (!focusedComposer) return undefined;
+    const caller = callers.find((c) => c.id === focusedComposer.callerId);
+    return caller?.color;
+  }, [callers, focusedComposer]);
 
   const workspaceColorCandidates = useMemo(() => {
     const callerById = new Map(
@@ -188,9 +194,10 @@ export function GitPanel() {
     () =>
       resolveWorkspaceIdentity({
         workspacePath,
+        color: focusedCallerColor,
         candidates: workspaceColorCandidates,
       }),
-    [workspacePath, workspaceColorCandidates],
+    [workspacePath, workspaceColorCandidates, focusedCallerColor],
   );
 
   const [logResult, setLogResult] = useState<GitLogResult | null>(null);

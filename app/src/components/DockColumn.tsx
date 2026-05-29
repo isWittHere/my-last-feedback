@@ -94,7 +94,6 @@ export function DockColumn({ columnId }: { columnId: DockColumnId }) {
   const column = useFeedbackStore((state) => state.dockLayout.columns[columnId]);
   const draggingDockTab = useFeedbackStore((state) => state.draggingDockTab);
   const focusedComposer = useFeedbackStore((state) => state.focusedComposer);
-  const activeWorkspacePath = useFeedbackStore((state) => state.mlcActiveWorkspacePath);
   const setActiveWorkspacePath = useFeedbackStore((state) => state.setMlcActiveWorkspacePath);
   const setDockColumnWidth = useFeedbackStore((state) => state.setDockColumnWidth);
   const setDockColumnCollapsed = useFeedbackStore((state) => state.setDockColumnCollapsed);
@@ -113,12 +112,6 @@ export function DockColumn({ columnId }: { columnId: DockColumnId }) {
   const suppressClickTabRef = useRef<DockTabId | null>(null);
   const tabBarMenuRef = useRef<HTMLDivElement>(null);
   const [tabBarMenu, setTabBarMenu] = useState<{ left: number; top: number; tabId: DockTabId } | null>(null);
-
-  useEffect(() => {
-    if (focusedComposer?.projectDirectory && !activeWorkspacePath) {
-      setActiveWorkspacePath(focusedComposer.projectDirectory);
-    }
-  }, [activeWorkspacePath, focusedComposer?.projectDirectory, setActiveWorkspacePath]);
 
   useEffect(() => {
     if (!tabBarMenu) return;
