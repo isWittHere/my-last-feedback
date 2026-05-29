@@ -3150,6 +3150,7 @@ body,
 }
 
 .subscription-usage-empty {
+    padding: 4px 8px;
     font-size: 11px;
     color: var(--color-text-muted);
     font-style: italic;

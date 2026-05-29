@@ -369,6 +369,14 @@ export function GitPanel() {
     };
   }, []);
 
+  const errorKind = useMemo<"not-a-repo" | "no-commits" | "generic" | null>(() => {
+    if (!error) return null;
+    const lower = error.toLowerCase();
+    if (lower.includes("not a git repository")) return "not-a-repo";
+    if (lower.includes("does not have any commits yet")) return "no-commits";
+    return "generic";
+  }, [error]);
+
   const clearTooltip = useCallback(() => {
     if (tooltipTimerRef.current !== null) {
       window.clearTimeout(tooltipTimerRef.current);
@@ -638,20 +646,20 @@ export function GitPanel() {
           </button>
         </div>
       </div>
-      {error && (
-        <div
-          className="shrink-0 px-3 py-1 text-xs"
-          style={{
-            color: "var(--color-error, #ef4444)",
-            borderBottom: "1px solid var(--color-border)",
-          }}
-        >
-          {error}
+      {error && commits.length > 0 && (
+        <div className="shrink-0 flex items-center gap-1.5 px-3 py-1 border-b text-xs" style={{ color: "var(--color-text-muted)", borderColor: "var(--color-border)" }}>
+          <Icon name="alert-circle" size={11} style={{ color: "var(--color-error, #ef4444)" }} />
+          <span className="truncate">{error}</span>
         </div>
       )}
-
       <div className="flex-1 overflow-y-auto min-h-0">
-        {loading ? (
+        {!workspacePath ? (
+          <div className="flex flex-col items-center justify-center h-full gap-2 px-4" style={{ color: "var(--color-text-muted)" }}>
+            <Icon name="folder" size={24} />
+            <span className="text-xs">{t("git.noWorkspace", "No workspace selected")}</span>
+            <span className="text-xs" style={{ opacity: 0.6, textAlign: "center" }}>{t("git.noWorkspaceHint", "Focus a caller input or select a workspace in the panel tabs to see its Git history")}</span>
+          </div>
+        ) : loading ? (
           <div
             className="flex items-center justify-center h-full"
             style={{ color: "var(--color-text-muted)" }}
@@ -661,7 +669,25 @@ export function GitPanel() {
               <span className="text-xs">{t("git.loading", "Loading...")}</span>
             </div>
           </div>
-        ) : commits.length === 0 && !error ? (
+        ) : error && errorKind === "not-a-repo" ? (
+          <div className="flex flex-col items-center justify-center h-full gap-2 px-4">
+            <Icon name="folder-x" size={24} style={{ color: "var(--color-text-muted)" }} />
+            <span className="text-xs" style={{ color: "var(--color-text-muted)" }}>{t("git.notRepo", "Not a Git repository")}</span>
+            <span className="text-xs" style={{ color: "var(--color-text-muted)", opacity: 0.6, textAlign: "center" }}>{t("git.notRepoHint", "This workspace does not contain a `.git` folder")}</span>
+          </div>
+        ) : error && errorKind === "no-commits" ? (
+          <div className="flex flex-col items-center justify-center h-full gap-2 px-4">
+            <Icon name="git-commit" size={24} style={{ color: "var(--color-text-muted)" }} />
+            <span className="text-xs" style={{ color: "var(--color-text-muted)" }}>{t("git.emptyRepo", "No commits yet")}</span>
+            <span className="text-xs" style={{ color: "var(--color-text-muted)", opacity: 0.6, textAlign: "center" }}>{t("git.emptyRepoHint", "Make your first commit to see history here")}</span>
+          </div>
+        ) : error && errorKind === "generic" ? (
+          <div className="flex flex-col items-center justify-center h-full gap-2 px-4">
+            <Icon name="alert-circle" size={24} style={{ color: "var(--color-error, #ef4444)" }} />
+            <span className="text-xs" style={{ color: "var(--color-error, #ef4444)" }}>{t("git.genericError", "Failed to load Git data")}</span>
+            <span className="text-xs" style={{ color: "var(--color-text-muted)", opacity: 0.7, textAlign: "center", fontFamily: "monospace", wordBreak: "break-all" }}>{error}</span>
+          </div>
+        ) : commits.length === 0 ? (
           <div
             className="flex items-center justify-center h-full"
             style={{ color: "var(--color-text-muted)" }}

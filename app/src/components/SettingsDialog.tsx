@@ -15,6 +15,7 @@ import { invoke } from "@tauri-apps/api/core";
 import { formatAutostartError, getAutostart, setAutostartEnabled } from "../autostartSettings";
 import { applyTheme, getStoredTheme, type Theme } from "../theme";
 import { getNotificationSettings, saveNotificationSettings, syncAutoFocusNewRequest, type NotificationSettings } from "../notificationSettings";
+import { getPanelTimeoutSettings, savePanelTimeoutSettings, type PanelTimeoutSettings } from "../panelTimeoutSettings";
 import { getSubmittedViewSettings, saveSubmittedViewSettings, SUBMITTED_VIEW_SECTION_CONFIGS, type SubmittedViewSectionId, type SubmittedViewSettings } from "../submittedViewSettings";
 import { getTerminalSettings, saveTerminalSettings, type TerminalSettings, type TerminalShellId } from "../terminalSettings";
 import { getComposerSettings, saveComposerSettings, type ComposerSettings } from "../composerSettings";
@@ -203,6 +204,7 @@ export function SettingsDialog({ open, onClose }: { open: boolean; onClose: () =
   const [openCodeModelQuery, setOpenCodeModelQuery] = useState("");
   const [agentCleanupMessage, setAgentCleanupMessage] = useState<string | null>(null);
   const [zoomSettings, setZoomSettings] = useState<ZoomSettings>(getZoomSettings);
+  const [panelTimeoutSettings, setPanelTimeoutSettings] = useState<PanelTimeoutSettings>(getPanelTimeoutSettings);
 
   useEffect(() => {
     if (!isAgentUiDisabled) return;
@@ -270,6 +272,7 @@ export function SettingsDialog({ open, onClose }: { open: boolean; onClose: () =
     setAutostartMessage(null);
     setOpenCodeSettings(getOpenCodeSettings());
     setSubmittedViewSettings(getSubmittedViewSettings());
+    setPanelTimeoutSettings(getPanelTimeoutSettings());
     getAutostart().then(setAutostart).catch(() => {});
   }, [open]);
 
@@ -1511,6 +1514,29 @@ export function SettingsDialog({ open, onClose }: { open: boolean; onClose: () =
                       );
                     })}
                   </div>
+                </div>
+                <div className="settings-row">
+                  <div className="settings-row-info">
+                    <span className="settings-label">{t("settings.panelTimeout", "Panel timeout")}</span>
+                    <span className="settings-sublabel">{t("settings.panelTimeoutDesc", "Inactive panels are kept alive when switching tabs. They will be unloaded after this duration to free resources.")}</span>
+                  </div>
+                  <AppSelect
+                    ariaLabel={t("settings.panelTimeout", "Panel timeout")}
+                    value={String(panelTimeoutSettings.timeoutHours)}
+                    onChange={(value) => {
+                      const next = { timeoutHours: Number(value) };
+                      setPanelTimeoutSettings(next);
+                      savePanelTimeoutSettings(next);
+                    }}
+                    options={[
+                      { value: "0", label: t("settings.panelTimeoutNever", "Never") },
+                      { value: "1", label: "1h" },
+                      { value: "3", label: "3h" },
+                      { value: "6", label: "6h" },
+                      { value: "12", label: "12h" },
+                      { value: "24", label: "24h" },
+                    ]}
+                  />
                 </div>
               </div>
             )}
