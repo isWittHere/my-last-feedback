@@ -241,3 +241,198 @@ export async function fetchChannelMonitors(jwt: string): Promise<ChannelMonitors
     return { success: false, error: err instanceof Error ? err.message : String(err) };
   }
 }
+
+// ── Shared types for new providers ──
+
+export interface TokenUsage {
+  label: string;
+  usagePercent: number;
+  resetInSec: number;
+}
+
+export interface BalanceInfo {
+  total: string;
+  currency: string;
+  items?: { label: string; value: string }[];
+}
+
+export type TokenUsageResponse =
+  | { success: true; data: TokenUsage[] }
+  | { success: false; error: string };
+
+export type BalanceResponse =
+  | { success: true; data: BalanceInfo }
+  | { success: false; error: string };
+
+// ── Zhipu (GLM 智谱) ──
+
+export async function fetchZhipuUsage(apiKey: string): Promise<TokenUsageResponse> {
+  try {
+    const text = await invoke<string>("fetch_zhipu_usage", { request: { apiKey } });
+    const parsed = JSON.parse(text);
+    const windows: TokenUsage[] = [];
+    if (parsed.data?.quota?.length) {
+      for (const q of parsed.data.quota) {
+        if (q.usagePercent !== undefined && q.resetInSec !== undefined) {
+          windows.push({
+            label: q.model || q.name || "Unknown",
+            usagePercent: q.usagePercent,
+            resetInSec: q.resetInSec,
+          });
+        }
+      }
+    }
+    if (windows.length === 0) {
+      return { success: false, error: "No usage data found" };
+    }
+    return { success: true, data: windows };
+  } catch (err) {
+    return { success: false, error: err instanceof Error ? err.message : String(err) };
+  }
+}
+
+// ── MIMO (小米) ──
+
+export async function fetchMimoUsage(apiKey: string): Promise<BalanceResponse> {
+  try {
+    const text = await invoke<string>("fetch_mimo_usage", { request: { apiKey } });
+    const parsed = JSON.parse(text);
+    if (parsed.code === 0 || parsed.success) {
+      const d = parsed.data || parsed;
+      return {
+        success: true,
+        data: {
+          total: String(d.total_credits ?? d.total ?? "0"),
+          currency: "Credits",
+          items: [
+            { label: "Used", value: String(d.used_credits ?? d.used ?? "0") },
+            { label: "Remaining", value: String(d.remaining_credits ?? d.remaining ?? "0") },
+          ],
+        },
+      };
+    }
+    return { success: false, error: parsed.message || "API error" };
+  } catch (err) {
+    return { success: false, error: err instanceof Error ? err.message : String(err) };
+  }
+}
+
+// ── Minimax ──
+
+export async function fetchMinimaxUsage(apiKey: string): Promise<TokenUsageResponse> {
+  try {
+    const text = await invoke<string>("fetch_minimax_usage", { request: { apiKey } });
+    const parsed = JSON.parse(text);
+    const windows: TokenUsage[] = [];
+    if (parsed.data?.usage_percent !== undefined) {
+      windows.push({
+        label: "M2.7",
+        usagePercent: parsed.data.usage_percent,
+        resetInSec: parsed.data.reset_in_sec ?? 18000,
+      });
+    }
+    if (parsed.data?.models && Array.isArray(parsed.data.models)) {
+      for (const m of parsed.data.models) {
+        if (m.usage_percent !== undefined) {
+          windows.push({
+            label: m.name || m.model || "Model",
+            usagePercent: m.usage_percent,
+            resetInSec: m.reset_in_sec ?? 86400,
+          });
+        }
+      }
+    }
+    if (windows.length === 0) {
+      return { success: false, error: "No usage data found" };
+    }
+    return { success: true, data: windows };
+  } catch (err) {
+    return { success: false, error: err instanceof Error ? err.message : String(err) };
+  }
+}
+
+// ── Codex (OpenAI / ChatGPT) ──
+
+export async function fetchCodexUsage(accessToken: string): Promise<TokenUsageResponse> {
+  try {
+    const text = await invoke<string>("fetch_codex_usage", { request: { accessToken } });
+    const parsed = JSON.parse(text);
+    const windows: TokenUsage[] = [];
+    if (parsed.rate_limit?.primary_window) {
+      windows.push({
+        label: "5h",
+        usagePercent: parsed.rate_limit.primary_window.used_percent ?? 0,
+        resetInSec: parsed.rate_limit.primary_window.reset_after_seconds ?? 18000,
+      });
+    }
+    if (parsed.rate_limit?.secondary_window) {
+      windows.push({
+        label: "Weekly",
+        usagePercent: parsed.rate_limit.secondary_window.used_percent ?? 0,
+        resetInSec: parsed.rate_limit.secondary_window.reset_after_seconds ?? 604800,
+      });
+    }
+    if (windows.length === 0) {
+      return { success: false, error: "No usage data found" };
+    }
+    return { success: true, data: windows };
+  } catch (err) {
+    return { success: false, error: err instanceof Error ? err.message : String(err) };
+  }
+}
+
+// ── Claude (Anthropic) ──
+
+export async function fetchClaudeUsage(accessToken: string): Promise<TokenUsageResponse> {
+  try {
+    const text = await invoke<string>("fetch_claude_usage", { request: { accessToken } });
+    const parsed = JSON.parse(text);
+    const windows: TokenUsage[] = [];
+    if (parsed.utilization !== undefined) {
+      windows.push({
+        label: "5h",
+        usagePercent: parsed.utilization,
+        resetInSec: parsed.reset_in_sec ?? 18000,
+      });
+    }
+    if (parsed.weekly_utilization !== undefined) {
+      windows.push({
+        label: "Weekly",
+        usagePercent: parsed.weekly_utilization,
+        resetInSec: parsed.weekly_reset_in_sec ?? 604800,
+      });
+    }
+    if (windows.length === 0) {
+      return { success: false, error: "No usage data found" };
+    }
+    return { success: true, data: windows };
+  } catch (err) {
+    return { success: false, error: err instanceof Error ? err.message : String(err) };
+  }
+}
+
+// ── Kimi (Moonshot) ──
+
+export async function fetchKimiBalance(apiKey: string): Promise<BalanceResponse> {
+  try {
+    const text = await invoke<string>("fetch_kimi_balance", { request: { apiKey } });
+    const parsed = JSON.parse(text);
+    if (parsed.code === 0 && parsed.data) {
+      const d = parsed.data;
+      return {
+        success: true,
+        data: {
+          total: String(d.available_balance ?? "0"),
+          currency: "¥",
+          items: [
+            { label: "Voucher", value: `¥${d.voucher_balance ?? "0"}` },
+            { label: "Cash", value: `¥${d.cash_balance ?? "0"}` },
+          ],
+        },
+      };
+    }
+    return { success: false, error: parsed.message || "API error" };
+  } catch (err) {
+    return { success: false, error: err instanceof Error ? err.message : String(err) };
+  }
+}

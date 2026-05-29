@@ -2,7 +2,7 @@ import { useCallback, useEffect, useLayoutEffect, useRef, useState } from "react
 import { createPortal } from "react-dom";
 import { useTranslation } from "react-i18next";
 import { useSubscriptionStore, type SubscriptionGroupState, type SubscriptionGroupConfig } from "../store/subscriptionStore";
-import { type ChannelMonitor } from "../services/subscriptionScrapers";
+import { type ChannelMonitor, type TokenUsage, type BalanceInfo } from "../services/subscriptionScrapers";
 import { Icon, ProviderIcon } from "./Icons";
 
 function formatDuration(seconds: number): string {
@@ -42,15 +42,25 @@ function GroupConfigForm({
   group,
   onSave,
   onCancel,
+  formId,
+  onValidityChange,
 }: {
   group: Pick<SubscriptionGroupState, "workspaceId" | "authCookie" | "refreshIntervalSeconds" | "name">;
   onSave: (config: Pick<SubscriptionGroupConfig, "workspaceId" | "authCookie" | "refreshIntervalSeconds" | "name">) => void;
   onCancel: () => void;
+  formId?: string;
+  onValidityChange?: (valid: boolean) => void;
 }) {
   const { t } = useTranslation();
   const [workspaceId, setWorkspaceId] = useState(group.workspaceId);
   const [authCookie, setAuthCookie] = useState(group.authCookie);
   const [interval, setInterval] = useState(String(group.refreshIntervalSeconds));
+
+  const canSave = workspaceId.trim().length > 0 && authCookie.trim().length > 0;
+
+  useEffect(() => {
+    onValidityChange?.(canSave);
+  }, [canSave, onValidityChange]);
 
   const handleSave = () => {
     const intervalSecs = Math.max(10, parseInt(interval, 10) || 60);
@@ -58,7 +68,7 @@ function GroupConfigForm({
   };
 
   return (
-    <div className="subscription-config-form">
+    <form className="subscription-config-form" id={formId} onSubmit={(e) => { e.preventDefault(); handleSave(); }}>
       <label className="subscription-config-field">
         <span>{t("subscriptions.workspaceId", "Workspace ID")}</span>
         <input value={workspaceId} onChange={(e) => setWorkspaceId(e.target.value)} placeholder="wrk_..." />
@@ -72,7 +82,7 @@ function GroupConfigForm({
         <input type="number" min={10} value={interval} onChange={(e) => setInterval(e.target.value)} />
       </label>
       <div className="subscription-config-actions">
-        <button type="button" className="subscription-config-save" onClick={handleSave}>
+        <button type="submit" className="subscription-config-save" disabled={!canSave}>
           <Icon name="check" size={12} />
           {t("common.save", "Save")}
         </button>
@@ -81,7 +91,7 @@ function GroupConfigForm({
           {t("common.cancel", "Cancel")}
         </button>
       </div>
-    </div>
+    </form>
   );
 }
 
@@ -89,14 +99,24 @@ function DeepseekConfigForm({
   group,
   onSave,
   onCancel,
+  formId,
+  onValidityChange,
 }: {
   group: Pick<SubscriptionGroupState, "authCookie" | "refreshIntervalSeconds" | "name">;
   onSave: (config: Pick<SubscriptionGroupConfig, "authCookie" | "refreshIntervalSeconds" | "name">) => void;
   onCancel: () => void;
+  formId?: string;
+  onValidityChange?: (valid: boolean) => void;
 }) {
   const { t } = useTranslation();
   const [apiKey, setApiKey] = useState(group.authCookie);
   const [interval, setInterval] = useState(String(group.refreshIntervalSeconds));
+
+  const canSave = apiKey.trim().length > 0;
+
+  useEffect(() => {
+    onValidityChange?.(canSave);
+  }, [canSave, onValidityChange]);
 
   const handleSave = () => {
     const intervalSecs = Math.max(10, parseInt(interval, 10) || 60);
@@ -104,7 +124,7 @@ function DeepseekConfigForm({
   };
 
   return (
-    <div className="subscription-config-form">
+    <form className="subscription-config-form" id={formId} onSubmit={(e) => { e.preventDefault(); handleSave(); }}>
       <label className="subscription-config-field">
         <span>{t("subscriptions.apiKey", "API Key")}</span>
         <input type="password" value={apiKey} onChange={(e) => setApiKey(e.target.value)} placeholder="sk-..." />
@@ -114,7 +134,7 @@ function DeepseekConfigForm({
         <input type="number" min={10} value={interval} onChange={(e) => setInterval(e.target.value)} />
       </label>
       <div className="subscription-config-actions">
-        <button type="button" className="subscription-config-save" onClick={handleSave}>
+        <button type="submit" className="subscription-config-save" disabled={!canSave}>
           <Icon name="check" size={12} />
           {t("common.save", "Save")}
         </button>
@@ -123,7 +143,7 @@ function DeepseekConfigForm({
           {t("common.cancel", "Cancel")}
         </button>
       </div>
-    </div>
+    </form>
   );
 }
 
@@ -131,14 +151,24 @@ function ToiotoConfigForm({
   group,
   onSave,
   onCancel,
+  formId,
+  onValidityChange,
 }: {
   group: Pick<SubscriptionGroupState, "authCookie" | "refreshIntervalSeconds" | "name">;
   onSave: (config: Pick<SubscriptionGroupConfig, "authCookie" | "refreshIntervalSeconds" | "name">) => void;
   onCancel: () => void;
+  formId?: string;
+  onValidityChange?: (valid: boolean) => void;
 }) {
   const { t } = useTranslation();
   const [jwt, setJwt] = useState(group.authCookie);
   const [interval, setInterval] = useState(String(group.refreshIntervalSeconds));
+
+  const canSave = jwt.trim().length > 0;
+
+  useEffect(() => {
+    onValidityChange?.(canSave);
+  }, [canSave, onValidityChange]);
 
   const handleSave = () => {
     const intervalSecs = Math.max(10, parseInt(interval, 10) || 60);
@@ -146,7 +176,7 @@ function ToiotoConfigForm({
   };
 
   return (
-    <div className="subscription-config-form">
+    <form className="subscription-config-form" id={formId} onSubmit={(e) => { e.preventDefault(); handleSave(); }}>
       <label className="subscription-config-field">
         <span>{t("subscriptions.jwt", "JWT Token")}</span>
         <input type="password" value={jwt} onChange={(e) => setJwt(e.target.value)} placeholder="eyJ..." />
@@ -156,7 +186,7 @@ function ToiotoConfigForm({
         <input type="number" min={10} value={interval} onChange={(e) => setInterval(e.target.value)} />
       </label>
       <div className="subscription-config-actions">
-        <button type="button" className="subscription-config-save" onClick={handleSave}>
+        <button type="submit" className="subscription-config-save" disabled={!canSave}>
           <Icon name="check" size={12} />
           {t("common.save", "Save")}
         </button>
@@ -165,7 +195,7 @@ function ToiotoConfigForm({
           {t("common.cancel", "Cancel")}
         </button>
       </div>
-    </div>
+    </form>
   );
 }
 
@@ -319,6 +349,21 @@ function ChannelStatusTooltip({ monitors }: { monitors: ChannelMonitor[] }) {
   );
 }
 
+function providerDisplayName(type: string): string {
+  const names: Record<string, string> = {
+    "opencode-go": "OpenCode Go",
+    toioto: "Toioto",
+    deepseek: "DeepSeek",
+    zhipu: "GLM 智谱",
+    mimo: "小米 MIMO",
+    minimax: "MINIMAX",
+    codex: "Codex",
+    claude: "Claude",
+    kimi: "KIMI",
+  };
+  return names[type] || type;
+}
+
 function usageColor(pct: number): string {
   if (pct >= 80) return "#ef4444";
   if (pct >= 60) return "#f59e0b";
@@ -377,12 +422,168 @@ function UsageOverviewTooltip({ group }: { group: SubscriptionGroupState }) {
   );
 }
 
+function ApiKeyConfigForm({
+  group,
+  onSave,
+  onCancel,
+  formId,
+  onValidityChange,
+}: {
+  group: Pick<SubscriptionGroupState, "authCookie" | "refreshIntervalSeconds" | "name">;
+  onSave: (config: Pick<SubscriptionGroupConfig, "authCookie" | "refreshIntervalSeconds" | "name">) => void;
+  onCancel: () => void;
+  formId?: string;
+  onValidityChange?: (valid: boolean) => void;
+}) {
+  const { t } = useTranslation();
+  const [apiKey, setApiKey] = useState(group.authCookie);
+  const [interval, setInterval] = useState(String(group.refreshIntervalSeconds));
+
+  const canSave = apiKey.trim().length > 0;
+
+  useEffect(() => {
+    onValidityChange?.(canSave);
+  }, [canSave, onValidityChange]);
+
+  const handleSave = () => {
+    const intervalSecs = Math.max(10, parseInt(interval, 10) || 60);
+    onSave({ authCookie: apiKey.trim(), refreshIntervalSeconds: intervalSecs, name: group.name });
+  };
+
+  return (
+    <form className="subscription-config-form" id={formId} onSubmit={(e) => { e.preventDefault(); handleSave(); }}>
+      <label className="subscription-config-field">
+        <span>{t("subscriptions.apiKey", "API Key")}</span>
+        <input type="password" value={apiKey} onChange={(e) => setApiKey(e.target.value)} placeholder="sk-..." />
+      </label>
+      <label className="subscription-config-field">
+        <span>{t("subscriptions.refreshInterval", "Refresh interval (s)")}</span>
+        <input type="number" min={10} value={interval} onChange={(e) => setInterval(e.target.value)} />
+      </label>
+      <div className="subscription-config-actions">
+        <button type="submit" className="subscription-config-save" disabled={!canSave}>
+          <Icon name="check" size={12} />
+          {t("common.save", "Save")}
+        </button>
+        <button type="button" className="subscription-config-cancel" onClick={onCancel}>
+          <Icon name="close" size={12} />
+          {t("common.cancel", "Cancel")}
+        </button>
+      </div>
+    </form>
+  );
+}
+
+function AuthTokenConfigForm({
+  group,
+  onSave,
+  onCancel,
+  formId,
+  onValidityChange,
+}: {
+  group: Pick<SubscriptionGroupState, "authCookie" | "refreshIntervalSeconds" | "name">;
+  onSave: (config: Pick<SubscriptionGroupConfig, "authCookie" | "refreshIntervalSeconds" | "name">) => void;
+  onCancel: () => void;
+  formId?: string;
+  onValidityChange?: (valid: boolean) => void;
+}) {
+  const { t } = useTranslation();
+  const [token, setToken] = useState(group.authCookie);
+  const [interval, setInterval] = useState(String(group.refreshIntervalSeconds));
+
+  const canSave = token.trim().length > 0;
+
+  useEffect(() => {
+    onValidityChange?.(canSave);
+  }, [canSave, onValidityChange]);
+
+  const handleSave = () => {
+    const intervalSecs = Math.max(10, parseInt(interval, 10) || 60);
+    onSave({ authCookie: token.trim(), refreshIntervalSeconds: intervalSecs, name: group.name });
+  };
+
+  return (
+    <form className="subscription-config-form" id={formId} onSubmit={(e) => { e.preventDefault(); handleSave(); }}>
+      <label className="subscription-config-field">
+        <span>{t("subscriptions.authToken", "Auth Token")}</span>
+        <input type="password" value={token} onChange={(e) => setToken(e.target.value)} placeholder="eyJ..." />
+      </label>
+      <label className="subscription-config-field">
+        <span>{t("subscriptions.refreshInterval", "Refresh interval (s)")}</span>
+        <input type="number" min={10} value={interval} onChange={(e) => setInterval(e.target.value)} />
+      </label>
+      <div className="subscription-config-actions">
+        <button type="submit" className="subscription-config-save" disabled={!canSave}>
+          <Icon name="check" size={12} />
+          {t("common.save", "Save")}
+        </button>
+        <button type="button" className="subscription-config-cancel" onClick={onCancel}>
+          <Icon name="close" size={12} />
+          {t("common.cancel", "Cancel")}
+        </button>
+      </div>
+    </form>
+  );
+}
+
+function TokenUsageDisplay({ usage }: { usage: TokenUsage[] | null | undefined }) {
+  const { t } = useTranslation();
+  if (!usage || usage.length === 0) {
+    return <div className="subscription-usage-empty">{t("subscriptions.noData", "No usage data available")}</div>;
+  }
+
+  return (
+    <div className="subscription-usage-display">
+      {usage.map((w) => (
+        <div key={w.label} className="subscription-usage-window">
+          <div className="subscription-usage-header">
+            <span className="subscription-usage-label">{w.label}</span>
+            <span className="subscription-usage-pct">{usageBarPercent(w.usagePercent)}</span>
+          </div>
+          <div className="subscription-usage-bar-track">
+            <div className="subscription-usage-bar-fill" style={{ width: usageBarPercent(w.usagePercent) }} />
+          </div>
+        </div>
+      ))}
+    </div>
+  );
+}
+
+function BalanceDisplay({ balance }: { balance: BalanceInfo | null | undefined }) {
+  const { t } = useTranslation();
+  if (!balance) {
+    return <div className="subscription-usage-empty">{t("subscriptions.noData", "No usage data available")}</div>;
+  }
+
+  return (
+    <div className="subscription-toioto-display">
+      <div className="subscription-toioto-balance">
+        <span className="subscription-toioto-balance-amount">{balance.currency}{balance.total}</span>
+        <span className="subscription-toioto-balance-label">{t("subscriptions.balance", "Balance")}</span>
+      </div>
+      {balance.items && balance.items.length > 0 && (
+        <div className="subscription-toioto-meta">
+          {balance.items.map((item) => (
+            <span key={item.label} className="subscription-toioto-meta-item">
+              {item.label}: {item.value}
+            </span>
+          ))}
+        </div>
+      )}
+    </div>
+  );
+}
+
 function SubscriptionGroupCard({
   group,
+  index,
   onRefresh,
+  onReorder,
 }: {
   group: SubscriptionGroupState;
+  index: number;
   onRefresh: (id: string) => void;
+  onReorder: (from: number, to: number) => void;
 }) {
   const { t } = useTranslation();
   const removeGroup = useSubscriptionStore((s) => s.removeGroup);
@@ -390,6 +591,27 @@ function SubscriptionGroupCard({
   const showCollapsedBar = useSubscriptionStore((s) => s.showCollapsedProgressBar);
   const [editing, setEditing] = useState(false);
   const [collapsed, setCollapsed] = useState(!group.enabled);
+  const [dragOver, setDragOver] = useState(false);
+
+  const handleDragStart = (e: React.DragEvent) => {
+    e.dataTransfer.setData("text/plain", String(index));
+    e.dataTransfer.effectAllowed = "move";
+  };
+
+  const handleDragOver = (e: React.DragEvent) => {
+    e.preventDefault();
+    e.dataTransfer.dropEffect = "move";
+    setDragOver(true);
+  };
+
+  const handleDragLeave = () => setDragOver(false);
+
+  const handleDrop = (e: React.DragEvent) => {
+    e.preventDefault();
+    setDragOver(false);
+    const from = parseInt(e.dataTransfer.getData("text/plain"), 10);
+    if (!isNaN(from) && from !== index) onReorder(from, index);
+  };
   const [showChanTooltip, setShowChanTooltip] = useState(false);
   const [tooltipPos, setTooltipPos] = useState<{ left: number; top: number } | null>(null);
   const [showUsageTooltip, setShowUsageTooltip] = useState(false);
@@ -466,13 +688,30 @@ function SubscriptionGroupCard({
     setEditing(false);
   };
 
+  const handleSaveApiKeyConfig = (config: Pick<SubscriptionGroupConfig, "authCookie" | "refreshIntervalSeconds" | "name">) => {
+    updateGroup(group.id, config);
+    setEditing(false);
+  };
+
+  const handleSaveAuthTokenConfig = (config: Pick<SubscriptionGroupConfig, "authCookie" | "refreshIntervalSeconds" | "name">) => {
+    updateGroup(group.id, config);
+    setEditing(false);
+  };
+
   return (
     <>
-      <section className={`subscription-group${collapsed ? " collapsed" : ""}`}>
+      <section
+        className={`subscription-group${collapsed ? " collapsed" : ""}${dragOver ? " subscription-group-dragover" : ""}`}
+        draggable="true"
+        onDragStart={handleDragStart}
+        onDragOver={handleDragOver}
+        onDragLeave={handleDragLeave}
+        onDrop={handleDrop}
+      >
       <button type="button" className="subscription-group-header" onClick={() => setCollapsed((v) => !v)} aria-expanded={!collapsed}>
         <Icon name={collapsed ? "chevron-right" : "chevron-down"} size={12} className="subscription-group-caret" />
         <ProviderIcon provider={group.type} size={16} className="subscription-group-provider-icon" />
-        <span className="subscription-group-name">{group.name || (group.type === "toioto" ? "Toioto" : group.type === "deepseek" ? "DeepSeek" : "OpenCode Go")}</span>
+        <span className="subscription-group-name">{group.name || providerDisplayName(group.type)}</span>
         {group.type === "opencode-go" && group.monthly && (
           <span className="subscription-group-monthly-pct">
             {t("subscriptions.used", "已使用")} <span style={{ fontWeight: 700, color: usageColor(group.monthly.usagePercent) }}>{Math.round(group.monthly.usagePercent)}%</span>
@@ -486,6 +725,16 @@ function SubscriptionGroupCard({
         {group.type === "deepseek" && group.deepseek && group.deepseek.balanceInfos[0] && (
           <span className={`subscription-group-balance${Number(group.deepseek.balanceInfos[0].totalBalance) < 1 ? " low" : ""}`}>
             ￥{group.deepseek.balanceInfos[0].totalBalance}
+          </span>
+        )}
+        {(group.type === "zhipu" || group.type === "minimax" || group.type === "codex" || group.type === "claude") && group[group.type] && group[group.type]![0] && (
+          <span className="subscription-group-monthly-pct">
+            {t("subscriptions.used", "已使用")} <span style={{ fontWeight: 700, color: usageColor(group[group.type]![0].usagePercent) }}>{Math.round(group[group.type]![0].usagePercent)}%</span>
+          </span>
+        )}
+        {(group.type === "mimo" || group.type === "kimi") && group[group.type] && (
+          <span className={`subscription-group-balance${Number(group[group.type]!.total) < 1 ? " low" : ""}`}>
+            {group[group.type]!.currency}{group[group.type]!.total}
           </span>
         )}
         <span
@@ -510,6 +759,8 @@ function SubscriptionGroupCard({
             })()
           ) : group.type === "opencode-go" && group.monthly ? (
             <UsageRing percent={group.monthly.usagePercent} size={12} />
+          ) : (group.type === "zhipu" || group.type === "minimax" || group.type === "codex" || group.type === "claude") && group[group.type] && group[group.type]![0] ? (
+            <UsageRing percent={group[group.type]![0].usagePercent} size={12} />
           ) : group.lastFetched ? (
             <Icon name="check" size={12} style={{ color: "var(--color-success, #22c55e)" }} />
           ) : (
@@ -552,28 +803,32 @@ function SubscriptionGroupCard({
 
         {editing ? (
           group.type === "toioto" ? (
-            <ToiotoConfigForm
-              group={group}
-              onSave={handleSaveToiotoConfig}
-              onCancel={() => setEditing(false)}
-            />
+            <ToiotoConfigForm group={group} onSave={handleSaveToiotoConfig} onCancel={() => setEditing(false)} />
           ) : group.type === "deepseek" ? (
-            <DeepseekConfigForm
-              group={group}
-              onSave={handleSaveDeepseekConfig}
-              onCancel={() => setEditing(false)}
-            />
+            <DeepseekConfigForm group={group} onSave={handleSaveDeepseekConfig} onCancel={() => setEditing(false)} />
+          ) : group.type === "zhipu" || group.type === "minimax" || group.type === "kimi" ? (
+            <ApiKeyConfigForm group={group} onSave={handleSaveApiKeyConfig} onCancel={() => setEditing(false)} />
+          ) : group.type === "mimo" || group.type === "codex" || group.type === "claude" ? (
+            <AuthTokenConfigForm group={group} onSave={handleSaveAuthTokenConfig} onCancel={() => setEditing(false)} />
           ) : (
-            <GroupConfigForm
-              group={group}
-              onSave={handleSaveConfig}
-              onCancel={() => setEditing(false)}
-            />
+            <GroupConfigForm group={group} onSave={handleSaveConfig} onCancel={() => setEditing(false)} />
           )
         ) : group.type === "toioto" ? (
           <ToiotoDisplay group={group} />
         ) : group.type === "deepseek" ? (
           <DeepseekDisplay group={group} />
+        ) : group.type === "zhipu" ? (
+          <TokenUsageDisplay usage={group.zhipu} />
+        ) : group.type === "minimax" ? (
+          <TokenUsageDisplay usage={group.minimax} />
+        ) : group.type === "codex" ? (
+          <TokenUsageDisplay usage={group.codex} />
+        ) : group.type === "claude" ? (
+          <TokenUsageDisplay usage={group.claude} />
+        ) : group.type === "mimo" ? (
+          <BalanceDisplay balance={group.mimo} />
+        ) : group.type === "kimi" ? (
+          <BalanceDisplay balance={group.kimi} />
         ) : (
           <UsageDisplay group={group} />
         )}
@@ -649,9 +904,12 @@ export function SubscriptionPanel() {
   const addGroup = useSubscriptionStore((s) => s.addGroup);
   const refreshGroup = useSubscriptionStore((s) => s.refreshGroup);
   const refreshAll = useSubscriptionStore((s) => s.refreshAll);
+  const reorderGroups = useSubscriptionStore((s) => s.reorderGroups);
   const [showNewForm, setShowNewForm] = useState(false);
   const [showNewToiotoForm, setShowNewToiotoForm] = useState(false);
   const [showNewDeepseekForm, setShowNewDeepseekForm] = useState(false);
+  const [showNewApiKeyForm, setShowNewApiKeyForm] = useState<string | null>(null);
+  const [addFormValid, setAddFormValid] = useState(false);
   const [refreshing, setRefreshing] = useState(false);
   const [showDropdown, setShowDropdown] = useState(false);
   const addBtnRef = useRef<HTMLButtonElement>(null);
@@ -673,17 +931,20 @@ export function SubscriptionPanel() {
     return () => document.removeEventListener("mousedown", handler);
   }, [showDropdown]);
 
-  const openForm = (type: "opencode-go" | "toioto" | "deepseek") => {
+  const openForm = (type: "opencode-go" | "toioto" | "deepseek" | "zhipu" | "mimo" | "minimax" | "codex" | "claude" | "kimi") => {
     setShowDropdown(false);
     setShowNewForm(false);
     setShowNewToiotoForm(false);
     setShowNewDeepseekForm(false);
+    setShowNewApiKeyForm(null);
     if (type === "opencode-go") {
       setShowNewForm(true);
     } else if (type === "toioto") {
       setShowNewToiotoForm(true);
-    } else {
+    } else if (type === "deepseek") {
       setShowNewDeepseekForm(true);
+    } else {
+      setShowNewApiKeyForm(type);
     }
   };
 
@@ -726,6 +987,16 @@ export function SubscriptionPanel() {
     setShowNewDeepseekForm(false);
   };
 
+  const handleAddApiKeyGroup = (type: string) => (config: Pick<SubscriptionGroupConfig, "authCookie" | "refreshIntervalSeconds" | "name">) => {
+    addGroup({
+      type: type as SubscriptionGroupState["type"],
+      workspaceId: "",
+      ...config,
+      enabled: true,
+    });
+    setShowNewApiKeyForm(null);
+  };
+
   return (
     <div className="subscription-panel">
       <div className="subscription-toolbar">
@@ -753,33 +1024,100 @@ export function SubscriptionPanel() {
 
       {showNewForm && (
         <div className="subscription-new-form">
-          <div className="subscription-new-form-header"><ProviderIcon provider="opencode-go" size={16} /> {t("subscriptions.addOpenCodeGo", "Add OpenCode Go")}</div>
+          <div className="subscription-new-form-header">
+            <span className="subscription-new-form-header-title">
+              <ProviderIcon provider="opencode-go" size={16} /> {t("subscriptions.addOpenCodeGo", "Add OpenCode Go")}
+            </span>
+            <div className="subscription-config-actions">
+              <button type="submit" form="add-form-opencode-go" className="subscription-config-save" disabled={!addFormValid}>
+                <Icon name="check" size={12} /> {t("common.save", "Save")}
+              </button>
+              <button type="button" className="subscription-config-cancel" onClick={() => setShowNewForm(false)}>
+                <Icon name="close" size={12} /> {t("common.cancel", "Cancel")}
+              </button>
+            </div>
+          </div>
           <GroupConfigForm
+            formId="add-form-opencode-go"
             group={{ workspaceId: "", authCookie: "", refreshIntervalSeconds: 60, name: t("subscriptions.opencodeGo", "OpenCode Go") }}
             onSave={handleAddGroup}
             onCancel={() => setShowNewForm(false)}
+            onValidityChange={setAddFormValid}
           />
         </div>
       )}
 
       {showNewToiotoForm && (
         <div className="subscription-new-form">
-          <div className="subscription-new-form-header">{t("subscriptions.addToioto", "Add Toioto")}</div>
+          <div className="subscription-new-form-header">
+            <span className="subscription-new-form-header-title">
+              <ProviderIcon provider="toioto" size={16} /> {t("subscriptions.addToioto", "Add Toioto")}
+            </span>
+            <div className="subscription-config-actions">
+              <button type="submit" form="add-form-toioto" className="subscription-config-save" disabled={!addFormValid}>
+                <Icon name="check" size={12} /> {t("common.save", "Save")}
+              </button>
+              <button type="button" className="subscription-config-cancel" onClick={() => setShowNewToiotoForm(false)}>
+                <Icon name="close" size={12} /> {t("common.cancel", "Cancel")}
+              </button>
+            </div>
+          </div>
           <ToiotoConfigForm
+            formId="add-form-toioto"
             group={{ authCookie: "", refreshIntervalSeconds: 120, name: t("subscriptions.toioto", "Toioto") }}
             onSave={handleAddToiotoGroup}
             onCancel={() => setShowNewToiotoForm(false)}
+            onValidityChange={setAddFormValid}
           />
         </div>
       )}
 
       {showNewDeepseekForm && (
         <div className="subscription-new-form">
-          <div className="subscription-new-form-header"><ProviderIcon provider="deepseek" size={16} /> {t("subscriptions.addDeepseek", "Add DeepSeek")}</div>
+          <div className="subscription-new-form-header">
+            <span className="subscription-new-form-header-title">
+              <ProviderIcon provider="deepseek" size={16} /> {t("subscriptions.addDeepseek", "Add DeepSeek")}
+            </span>
+            <div className="subscription-config-actions">
+              <button type="submit" form="add-form-deepseek" className="subscription-config-save" disabled={!addFormValid}>
+                <Icon name="check" size={12} /> {t("common.save", "Save")}
+              </button>
+              <button type="button" className="subscription-config-cancel" onClick={() => setShowNewDeepseekForm(false)}>
+                <Icon name="close" size={12} /> {t("common.cancel", "Cancel")}
+              </button>
+            </div>
+          </div>
           <DeepseekConfigForm
+            formId="add-form-deepseek"
             group={{ authCookie: "", refreshIntervalSeconds: 120, name: t("subscriptions.deepseek", "DeepSeek") }}
             onSave={handleAddDeepseekGroup}
             onCancel={() => setShowNewDeepseekForm(false)}
+            onValidityChange={setAddFormValid}
+          />
+        </div>
+      )}
+
+      {showNewApiKeyForm && (
+        <div className="subscription-new-form">
+          <div className="subscription-new-form-header">
+            <span className="subscription-new-form-header-title">
+              <ProviderIcon provider={showNewApiKeyForm} size={16} /> {t(`subscriptions.add${providerDisplayName(showNewApiKeyForm).replace(/\s/g, "")}`, `Add ${providerDisplayName(showNewApiKeyForm)}`)}
+            </span>
+            <div className="subscription-config-actions">
+              <button type="submit" form={`add-form-${showNewApiKeyForm}`} className="subscription-config-save" disabled={!addFormValid}>
+                <Icon name="check" size={12} /> {t("common.save", "Save")}
+              </button>
+              <button type="button" className="subscription-config-cancel" onClick={() => setShowNewApiKeyForm(null)}>
+                <Icon name="close" size={12} /> {t("common.cancel", "Cancel")}
+              </button>
+            </div>
+          </div>
+          <ApiKeyConfigForm
+            formId={`add-form-${showNewApiKeyForm}`}
+            group={{ authCookie: "", refreshIntervalSeconds: 120, name: providerDisplayName(showNewApiKeyForm) }}
+            onSave={handleAddApiKeyGroup(showNewApiKeyForm)}
+            onCancel={() => setShowNewApiKeyForm(null)}
+            onValidityChange={setAddFormValid}
           />
         </div>
       )}
@@ -791,8 +1129,8 @@ export function SubscriptionPanel() {
             <div>{t("subscriptions.empty", "No subscriptions configured")}</div>
           </div>
         ) : (
-          groups.map((group) => (
-            <SubscriptionGroupCard key={group.id} group={group} onRefresh={refreshGroup} />
+          groups.map((group, idx) => (
+            <SubscriptionGroupCard key={group.id} group={group} index={idx} onRefresh={refreshGroup} onReorder={reorderGroups} />
           ))
         )}
       </div>
@@ -848,6 +1186,30 @@ export function SubscriptionPanel() {
               <span className="app-select-option-text">
                 <span className="app-select-option-label">{t("subscriptions.deepseek", "DeepSeek")}</span>
               </span>
+            </button>
+            <button type="button" className="app-select-option" role="option" aria-selected={false} onClick={() => openForm("zhipu")}>
+              <ProviderIcon provider="zhipu" size={13} />
+              <span className="app-select-option-text"><span className="app-select-option-label">GLM 智谱</span></span>
+            </button>
+            <button type="button" className="app-select-option" role="option" aria-selected={false} onClick={() => openForm("mimo")}>
+              <ProviderIcon provider="mimo" size={13} />
+              <span className="app-select-option-text"><span className="app-select-option-label">小米 MIMO</span></span>
+            </button>
+            <button type="button" className="app-select-option" role="option" aria-selected={false} onClick={() => openForm("minimax")}>
+              <ProviderIcon provider="minimax" size={13} />
+              <span className="app-select-option-text"><span className="app-select-option-label">MINIMAX</span></span>
+            </button>
+            <button type="button" className="app-select-option" role="option" aria-selected={false} onClick={() => openForm("codex")}>
+              <ProviderIcon provider="codex" size={13} />
+              <span className="app-select-option-text"><span className="app-select-option-label">Codex</span></span>
+            </button>
+            <button type="button" className="app-select-option" role="option" aria-selected={false} onClick={() => openForm("claude")}>
+              <ProviderIcon provider="claude" size={13} />
+              <span className="app-select-option-text"><span className="app-select-option-label">Claude</span></span>
+            </button>
+            <button type="button" className="app-select-option" role="option" aria-selected={false} onClick={() => openForm("kimi")}>
+              <ProviderIcon provider="kimi" size={13} />
+              <span className="app-select-option-text"><span className="app-select-option-label">KIMI</span></span>
             </button>
           </div>,
           document.body,

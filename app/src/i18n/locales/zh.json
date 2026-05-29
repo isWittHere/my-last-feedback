@@ -1078,6 +1078,7 @@
     "balanceUnavailable": "无可用的余额",
     "used": "已使用",
     "showCollapsedBar": "折叠时显示卡片底部进度条",
-    "showCollapsedBarDesc": "折叠订阅卡片时在底部显示一条用量进度条"
+    "showCollapsedBarDesc": "折叠订阅卡片时在底部显示一条用量进度条",
+    "authToken": "认证令牌"
   }
 }

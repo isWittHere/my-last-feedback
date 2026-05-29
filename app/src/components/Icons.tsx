@@ -1,6 +1,12 @@
 import mlcLogoSvg from "../assets/my-last-chat.svg?raw";
 import opencodeLogoSvg from "../assets/provider-opencode.svg?raw";
 import deepseekLogoSvg from "../assets/provider-deepseek.svg?raw";
+import zhipuLogoSvg from "../assets/provider-zhipu.svg?raw";
+import xiaomimimoLogoSvg from "../assets/provider-xiaomimimo.svg?raw";
+import minimaxLogoSvg from "../assets/provider-minimax.svg?raw";
+import openaiLogoSvg from "../assets/provider-openai.svg?raw";
+import claudeLogoSvg from "../assets/provider-claude.svg?raw";
+import moonshotLogoSvg from "../assets/provider-moonshot.svg?raw";
 
 /**
  * Unified SVG icon library for the entire UI.
@@ -342,6 +348,12 @@ const PROVIDER_LOGOS: Record<string, string> = {
   "opencode-go": opencodeLogoSvg,
   opencode: opencodeLogoSvg,
   deepseek: deepseekLogoSvg,
+  zhipu: zhipuLogoSvg,
+  mimo: xiaomimimoLogoSvg,
+  minimax: minimaxLogoSvg,
+  codex: openaiLogoSvg,
+  claude: claudeLogoSvg,
+  kimi: moonshotLogoSvg,
 };
 
 const FALLBACK_CHARS: Record<string, string> = {

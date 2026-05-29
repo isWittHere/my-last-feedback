@@ -2886,16 +2886,34 @@ body,
 .subscription-new-form {
     margin: 4px 0;
     border: 1px solid var(--color-border-subtle);
-    border-radius: var(--radius-md);
+    border-radius: var(--radius-lg);
     background: var(--color-bg-surface);
+    overflow: hidden;
 }
 
 .subscription-new-form-header {
-    font-size: 11px;
-    font-weight: 600;
+    display: flex;
+    align-items: center;
     padding: 6px 8px;
-    color: var(--color-text-secondary);
     border-bottom: 1px solid var(--color-border-subtle);
+}
+
+.subscription-new-form-header-title {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    flex: 1;
+    min-width: 0;
+    font-size: 12px;
+    color: var(--color-text-primary);
+}
+
+.subscription-new-form-header > .subscription-config-actions {
+    margin-top: 0;
+}
+
+.subscription-new-form .subscription-config-form .subscription-config-actions {
+    display: none;
 }
 
 .subscription-groups {
@@ -2909,6 +2927,17 @@ body,
     border-radius: var(--radius-lg);
     background: var(--color-bg-surface);
     overflow: hidden;
+    cursor: grab;
+}
+
+.subscription-group:active {
+    cursor: grabbing;
+}
+
+.subscription-group-dragover {
+    border-color: var(--color-primary);
+    box-shadow: 0 0 0 1px var(--color-primary);
+    opacity: 0.7;
 }
 
 .subscription-group-header {
@@ -3277,7 +3306,7 @@ body,
     display: flex;
     align-items: center;
     gap: 4px;
-    margin-top: 2px;
+    margin-top: 0px;
 }
 
 .subscription-config-save,
@@ -3285,7 +3314,7 @@ body,
     display: flex;
     align-items: center;
     gap: 4px;
-    padding: 4px 8px;
+    padding: 2px 4px;
     border: none;
     border-radius: 3px;
     font-size: 11px;
@@ -3302,14 +3331,19 @@ body,
     opacity: 0.9;
 }
 
+.subscription-config-save:disabled {
+    opacity: 0.4;
+    cursor: not-allowed;
+}
+
 .subscription-config-cancel {
     background: transparent;
-    color: var(--color-text-muted);
+    color: var(--color-danger, #ef4444);
 }
 
 .subscription-config-cancel:hover {
-    background: rgba(255, 255, 255, 0.06);
-    color: var(--color-text-primary);
+    background: rgba(239, 68, 68, 0.12);
+    color: #f87171;
 }
 
 /* ── End Subscription Panel ── */
