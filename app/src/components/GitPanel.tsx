@@ -890,7 +890,9 @@ export function GitPanel() {
                           className="git-diff-summary-add"
                           style={{ width: addWidthPx, minWidth: addWidthPx }}
                         >
-                          +{file.additions}
+                          {statusLetter(file.status) === "D"
+                            ? "\u00A0"
+                            : `+${file.additions}`}
                         </span>
                         <span
                           className="git-diff-summary-delete"
