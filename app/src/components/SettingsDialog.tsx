@@ -637,6 +637,10 @@ export function SettingsDialog({ open, onClose }: { open: boolean; onClose: () =
     updateGitOperationSettings((current) => ({ ...current, folderBlacklist: parseGitFolderBlacklistText(value) }));
   }, [updateGitOperationSettings]);
 
+  const handleGitCustomPromptChange = useCallback((value: string) => {
+    updateGitOperationSettings((current) => ({ ...current, customPrompt: value }));
+  }, [updateGitOperationSettings]);
+
   const handleSubmittedSectionVisibleToggle = useCallback((id: SubmittedViewSectionId) => {
     updateSubmittedViewSettings((current) => ({
       ...current,
@@ -1447,6 +1451,19 @@ export function SettingsDialog({ open, onClose }: { open: boolean; onClose: () =
                 </div>
                 <div className="settings-row settings-row-stacked">
                   <div className="settings-row-info">
+                    <span className="settings-label">{t("settings.gitCustomPrompt", "Custom prompt")}</span>
+                    <span className="settings-sublabel">{t("settings.gitCustomPromptDesc", "Additional instructions appended directly to the Git reminder prompt. One line = one paragraph.")}</span>
+                  </div>
+                  <textarea
+                    className="settings-git-blacklist-textarea"
+                    rows={3}
+                    spellCheck={false}
+                    value={gitOperationSettings.customPrompt}
+                    onChange={(event) => handleGitCustomPromptChange(event.target.value)}
+                  />
+                </div>
+                <div className="settings-row settings-row-stacked">
+                  <div className="settings-row-info">
                     <span className="settings-label">{t("settings.gitReminderPreview", "Injected reminder preview")}</span>
                     <span className="settings-sublabel">{t("settings.gitReminderPreviewDesc", "Manual Git Action and scheduled reminders both include these safety requirements.")}</span>
                   </div>
@@ -1457,6 +1474,7 @@ export function SettingsDialog({ open, onClose }: { open: boolean; onClose: () =
                     "Requirements:",
                     "- Do not stage or commit files under the configured blacklisted folders.",
                     "- When committing, write a meaningful git commit message that briefly summarizes the recent activity being backed up.",
+                    ...(gitOperationSettings.customPrompt.trim() ? ["", gitOperationSettings.customPrompt.trim()] : []),
                   ].join("\n")}</pre>
                 </div>
               </div>

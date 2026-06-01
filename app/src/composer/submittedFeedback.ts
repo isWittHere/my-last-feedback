@@ -136,12 +136,16 @@ function formatGitFolderBlacklist(settings: GitOperationSettings): string | null
 }
 
 function formatGitSafetyRequirements(settings: GitOperationSettings): string {
-  return [
+  const lines: Array<string | null> = [
     formatGitFolderBlacklist(settings),
     "Requirements:",
     "- Do not stage or commit files under the configured blacklisted folders.",
     "- When committing, write a meaningful git commit message that briefly summarizes the recent activity being backed up.",
-  ].filter(Boolean).join("\n\n");
+  ];
+  if (settings.customPrompt.trim()) {
+    lines.push("", settings.customPrompt.trim());
+  }
+  return lines.filter(Boolean).join("\n\n");
 }
 
 function formatGitAction(gitAction: GitAction | null | undefined): string | null {
