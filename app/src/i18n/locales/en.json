@@ -14,7 +14,9 @@
     "empty": "Waiting for AI task summary...",
     "says": "says:",
     "copyMarkdown": "Copy Markdown",
-    "copied": "Copied!"
+    "copied": "Copied!",
+    "saveDocument": "Save as Document",
+    "saved": "Saved!"
   },
   "feedback": {
     "placeholder": "Enter your feedback here...\nCtrl+Enter to submit, Ctrl+V to paste images",
