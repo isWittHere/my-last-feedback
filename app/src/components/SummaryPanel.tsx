@@ -264,7 +264,7 @@ export function SummaryPanel({ topbarSlot }: { topbarSlot?: ReactNode }) {
             cursor: "pointer",
             transition: "all 0.15s",
           }}
-          title={copied ? "Copied!" : "Copy Markdown"}
+          title={copied ? t("summary.copied", "Copied!") : t("summary.copyMarkdown", "Copy Markdown")}
         >
           {copied ? (
             <Icon name="check" size={14} color="var(--color-success)" />

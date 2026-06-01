@@ -12,7 +12,9 @@
   "summary": {
     "title": "AI Summary",
     "empty": "Waiting for AI task summary...",
-    "says": "says:"
+    "says": "says:",
+    "copyMarkdown": "Copy Markdown",
+    "copied": "Copied!"
   },
   "feedback": {
     "placeholder": "Enter your feedback here...\nCtrl+Enter to submit, Ctrl+V to paste images",

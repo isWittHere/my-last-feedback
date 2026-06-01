@@ -12,7 +12,9 @@
   "summary": {
     "title": "AI 摘要",
     "empty": "等待 AI 任务摘要...",
-    "says": "说："
+    "says": "说：",
+    "copyMarkdown": "复制 Markdown",
+    "copied": "已复制！"
   },
   "feedback": {
     "placeholder": "在此输入您的反馈...\nCtrl+Enter 提交，Ctrl+V 粘贴图片",
