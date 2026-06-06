@@ -2799,7 +2799,7 @@ body,
     gap: 4px;
     padding: 0 4px 6px;
     overflow: auto;
-    background: var(--color-bg-card);
+    background: var(--color-bg-surface);
 }
 
 .subscription-toolbar {
@@ -7880,10 +7880,10 @@ body,
 }
 
 .terminal-panel {
-    --terminal-bg: #111318;
+    --terminal-bg: var(--color-bg-surface);
     --terminal-toolbar-bg: color-mix(
         in srgb,
-        #171a21 92%,
+        var(--color-bg-elevated) 80%,
         var(--color-bg-surface)
     );
     --terminal-fg: #d8dee9;
@@ -7905,8 +7905,6 @@ body,
 
 .terminal-panel[data-terminal-theme="light"],
 [data-theme="light"] .terminal-panel {
-    --terminal-bg: #f8fafc;
-    --terminal-toolbar-bg: #f1f5f9;
     --terminal-fg: #1f2937;
     --terminal-muted: #64748b;
     --terminal-pill-bg: color-mix(in srgb, var(--color-primary) 12%, #ffffff);
@@ -8319,7 +8317,7 @@ body,
     .terminal-host
     .xterm-screen
     canvas {
-    background-color: #f8fafc !important;
+    background-color: var(--terminal-bg) !important;
 }
 
 .preview-browser-panel.view-only .preview-browser-viewport {
