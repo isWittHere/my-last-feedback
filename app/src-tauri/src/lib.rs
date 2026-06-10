@@ -21,7 +21,7 @@ use session::{
     CallerInfo, FeedbackPayload, MlcAttachment, SessionDetail, SessionSummary, SharedSessionManager,
 };
 use ipc::SharedMlraWriter;
-use mlc::{mlc_delete_document, mlc_read_document, mlc_search_documents, mlc_toggle_favorite};
+use mlc::{mlc_create_document, mlc_delete_document, mlc_read_document, mlc_search_documents, mlc_toggle_favorite};
 use project_resources::project_list_directory;
 use preview_browser::{
     preview_capture_element, preview_close_tab, preview_create_tab, preview_go_back, preview_go_forward,
@@ -807,6 +807,7 @@ pub fn run() {
             remove_empty_callers,
             trim_caller_sessions,
             clear_all_history,
+            mlc_create_document,
             mlc_delete_document,
             mlc_read_document,
             mlc_search_documents,
@@ -838,6 +839,13 @@ pub fn run() {
             subscriptions::fetch_dashboard_html,
             subscriptions::fetch_toioto_me,
             subscriptions::fetch_toioto_api,
+            subscriptions::fetch_deepseek_balance,
+            subscriptions::fetch_zhipu_usage,
+            subscriptions::fetch_mimo_usage,
+            subscriptions::fetch_minimax_usage,
+            subscriptions::fetch_codex_usage,
+            subscriptions::fetch_claude_usage,
+            subscriptions::fetch_kimi_balance,
             git::git_log,
             git::git_changes_count,
             git::git_changes_breakdown,

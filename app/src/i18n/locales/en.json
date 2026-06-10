@@ -12,7 +12,11 @@
   "summary": {
     "title": "AI Summary",
     "empty": "Waiting for AI task summary...",
-    "says": "says:"
+    "says": "says:",
+    "copyMarkdown": "Copy Markdown",
+    "copied": "Copied!",
+    "saveDocument": "Save as Document",
+    "saved": "Saved!"
   },
   "feedback": {
     "placeholder": "Enter your feedback here...\nCtrl+Enter to submit, Ctrl+V to paste images",
@@ -568,6 +572,9 @@
     "gitReminderPreviewDesc": "Manual Git Action and scheduled Git reminders both include these safety requirements.",
     "panelManagement": "Panel management",
     "panelManagementDesc": "Drag panel tabs into the dock columns where they should appear.",
+    "panelTimeout": "Panel timeout",
+    "panelTimeoutDesc": "Inactive panels are kept alive when switching tabs. They will be unloaded after this duration to free resources.",
+    "panelTimeoutNever": "Never",
     "dockLeftSidebar": "Left sidebar",
     "dockLeftPage": "Left page",
     "dockRightPage": "Right page",
@@ -1016,6 +1023,13 @@
     "refresh": "Refresh",
     "loading": "Loading...",
     "noCommits": "No commits found",
+    "noWorkspace": "No workspace selected",
+    "noWorkspaceHint": "Focus a caller input or select a workspace in the panel tabs to see its Git history",
+    "notRepo": "Not a Git repository",
+    "notRepoHint": "This workspace does not contain a `.git` folder",
+    "emptyRepo": "No commits yet",
+    "emptyRepoHint": "Make your first commit to see history here",
+    "genericError": "Failed to load Git data",
     "groupToday": "Today",
     "groupYesterday": "Yesterday",
     "groupPastWeek": "Past week",
@@ -1036,8 +1050,11 @@
     "addGroup": "Add subscription",
     "addOpenCodeGo": "Add OpenCode Go",
     "addToioto": "Add Toioto",
+    "addDeepseek": "Add DeepSeek",
     "opencodeGo": "OpenCode Go",
     "toioto": "Toioto",
+    "deepseek": "DeepSeek",
+    "apiKey": "API Key",
     "workspaceId": "Workspace ID",
     "authCookie": "Auth Cookie",
     "jwt": "JWT Token",
@@ -1059,6 +1076,13 @@
     "empty": "No subscriptions configured",
     "balance": "Balance",
     "concurrency": "Concurrency",
-    "totalRecharged": "Recharged"
+    "totalRecharged": "Recharged",
+    "grantedBalance": "Granted",
+    "toppedUpBalance": "Topped up",
+    "balanceUnavailable": "No available balance",
+    "used": "Used",
+    "showCollapsedBar": "Show bottom progress bar when collapsed",
+    "showCollapsedBarDesc": "Display a thin usage progress bar at the bottom of subscription cards when collapsed",
+    "authToken": "Auth Token"
   }
 }

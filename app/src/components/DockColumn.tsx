@@ -19,6 +19,7 @@ import { AgentConsolePanel } from "./agent/AgentConsolePanel";
 import { AgentSessionManagerPanel } from "./agent/AgentSessionManagerPanel";
 import { usePreviewBrowserStore } from "../store/previewBrowserStore";
 import { isAgentUiDisabled } from "../agent/agentUiFlags";
+import { getPanelTimeoutSettings, PANEL_TIMEOUT_SETTINGS_EVENT, type PanelTimeoutSettings } from "../panelTimeoutSettings";
 
 const DOCK_COLUMN_LABELS: Record<DockColumnId, string> = {
   leftSidebar: "Left sidebar",
@@ -94,7 +95,6 @@ export function DockColumn({ columnId }: { columnId: DockColumnId }) {
   const column = useFeedbackStore((state) => state.dockLayout.columns[columnId]);
   const draggingDockTab = useFeedbackStore((state) => state.draggingDockTab);
   const focusedComposer = useFeedbackStore((state) => state.focusedComposer);
-  const activeWorkspacePath = useFeedbackStore((state) => state.mlcActiveWorkspacePath);
   const setActiveWorkspacePath = useFeedbackStore((state) => state.setMlcActiveWorkspacePath);
   const setDockColumnWidth = useFeedbackStore((state) => state.setDockColumnWidth);
   const setDockColumnCollapsed = useFeedbackStore((state) => state.setDockColumnCollapsed);
@@ -114,11 +114,62 @@ export function DockColumn({ columnId }: { columnId: DockColumnId }) {
   const tabBarMenuRef = useRef<HTMLDivElement>(null);
   const [tabBarMenu, setTabBarMenu] = useState<{ left: number; top: number; tabId: DockTabId } | null>(null);
 
+  const [panelTimeoutSettings, setPanelTimeoutSettings] = useState<PanelTimeoutSettings>(getPanelTimeoutSettings);
+  const timeoutMs = panelTimeoutSettings.timeoutHours === 0 ? Infinity : panelTimeoutSettings.timeoutHours * 3600 * 1000;
+  const [mountedTabIds, setMountedTabIds] = useState<Set<DockTabId>>(() => new Set(column.tabIds));
+  const lastActiveRef = useRef<Map<DockTabId, number>>(new Map());
+
   useEffect(() => {
-    if (focusedComposer?.projectDirectory && !activeWorkspacePath) {
-      setActiveWorkspacePath(focusedComposer.projectDirectory);
-    }
-  }, [activeWorkspacePath, focusedComposer?.projectDirectory, setActiveWorkspacePath]);
+    const handleSettingsChanged = (event: Event) => {
+      const detail = (event as CustomEvent<PanelTimeoutSettings>).detail;
+      if (detail) setPanelTimeoutSettings(detail);
+    };
+    window.addEventListener(PANEL_TIMEOUT_SETTINGS_EVENT, handleSettingsChanged);
+    return () => window.removeEventListener(PANEL_TIMEOUT_SETTINGS_EVENT, handleSettingsChanged);
+  }, []);
+
+  useEffect(() => {
+    setMountedTabIds((prev) => {
+      const next = new Set(prev);
+      for (const tabId of column.tabIds) next.add(tabId);
+      return next;
+    });
+  }, [column.tabIds]);
+
+  useEffect(() => {
+    if (!column.activeTabId) return;
+    lastActiveRef.current.set(column.activeTabId, Date.now());
+    setMountedTabIds((prev) => {
+      if (prev.has(column.activeTabId!)) return prev;
+      const next = new Set(prev);
+      next.add(column.activeTabId!);
+      return next;
+    });
+  }, [column.activeTabId]);
+
+  useEffect(() => {
+    if (timeoutMs === Infinity) return;
+    const prune = () => {
+      const now = Date.now();
+      const activeTab = column.activeTabId;
+      setMountedTabIds((prev) => {
+        let changed = false;
+        const next = new Set(prev);
+        for (const tabId of next) {
+          if (tabId === activeTab) continue;
+          const lastActive = lastActiveRef.current.get(tabId) ?? 0;
+          if (now - lastActive > timeoutMs) {
+            next.delete(tabId);
+            lastActiveRef.current.delete(tabId);
+            changed = true;
+          }
+        }
+        return changed ? next : prev;
+      });
+    };
+    const interval = setInterval(prune, 30000);
+    return () => clearInterval(interval);
+  }, [timeoutMs, column.activeTabId]);
 
   useEffect(() => {
     if (!tabBarMenu) return;
@@ -341,7 +392,19 @@ export function DockColumn({ columnId }: { columnId: DockColumnId }) {
       <div className="mlc-resize-handle" data-preview-overlay onMouseDown={handleResizeMouseDown} />
       {draggingDockTab ? <div className="dock-column-target-icon dock-column-target-badge" aria-hidden="true">{dockColumnTargetIcon(columnId)}</div> : null}
       {column.tabBarPosition === "top" ? renderPanelTabBar() : null}
-      <DockTabContent tabId={column.activeTabId} />
+      <div className="dock-tab-panels" style={{ display: "contents" }}>
+        {[...mountedTabIds].map((tabId) => {
+          const isActive = column.activeTabId === tabId;
+          return (
+            <div
+              key={tabId}
+              style={{ display: isActive ? "contents" : "none" }}
+            >
+              <DockTabContent tabId={tabId} />
+            </div>
+          );
+        })}
+      </div>
       {column.tabBarPosition === "bottom" ? renderPanelTabBar() : null}
       {tabBarMenu ? (
         <div ref={tabBarMenuRef} className="mlc-panel-tab-menu dock-tab-menu" data-preview-overlay style={{ left: tabBarMenu.left, top: tabBarMenu.top }} role="menu" onContextMenu={(event) => event.preventDefault()}>

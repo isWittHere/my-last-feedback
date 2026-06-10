@@ -12,7 +12,11 @@
   "summary": {
     "title": "AI 摘要",
     "empty": "等待 AI 任务摘要...",
-    "says": "说："
+    "says": "说：",
+    "copyMarkdown": "复制 Markdown",
+    "copied": "已复制！",
+    "saveDocument": "保存为文档",
+    "saved": "已保存！"
   },
   "feedback": {
     "placeholder": "在此输入您的反馈...\nCtrl+Enter 提交，Ctrl+V 粘贴图片",
@@ -568,6 +572,9 @@
     "gitReminderPreviewDesc": "手动 Git Action 和定时 Git 提醒都会包含这些安全要求。",
     "panelManagement": "面板管理",
     "panelManagementDesc": "将面板标签页拖入它们应出现的 dock 列。",
+    "panelTimeout": "面板超时",
+    "panelTimeoutDesc": "切换标签页时，非活跃面板将保持存活。超过此时间后将被卸载以释放资源。",
+    "panelTimeoutNever": "永不",
     "dockLeftSidebar": "左侧栏",
     "dockLeftPage": "左页面",
     "dockRightPage": "右页面",
@@ -1016,6 +1023,13 @@
     "refresh": "刷新",
     "loading": "加载中...",
     "noCommits": "暂无提交记录",
+    "noWorkspace": "未选择工作区",
+    "noWorkspaceHint": "聚焦某个输入框或在侧边面板中选择工作区以查看 Git 历史",
+    "notRepo": "非 Git 仓库",
+    "notRepoHint": "该工作区不包含 `.git` 文件夹",
+    "emptyRepo": "暂无提交",
+    "emptyRepoHint": "进行首次提交后可在此查看历史记录",
+    "genericError": "加载 Git 数据失败",
     "groupToday": "今天",
     "groupYesterday": "昨天",
     "groupPastWeek": "近一周",
@@ -1036,8 +1050,11 @@
     "addGroup": "添加订阅",
     "addOpenCodeGo": "添加 OpenCode Go",
     "addToioto": "添加 Toioto",
+    "addDeepseek": "添加 DeepSeek",
     "opencodeGo": "OpenCode Go",
     "toioto": "Toioto",
+    "deepseek": "DeepSeek",
+    "apiKey": "API 密钥",
     "workspaceId": "工作区 ID",
     "authCookie": "认证 Cookie",
     "jwt": "JWT 令牌",
@@ -1059,6 +1076,13 @@
     "empty": "尚未配置订阅",
     "balance": "余额",
     "concurrency": "并发数",
-    "totalRecharged": "累计充值"
+    "totalRecharged": "累计充值",
+    "grantedBalance": "赠金",
+    "toppedUpBalance": "充值",
+    "balanceUnavailable": "无可用的余额",
+    "used": "已使用",
+    "showCollapsedBar": "折叠时显示卡片底部进度条",
+    "showCollapsedBarDesc": "折叠订阅卡片时在底部显示一条用量进度条",
+    "authToken": "认证令牌"
   }
 }

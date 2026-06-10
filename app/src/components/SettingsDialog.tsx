@@ -4,6 +4,7 @@ import i18n from "../i18n";
 import { getAgentSessionSettings, saveAgentSessionSettings, type AgentSessionSettings, type NewSessionWorkspacePathMode } from "../agentSessionSettings";
 import { useFeedbackStore, type DockColumnId, type DockTabId } from "../store/feedbackStore";
 import { useAgentStore } from "../store/agentStore";
+import { useSubscriptionStore } from "../store/subscriptionStore";
 import { PromptIcon } from "./PromptIcons";
 import { McpConfigHelper } from "./McpConfigHelper";
 import { CallerManager } from "./CallerManager";
@@ -14,6 +15,7 @@ import { invoke } from "@tauri-apps/api/core";
 import { formatAutostartError, getAutostart, setAutostartEnabled } from "../autostartSettings";
 import { applyTheme, getStoredTheme, type Theme } from "../theme";
 import { getNotificationSettings, saveNotificationSettings, syncAutoFocusNewRequest, type NotificationSettings } from "../notificationSettings";
+import { getPanelTimeoutSettings, savePanelTimeoutSettings, type PanelTimeoutSettings } from "../panelTimeoutSettings";
 import { getSubmittedViewSettings, saveSubmittedViewSettings, SUBMITTED_VIEW_SECTION_CONFIGS, type SubmittedViewSectionId, type SubmittedViewSettings } from "../submittedViewSettings";
 import { getTerminalSettings, saveTerminalSettings, type TerminalSettings, type TerminalShellId } from "../terminalSettings";
 import { getComposerSettings, saveComposerSettings, type ComposerSettings } from "../composerSettings";
@@ -28,7 +30,7 @@ import { AppSelect, type AppSelectOption } from "./AppSelect";
 import { SettingsSegmentedControl } from "./SettingsSegmentedControl";
 import { isAgentUiDisabled } from "../agent/agentUiFlags";
 
-type Tab = "general" | "display" | "callers" | "submitted" | "prompts" | "sessionNavigation" | "gitOperations" | "layoutPanels" | "agentConsole" | "agentStepDisplay" | "agentChat" | "agentSessionManager" | "openCode" | "openCodePermissions" | "terminal" | "resources" | "gitPanel" | "markdownPreview" | "notification" | "about";
+type Tab = "general" | "display" | "callers" | "submitted" | "prompts" | "sessionNavigation" | "gitOperations" | "layoutPanels" | "agentConsole" | "agentStepDisplay" | "agentChat" | "agentSessionManager" | "openCode" | "openCodePermissions" | "terminal" | "resources" | "gitPanel" | "markdownPreview" | "subscriptionPanel" | "notification" | "about";
 type SettingsGroupId = "mlfb" | "agent" | "layout";
 
 function renderStickyUserMessageText(text: string, mergeLines: boolean): ReactNode {
@@ -202,6 +204,7 @@ export function SettingsDialog({ open, onClose }: { open: boolean; onClose: () =
   const [openCodeModelQuery, setOpenCodeModelQuery] = useState("");
   const [agentCleanupMessage, setAgentCleanupMessage] = useState<string | null>(null);
   const [zoomSettings, setZoomSettings] = useState<ZoomSettings>(getZoomSettings);
+  const [panelTimeoutSettings, setPanelTimeoutSettings] = useState<PanelTimeoutSettings>(getPanelTimeoutSettings);
 
   useEffect(() => {
     if (!isAgentUiDisabled) return;
@@ -245,6 +248,8 @@ export function SettingsDialog({ open, onClose }: { open: boolean; onClose: () =
   const setShowTransferSubmitUi = useFeedbackStore((s) => s.setShowTransferSubmitUi);
   const setResourceIconTheme = useFeedbackStore((s) => s.setResourceIconTheme);
   const setMlcPreviewShowYaml = useFeedbackStore((s) => s.setMlcPreviewShowYaml);
+  const showCollapsedProgressBar = useSubscriptionStore((s) => s.showCollapsedProgressBar);
+  const setShowCollapsedProgressBar = useSubscriptionStore((s) => s.setShowCollapsedProgressBar);
   const setSessionListMode = useFeedbackStore((s) => s.setSessionListMode);
   const setShowSessionNavigationAttachmentDots = useFeedbackStore((s) => s.setShowSessionNavigationAttachmentDots);
   const setUseSessionNavigationColorCards = useFeedbackStore((s) => s.setUseSessionNavigationColorCards);
@@ -267,6 +272,7 @@ export function SettingsDialog({ open, onClose }: { open: boolean; onClose: () =
     setAutostartMessage(null);
     setOpenCodeSettings(getOpenCodeSettings());
     setSubmittedViewSettings(getSubmittedViewSettings());
+    setPanelTimeoutSettings(getPanelTimeoutSettings());
     getAutostart().then(setAutostart).catch(() => {});
   }, [open]);
 
@@ -629,6 +635,10 @@ export function SettingsDialog({ open, onClose }: { open: boolean; onClose: () =
 
   const handleGitFolderBlacklistChange = useCallback((value: string) => {
     updateGitOperationSettings((current) => ({ ...current, folderBlacklist: parseGitFolderBlacklistText(value) }));
+  }, [updateGitOperationSettings]);
+
+  const handleGitCustomPromptChange = useCallback((value: string) => {
+    updateGitOperationSettings((current) => ({ ...current, customPrompt: value }));
   }, [updateGitOperationSettings]);
 
   const handleSubmittedSectionVisibleToggle = useCallback((id: SubmittedViewSectionId) => {
@@ -1170,13 +1180,14 @@ export function SettingsDialog({ open, onClose }: { open: boolean; onClose: () =
                 {renderSettingsNavItem("openCodePermissions", "checklist", t("settings.openCodeApprovalPermissions", "Approval permissions"), true)}
               </>
             ))}
-            {renderSettingsNavGroup("layout", t("settings.layout", "Layout"), ["layoutPanels", "markdownPreview", "resources", "terminal", "gitPanel"], (
+            {renderSettingsNavGroup("layout", t("settings.layout", "Layout"), ["layoutPanels", "markdownPreview", "resources", "terminal", "gitPanel", "subscriptionPanel"], (
               <>
                 {renderSettingsNavItem("layoutPanels", "page-sidebar", t("settings.panelManagement", "Panel management"), true)}
                 {renderSettingsNavItem("markdownPreview", "file-text", t("settings.markdownPreview", "Markdown preview"), true)}
                 {renderSettingsNavItem("resources", "folder", t("settings.resourceExplorer", "Resource explorer"), true)}
                 {renderSettingsNavItem("terminal", "terminal", t("settings.terminal", "Terminal"), true)}
                 {renderSettingsNavItem("gitPanel", "git-commit", t("settings.gitPanel", "Git panel"), true)}
+                {renderSettingsNavItem("subscriptionPanel", "dollar-sign", t("subscriptions.title", "Subscriptions"), true)}
               </>
             ))}
             {renderSettingsNavItem("notification", "bell", t("settings.notification"))}
@@ -1440,6 +1451,19 @@ export function SettingsDialog({ open, onClose }: { open: boolean; onClose: () =
                 </div>
                 <div className="settings-row settings-row-stacked">
                   <div className="settings-row-info">
+                    <span className="settings-label">{t("settings.gitCustomPrompt", "Custom prompt")}</span>
+                    <span className="settings-sublabel">{t("settings.gitCustomPromptDesc", "Additional instructions appended directly to the Git reminder prompt. One line = one paragraph.")}</span>
+                  </div>
+                  <textarea
+                    className="settings-git-blacklist-textarea"
+                    rows={3}
+                    spellCheck={false}
+                    value={gitOperationSettings.customPrompt}
+                    onChange={(event) => handleGitCustomPromptChange(event.target.value)}
+                  />
+                </div>
+                <div className="settings-row settings-row-stacked">
+                  <div className="settings-row-info">
                     <span className="settings-label">{t("settings.gitReminderPreview", "Injected reminder preview")}</span>
                     <span className="settings-sublabel">{t("settings.gitReminderPreviewDesc", "Manual Git Action and scheduled reminders both include these safety requirements.")}</span>
                   </div>
@@ -1450,6 +1474,7 @@ export function SettingsDialog({ open, onClose }: { open: boolean; onClose: () =
                     "Requirements:",
                     "- Do not stage or commit files under the configured blacklisted folders.",
                     "- When committing, write a meaningful git commit message that briefly summarizes the recent activity being backed up.",
+                    ...(gitOperationSettings.customPrompt.trim() ? ["", gitOperationSettings.customPrompt.trim()] : []),
                   ].join("\n")}</pre>
                 </div>
               </div>
@@ -1507,6 +1532,29 @@ export function SettingsDialog({ open, onClose }: { open: boolean; onClose: () =
                       );
                     })}
                   </div>
+                </div>
+                <div className="settings-row">
+                  <div className="settings-row-info">
+                    <span className="settings-label">{t("settings.panelTimeout", "Panel timeout")}</span>
+                    <span className="settings-sublabel">{t("settings.panelTimeoutDesc", "Inactive panels are kept alive when switching tabs. They will be unloaded after this duration to free resources.")}</span>
+                  </div>
+                  <AppSelect
+                    ariaLabel={t("settings.panelTimeout", "Panel timeout")}
+                    value={String(panelTimeoutSettings.timeoutHours)}
+                    onChange={(value) => {
+                      const next = { timeoutHours: Number(value) };
+                      setPanelTimeoutSettings(next);
+                      savePanelTimeoutSettings(next);
+                    }}
+                    options={[
+                      { value: "0", label: t("settings.panelTimeoutNever", "Never") },
+                      { value: "1", label: "1h" },
+                      { value: "3", label: "3h" },
+                      { value: "6", label: "6h" },
+                      { value: "12", label: "12h" },
+                      { value: "24", label: "24h" },
+                    ]}
+                  />
                 </div>
               </div>
             )}
@@ -1983,6 +2031,23 @@ export function SettingsDialog({ open, onClose }: { open: boolean; onClose: () =
                       { id: "compact", label: t("settings.gitListItemStyleCompact", "Compact"), icon: <Icon name="list" size={12} /> },
                     ]}
                   />
+                </div>
+              </div>
+            )}
+
+            {tab === "subscriptionPanel" && (
+              <div className="settings-section">
+                <div className="settings-row">
+                  <div className="settings-row-info">
+                    <span className="settings-label">{t("subscriptions.showCollapsedBar")}</span>
+                    <span className="settings-sublabel">{t("subscriptions.showCollapsedBarDesc")}</span>
+                  </div>
+                  <button
+                    className={`settings-toggle${showCollapsedProgressBar ? " settings-toggle-on" : ""}`}
+                    onClick={() => setShowCollapsedProgressBar(!showCollapsedProgressBar)}
+                  >
+                    <span className="settings-toggle-knob" />
+                  </button>
                 </div>
               </div>
             )}

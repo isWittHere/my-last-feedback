@@ -1733,8 +1733,10 @@ export const useFeedbackStore = create<FeedbackState>((set, get) => ({
       && sameWorkspacePath(current.projectDirectory, normalizedFocus.projectDirectory)
       && current.kind === normalizedFocus.kind;
     if (sameTarget) return;
-    // Keep workspace selection independent from composer focus.
-    set({ focusedComposer: normalizedFocus });
+    set({
+      focusedComposer: normalizedFocus,
+      mlcActiveWorkspacePath: normalizedFocus.projectDirectory || get().mlcActiveWorkspacePath,
+    });
   },
 
   clearFocusedComposer: (sessionId) => {

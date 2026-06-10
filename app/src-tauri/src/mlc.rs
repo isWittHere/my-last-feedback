@@ -132,6 +132,57 @@ pub async fn mlc_delete_document(file_path: String) -> Result<(), String> {
     std::fs::remove_file(path).map_err(|e| e.to_string())
 }
 
+#[tauri::command]
+pub async fn mlc_create_document(
+    workspace_path: String,
+    title: String,
+    markdown_content: String,
+    description: Option<String>,
+    folder_name: Option<String>,
+) -> Result<String, String> {
+    let workspace = PathBuf::from(&workspace_path)
+        .canonicalize()
+        .map_err(|e| format!("Invalid workspace path: {}", e))?;
+    if !workspace.is_dir() {
+        return Err("Workspace path is not a directory".to_string());
+    }
+
+    let storage_dir = if let Some(folder) = folder_name.as_deref() {
+        workspace.join(".myLastChat").join(folder)
+    } else {
+        workspace.join(".myLastChat")
+    };
+    std::fs::create_dir_all(&storage_dir).map_err(|e| e.to_string())?;
+
+    let now = Utc::now();
+    let date_part = now.format("%Y-%m-%d").to_string();
+    let time_part = now.format("%H%M%S").to_string();
+    let safe_title: String = title
+        .chars()
+        .map(|ch| if ch.is_ascii_alphanumeric() || ch == '-' || ch == '_' { ch } else { '_' })
+        .collect();
+    let safe_title = if safe_title.is_empty() { "document".to_string() } else { safe_title };
+    let file_name = format!("{}-{}-{}.md", safe_title, date_part, time_part);
+    let file_path = storage_dir.join(&file_name);
+
+    let desc = description.unwrap_or_default();
+    let created_at = now.to_rfc3339();
+    let updated_at = created_at.clone();
+
+    let frontmatter = format!(
+        "---\ntitle: \"{}\"\ndescription: \"{}\"\ntype: summary\ncreatedAt: {}\nupdatedAt: {}\n---\n\n",
+        title.replace('"', "\\\""),
+        desc.replace('"', "\\\""),
+        created_at,
+        updated_at,
+    );
+
+    let full_content = format!("{}{}", frontmatter, markdown_content);
+    std::fs::write(&file_path, full_content).map_err(|e| e.to_string())?;
+
+    Ok(display_path(&file_path))
+}
+
 fn canonical_markdown_file(file_path: &str) -> Result<PathBuf, String> {
     let path = PathBuf::from(file_path)
         .canonicalize()

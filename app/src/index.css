@@ -949,7 +949,8 @@ body,
     padding: 1px;
     border-radius: 6px;
     background: transparent;
-    border: 1px solid color-mix(in srgb, var(--color-border-subtle) 70%, transparent);
+    border: 1px solid
+        color-mix(in srgb, var(--color-border-subtle) 70%, transparent);
     box-shadow: none;
 }
 .titlebar-dock-group .titlebar-btn {
@@ -2798,7 +2799,7 @@ body,
     gap: 4px;
     padding: 0 4px 6px;
     overflow: auto;
-    background: var(--color-bg-card);
+    background: var(--color-bg-surface);
 }
 
 .subscription-toolbar {
@@ -2885,16 +2886,34 @@ body,
 .subscription-new-form {
     margin: 4px 0;
     border: 1px solid var(--color-border-subtle);
-    border-radius: var(--radius-md);
+    border-radius: var(--radius-lg);
     background: var(--color-bg-surface);
+    overflow: hidden;
 }
 
 .subscription-new-form-header {
-    font-size: 11px;
-    font-weight: 600;
+    display: flex;
+    align-items: center;
     padding: 6px 8px;
-    color: var(--color-text-secondary);
     border-bottom: 1px solid var(--color-border-subtle);
+}
+
+.subscription-new-form-header-title {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    flex: 1;
+    min-width: 0;
+    font-size: 12px;
+    color: var(--color-text-primary);
+}
+
+.subscription-new-form-header > .subscription-config-actions {
+    margin-top: 0;
+}
+
+.subscription-new-form .subscription-config-form .subscription-config-actions {
+    display: none;
 }
 
 .subscription-groups {
@@ -2905,12 +2924,24 @@ body,
 
 .subscription-group {
     border: 1px solid var(--color-border-subtle);
-    border-radius: var(--radius-md);
+    border-radius: var(--radius-lg);
     background: var(--color-bg-surface);
     overflow: hidden;
+    cursor: grab;
+}
+
+.subscription-group:active {
+    cursor: grabbing;
+}
+
+.subscription-group-dragover {
+    border-color: var(--color-primary);
+    box-shadow: 0 0 0 1px var(--color-primary);
+    opacity: 0.7;
 }
 
 .subscription-group-header {
+    position: relative;
     display: flex;
     align-items: center;
     gap: 6px;
@@ -2929,10 +2960,23 @@ body,
     background: rgba(255, 255, 255, 0.04);
 }
 
+.subscription-group-collapsed-bar {
+    position: absolute;
+    bottom: 0;
+    left: 0;
+    height: 2px;
+    border-radius: 1px;
+    transition: width 0.3s ease;
+}
+
 .subscription-group-caret {
     flex: 0 0 auto;
     color: var(--color-text-muted);
     transition: transform 0.12s;
+}
+
+.subscription-group-provider-icon {
+    flex: 0 0 auto;
 }
 
 .subscription-group.collapsed .subscription-group-caret {
@@ -2940,12 +2984,20 @@ body,
 }
 
 .subscription-group-name {
+    color: var(--color-text-secondary);
     flex: 1;
     min-width: 0;
     overflow: hidden;
     text-overflow: ellipsis;
     white-space: nowrap;
     font-weight: 500;
+}
+
+.subscription-group-monthly-pct {
+    flex: 0 0 auto;
+    font-size: 11px;
+    color: var(--color-text-secondary);
+    white-space: nowrap;
 }
 
 .subscription-group-balance {
@@ -2989,7 +3041,7 @@ body,
 }
 
 .subscription-status-channel-name {
-    font-size: 10px;
+    font-size: 11px;
     font-weight: 600;
     color: var(--color-text-muted);
     text-transform: uppercase;
@@ -3011,17 +3063,17 @@ body,
     white-space: nowrap;
 }
 
-.subscription-status-model-name--degraded,
-.subscription-status-model-name--error {
+.subscription-status-model-name--degraded {
     color: #f59e0b;
 }
 
+.subscription-status-model-name--error,
 .subscription-status-model-name--failed {
     color: #ef4444;
 }
 
 .subscription-status-model-latency {
-    font-size: 10px;
+    font-size: 11px;
     color: var(--color-text-muted);
     white-space: nowrap;
 }
@@ -3045,7 +3097,7 @@ body,
     align-items: center;
     gap: 8px;
     padding: 4px 8px;
-    font-size: 10px;
+    font-size: 11px;
     color: var(--color-text-muted);
 }
 
@@ -3066,46 +3118,16 @@ body,
 }
 
 .subscription-usage-display {
-    padding: 4px 8px 8px;
+    padding: 2px 8px 8px;
     display: flex;
     flex-direction: column;
-    gap: 4px;
-}
-
-.subscription-group-minibars {
-    flex: 0 0 auto;
-    display: flex;
-    flex-direction: column;
-    gap: 2px;
-    width: 32px;
-    margin-right: 4px;
-}
-
-.subscription-group-minibar {
-    height: 2px;
-    background: var(--color-bg-input);
-    overflow: hidden;
-    border-radius: 1px;
-}
-
-.subscription-group-minibar-fill {
-    height: 100%;
-    background: var(--color-primary);
-    border-radius: 1px;
-    transition: width 0.3s ease;
-}
-
-.subscription-usage-display {
-    padding: 4px 8px 8px;
-    display: flex;
-    flex-direction: column;
-    gap: 8px;
+    gap: 6px;
 }
 
 .subscription-usage-window {
     display: flex;
     flex-direction: column;
-    gap: 3px;
+    gap: 2px;
 }
 
 .subscription-usage-header {
@@ -3123,7 +3145,8 @@ body,
 }
 
 .subscription-usage-pct {
-    flex: 0 0 auto;
+    flex: 1;
+    text-align: right;
     font-weight: 600;
     color: var(--color-text-primary);
 }
@@ -3149,12 +3172,14 @@ body,
     transition: width 0.3s ease;
 }
 
-.subscription-usage-reset {
-    font-size: 10px;
+.subscription-usage-reset-inline {
+    font-size: 11px;
+    font-weight: 400;
     color: var(--color-text-muted);
 }
 
 .subscription-usage-empty {
+    padding: 4px 8px;
     font-size: 11px;
     color: var(--color-text-muted);
     font-style: italic;
@@ -3175,7 +3200,7 @@ body,
 
 .subscription-toioto-balance-amount {
     font-size: 22px;
-    font-weight: 700;
+    font-weight: 550;
     color: var(--color-primary);
 }
 
@@ -3196,6 +3221,11 @@ body,
     white-space: nowrap;
 }
 
+.subscription-deepseek-unavailable {
+    font-size: 11px;
+    color: var(--color-danger, #ef4444);
+}
+
 .subscription-group-actions {
     display: flex;
     align-items: center;
@@ -3213,7 +3243,7 @@ body,
     border-radius: 3px;
     background: transparent;
     color: var(--color-text-muted);
-    font-size: 10px;
+    font-size: 11px;
     cursor: pointer;
     transition: background 0.12s;
 }
@@ -3252,7 +3282,7 @@ body,
 }
 
 .subscription-config-field span {
-    font-size: 10px;
+    font-size: 11px;
     font-weight: 500;
     color: var(--color-text-secondary);
 }
@@ -3276,7 +3306,7 @@ body,
     display: flex;
     align-items: center;
     gap: 4px;
-    margin-top: 2px;
+    margin-top: 0px;
 }
 
 .subscription-config-save,
@@ -3284,7 +3314,7 @@ body,
     display: flex;
     align-items: center;
     gap: 4px;
-    padding: 4px 8px;
+    padding: 2px 4px;
     border: none;
     border-radius: 3px;
     font-size: 11px;
@@ -3301,14 +3331,19 @@ body,
     opacity: 0.9;
 }
 
+.subscription-config-save:disabled {
+    opacity: 0.4;
+    cursor: not-allowed;
+}
+
 .subscription-config-cancel {
     background: transparent;
-    color: var(--color-text-muted);
+    color: var(--color-danger, #ef4444);
 }
 
 .subscription-config-cancel:hover {
-    background: rgba(255, 255, 255, 0.06);
-    color: var(--color-text-primary);
+    background: rgba(239, 68, 68, 0.12);
+    color: #f87171;
 }
 
 /* ── End Subscription Panel ── */
@@ -7845,10 +7880,10 @@ body,
 }
 
 .terminal-panel {
-    --terminal-bg: #111318;
+    --terminal-bg: var(--color-bg-surface);
     --terminal-toolbar-bg: color-mix(
         in srgb,
-        #171a21 92%,
+        var(--color-bg-elevated) 80%,
         var(--color-bg-surface)
     );
     --terminal-fg: #d8dee9;
@@ -7870,8 +7905,6 @@ body,
 
 .terminal-panel[data-terminal-theme="light"],
 [data-theme="light"] .terminal-panel {
-    --terminal-bg: #f8fafc;
-    --terminal-toolbar-bg: #f1f5f9;
     --terminal-fg: #1f2937;
     --terminal-muted: #64748b;
     --terminal-pill-bg: color-mix(in srgb, var(--color-primary) 12%, #ffffff);
@@ -8284,7 +8317,7 @@ body,
     .terminal-host
     .xterm-screen
     canvas {
-    background-color: #f8fafc !important;
+    background-color: var(--terminal-bg) !important;
 }
 
 .preview-browser-panel.view-only .preview-browser-viewport {
@@ -16282,7 +16315,11 @@ button.mlra-inspector-gate-pill {
     position: absolute;
     left: 13px;
     width: 1px;
-    background: color-mix(in srgb, var(--git-workspace-color, var(--color-primary)) 45%, transparent);
+    background: color-mix(
+        in srgb,
+        var(--git-workspace-color, var(--color-primary)) 45%,
+        transparent
+    );
     pointer-events: none;
     z-index: 2;
 }
@@ -16311,10 +16348,14 @@ button.mlra-inspector-gate-pill {
 }
 
 /* Only latest group first item needs its own anchor. */
-.git-commit-group-latest .git-commit-group-items .git-commit-item:first-child::after {
+.git-commit-group-latest
+    .git-commit-group-items
+    .git-commit-item:first-child::after {
     top: 30px;
 }
-.git-commit-group-latest .git-commit-group-items .git-commit-item.git-commit-item-compact:first-child::after {
+.git-commit-group-latest
+    .git-commit-group-items
+    .git-commit-item.git-commit-item-compact:first-child::after {
     top: 28px;
 }
 
@@ -16332,6 +16373,7 @@ button.mlra-inspector-gate-pill {
 }
 
 .git-commit-message {
+    color: var(--color-text-secondary);
     font-size: 12px;
     line-height: 1.3;
     margin-bottom: 2px;
@@ -16379,7 +16421,10 @@ button.mlra-inspector-gate-pill {
     color: var(--color-text-muted);
     opacity: 0;
     pointer-events: none;
-    transition: width 0.15s ease, opacity 0.15s ease, margin-left 0.15s ease;
+    transition:
+        width 0.15s ease,
+        opacity 0.15s ease,
+        margin-left 0.15s ease;
     cursor: pointer;
 }
 .git-commit-item.git-commit-item-compact .git-commit-attach {

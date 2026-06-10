@@ -7,6 +7,7 @@ export interface GitOperationSettings {
   timedReminderIntervalMinutes: number;
   timedReminderTheme: GitTimedReminderTheme;
   folderBlacklist: string[];
+  customPrompt: string;
 }
 
 export const GIT_OPERATION_SETTINGS_EVENT = "mlf-git-operation-settings-changed";
@@ -23,6 +24,7 @@ export const DEFAULT_GIT_OPERATION_SETTINGS: GitOperationSettings = {
   timedReminderIntervalMinutes: 30,
   timedReminderTheme: "caller",
   folderBlacklist: ["ref-repos"],
+  customPrompt: "",
 };
 
 function normalizeIntervalMinutes(value: unknown): number {
@@ -68,6 +70,7 @@ export function normalizeGitOperationSettings(value: Partial<GitOperationSetting
     timedReminderIntervalMinutes: normalizeIntervalMinutes(value?.timedReminderIntervalMinutes),
     timedReminderTheme: normalizeTimedReminderTheme(value?.timedReminderTheme),
     folderBlacklist: parsedBlacklist,
+    customPrompt: typeof value?.customPrompt === "string" ? value.customPrompt : DEFAULT_GIT_OPERATION_SETTINGS.customPrompt,
   };
 }
 

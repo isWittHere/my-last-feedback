@@ -1,5 +1,6 @@
 import { useCallback, useEffect, useMemo, useRef, useState, type ReactNode } from "react";
 import { useTranslation } from "react-i18next";
+import { invoke } from "@tauri-apps/api/core";
 import { useFeedbackStore } from "../store/feedbackStore";
 import { agentIdentityLanguage, resolveAgentGlyphIdentity } from "../identity/agentIdentity";
 import { Icon } from "./Icons";
@@ -153,6 +154,8 @@ export function SummaryPanel({ topbarSlot }: { topbarSlot?: ReactNode }) {
     : undefined;
 
   const { copied, copy: copyMarkdown } = useCopyToClipboard(1800);
+  const [saving, setSaving] = useState(false);
+  const [saved, setSaved] = useState(false);
   const scrollRef = useRef<HTMLDivElement>(null);
   const [activeHeadingIdx, setActiveHeadingIdx] = useState(0);
 
@@ -185,6 +188,31 @@ export function SummaryPanel({ topbarSlot }: { topbarSlot?: ReactNode }) {
   const handleCopyMarkdown = useCallback(() => {
     if (summary) copyMarkdown(summary);
   }, [summary, copyMarkdown]);
+
+  const handleSaveDocument = useCallback(async () => {
+    if (!summary || !projectDirectory || saving) return;
+    setSaving(true);
+    setSaved(false);
+    try {
+      const now = new Date();
+      const dateStr = now.toISOString().slice(0, 10);
+      const title = `AI-Summary-${dateStr}`;
+      await invoke<string>("mlc_create_document", {
+        workspacePath: projectDirectory,
+        title,
+        markdownContent: summary,
+        description: `AI-generated summary from session`,
+        folderName: null,
+      });
+      setSaved(true);
+      window.dispatchEvent(new CustomEvent("mlfb-git-updated"));
+      setTimeout(() => setSaved(false), 2000);
+    } catch (e) {
+      console.error("Failed to save document:", e);
+    } finally {
+      setSaving(false);
+    }
+  }, [summary, projectDirectory, saving]);
 
   return (
     <div
@@ -250,28 +278,53 @@ export function SummaryPanel({ topbarSlot }: { topbarSlot?: ReactNode }) {
         />
       )}
 
-      {/* Floating copy button — bottom right, semi-transparent, visible on hover */}
+      {/* Floating action buttons — bottom right, visible on hover */}
       {summary && (
-        <button
-          onClick={handleCopyMarkdown}
-          className="absolute bottom-2 right-2 items-center justify-center rounded hidden group-hover/summary:flex"
-          style={{
-            width: 28,
-            height: 28,
-            background: "var(--color-bg-elevated)",
-            border: "1px solid var(--color-border)",
-            color: "var(--color-text-muted)",
-            cursor: "pointer",
-            transition: "all 0.15s",
-          }}
-          title={copied ? "Copied!" : "Copy Markdown"}
-        >
-          {copied ? (
-            <Icon name="check" size={14} color="var(--color-success)" />
-          ) : (
-            <Icon name="copy" size={14} />
-          )}
-        </button>
+        <>
+          <button
+            onClick={handleSaveDocument}
+            disabled={saving}
+            className="absolute bottom-2 items-center justify-center rounded hidden group-hover/summary:flex"
+            style={{
+              right: 36,
+              width: 28,
+              height: 28,
+              background: "var(--color-bg-elevated)",
+              border: "1px solid var(--color-border)",
+              color: "var(--color-text-muted)",
+              cursor: saving ? "wait" : "pointer",
+              transition: "all 0.15s",
+              opacity: saving ? 0.6 : 1,
+            }}
+            title={saved ? t("summary.saved", "Saved!") : t("summary.saveDocument", "Save as MLC")}
+          >
+            {saved ? (
+              <Icon name="check" size={14} color="var(--color-success)" />
+            ) : (
+              <Icon name="download" size={14} />
+            )}
+          </button>
+          <button
+            onClick={handleCopyMarkdown}
+            className="absolute bottom-2 right-2 items-center justify-center rounded hidden group-hover/summary:flex"
+            style={{
+              width: 28,
+              height: 28,
+              background: "var(--color-bg-elevated)",
+              border: "1px solid var(--color-border)",
+              color: "var(--color-text-muted)",
+              cursor: "pointer",
+              transition: "all 0.15s",
+            }}
+            title={copied ? t("summary.copied", "Copied!") : t("summary.copyMarkdown", "Copy Markdown")}
+          >
+            {copied ? (
+              <Icon name="check" size={14} color="var(--color-success)" />
+            ) : (
+              <Icon name="copy" size={14} />
+            )}
+          </button>
+        </>
       )}
     </div>
   );
