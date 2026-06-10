@@ -395,6 +395,35 @@ my-last-feedback/
 
 ---
 
+## 文档
+
+完整文档请访问 [https://anthropics.github.io/my-last-feedback/](https://anthropics.github.io/my-last-feedback/)
+
+### 本地文档开发
+
+```bash
+# 安装依赖
+npm install
+
+# 启动文档开发服务器
+npm run docs:dev
+
+# 构建文档
+npm run docs:build
+
+# 预览构建的文档
+npm run docs:preview
+```
+
+### 文档结构
+
+- **指南**：介绍、功能特性、安装、快速开始
+- **开发**：环境设置、项目架构、贡献指南、构建指南
+- **API**：MCP 协议、Tauri 命令、IPC 通信
+- **发布**：更新日志和版本历史
+
+---
+
 ## 许可证
 
 MIT 许可证 — 详见 [LICENSE](LICENSE)。

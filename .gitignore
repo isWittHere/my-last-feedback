@@ -8,6 +8,7 @@ app/src-tauri/target/
 app/src-tauri/gen/schemas/
 dist/win-x64/
 dist/mac-arm64/
+docs/.vitepress/dist/
 
 # Logs
 *.log

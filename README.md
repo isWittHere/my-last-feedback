@@ -395,6 +395,35 @@ my-last-feedback/
 
 ---
 
+## Documentation
+
+Full documentation is available at [https://anthropics.github.io/my-last-feedback/](https://anthropics.github.io/my-last-feedback/)
+
+### Local Documentation Development
+
+```bash
+# Install dependencies
+npm install
+
+# Start documentation dev server
+npm run docs:dev
+
+# Build documentation
+npm run docs:build
+
+# Preview built documentation
+npm run docs:preview
+```
+
+### Documentation Structure
+
+- **Guide**: Introduction, features, installation, quick start
+- **Development**: Setup, architecture, contributing, build guide
+- **API**: MCP protocol, Tauri commands, IPC communication
+- **Releases**: Changelog and version history
+
+---
+
 ## License
 
 MIT License — see [LICENSE](LICENSE) for full text.
