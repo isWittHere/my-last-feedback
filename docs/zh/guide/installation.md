@@ -13,13 +13,13 @@
 
 ### Windows
 
-1. 从 [GitHub Releases](https://github.com/anthropics/my-last-feedback/releases) 下载最新版本
+1. 从 [GitHub Releases](https://github.com/isWittHere/my-last-feedback/releases) 下载最新版本
 2. 将 ZIP 压缩包解压到你选择的位置
 3. 运行 `My Last Feedback.exe`
 
 ### macOS
 
-1. 从 [GitHub Releases](https://github.com/anthropics/my-last-feedback/releases) 下载最新版本
+1. 从 [GitHub Releases](https://github.com/isWittHere/my-last-feedback/releases) 下载最新版本
 2. 将 TAR.GZ 压缩包解压到你选择的位置
 3. 使二进制文件可执行：
    ```bash

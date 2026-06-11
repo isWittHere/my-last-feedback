@@ -23,7 +23,7 @@ On Windows, you also need to install [Visual Studio Build Tools](https://visuals
 ## Clone the Repository
 
 ```bash
-git clone https://github.com/anthropics/my-last-feedback.git
+git clone https://github.com/isWittHere/my-last-feedback.git
 cd my-last-feedback
 ```
 

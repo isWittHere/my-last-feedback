@@ -6,12 +6,13 @@ export default defineConfig({
   base: '/my-last-feedback/',
   
   head: [
-    ['link', { rel: 'icon', href: '/my-last-feedback/favicon.ico' }],
-    ['meta', { name: 'theme-color', content: '#5f67ee' }],
+    ['link', { rel: 'icon', type: 'image/svg+xml', href: '/my-last-feedback/favicon.svg' }],
+    ['meta', { name: 'theme-color', content: '#1e1e2e' }],
     ['meta', { property: 'og:type', content: 'website' }],
     ['meta', { property: 'og:locale', content: 'en' }],
     ['meta', { property: 'og:title', content: 'My Last Feedback | Developer Companion for AI Workflows' }],
     ['meta', { property: 'og:site_name', content: 'My Last Feedback' }],
+    ['meta', { property: 'og:image', content: '/my-last-feedback/images/MLFB_theme_light.png' }],
   ],
 
   locales: {
@@ -132,7 +133,7 @@ export default defineConfig({
     siteTitle: 'My Last Feedback',
     
     socialLinks: [
-      { icon: 'github', link: 'https://github.com/anthropics/my-last-feedback' }
+      { icon: 'github', link: 'https://github.com/isWittHere/my-last-feedback' }
     ],
     
     footer: {

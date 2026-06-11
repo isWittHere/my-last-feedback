@@ -20,7 +20,7 @@
    ```
 3. 添加上游远程：
    ```bash
-   git remote add upstream https://github.com/anthropics/my-last-feedback.git
+   git remote add upstream https://github.com/isWittHere/my-last-feedback.git
    ```
 
 ## 开发工作流程
