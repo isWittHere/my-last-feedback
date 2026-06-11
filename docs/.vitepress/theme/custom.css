@@ -1,0 +1,20 @@
+/* Phosphor Icons for VitePress */
+@import url('https://unpkg.com/@phosphor-icons/web@2.1.1/src/regular/style.css');
+@import url('https://unpkg.com/@phosphor-icons/web@2.1.1/src/bold/style.css');
+@import url('https://unpkg.com/@phosphor-icons/web@2.1.1/src/fill/style.css');
+@import url('https://unpkg.com/@phosphor-icons/web@2.1.1/src/duotone/style.css');
+
+/* Custom icon styles for VitePress features */
+.ph-icon {
+  display: inline-block;
+  width: 24px;
+  height: 24px;
+  vertical-align: middle;
+}
+
+/* Feature icons */
+.VPFeature .icon {
+  font-family: 'Phosphor Icons';
+  font-size: 24px;
+  line-height: 1;
+}
