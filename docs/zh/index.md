@@ -14,7 +14,7 @@ hero:
       link: /zh/guide/quick-start
     - theme: alt
       text: 在 GitHub 上查看
-      link: https://github.com/anthropics/my-last-feedback
+      link: https://github.com/isWittHere/my-last-feedback
 
 features:
   - icon: 🎯

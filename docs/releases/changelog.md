@@ -87,7 +87,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## Version History
 
-For older versions, see the [GitHub Releases](https://github.com/anthropics/my-last-feedback/releases) page.
+For older versions, see the [GitHub Releases](https://github.com/isWittHere/my-last-feedback/releases) page.
 
 ---
 

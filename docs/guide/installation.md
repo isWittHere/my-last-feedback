@@ -13,13 +13,13 @@ Before installing My Last Feedback, ensure you have the following:
 
 ### Windows
 
-1. Download the latest release from [GitHub Releases](https://github.com/anthropics/my-last-feedback/releases)
+1. Download the latest release from [GitHub Releases](https://github.com/isWittHere/my-last-feedback/releases)
 2. Extract the ZIP archive to a location of your choice
 3. Run `My Last Feedback.exe`
 
 ### macOS
 
-1. Download the latest release from [GitHub Releases](https://github.com/anthropics/my-last-feedback/releases)
+1. Download the latest release from [GitHub Releases](https://github.com/isWittHere/my-last-feedback/releases)
 2. Extract the TAR.GZ archive to a location of your choice
 3. Make the binary executable:
    ```bash

@@ -20,7 +20,7 @@ Thank you for your interest in contributing to My Last Feedback! This guide will
    ```
 3. Add the upstream remote:
    ```bash
-   git remote add upstream https://github.com/anthropics/my-last-feedback.git
+   git remote add upstream https://github.com/isWittHere/my-last-feedback.git
    ```
 
 ## Development Workflow

@@ -23,7 +23,7 @@ curl --proto '=https' --tlsv1.2 -sSf https://sh.rustup.rs | sh
 ## 克隆仓库
 
 ```bash
-git clone https://github.com/anthropics/my-last-feedback.git
+git clone https://github.com/isWittHere/my-last-feedback.git
 cd my-last-feedback
 ```
 

@@ -87,7 +87,7 @@ My Last Feedback 的所有显著更改都将记录在此文件中。
 
 ## 版本历史
 
-有关更早的版本，请参阅 [GitHub Releases](https://github.com/anthropics/my-last-feedback/releases) 页面。
+有关更早的版本，请参阅 [GitHub Releases](https://github.com/isWittHere/my-last-feedback/releases) 页面。
 
 ---
 
