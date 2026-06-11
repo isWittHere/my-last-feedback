@@ -1,20 +1,66 @@
-/* Phosphor Icons for VitePress */
-@import url('https://unpkg.com/@phosphor-icons/web@2.1.1/src/regular/style.css');
-@import url('https://unpkg.com/@phosphor-icons/web@2.1.1/src/bold/style.css');
-@import url('https://unpkg.com/@phosphor-icons/web@2.1.1/src/fill/style.css');
-@import url('https://unpkg.com/@phosphor-icons/web@2.1.1/src/duotone/style.css');
-
-/* Custom icon styles for VitePress features */
-.ph-icon {
-  display: inline-block;
-  width: 24px;
-  height: 24px;
-  vertical-align: middle;
+/* Hero section centering */
+.VPHero .wrapper {
+  display: flex !important;
+  justify-content: center !important;
 }
 
-/* Feature icons */
-.VPFeature .icon {
-  font-family: 'Phosphor Icons';
-  font-size: 24px;
-  line-height: 1;
+.VPHero .container {
+  display: flex !important;
+  justify-content: center !important;
+  max-width: 100% !important;
+}
+
+.VPHero .main {
+  max-width: 100% !important;
+  text-align: center !important;
+  display: flex !important;
+  flex-direction: column !important;
+  align-items: center !important;
+}
+
+.VPHero .heading {
+  justify-content: center !important;
+  flex-direction: column !important;
+  align-items: center !important;
+}
+
+.VPHero .heading::before {
+  content: '';
+  display: block;
+  width: 80px;
+  height: 80px;
+  margin-bottom: 24px;
+  background: linear-gradient(120deg, #bd34fe 30%, #41d1ff);
+  -webkit-mask-image: url('/my-last-feedback/logo.svg');
+  mask-image: url('/my-last-feedback/logo.svg');
+  -webkit-mask-size: contain;
+  mask-size: contain;
+  -webkit-mask-repeat: no-repeat;
+  mask-repeat: no-repeat;
+  -webkit-mask-position: center;
+  mask-position: center;
+}
+
+.VPHero .name {
+  display: block !important;
+  text-align: center !important;
+}
+
+.VPHero .text {
+  display: block !important;
+  text-align: center !important;
+  font-size: 20px !important;
+  font-weight: 400 !important;
+}
+
+.VPHero .tagline {
+  text-align: center !important;
+  max-width: 100% !important;
+  padding-top: 20px !important;
+  line-height: 20px !important;
+  font-size: 14px !important;
+}
+
+.VPHero .actions {
+  justify-content: center !important;
 }
