@@ -5,9 +5,6 @@ hero:
   name: "My Last Feedback"
   text: "Developer Companion for AI Workflows"
   tagline: Interactive feedback, integrated dev tools, and knowledge management — all in a single desktop app that works with your AI coding agent.
-  image:
-    src: /images/MLFB_theme_light.png
-    alt: My Last Feedback Screenshot
   actions:
     - theme: brand
       text: Get Started
@@ -35,6 +32,20 @@ features:
 :root {
   --vp-home-hero-name-color: transparent;
   --vp-home-hero-name-background: -webkit-linear-gradient(120deg, #bd34fe 30%, #41d1ff);
+}
+
+.VPHero .text {
+  font-size: 20px !important;
+  font-weight: 400 !important;
+}
+
+.VPHero .main {
+  max-width: 100% !important;
+  text-align: center !important;
+}
+
+.VPHero .actions {
+  justify-content: center !important;
 }
 
 .VPFeature {

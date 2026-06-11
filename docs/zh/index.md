@@ -5,9 +5,6 @@ hero:
   name: "My Last Feedback"
   text: "AI 辅助开发流程的开发者伴侣"
   tagline: 集成交互式反馈、开发工具面板和知识管理于一体，通过一个桌面应用连接你的 AI 编程 Agent。
-  image:
-    src: /images/MLFB_theme_light.png
-    alt: My Last Feedback 截图
   actions:
     - theme: brand
       text: 快速开始
@@ -35,6 +32,20 @@ features:
 :root {
   --vp-home-hero-name-color: transparent;
   --vp-home-hero-name-background: -webkit-linear-gradient(120deg, #bd34fe 30%, #41d1ff);
+}
+
+.VPHero .text {
+  font-size: 20px !important;
+  font-weight: 400 !important;
+}
+
+.VPHero .main {
+  max-width: 100% !important;
+  text-align: center !important;
+}
+
+.VPHero .actions {
+  justify-content: center !important;
 }
 
 .VPFeature {
