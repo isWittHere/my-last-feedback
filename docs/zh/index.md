@@ -17,23 +17,17 @@ hero:
       link: https://github.com/isWittHere/my-last-feedback
 
 features:
-  - icon: 💬
-    title: 交互式反馈
+  - title: 交互式反馈
     details: AI Agent 请求反馈时弹出原生桌面窗口。支持 Markdown 渲染、图片附件和结构化问题。
-  - icon: 🔧
-    title: 内置开发工具
+  - title: 内置开发工具
     details: 完整 PTY 终端、Git 面板、预览浏览器和项目资源浏览器 — 全部集成在一个地方。
-  - icon: 📖
-    title: 知识管理
+  - title: 知识管理
     details: My Last Chat 侧栏面板，用于浏览、搜索和预览 Markdown 文档。让知识库触手可及。
-  - icon: 🤖
-    title: 多 Agent 支持
+  - title: 多 Agent 支持
     details: 支持 Cursor、VS Code Copilot、Cline、Windsurf、Codex 等所有支持 MCP 协议的 AI 开发工具。
-  - icon: 🎨
-    title: 双主题 & 双语
+  - title: 双主题 & 双语
     details: 完整的暗色/亮色主题支持，以及完整的中文和英文界面。
-  - icon: ⚡
-    title: 轻量快速
+  - title: 轻量快速
     details: 基于 Tauri 2.0 + React 19 构建 — 二进制仅 ~11 MB。瞬间启动，流畅运行。
 ---
 
