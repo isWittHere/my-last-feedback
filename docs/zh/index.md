@@ -39,9 +39,18 @@ features:
   font-weight: 400 !important;
 }
 
+.VPHero .container {
+  display: flex !important;
+  justify-content: center !important;
+}
+
 .VPHero .main {
   max-width: 100% !important;
   text-align: center !important;
+}
+
+.VPHero .heading {
+  justify-content: center !important;
 }
 
 .VPHero .actions {
