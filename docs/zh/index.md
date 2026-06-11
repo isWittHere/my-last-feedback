@@ -34,53 +34,6 @@ features:
   --vp-home-hero-name-background: -webkit-linear-gradient(120deg, #bd34fe 30%, #41d1ff);
 }
 
-.VPHero .text {
-  font-size: 20px !important;
-  font-weight: 400 !important;
-}
-
-.VPHero .wrapper {
-  display: flex !important;
-  justify-content: center !important;
-}
-
-.VPHero .container {
-  display: flex !important;
-  justify-content: center !important;
-  max-width: 100% !important;
-}
-
-.VPHero .main {
-  max-width: 100% !important;
-  text-align: center !important;
-  display: flex !important;
-  flex-direction: column !important;
-  align-items: center !important;
-}
-
-.VPHero .heading {
-  justify-content: center !important;
-}
-
-.VPHero .name {
-  display: block !important;
-  text-align: center !important;
-}
-
-.VPHero .text {
-  display: block !important;
-  text-align: center !important;
-}
-
-.VPHero .tagline {
-  text-align: center !important;
-  max-width: 100% !important;
-}
-
-.VPHero .actions {
-  justify-content: center !important;
-}
-
 .VPFeature {
   transition: transform 0.2s;
 }
